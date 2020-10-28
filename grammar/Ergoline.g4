@@ -1,7 +1,74 @@
 grammar Ergoline;
 
+program
+    :   (include | namespace | classDeclaration | function)+
+    ;
+
+statement
+    :   returnStatement
+    |   classDeclaration
+    |   function
+    |   namespace
+    |   block
+    |   fieldDeclaration
+    |   expression ';'
+    ;
+
+returnStatement
+    :   'return' expression? ';'
+    ;
+
+include
+    :   'include' StringLiteral ';'
+    ;
+
+block
+    :   '{' statement* '}'
+    ;
+
+classDeclaration
+    :   'class' Identifier '{' member* '}'
+    ;
+
+member
+    :   classDeclaration | fieldDeclaration | function
+    ;
+
+namespace
+    :   'namespace' fqn '{' (classDeclaration | function | namespace)* '}'
+    ;
+
+fqn
+    :   (Identifier '::')* Identifier
+    ;
+
+valueDeclaration
+    :   'val' Identifier ':' typeName '=' expression ';'
+    ;
+
+variableDeclaration
+    :   'var' Identifier ':' typeName ('=' expression)? ';'
+    ;
+
+fieldDeclaration
+    :   valueDeclaration | variableDeclaration
+    ;
+
+function
+    :   'func' Identifier '(' functionArgumentList? ')' ':' typeName (';' | block)
+    ;
+
+functionArgument
+    :   'var'? Identifier ':' typeName
+    ;
+
+functionArgumentList
+    :   functionArgument
+    |   functionArgumentList ',' functionArgument
+    ;
+
 primaryExpression
-    :   Identifier
+    :   fqn
     |   Constant
     |   StringLiteral+
     |   '(' expression ')'
