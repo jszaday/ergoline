@@ -1,0 +1,11 @@
+func main(args : list<string>): unit {
+    val f : int => unit =
+        (i : int) => ck::println("hello $i");
+    val n : int = args.size() > 1 ? args[1].toInt() : 16;
+
+    for (i <- range(n)) {
+        f(i);
+    }
+
+    return;
+}

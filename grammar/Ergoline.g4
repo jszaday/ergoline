@@ -5,13 +5,19 @@ program
     ;
 
 statement
-    :   returnStatement
+    :   forLoop
+    |   returnStatement
     |   classDeclaration
     |   function
     |   namespace
     |   block
     |   fieldDeclaration
     |   expression ';'
+    ;
+
+forLoop
+    :   'for' '(' Identifier '<-' expression ')' (block | statement)
+    // |   'for' '(' variableDeclaration expression ';' expression ')' (block | statement)
     ;
 
 returnStatement
@@ -43,11 +49,11 @@ fqn
     ;
 
 valueDeclaration
-    :   'val' Identifier ':' typeName '=' expression ';'
+    :   'val' Identifier ':' type '=' expression ';'
     ;
 
 variableDeclaration
-    :   'var' Identifier ':' typeName ('=' expression)? ';'
+    :   'var' Identifier ':' type ('=' expression)? ';'
     ;
 
 fieldDeclaration
@@ -55,11 +61,11 @@ fieldDeclaration
     ;
 
 function
-    :   'func' Identifier '(' functionArgumentList? ')' ':' typeName (';' | block)
+    :   'func' Identifier '(' functionArgumentList? ')' ':' type (';' | block)
     ;
 
 functionArgument
-    :   'var'? Identifier ':' typeName
+    :   'var'? Identifier ':' type
     ;
 
 functionArgumentList
@@ -71,7 +77,12 @@ primaryExpression
     :   fqn
     |   Constant
     |   StringLiteral+
+    |   lambdaExpression
     |   '(' expression ')'
+    ;
+
+lambdaExpression
+    :   '(' functionArgumentList ')' '=>' (block | expression)
     ;
 
 postfixExpression
@@ -90,7 +101,7 @@ unaryExpression
     :   postfixExpression
     |   unaryOperator castExpression
     // |   'sizeof' unaryExpression
-    // |   'sizeof' '(' typeName ')'
+    // |   'sizeof' '(' type ')'
     ;
 
 unaryOperator
@@ -98,7 +109,7 @@ unaryOperator
     ;
 
 castExpression
-    :   '(' typeName ')' castExpression
+    :   '(' type ')' castExpression
     |   unaryExpression
     ;
 
@@ -168,8 +179,26 @@ expression
     :   conditionalExpression
     ;
 
-typeName
-    :   Identifier
+typeList
+    :   (type ',')* type
+    ;
+
+tupleType
+    :   '(' typeList ')'
+    ;
+
+basicType
+    :   fqn ('<' typeList '>')?
+    ;
+
+lambdaType
+    :   (basicType | tupleType) '=>' type
+    ;
+
+type
+    :   basicType
+    |   tupleType
+    |   lambdaType
     ;
 
 Identifier
