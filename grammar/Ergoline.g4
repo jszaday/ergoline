@@ -32,12 +32,33 @@ block
     :   '{' statement* '}'
     ;
 
+templateDeclArg
+    :   Identifier
+    ;
+
+templateDecl
+    :   '<' (templateDeclArg ',')* templateDeclArg '...'? '>'
+    ;
+
+accessModifier
+    :   'public' | 'protected' | 'private'
+    ;
+
+inheritanceDecl
+    :   ('extends' type)? ('implements' type ('and' type)*)?
+    ;
+
 classDeclaration
-    :   'class' Identifier '{' member* '}'
+    :   'class' Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    ;
+
+annotatedMember
+    :   annotation* member
     ;
 
 member
-    :   classDeclaration | fieldDeclaration | function
+    :   accessModifier? ( classDeclaration | fieldDeclaration )
+    |   accessModifier? 'override'? function
     ;
 
 namespace
@@ -61,7 +82,7 @@ fieldDeclaration
     ;
 
 function
-    :   'func' Identifier '(' functionArgumentList? ')' ':' type (';' | block)
+    :   'func' Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
     ;
 
 functionArgument
@@ -192,13 +213,17 @@ basicType
     ;
 
 lambdaType
-    :   (basicType | tupleType) '=>' type
+    :   (basicType | tupleType) '=>' (basicType | tupleType)
     ;
 
 type
     :   basicType
     |   tupleType
     |   lambdaType
+    ;
+
+annotation
+    :   '@' Identifier
     ;
 
 Identifier
@@ -428,11 +453,11 @@ Newline
     ;
 
 BlockComment
-    :   '#%' .*? '%#'
+    :   '/*' .*? '*/'
         -> skip
     ;
 
 LineComment
-    :   '#' ~[\r\n]*
+    :   '//' ~[\r\n]*
         -> skip
     ;
