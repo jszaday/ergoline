@@ -1,7 +1,15 @@
 grammar Ergoline;
 
 program
-    :   (include | namespace | classDeclaration | function)+
+    : packageStatement? importStatement* (namespace | classDeclaration | function)+
+    ;
+
+packageStatement
+    :   'package' fqn ';'
+    ;
+
+importStatement
+    :   'import' fqn ';'
     ;
 
 statement
@@ -22,10 +30,6 @@ forLoop
 
 returnStatement
     :   'return' expression? ';'
-    ;
-
-include
-    :   'include' StringLiteral ';'
     ;
 
 block
@@ -227,8 +231,8 @@ annotation
     ;
 
 Identifier
-    :   Nondigit
-        (   Nondigit
+    :   NonDigit
+        (   NonDigit
         |   Digit
         )*
     ;
@@ -239,7 +243,7 @@ Constant
     |   CharacterConstant
     ;
 
-fragment Nondigit
+fragment NonDigit
     :   [a-zA-Z_]
     ;
 
