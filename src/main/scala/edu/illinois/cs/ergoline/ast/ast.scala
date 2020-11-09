@@ -1,4 +1,4 @@
-package edu.illinois.cs.ergoline
+package edu.illinois.cs.ergoline.ast
 
 abstract class EirNode {
   var parent: Option[EirNode]
