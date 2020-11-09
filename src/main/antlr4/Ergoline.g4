@@ -1,7 +1,11 @@
 grammar Ergoline;
 
 program
-    : packageStatement? importStatement* (namespace | classDeclaration | function)+
+    : packageStatement? importStatement* programStatement*
+    ;
+
+programStatement
+    :   namespace | classDeclaration | function
     ;
 
 packageStatement

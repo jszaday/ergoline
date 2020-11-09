@@ -1,7 +1,11 @@
 package edu.illinois.cs.ergoline
 
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
+
+import edu.illinois.cs.ergoline.ast.EirNamespace
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+
+import scala.collection.mutable
 
 object Driver extends App {
   // get the options from the command-line args
@@ -16,6 +20,6 @@ object Driver extends App {
   })
   // visit each file
   for (parser <- parsers) {
-    parser.program.enterRule(new Listener)
+    (new Visitor).visitProgram(parser.program())
   }
 }

@@ -1,5 +1,9 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.ast
+
+import scala.collection.mutable
+
 abstract class EirNode {
   var parent: Option[EirNode]
 
@@ -88,10 +92,14 @@ trait EirScopedNode extends EirNode {
   }
 }
 
-//case object EirGlobalNamespace extends EirScope {
-//  override var children: List[EirNode] = List.empty
-//  override var parent: Option[EirNode] = None
-//}
+case object EirGlobalNamespace extends EirScope {
+  def put(name : String, eirNamespace: EirNamespace): Option[EirNamespace] = modules.put(name, eirNamespace)
+
+  private val modules : mutable.HashMap[String, EirNamespace] = new mutable.HashMap
+  override def symbols: Map[String, EirNode] = modules.toMap
+  override var children: List[EirNode] = List.empty
+  override var parent: Option[EirNode] = None
+}
 
 case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode], var name: String)
   extends EirScope with EirNamedNode {
