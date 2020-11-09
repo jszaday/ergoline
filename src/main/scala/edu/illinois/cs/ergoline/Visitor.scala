@@ -1,5 +1,7 @@
 package edu.illinois.cs.ergoline
 
+import edu.illinois.cs.ergoline.ast.EirAccessibility
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -11,6 +13,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
+  val defaultMemberAccessibility: EirAccessibility.Value = EirAccessibility.Private
 
   /**
    * {@inheritDoc }
@@ -52,20 +55,17 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitClassDeclaration(ctx: ClassDeclarationContext): Any = {
     val c: EirClass = EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil)
     parents.push(c)
-    for (member <- ctx.annotatedMember().asScala) {
-      val visited = visitMember(member.member()).asInstanceOf[EirNode]
-      parents.push(visited)
-      visited.annotations ++= member.annotation().asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
-      c.members ++= List(parents.pop().asInstanceOf[EirMember])
-    }
-    println("visiting class " + c)
+    c.members ++= ctx.annotatedMember().asScala.map(ctx => {
+      parents.push(visitMember(ctx.member()).asInstanceOf[EirNode])
+      parents.head.annotations ++= ctx.annotation().asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
+      parents.pop().asInstanceOf[EirMember]
+    })
     parents.pop()
   }
 
   override def visitMember(ctx: MemberContext): Any = {
-    val accessModifier = Option(ctx.accessModifier()).map(_.getText).getOrElse("private")
     EirMember(parents.headOption, super.visitMember(ctx).asInstanceOf[EirNamedNode],
-      EirAccessibility.withName(accessModifier.capitalize))
+      Option(ctx.accessModifier()).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility))
   }
 
   override def visitFunction(ctx: FunctionContext): Any = {
