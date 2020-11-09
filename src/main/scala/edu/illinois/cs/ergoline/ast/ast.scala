@@ -1,13 +1,18 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.ast
-
 import scala.collection.mutable
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility}
+
+object EirAccessibility extends Enumeration {
+  type EirAccessibility = Value
+  val Public, Private, Protected = Value
+}
 
 abstract class EirNode {
   var parent: Option[EirNode]
+  var annotations: List[EirAnnotation] = Nil
 
-  def validate() : Boolean
+  def validate(): Boolean
 }
 
 class EirResolvable[T](qualifiers: List[String], name: String) {
@@ -45,7 +50,8 @@ trait EirExpression {
 
 abstract class EirScope extends EirNode with EirScopedNode {
   var cachedSymbols: Option[(Int, Map[String, EirNode])] = None
-  var children: List[EirNode]
+
+  def children: Iterable[EirNode]
 
   def contains(symbol: String): Boolean = symbols.contains(symbol)
 
@@ -68,13 +74,13 @@ abstract class EirScope extends EirNode with EirScopedNode {
   override def scope: Option[EirScope] = Some(this)
 
   override def validate(): Boolean = {
-    val declarations = children.collect { case x: EirNamedNode => x.name }
+    val declarations = children.collect { case x: EirNamedNode => x.name }.toList
     declarations.distinct.size == declarations.size
   }
 }
 
 trait EirNamedNode extends EirNode {
-  var name: String
+  def name: String
 
   def fullyQualifiedName: List[String] = parent match {
     case Some(x: EirNamedNode) => x.fullyQualifiedName ++ List(name)
@@ -93,12 +99,14 @@ trait EirScopedNode extends EirNode {
 }
 
 case object EirGlobalNamespace extends EirScope {
-  def put(name : String, eirNamespace: EirNamespace): Option[EirNamespace] = modules.put(name, eirNamespace)
+  def put(name: String, ns: EirNamespace): Option[EirNamespace] = modules.put(name, ns)
 
-  private val modules : mutable.HashMap[String, EirNamespace] = new mutable.HashMap
-  override def symbols: Map[String, EirNode] = modules.toMap
-  override var children: List[EirNode] = List.empty
+  private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
   override var parent: Option[EirNode] = None
+
+  override def symbols: Map[String, EirNode] = modules.toMap
+
+  override def children: Iterable[EirNode] = modules.values
 }
 
 case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode], var name: String)
@@ -131,18 +139,39 @@ case class EirTemplateArgument(var parent: Option[EirNode]) extends EirNode {
   override def validate(): Boolean = true
 }
 
-case class EirClass(var parent: Option[EirNode], var children: List[EirNode],
+case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirClass]],
                     var implementsThese: List[EirResolvable[EirTrait]])
   extends EirScope with EirNamedNode with EirInheritable[EirClass] {
-
+  override def children: List[EirNode] = members ++ templateArgs
 }
 
-case class EirTrait(var parent: Option[EirNode], var children: List[EirNode],
+case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirTrait]],
                     var implementsThese: List[EirResolvable[EirTrait]])
   extends EirScope with EirNamedNode with EirInheritable[EirTrait] {
+  override def children: List[EirNode] = members ++ templateArgs
+}
 
+case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility)
+  extends EirNamedNode {
+  override def name: String = member.name
+
+  override def toString: String = s"${accessibility.toString.toLowerCase} $name"
+
+  override def validate(): Boolean = true
+
+  def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
+}
+
+case class EirFunction(var parent: Option[EirNode], var children: List[EirNode],
+                       var name: String, var templateArgs: List[EirTemplateArgument])
+  extends EirScope with EirNamedNode {
+
+}
+
+case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {
+  override def validate(): Boolean = ???
 }
