@@ -141,7 +141,8 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 }
 
 case class EirFunction(var parent: Option[EirNode], var children: List[EirNode],
-                       var name: String, var templateArgs: List[EirTemplateArgument])
+                       var name: String, var templateArgs: List[EirTemplateArgument],
+                       var functionArgs: List[EirFunctionArgument])
   extends EirScope with EirNamedNode {
 
 }
@@ -159,4 +160,10 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
   override def validate(): Boolean = ???
 
   override def toString: String = s"EirBinaryExpression($lhs $op $rhs)"
+}
+
+case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
+                               var declaredType: types.Allowed, var isFinal: Boolean, var isSelfAssigning: Boolean)
+  extends EirNamedNode {
+  override def validate(): Boolean = ???
 }

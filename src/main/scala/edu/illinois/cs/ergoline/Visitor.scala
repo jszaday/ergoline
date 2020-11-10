@@ -17,8 +17,8 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   val defaultModuleName = "__default__"
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
-  implicit def scope: EirScope = parents.head match {
-    case x: EirScopedNode => x.scope.orNull
+  implicit def scope: EirScope = parents.headOption match {
+    case Some(x: EirScopedNode) => x.scope.orNull
     case _ => null
   }
 
@@ -106,11 +106,11 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.pop()
   }
 
-  override def visitFunction(ctx: FunctionContext): Any = {
-    val f = EirFunction(parents.headOption, Nil, ctx.Identifier().getText, Nil)
+  override def visitFunction(ctx: FunctionContext): EirFunction = {
+    val f = EirFunction(parents.headOption, Nil, ctx.Identifier().getText, Nil, visitFunctionArgumentList(ctx.functionArgumentList))
     parents.push(f)
     f.children = visitBlock(ctx.block())
-    parents.pop()
+    parents.pop().asInstanceOf[EirFunction]
   }
 
   override def visitBlock(ctx: BlockContext): List[EirNode] = Option(ctx) match {
@@ -150,7 +150,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       base = EirTemplatedType(base.asAllowed, templates)
     }
     if (ctx.Atpersand() != null) {
-      base = EirProxyType(base.asAllowed, Option(ctx.Collective()).map(_.getText))
+      base = EirProxyType(base.asAllowed, Option(ctx.CollectiveKeyword()).map(_.getText))
     }
     base.asAllowed
   }
@@ -176,5 +176,14 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       e.rhs = visit(children.last).asInstanceOf[EirExpressionNode]
       parents.pop().asInstanceOf[EirExpressionNode]
     } else throw new RuntimeException("how did I get here?")
+  }
+
+  override def visitFunctionArgumentList(ctx: FunctionArgumentListContext): List[EirFunctionArgument] =
+    Option(ctx).map(_.functionArgument).map(_.asScala).getOrElse(Nil).map(visitFunctionArgument).toList
+
+  override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
+    EirFunctionArgument(parents.headOption, ctx.Identifier.getText, visitType(ctx.`type`()),
+      isFinal = Option(ctx.VariableKeyword()).isEmpty,
+      isSelfAssigning = Option(ctx.Equals()).isDefined)
   }
 }

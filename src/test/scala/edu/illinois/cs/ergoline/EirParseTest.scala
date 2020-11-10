@@ -23,4 +23,14 @@ class EirParseTest extends FunSuite {
       case EirBinaryExpression(_, _, "+", EirBinaryExpression(_, _, "*", _)) =>
     }
   }
+  test("mini function args test") {
+    val f = (new Visitor).visitFunction(parserFromString("func foo (var bar : unit, baz= : unit): unit { }").function())
+    f.functionArgs.length shouldEqual 2
+    f.functionArgs.head should matchPattern {
+      case EirFunctionArgument(_, "bar", _, false, false) =>
+    }
+    f.functionArgs.last should matchPattern {
+      case EirFunctionArgument(_, "baz", _, true, true) =>
+    }
+  }
 }

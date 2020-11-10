@@ -84,20 +84,20 @@ fqn
     ;
 
 valueDeclaration
-    :   'val' Identifier ':' type '=' expression ';'
+    :   ValueKeyword Identifier ':' type Equals expression ';'
     ;
 
 variableDeclaration
-    :   'var' Identifier ':' type ('=' expression)? ';'
+    :   VariableKeyword Identifier ':' type (Equals expression)? ';'
+    ;
+
+fieldValueDeclaration
+    :   ValueKeyword Identifier ':' type (Equals expression)? ';'
     ;
 
 topLevelDeclaration
     :   valueDeclaration
     |   variableDeclaration
-    ;
-
-fieldValueDeclaration
-    :   'val' Identifier ':' type ('=' expression)? ';'
     ;
 
 fieldDeclaration
@@ -110,12 +110,11 @@ function
     ;
 
 functionArgument
-    :   'var'? Identifier '='? ':' type
+    :   VariableKeyword? Identifier Equals? ':' type
     ;
 
 functionArgumentList
-    :   functionArgument
-    |   functionArgumentList ',' functionArgument
+    :   (functionArgument ',')* functionArgument
     ;
 
 primaryExpression
@@ -233,7 +232,7 @@ tupleType
     ;
 
 basicType
-    :   fqn ('<' typeList '>')? (Atpersand Collective?)?
+    :   fqn ('<' typeList '>')? (Atpersand CollectiveKeyword?)?
     ;
 
 lambdaType
@@ -254,11 +253,15 @@ Atpersand
     :   '@'
     ;
 
-Collective
+CollectiveKeyword
     :   'array1d'
     |   'nodegroup'
     |   'group'
     ;
+VariableKeyword : 'var' ;
+ValueKeyword : 'val' ;
+
+Equals : '=' ;
 
 Identifier
     :   NonDigit
