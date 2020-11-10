@@ -1,7 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
 import scala.collection.mutable
-import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
@@ -163,7 +162,7 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
   override def children: List[EirNode] = members ++ templateArgs
 }
 
-case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility)
+case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
   override def toString: String = s"${accessibility.toString.toLowerCase} $name"
 

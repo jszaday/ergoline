@@ -3,16 +3,16 @@ package edu.illinois.cs.ergoline
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.tree.TerminalNode
-
 import ast._
 import ast.{EirGlobalNamespace => modules, _}
 import ErgolineParser._
+import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
-  val defaultMemberAccessibility: EirAccessibility.Value = EirAccessibility.Private
+  val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
   override def visitProgram(ctx: ProgramContext): Any = {
     val ps = Option(ctx.packageStatement())
@@ -73,22 +73,24 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     val c: EirClass = EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil)
     parents.push(c)
     c.members ++= ctx.annotatedMember().asScala.map(ctx => {
-      parents.push(visitMember(ctx.member()).asInstanceOf[EirNode])
+      parents.push(visitMember(ctx.member()))
       parents.head.annotations ++= visitAnnotationList(ctx.annotation())
       parents.pop().asInstanceOf[EirMember]
     })
     parents.pop()
   }
 
-  override def visitMember(ctx: MemberContext): Any = {
-    val member = if (ctx.fieldDeclaration() != null) {
-      visitFieldDeclaration(ctx.fieldDeclaration())
-    } else {
-      visitTopLevelStatement(ctx.topLevelStatement())
-    }
-    EirMember(parents.headOption, member.asInstanceOf[EirNamedNode],
-      Option(ctx.accessModifier()).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility))
+  override def visitMember(ctx: MemberContext): EirNode = {
+    val m = EirMember(parents.headOption, null, visitAccessModifier(ctx.accessModifier))
+    parents.push(m)
+    Option(ctx.fieldDeclaration())
+      .orElse(Option(ctx.topLevelStatement()))
+      .map(this.visit).foreach(x => x.asInstanceOf[EirNamedNode])
+    parents.pop()
   }
+
+  override def visitAccessModifier(ctx: AccessModifierContext): EirAccessibility =
+    Option(ctx).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
 
   override def visitNamespace(ctx: NamespaceContext): Any = {
     val ns = getModule(visitFqn(ctx.fqn()))
