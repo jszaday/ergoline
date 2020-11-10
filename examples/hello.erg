@@ -1,8 +1,10 @@
 package examples;
 import ck;
 
-class hello extends ck::mainchare {
-    @entry func hello(self : hello, args : list<string>): unit {
+@main class hello {
+    val proxy: hello@;
+
+    @entry func hello(self : hello, proxy= : hello@, args : list<string>): unit {
         val f : int => unit =
             (i : int) => ck::println("hello $i");
         val n : int = args.size() > 1 ? args[1].toInt() : 16;

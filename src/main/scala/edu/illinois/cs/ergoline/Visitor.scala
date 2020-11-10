@@ -45,13 +45,25 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       case _ => List(defaultModuleName)
     })
     parents.push(module)
-    ctx.importStatement().asScala.foreach(this.visitImportStatement)
-    module.children ++= visitTopLevelStatementList(ctx.topLevelStatement)
+    module.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
     parents.pop()
   }
 
-  def visitTopLevelStatementList(statements: java.util.List[TopLevelStatementContext]): Iterable[EirNode] =
-    statements.asScala.map(this.visitTopLevelStatement).map(_.asInstanceOf[EirNode])
+  def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
+    if (annotations.isEmpty) Nil
+    else annotations.asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
+
+  def visitStatementList(statements: java.util.List[AnnotatedTopLevelStatementContext]): Iterable[EirNode] =
+    statements.asScala.map(this.visitAnnotatedTopLevelStatement)
+
+  override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode =
+    Option(visit(ctx.topLevelStatement())) match {
+      case Some(s: EirNode) =>
+        parents.push(s)
+        s.annotations ++= visitAnnotationList(ctx.annotation())
+        parents.pop()
+      case _ => null
+    }
 
   /**
    * {@inheritDoc }
@@ -68,7 +80,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.push(c)
     c.members ++= ctx.annotatedMember().asScala.map(ctx => {
       parents.push(visitMember(ctx.member()).asInstanceOf[EirNode])
-      parents.head.annotations ++= ctx.annotation().asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
+      parents.head.annotations ++= visitAnnotationList(ctx.annotation())
       parents.pop().asInstanceOf[EirMember]
     })
     parents.pop()
@@ -77,12 +89,17 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitNamespace(ctx: NamespaceContext): Any = {
     val ns = getModule(visitFqn(ctx.fqn()))
     parents.push(ns)
-    ns.children ++= visitTopLevelStatementList(ctx.topLevelStatement())
+    ns.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
     parents.pop()
   }
 
   override def visitMember(ctx: MemberContext): Any = {
-    EirMember(parents.headOption, super.visitMember(ctx).asInstanceOf[EirNamedNode],
+    val member = if (ctx.fieldDeclaration() != null) {
+      visitFieldDeclaration(ctx.fieldDeclaration())
+    } else {
+      visitTopLevelStatement(ctx.topLevelStatement())
+    }
+    EirMember(parents.headOption, member.asInstanceOf[EirNamedNode],
       Option(ctx.accessModifier()).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility))
   }
 
@@ -108,9 +125,11 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.pop()
   }
 
-  override def visitValueDeclaration(ctx: ValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
+  override def visitValueDeclaration(ctx: ValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
 
-  override def visitVariableDeclaration(ctx: VariableDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
+  override def visitFieldValueDeclaration(ctx: FieldValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
+
+  override def visitVariableDeclaration(ctx: VariableDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
   override def visitExpression(ctx: ExpressionContext): Any = null
 

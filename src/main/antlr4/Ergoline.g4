@@ -1,11 +1,18 @@
 grammar Ergoline;
 
 program
-    : packageStatement? importStatement* topLevelStatement*
+    : packageStatement? annotatedTopLevelStatement*
+    ;
+
+annotatedTopLevelStatement
+    :   annotation* topLevelStatement
     ;
 
 topLevelStatement
-    :   namespace | classDeclaration | function
+    :   importStatement
+    |   namespace
+    |   classDeclaration
+    |   function
     ;
 
 packageStatement
@@ -23,7 +30,7 @@ statement
     |   function
     |   namespace
     |   block
-    |   fieldDeclaration
+    |   topLevelDeclaration
     |   expression ';'
     ;
 
@@ -65,11 +72,11 @@ annotatedMember
     ;
 
 member
-    :   accessModifier? 'override'? topLevelStatement
+    :   accessModifier? 'override'? ( fieldDeclaration | topLevelStatement )
     ;
 
 namespace
-    :   'namespace' fqn '{' topLevelStatement* '}'
+    :   'namespace' fqn '{' annotatedTopLevelStatement* '}'
     ;
 
 fqn
@@ -84,8 +91,18 @@ variableDeclaration
     :   'var' Identifier ':' type ('=' expression)? ';'
     ;
 
+topLevelDeclaration
+    :   valueDeclaration
+    |   variableDeclaration
+    ;
+
+fieldValueDeclaration
+    :   'val' Identifier ':' type ('=' expression)? ';'
+    ;
+
 fieldDeclaration
-    :   valueDeclaration | variableDeclaration
+    :   fieldValueDeclaration
+    |   variableDeclaration
     ;
 
 function
@@ -93,7 +110,7 @@ function
     ;
 
 functionArgument
-    :   'var'? Identifier ':' type
+    :   'var'? Identifier '='? ':' type
     ;
 
 functionArgumentList
@@ -216,7 +233,7 @@ tupleType
     ;
 
 basicType
-    :   fqn ('<' typeList '>')?
+    :   fqn ('<' typeList '>')? ('@' Collective?)?
     ;
 
 lambdaType
@@ -231,6 +248,12 @@ type
 
 annotation
     :   '@' Identifier
+    ;
+
+Collective
+    :   'array1d'
+    |   'nodegroup'
+    |   'group'
     ;
 
 Identifier
