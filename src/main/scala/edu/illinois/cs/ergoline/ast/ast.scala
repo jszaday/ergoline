@@ -78,6 +78,8 @@ trait EirScopedNode extends EirNode {
   }
 }
 
+case class EirBlock(var parent: Option[EirNode], var children: Iterable[EirNode]) extends EirScope
+
 case object EirGlobalNamespace extends EirScope {
   private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
 
@@ -140,11 +142,11 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   override def name: String = member.name
 }
 
-case class EirFunction(var parent: Option[EirNode], var children: List[EirNode],
+case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument])
   extends EirScope with EirNamedNode {
-
+  override def children: Iterable[EirNode] = body.map(List(_)).getOrElse(Nil) ++ templateArgs ++ functionArgs
 }
 
 case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {

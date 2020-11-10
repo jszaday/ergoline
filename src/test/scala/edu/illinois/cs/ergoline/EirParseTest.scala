@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax._
+
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
@@ -32,5 +32,14 @@ class EirParseTest extends FunSuite {
     f.functionArgs.last should matchPattern {
       case EirFunctionArgument(_, "baz", _, true, true) =>
     }
+  }
+  test("annotated function retrieval test") {
+    visitProgram(parserFromString("package foo; @entry func bar(): unit { }"))
+    val fs = util.findAnnotated[EirFunction]("entry", EirGlobalNamespace)
+    val retrievedFn = fs.exists {
+      case EirFunction(_, _, "bar", _, _) => true
+      case _ => false
+    }
+    assert(retrievedFn)
   }
 }

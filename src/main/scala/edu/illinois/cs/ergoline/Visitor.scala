@@ -107,15 +107,23 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   }
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
-    val f = EirFunction(parents.headOption, Nil, ctx.Identifier().getText, Nil, visitFunctionArgumentList(ctx.functionArgumentList))
+    val f = EirFunction(parents.headOption, None, ctx.Identifier().getText, Nil, Nil)
     parents.push(f)
-    f.children = visitBlock(ctx.block())
+    f.templateArgs = visitTemplateDecl(ctx.templateDecl())
+    f.functionArgs = visitFunctionArgumentList(ctx.functionArgumentList)
+    f.body = visitBlock(ctx.block())
     parents.pop().asInstanceOf[EirFunction]
   }
 
-  override def visitBlock(ctx: BlockContext): List[EirNode] = Option(ctx) match {
-    case Some(ctx) => ctx.statement().asScala.map(f => visit(f).asInstanceOf[EirNode]).toList
-    case _ => Nil
+  override def visitBlock(ctx: BlockContext): Option[EirBlock] = Option(ctx).map(_.statement.asScala).map(it =>
+    EirBlock(parents.headOption, it.map(f => visit(f).asInstanceOf[EirNode]))
+  )
+
+  override def visitTemplateDecl(ctx: TemplateDeclContext): List[EirTemplateArgument] =
+    Option(ctx).map(_.templateDeclArg.asScala).getOrElse(Nil).map(visitTemplateDeclArg).toList
+
+  override def visitTemplateDeclArg(ctx: TemplateDeclArgContext): EirTemplateArgument = {
+    null
   }
 
   override def visitValueDeclaration(ctx: ValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
@@ -155,16 +163,25 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     base.asAllowed
   }
 
-  override def visitMultiplicativeExpression(ctx : MultiplicativeExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitAdditiveExpression(ctx : AdditiveExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitShiftExpression(ctx : ShiftExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitRelationalExpression(ctx : RelationalExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitEqualityExpression(ctx : EqualityExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitAndExpression(ctx : AndExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitExclusiveOrExpression(ctx : ExclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitInclusiveOrExpression(ctx : InclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitLogicalAndExpression(ctx : LogicalAndExpressionContext): Any = visitBinaryExpression(ctx)
-  override def visitLogicalOrExpression(ctx : LogicalOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitAdditiveExpression(ctx: AdditiveExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitShiftExpression(ctx: ShiftExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitRelationalExpression(ctx: RelationalExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitEqualityExpression(ctx: EqualityExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitAndExpression(ctx: AndExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitExclusiveOrExpression(ctx: ExclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitInclusiveOrExpression(ctx: InclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitLogicalAndExpression(ctx: LogicalAndExpressionContext): Any = visitBinaryExpression(ctx)
+
+  override def visitLogicalOrExpression(ctx: LogicalOrExpressionContext): Any = visitBinaryExpression(ctx)
 
   def visitBinaryExpression[T <: ParserRuleContext](ctx: T): EirExpressionNode = {
     val children = ctx.children.asScala.toList

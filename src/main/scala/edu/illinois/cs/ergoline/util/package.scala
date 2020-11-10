@@ -17,6 +17,17 @@ package object util {
     }
   }
 
+  def findMatching[T: Manifest](pattern : PartialFunction[EirNode, T], scope : EirScope): Iterable[T] = {
+    scope.children.collect{
+      case x : EirScope => findMatching(pattern, x)
+    }.flatten ++ scope.children.collect(pattern)
+  }
+
+  def findAnnotated[T <: EirNode: Manifest](name : String, scope : EirScope): Iterable[T] =
+    findMatching[T]({
+      case x : T if x.annotations.exists(_.name == name) => x
+    }, scope)
+
   trait EirResolvable[T] {
     def resolve(scope: EirScope): Option[T]
 

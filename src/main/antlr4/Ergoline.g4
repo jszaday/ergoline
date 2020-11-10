@@ -9,10 +9,10 @@ annotatedTopLevelStatement
     ;
 
 topLevelStatement
-    :   importStatement
+    :   function
     |   namespace
+    |   importStatement
     |   classDeclaration
-    |   function
     ;
 
 packageStatement
@@ -24,14 +24,14 @@ importStatement
     ;
 
 statement
-    :   forLoop
-    |   returnStatement
-    |   classDeclaration
+    :   block
+    |   forLoop
     |   function
     |   namespace
-    |   block
-    |   topLevelDeclaration
     |   expression ';'
+    |   returnStatement
+    |   classDeclaration
+    |   topLevelDeclaration
     ;
 
 forLoop
