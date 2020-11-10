@@ -56,10 +56,9 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     }
 
   def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
-    if (annotations.isEmpty) Nil
-    else annotations.asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
+    annotations.asScala.map(this.visitAnnotation)
 
-  override def visitAnnotation(ctx: AnnotationContext): Any =
+  override def visitAnnotation(ctx: AnnotationContext): EirAnnotation =
     EirAnnotation(parents.headOption, ctx.Identifier().getText)
 
   override def visitFqn(ctx: FqnContext): Iterable[String] =
@@ -102,11 +101,11 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitFunction(ctx: FunctionContext): Any = {
     val f = EirFunction(parents.headOption, Nil, ctx.Identifier().getText, Nil)
     parents.push(f)
-    f.children = visitBlock(ctx.block()).asInstanceOf[List[EirNode]]
+    f.children = visitBlock(ctx.block())
     parents.pop()
   }
 
-  override def visitBlock(ctx: BlockContext): Any = Option(ctx) match {
+  override def visitBlock(ctx: BlockContext): List[EirNode] = Option(ctx) match {
     case Some(ctx) => ctx.statement().asScala.map(f => visit(f).asInstanceOf[EirNode]).toList
     case _ => Nil
   }
@@ -120,11 +119,12 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
     val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType).asInstanceOf[EirResolvable[EirType]], None)
     parents.push(d)
-    d.initialValue = Option(expressionContext).map(visitExpression(_).asInstanceOf[EirExpressionNode])
+    d.initialValue = Option(expressionContext).map(visitExpression)
     parents.pop()
   }
 
-  override def visitExpression(ctx: ExpressionContext): Any = null
+  override def visitExpression(ctx: ExpressionContext): EirExpressionNode =
+    super.visitExpression(ctx).asInstanceOf[EirExpressionNode]
 
   override def visitBasicType(ctx: BasicTypeContext): Any = {
     EirResolvable[EirType](visitFqn(ctx.fqn()))
