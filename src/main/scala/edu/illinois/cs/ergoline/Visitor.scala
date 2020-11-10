@@ -8,12 +8,18 @@ import ast.{EirGlobalNamespace => modules, _}
 import ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.types._
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowedIterable, RichType}
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
+
+  implicit def scope: EirScope = parents.head match {
+    case x : EirScopedNode => x.scope.orNull
+    case _ => null
+  }
 
   override def visitProgram(ctx: ProgramContext): Any = {
     val ps = Option(ctx.packageStatement())
@@ -127,26 +133,23 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitExpression(ctx: ExpressionContext): EirExpressionNode =
     super.visitExpression(ctx).asInstanceOf[EirExpressionNode]
 
-  override def visitType(ctx: TypeContext): types.Allowed = super.visitType(ctx).asInstanceOf[types.Allowed]
-  override def visitTypeList(ctx: TypeListContext): Iterable[types.Allowed] = {
+  override def visitType(ctx: TypeContext): Allowed = super.visitType(ctx).asInstanceOf[Allowed]
+  override def visitTypeList(ctx: TypeListContext): Iterable[Allowed] = {
     Option(ctx).map(_.`type`.asScala).getOrElse(Nil).map(visitType)
   }
 
-  override def visitTupleType(ctx: TupleTypeContext): types.Allowed =
-    EirTupleType.fromElements(visitTypeList(ctx.typeList()))
+  override def visitTupleType(ctx: TupleTypeContext): Allowed =
+    visitTypeList(ctx.typeList()).asType
 
-  override def visitBasicType(ctx: BasicTypeContext): types.Allowed = {
-    var base : types.Allowed = Left(EirResolvableType.fromName(parents.head match {
-      case x : EirScopedNode => x.scope.orNull
-      case _ => null
-    }, visitFqn(ctx.fqn)))
+  override def visitBasicType(ctx: BasicTypeContext): Allowed = {
+    var base: EirType = EirResolvableType.fromName(visitFqn(ctx.fqn))
     val templates = visitTypeList(ctx.typeList()).toList
     if (templates.nonEmpty) {
-      base = Left(EirTemplatedType(base, templates))
+      base = EirTemplatedType(base.asAllowed, templates)
     }
     if (ctx.Atpersand() != null) {
-      base = Left(EirProxyType(base, Option(ctx.Collective()).map(_.getText)))
+      base = EirProxyType(base.asAllowed, Option(ctx.Collective()).map(_.getText))
     }
-    base
+    base.asAllowed
   }
 }
