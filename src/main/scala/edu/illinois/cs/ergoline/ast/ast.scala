@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import scala.collection.mutable
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
@@ -21,7 +21,7 @@ trait EirResolvable[T] {
   def resolveDefinitely(scope: EirScope): T = resolve(scope).get
 }
 
-class EirResolvableName[T](fqn: Iterable[String]) extends EirResolvable[T] {
+class EirResolvableName[T : Manifest](fqn: Iterable[String]) extends EirResolvable[T] {
   def resolve(scope: EirScope): Option[T] = {
     fqn.foldLeft[Option[EirNode]](Some(scope))({
       case (Some(s: EirScope), name) => s(name)
@@ -34,7 +34,7 @@ class EirResolvableName[T](fqn: Iterable[String]) extends EirResolvable[T] {
 }
 
 object EirResolvable {
-  def apply[T](it: Iterable[String]): EirResolvable[T] = new EirResolvableName[T](it)
+  def apply[T : Manifest](it: Iterable[String]): EirResolvable[T] = new EirResolvableName[T](it)
 }
 
 trait EirType {
@@ -165,13 +165,13 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility)
   extends EirNamedNode {
-  override def name: String = member.name
-
   override def toString: String = s"${accessibility.toString.toLowerCase} $name"
 
   override def validate(): Boolean = true
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
+
+  override def name: String = member.name
 }
 
 case class EirFunction(var parent: Option[EirNode], var children: List[EirNode],

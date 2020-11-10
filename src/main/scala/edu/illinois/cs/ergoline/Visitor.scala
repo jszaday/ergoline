@@ -14,6 +14,17 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   val defaultModuleName = "__default__"
   val defaultMemberAccessibility: EirAccessibility.Value = EirAccessibility.Private
 
+  override def visitProgram(ctx: ProgramContext): Any = {
+    val ps = Option(ctx.packageStatement())
+    val module = getModule(ps match {
+      case Some(ps) => visitFqn(ps.fqn())
+      case _ => List(defaultModuleName)
+    })
+    parents.push(module)
+    module.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
+    parents.pop()
+  }
+
   def getModule(fqn: Iterable[String], scope: EirScope = EirGlobalNamespace): EirNamespace = {
     fqn.foldLeft[EirScope](scope)((parent, name) => {
       parent(name) match {
@@ -32,27 +43,6 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     }).asInstanceOf[EirNamespace]
   }
 
-  /**
-   * {@inheritDoc }
-   *
-   * <p>The default implementation returns the result of calling
-   * {@link #visitChildren} on {@code ctx}.</p>
-   */
-  override def visitProgram(ctx: ProgramContext): Any = {
-    val ps = Option(ctx.packageStatement())
-    val module = getModule(ps match {
-      case Some(ps) => visitFqn(ps.fqn())
-      case _ => List(defaultModuleName)
-    })
-    parents.push(module)
-    module.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
-    parents.pop()
-  }
-
-  def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
-    if (annotations.isEmpty) Nil
-    else annotations.asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
-
   def visitStatementList(statements: java.util.List[AnnotatedTopLevelStatementContext]): Iterable[EirNode] =
     statements.asScala.map(this.visitAnnotatedTopLevelStatement)
 
@@ -65,12 +55,16 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       case _ => null
     }
 
-  /**
-   * {@inheritDoc }
-   *
-   * <p>The default implementation returns the result of calling
-   * {@link #visitChildren} on {@code ctx}.</p>
-   */
+  def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
+    if (annotations.isEmpty) Nil
+    else annotations.asScala.map(this.visitAnnotation).map(_.asInstanceOf[EirAnnotation])
+
+  override def visitAnnotation(ctx: AnnotationContext): Any =
+    EirAnnotation(parents.headOption, ctx.Identifier().getText)
+
+  override def visitFqn(ctx: FqnContext): Iterable[String] =
+    ctx.Identifier().asScala.map(_.getText)
+
   override def visitImportStatement(ctx: ImportStatementContext): Any = {
     println("importing the module " + ctx.fqn().Identifier().asScala.map(_.getText))
   }
@@ -86,13 +80,6 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.pop()
   }
 
-  override def visitNamespace(ctx: NamespaceContext): Any = {
-    val ns = getModule(visitFqn(ctx.fqn()))
-    parents.push(ns)
-    ns.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
-    parents.pop()
-  }
-
   override def visitMember(ctx: MemberContext): Any = {
     val member = if (ctx.fieldDeclaration() != null) {
       visitFieldDeclaration(ctx.fieldDeclaration())
@@ -103,9 +90,11 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       Option(ctx.accessModifier()).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility))
   }
 
-  override def visitBlock(ctx: BlockContext): Any = Option(ctx) match {
-    case Some(ctx) => ctx.statement().asScala.map(f => visit(f).asInstanceOf[EirNode]).toList
-    case _ => Nil
+  override def visitNamespace(ctx: NamespaceContext): Any = {
+    val ns = getModule(visitFqn(ctx.fqn()))
+    parents.push(ns)
+    ns.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
+    parents.pop()
   }
 
   override def visitFunction(ctx: FunctionContext): Any = {
@@ -115,14 +104,9 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.pop()
   }
 
-  override def visitAnnotation(ctx: AnnotationContext): Any =
-    EirAnnotation(parents.headOption, ctx.Identifier().getText)
-
-  def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
-    val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType).asInstanceOf[EirResolvable[EirType]], None)
-    parents.push(d)
-    d.initialValue = Option(expressionContext).map(visitExpression(_).asInstanceOf[EirExpressionNode])
-    parents.pop()
+  override def visitBlock(ctx: BlockContext): Any = Option(ctx) match {
+    case Some(ctx) => ctx.statement().asScala.map(f => visit(f).asInstanceOf[EirNode]).toList
+    case _ => Nil
   }
 
   override def visitValueDeclaration(ctx: ValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
@@ -131,12 +115,16 @@ class Visitor extends ErgolineBaseVisitor[Any] {
 
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
+  def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
+    val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType).asInstanceOf[EirResolvable[EirType]], None)
+    parents.push(d)
+    d.initialValue = Option(expressionContext).map(visitExpression(_).asInstanceOf[EirExpressionNode])
+    parents.pop()
+  }
+
   override def visitExpression(ctx: ExpressionContext): Any = null
 
   override def visitBasicType(ctx: BasicTypeContext): Any = {
     EirResolvable[EirType](visitFqn(ctx.fqn()))
   }
-
-  override def visitFqn(ctx: FqnContext): Iterable[String] =
-    ctx.Identifier().asScala.map(_.getText)
 }

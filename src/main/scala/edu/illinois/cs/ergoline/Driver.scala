@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Path, Paths}
 
 import org.antlr.v4.runtime.{CharStream, CharStreams, CommonTokenStream}
 
