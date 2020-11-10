@@ -1,3 +1,6 @@
+package examples;
+import ck;
+
 class hello extends ck::mainchare {
     @entry func hello(self : hello, args : list<string>): unit {
         val f : int => unit =

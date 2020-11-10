@@ -15,27 +15,26 @@ abstract class EirNode {
   def validate(): Boolean
 }
 
-class EirResolvable[T](qualifiers: List[String], name: String) {
+trait EirResolvable[T] {
+  def resolve(scope: EirScope): Option[T]
+
+  def resolveDefinitely(scope: EirScope): T = resolve(scope).get
+}
+
+class EirResolvableName[T](fqn: Iterable[String]) extends EirResolvable[T] {
   def resolve(scope: EirScope): Option[T] = {
-    var qualified = scope
-    for (qualifier <- qualifiers) {
-      qualified = scope(qualifier) match {
-        case Some(x: EirScope) => x
-        case _ => return None
-      }
-    }
-    qualified(name) match {
+    fqn.foldLeft[Option[EirNode]](Some(scope))({
+      case (Some(s: EirScope), name) => s(name)
+      case _ => None
+    }) match {
       case Some(x: T) => Some(x)
       case _ => None
     }
   }
 }
 
-object EirImplicits {
-  implicit def identListToResolvable[T](value: List[String]): EirResolvable[T] = {
-    if (value.isEmpty) throw new RuntimeException("expected at least one value in list")
-    else new EirResolvable[T](value.init, value.last)
-  }
+object EirResolvable {
+  def apply[T](it: Iterable[String]): EirResolvable[T] = new EirResolvableName[T](it)
 }
 
 trait EirType {
@@ -44,8 +43,12 @@ trait EirType {
   def canCastTo(other: EirType): Boolean
 }
 
-trait EirExpression {
-  def eirType(): EirType
+abstract class EirExpressionNode extends EirNode {
+  def children: Iterable[EirNode]
+
+  def eirType: EirResolvable[EirType]
+
+  def toString: String
 }
 
 abstract class EirScope extends EirNode with EirScopedNode {
@@ -86,6 +89,8 @@ trait EirNamedNode extends EirNode {
     case Some(x: EirNamedNode) => x.fullyQualifiedName ++ List(name)
     case _ => List(name)
   }
+
+  override def hashCode(): Int = name.hashCode
 }
 
 trait EirScopedNode extends EirNode {
@@ -99,10 +104,13 @@ trait EirScopedNode extends EirNode {
 }
 
 case object EirGlobalNamespace extends EirScope {
+  private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
+
   def put(name: String, ns: EirNamespace): Option[EirNamespace] = modules.put(name, ns)
 
-  private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
-  override var parent: Option[EirNode] = None
+  override def parent: Option[EirNode] = None
+
+  override def parent_=(option: Option[EirNode]): Unit = ()
 
   override def symbols: Map[String, EirNode] = modules.toMap
 
@@ -115,12 +123,12 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 }
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
-                          var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpression])
+                          var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNode with EirNamedNode with EirScopedNode {
 
   override def validate(): Boolean = {
     if (isFinal && initialValue.isEmpty) false
-    else initialValue.map(_.eirType().canCastTo(declaredType.resolve(scope.get).get)).getOrElse(true)
+    else initialValue.map(_.eirType.resolveDefinitely(scope.get).canCastTo(declaredType.resolveDefinitely(scope.get))).getOrElse(true)
   }
 }
 
@@ -129,8 +137,8 @@ trait EirInheritable[T <: EirType] extends EirScopedNode with EirType {
   var implementsThese: List[EirResolvable[EirTrait]]
 
   def canCastTo(other: EirType): Boolean =
-    extendsThis.exists(_.resolve(scope.get).exists(_.canCastTo(other))) ||
-      implementsThese.exists(_.resolve(scope.get).exists(_.canCastTo(other))) ||
+    extendsThis.exists(_.resolveDefinitely(scope.get).canCastTo(other)) ||
+      implementsThese.exists(_.resolveDefinitely(scope.get).canCastTo(other)) ||
       // TODO this last check may, eventually, need to be more sophisticated
       other == this
 }

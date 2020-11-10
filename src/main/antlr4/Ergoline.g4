@@ -1,10 +1,10 @@
 grammar Ergoline;
 
 program
-    : packageStatement? importStatement* programStatement*
+    : packageStatement? importStatement* topLevelStatement*
     ;
 
-programStatement
+topLevelStatement
     :   namespace | classDeclaration | function
     ;
 
@@ -65,12 +65,11 @@ annotatedMember
     ;
 
 member
-    :   accessModifier? ( classDeclaration | fieldDeclaration )
-    |   accessModifier? 'override'? function
+    :   accessModifier? 'override'? topLevelStatement
     ;
 
 namespace
-    :   'namespace' fqn '{' (classDeclaration | function | namespace)* '}'
+    :   'namespace' fqn '{' topLevelStatement* '}'
     ;
 
 fqn
