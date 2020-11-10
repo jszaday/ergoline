@@ -1,5 +1,8 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.types.EirType
+import edu.illinois.cs.ergoline.util.EirResolvable
+
 import scala.collection.mutable
 
 object EirAccessibility extends Enumeration {
@@ -14,39 +17,9 @@ abstract class EirNode {
   def validate(): Boolean
 }
 
-trait EirResolvable[T] {
-  def resolve(scope: EirScope): Option[T]
-
-  def resolveDefinitely(scope: EirScope): T = resolve(scope).get
-}
-
-class EirResolvableName[T : Manifest](fqn: Iterable[String]) extends EirResolvable[T] {
-  def resolve(scope: EirScope): Option[T] = {
-    fqn.foldLeft[Option[EirNode]](Some(scope))({
-      case (Some(s: EirScope), name) => s(name)
-      case _ => None
-    }) match {
-      case Some(x: T) => Some(x)
-      case _ => None
-    }
-  }
-}
-
-object EirResolvable {
-  def apply[T : Manifest](it: Iterable[String]): EirResolvable[T] = new EirResolvableName[T](it)
-}
-
-trait EirType {
-  var name: String
-
-  def canCastTo(other: EirType): Boolean
-}
-
 abstract class EirExpressionNode extends EirNode {
   def children: Iterable[EirNode]
-
   def eirType: EirResolvable[EirType]
-
   def toString: String
 }
 

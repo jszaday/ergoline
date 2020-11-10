@@ -7,6 +7,8 @@ import ast._
 import ast.{EirGlobalNamespace => modules, _}
 import ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
+import edu.illinois.cs.ergoline.types.EirType
+import edu.illinois.cs.ergoline.util.EirResolvable
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 

@@ -1,1 +1,4 @@
 src/main/java/*
+target/*
+project/target/*
+src/main/antlr4/.antlr
