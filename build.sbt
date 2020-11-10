@@ -1,13 +1,11 @@
 name := "ergoline"
-
+organization := "edu.illinois.cs.ergoline"
 version := "0.1"
-
 scalaVersion := "2.13.3"
 
-Compile / scalaSource := baseDirectory.value / "src/main/scala"
-Test / scalaSource := baseDirectory.value / "src/test/scala"
-Compile / javaSource := baseDirectory.value / "src/main/java"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.8" % "test"
 
-// https://mvnrepository.com/artifact/org.antlr/antlr4-runtime
-libraryDependencies += "org.antlr" % "antlr4-runtime" % "4.8"
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.8" % Test
+enablePlugins(Antlr4Plugin)
+antlr4PackageName in Antlr4 := Some("edu.illinois.cs.ergoline")
+antlr4GenListener in Antlr4 := false
+antlr4GenVisitor in Antlr4 := true
