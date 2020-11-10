@@ -9,6 +9,7 @@ import ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowedIterable, RichType}
+import org.antlr.v4.runtime.ParserRuleContext
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 
@@ -17,7 +18,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
   implicit def scope: EirScope = parents.head match {
-    case x : EirScopedNode => x.scope.orNull
+    case x: EirScopedNode => x.scope.orNull
     case _ => null
   }
 
@@ -134,6 +135,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     super.visitExpression(ctx).asInstanceOf[EirExpressionNode]
 
   override def visitType(ctx: TypeContext): Allowed = super.visitType(ctx).asInstanceOf[Allowed]
+
   override def visitTypeList(ctx: TypeListContext): Iterable[Allowed] = {
     Option(ctx).map(_.`type`.asScala).getOrElse(Nil).map(visitType)
   }
@@ -151,5 +153,28 @@ class Visitor extends ErgolineBaseVisitor[Any] {
       base = EirProxyType(base.asAllowed, Option(ctx.Collective()).map(_.getText))
     }
     base.asAllowed
+  }
+
+  override def visitMultiplicativeExpression(ctx : MultiplicativeExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitAdditiveExpression(ctx : AdditiveExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitShiftExpression(ctx : ShiftExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitRelationalExpression(ctx : RelationalExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitEqualityExpression(ctx : EqualityExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitAndExpression(ctx : AndExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitExclusiveOrExpression(ctx : ExclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitInclusiveOrExpression(ctx : InclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitLogicalAndExpression(ctx : LogicalAndExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitLogicalOrExpression(ctx : LogicalOrExpressionContext): Any = visitBinaryExpression(ctx)
+
+  def visitBinaryExpression[T <: ParserRuleContext](ctx: T): EirExpressionNode = {
+    val children = ctx.children.asScala.toList
+    if (children.length == 1) visit(children.head).asInstanceOf[EirExpressionNode]
+    else if (children.length == 3) {
+      val e = EirBinaryExpression(parents.headOption, null, children(1).getText, null)
+      parents.push(e)
+      e.lhs = visit(children.head).asInstanceOf[EirExpressionNode]
+      e.rhs = visit(children.last).asInstanceOf[EirExpressionNode]
+      parents.pop().asInstanceOf[EirExpressionNode]
+    } else throw new RuntimeException("how did I get here?")
   }
 }

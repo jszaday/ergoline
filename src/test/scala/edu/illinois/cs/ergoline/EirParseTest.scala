@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax._
 import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
 class EirParseTest extends FunSuite {
   test("define class and resolve it") {
@@ -16,5 +16,11 @@ class EirParseTest extends FunSuite {
     val bazDeclaredType = util.find[EirDeclaration](List("foo", "bar", "baz")).map(_.declaredType)
     val quxDeclaredType = util.find[EirDeclaration](List("foo", "bar", "qux")).map(_.declaredType)
     bazDeclaredType shouldEqual quxDeclaredType
+  }
+  test("mini bin op precedence test") {
+    val expression = (new Visitor).visitExpression(parserFromString("4 + 4 * 6").expression())
+    expression should matchPattern {
+      case EirBinaryExpression(_, _, "+", EirBinaryExpression(_, _, "*", _)) =>
+    }
   }
 }

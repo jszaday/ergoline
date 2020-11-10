@@ -20,7 +20,9 @@ abstract class EirNode {
 
 abstract class EirExpressionNode extends EirNode {
   def children: Iterable[EirNode]
+
   def eirType: EirResolvable[EirType]
+
   def toString: String
 }
 
@@ -146,4 +148,15 @@ case class EirFunction(var parent: Option[EirNode], var children: List[EirNode],
 
 case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {
   override def validate(): Boolean = ???
+}
+
+case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressionNode, var op: String, var rhs: EirExpressionNode)
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = List(lhs, rhs)
+
+  override def eirType: EirResolvable[EirType] = ???
+
+  override def validate(): Boolean = ???
+
+  override def toString: String = s"EirBinaryExpression($lhs $op $rhs)"
 }
