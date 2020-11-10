@@ -1,7 +1,6 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.EirScope
-import edu.illinois.cs.ergoline.types.Allowed
 import edu.illinois.cs.ergoline.util.EirResolvable
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax._
 
@@ -46,4 +45,5 @@ package object types {
       names.asResolvable[EirType].asType
     }
   }
+
 }

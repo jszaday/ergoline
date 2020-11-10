@@ -1,19 +1,18 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.types.{Allowed, EirResolvableType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichStringIterable
 
 package object util {
 
-  def findDeclaration(fqn: Iterable[String], scope: EirScope = EirGlobalNamespace): Option[EirDeclaration] = {
-    findDeclaration(fqn.asResolvable[EirNamedNode], scope)
-  }
+  def find[T: Manifest](fqn: Iterable[String], scope: EirScope = EirGlobalNamespace): Option[T] =
+    find[T](fqn.asResolvable[EirNamedNode], scope)
 
-  def findDeclaration(resolvable: EirResolvable[EirNamedNode], scope: EirScope): Option[EirDeclaration] = {
+  def find[T: Manifest](resolvable: EirResolvable[EirNamedNode], scope: EirScope): Option[T] = {
     resolvable.resolve(scope) match {
-      case Some(EirMember(_, x: EirDeclaration, _)) => Some(x)
-      case Some(x: EirDeclaration) => Some(x)
+      case Some(EirMember(_, x: T, _)) => Some(x)
+      case Some(x: T) => Some(x)
       case _ => None
     }
   }
@@ -47,7 +46,7 @@ package object util {
       def asResolvable[T: Manifest]: EirResolvable[T] = new EirResolvableName[T](fqn)
     }
 
-    implicit class RichAllowedIterable(types : Iterable[Allowed]) {
+    implicit class RichAllowedIterable(types: Iterable[Allowed]) {
       def asType: Allowed =
         types.toList match {
           case Nil => throw new RuntimeException("please use unit type")
