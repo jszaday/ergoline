@@ -233,7 +233,7 @@ tupleType
     ;
 
 basicType
-    :   fqn ('<' typeList '>')? ('@' Collective?)?
+    :   fqn ('<' typeList '>')? (Atpersand Collective?)?
     ;
 
 lambdaType
@@ -247,7 +247,11 @@ type
     ;
 
 annotation
-    :   '@' Identifier
+    :   Atpersand Identifier
+    ;
+
+Atpersand
+    :   '@'
     ;
 
 Collective

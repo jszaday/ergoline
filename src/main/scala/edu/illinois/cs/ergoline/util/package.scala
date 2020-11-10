@@ -9,7 +9,7 @@ package object util {
     def resolveDefinitely(scope: EirScope): T = resolve(scope).get
   }
 
-  class EirResolvableName[T : Manifest](fqn: Iterable[String]) extends EirResolvable[T] {
+  class EirResolvableName[T : Manifest](var fqn: Iterable[String]) extends EirResolvable[T] {
     def resolve(scope: EirScope): Option[T] = {
       fqn.foldLeft[Option[EirNode]](Some(scope))({
         case (Some(s: EirScope), name) => s(name)
@@ -18,6 +18,11 @@ package object util {
         case Some(x: T) => Some(x)
         case _ => None
       }
+    }
+
+    override def equals(obj: Any): Boolean = obj match {
+      case x : EirResolvableName[_] => x.fqn == this.fqn
+      case _ => false
     }
   }
 

@@ -7,8 +7,7 @@ import ast._
 import ast.{EirGlobalNamespace => modules, _}
 import ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
-import edu.illinois.cs.ergoline.types.EirType
-import edu.illinois.cs.ergoline.util.EirResolvable
+import edu.illinois.cs.ergoline.types._
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 
@@ -86,7 +85,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.push(m)
     Option(ctx.fieldDeclaration())
       .orElse(Option(ctx.topLevelStatement()))
-      .map(this.visit).foreach(x => x.asInstanceOf[EirNamedNode])
+      .map(this.visit).foreach(x => m.member = x.asInstanceOf[EirNamedNode])
     parents.pop()
   }
 
@@ -119,7 +118,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
-    val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType).asInstanceOf[EirResolvable[EirType]], None)
+    val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType), None)
     parents.push(d)
     d.initialValue = Option(expressionContext).map(visitExpression)
     parents.pop()
@@ -128,7 +127,26 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitExpression(ctx: ExpressionContext): EirExpressionNode =
     super.visitExpression(ctx).asInstanceOf[EirExpressionNode]
 
-  override def visitBasicType(ctx: BasicTypeContext): Any = {
-    EirResolvable[EirType](visitFqn(ctx.fqn()))
+  override def visitType(ctx: TypeContext): types.Allowed = super.visitType(ctx).asInstanceOf[types.Allowed]
+  override def visitTypeList(ctx: TypeListContext): Iterable[types.Allowed] = {
+    Option(ctx).map(_.`type`.asScala).getOrElse(Nil).map(visitType)
+  }
+
+  override def visitTupleType(ctx: TupleTypeContext): types.Allowed =
+    EirTupleType.fromElements(visitTypeList(ctx.typeList()))
+
+  override def visitBasicType(ctx: BasicTypeContext): types.Allowed = {
+    var base : types.Allowed = Left(EirResolvableType.fromName(parents.head match {
+      case x : EirScopedNode => x.scope.orNull
+      case _ => null
+    }, visitFqn(ctx.fqn)))
+    val templates = visitTypeList(ctx.typeList()).toList
+    if (templates.nonEmpty) {
+      base = Left(EirTemplatedType(base, templates))
+    }
+    if (ctx.Atpersand() != null) {
+      base = Left(EirProxyType(base, Option(ctx.Collective()).map(_.getText)))
+    }
+    base
   }
 }

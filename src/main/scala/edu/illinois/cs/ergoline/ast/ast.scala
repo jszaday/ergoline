@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.types
 import edu.illinois.cs.ergoline.types.EirType
 import edu.illinois.cs.ergoline.util.EirResolvable
 
@@ -95,24 +96,15 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 }
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
-                          var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
+                          var declaredType: types.Allowed, var initialValue: Option[EirExpressionNode])
   extends EirNode with EirNamedNode with EirScopedNode {
 
-  override def validate(): Boolean = {
-    if (isFinal && initialValue.isEmpty) false
-    else initialValue.map(_.eirType.resolveDefinitely(scope.get).canCastTo(declaredType.resolveDefinitely(scope.get))).getOrElse(true)
-  }
+  override def validate(): Boolean = ???
 }
 
 trait EirInheritable[T <: EirType] extends EirScopedNode with EirType {
   var extendsThis: Option[EirResolvable[T]]
   var implementsThese: List[EirResolvable[EirTrait]]
-
-  def canCastTo(other: EirType): Boolean =
-    extendsThis.exists(_.resolveDefinitely(scope.get).canCastTo(other)) ||
-      implementsThese.exists(_.resolveDefinitely(scope.get).canCastTo(other)) ||
-      // TODO this last check may, eventually, need to be more sophisticated
-      other == this
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode]) extends EirNode {
