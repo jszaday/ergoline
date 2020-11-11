@@ -2,18 +2,31 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.types._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichStringIterable
 
 package object util {
 
-  def find[T: Manifest](fqn: Iterable[String], scope: EirScope = EirGlobalNamespace): Option[T] =
-    find[T](fqn.asResolvable[EirNamedNode], scope)
+  import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
-  def find[T: Manifest](resolvable: EirResolvable[EirNamedNode], scope: EirScope): Option[T] = {
-    resolvable.resolve(scope) match {
-      case Some(EirMember(_, x: T, _)) => Some(x)
-      case Some(x: T) => Some(x)
+  def find[T: Manifest](fqn: List[String], scope: Option[EirScope]): Option[T] = {
+    scope match {
+      case Some(s : EirScope) => find(fqn, s)
       case _ => None
+    }
+  }
+
+  def find[T: Manifest](fqn: List[String], scope: EirScope = EirGlobalNamespace): Option[T] = {
+    fqn match {
+      case head :: Nil => scope(head).to[T]
+      case init :+ last => find[EirScope](init, scope).flatMap(x => x(last)).to[T]
+      case _ => None
+    }
+  }
+
+  def findAll[T: Manifest](scope : EirScope): Iterable[T] = {
+    scope.children.collect{
+      case x : EirScope => findAll(x)
+    }.flatten ++ scope.children.collect {
+      case x : T => x
     }
   }
 
@@ -27,6 +40,17 @@ package object util {
     findMatching[T]({
       case x : T if x.annotations.exists(_.name == name) => x
     }, scope)
+
+  def putIntoScope(node : EirNamespace, scope : EirScope) = {
+    scope match {
+      case EirGlobalNamespace =>
+        EirGlobalNamespace.put(node.name, node)
+      case x: EirNamespace =>
+        x.children ++= List(node)
+      case _ => throw new RuntimeException("unacceptable module target")
+    }
+    node
+  }
 
   trait EirResolvable[T] {
     def resolve(scope: EirScope): Option[T]
@@ -49,12 +73,31 @@ package object util {
       case x: EirResolvableName[_] => x.fqn == this.fqn
       case _ => false
     }
+
+    override def toString: String = s"Pending(${fqn.mkString("::")})"
   }
 
   object EirUtilitySyntax {
 
     implicit class RichStringIterable(fqn: Iterable[String]) {
       def asResolvable[T: Manifest]: EirResolvable[T] = new EirResolvableName[T](fqn)
+    }
+
+    implicit class RichAllowed(allowed: Allowed) {
+//      def resolve()(implicit scope : EirScope): EirType = (allowed match {
+//        case Left(x) => x
+//        case Right(x) => x.resolveDefinitely(scope)
+//      })
+
+      def name : String = allowed match {
+        case Left(x) => x.name
+        case Right(x) => x.toString
+      }
+
+      def canAssignTo(other: Allowed): Boolean = {
+        // TODO implement true comparison between *fully resolved* type objects
+        allowed.name == other.name
+      }
     }
 
     implicit class RichAllowedIterable(types: Iterable[Allowed]) {
@@ -76,6 +119,12 @@ package object util {
       def asAllowed: Allowed = Left(t)
     }
 
+    implicit class RichOption(option : Option[_]) {
+      def to[T : Manifest]: Option[T] = option match {
+        case Some(t: T) => Some(t)
+        case _ => None
+      }
+    }
   }
 
 }

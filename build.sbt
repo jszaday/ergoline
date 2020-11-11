@@ -4,6 +4,7 @@ version := "0.1"
 scalaVersion := "2.13.3"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.8" % "test"
+concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
 
 enablePlugins(Antlr4Plugin)
 antlr4PackageName in Antlr4 := Some("edu.illinois.cs.ergoline")

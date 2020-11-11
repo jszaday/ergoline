@@ -1,15 +1,15 @@
 package edu.illinois.cs.ergoline
 
+import edu.illinois.cs.ergoline.ErgolineParser._
+import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.types._
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowedIterable, RichOption, RichType}
+import org.antlr.v4.runtime.ParserRuleContext
+import org.antlr.v4.runtime.tree.TerminalNode
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import org.antlr.v4.runtime.tree.TerminalNode
-import ast._
-import ast.{EirGlobalNamespace => modules, _}
-import ErgolineParser._
-import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
-import edu.illinois.cs.ergoline.types._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowedIterable, RichType}
-import org.antlr.v4.runtime.ParserRuleContext
 
 class Visitor extends ErgolineBaseVisitor[Any] {
 
@@ -18,50 +18,41 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
   implicit def scope: EirScope = parents.headOption match {
-    case Some(x: EirScopedNode) => x.scope.orNull
+    case Some(x) => x.scope.orNull
     case _ => null
   }
 
   override def visitProgram(ctx: ProgramContext): Any = {
     val ps = Option(ctx.packageStatement())
-    val module = getModule(ps match {
+    val module = createOrGetNamespace(ps match {
       case Some(ps) => visitFqn(ps.fqn())
       case _ => List(defaultModuleName)
-    })
+    }, EirGlobalNamespace)
     parents.push(module)
     module.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
     parents.pop()
   }
 
-  def getModule(fqn: Iterable[String], scope: EirScope = EirGlobalNamespace): EirNamespace = {
-    fqn.foldLeft[EirScope](scope)((parent, name) => {
-      parent(name) match {
-        case Some(x: EirNamespace) => x
-        case _ =>
-          val child = EirNamespace(Some(parent), Nil, name)
-          parent match {
-            case EirGlobalNamespace =>
-              modules.put(name, child)
-            case x: EirNamespace =>
-              x.children ++= List(child)
-            case _ => throw new RuntimeException("unacceptable module target")
-          }
-          child
-      }
-    }).asInstanceOf[EirNamespace]
+  def createOrGetNamespace(fqn: Iterable[String], scope: EirScope): EirNamespace = {
+    fqn.toList match {
+      case head :: Nil => scope(head).to[EirNamespace].getOrElse(util.putIntoScope(EirNamespace(Some(scope), Nil, head), scope))
+      case init :+ last => createOrGetNamespace(List(last), createOrGetNamespace(init, scope))
+      case _ => null
+    }
   }
 
   def visitStatementList(statements: java.util.List[AnnotatedTopLevelStatementContext]): Iterable[EirNode] =
     statements.asScala.map(this.visitAnnotatedTopLevelStatement)
 
-  override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode =
-    Option(visit(ctx.topLevelStatement())) match {
-      case Some(s: EirNode) =>
-        parents.push(s)
-        s.annotations ++= visitAnnotationList(ctx.annotation())
-        parents.pop()
-      case _ => null
-    }
+  override def visitTopLevelStatement(ctx: TopLevelStatementContext): EirNode =
+    Option(ctx).map(super.visitTopLevelStatement).to[EirNode].orNull
+
+  override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode = {
+    val s = visitTopLevelStatement(ctx.topLevelStatement())
+    parents.push(s)
+    s.annotations ++= visitAnnotationList(ctx.annotation())
+    parents.pop()
+  }
 
   def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
     annotations.asScala.map(this.visitAnnotation)
@@ -100,7 +91,7 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     Option(ctx).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
 
   override def visitNamespace(ctx: NamespaceContext): Any = {
-    val ns = getModule(visitFqn(ctx.fqn()))
+    val ns = createOrGetNamespace(visitFqn(ctx.fqn()), scope)
     parents.push(ns)
     ns.children ++= visitStatementList(ctx.annotatedTopLevelStatement())
     parents.pop()
@@ -131,6 +122,16 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitFieldValueDeclaration(ctx: FieldValueDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
 
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): Any = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
+
+  override def visitAssignmentStatement(ctx: AssignmentStatementContext): EirNode = {
+    val a = EirAssignment(parents.headOption, null, null)
+    parents.push(a)
+    a.target = visitPostfixExpression(ctx.postfixExpression())
+    a.value = visitExpression(ctx.expression())
+    parents.pop()
+  }
+
+  override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = null
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
     val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType), None)
@@ -185,7 +186,12 @@ class Visitor extends ErgolineBaseVisitor[Any] {
 
   def visitBinaryExpression[T <: ParserRuleContext](ctx: T): EirExpressionNode = {
     val children = ctx.children.asScala.toList
-    if (children.length == 1) visit(children.head).asInstanceOf[EirExpressionNode]
+    if (children.length == 1) {
+      visit(children.head) match {
+        case e: EirExpressionNode => e
+        case _ => null
+      }
+    }
     else if (children.length == 3) {
       val e = EirBinaryExpression(parents.headOption, null, children(1).getText, null)
       parents.push(e)

@@ -32,6 +32,7 @@ statement
     |   returnStatement
     |   classDeclaration
     |   topLevelDeclaration
+    |   assignmentStatement
     ;
 
 forLoop
@@ -117,12 +118,20 @@ functionArgumentList
     :   (functionArgument ',')* functionArgument
     ;
 
+expressionList
+    :   (expression ',')* expression
+    ;
+
 primaryExpression
     :   fqn
     |   Constant
     |   StringLiteral+
     |   lambdaExpression
-    |   '(' expression ')'
+    |   '(' expressionList? ')'
+    ;
+
+assignmentStatement
+    :   postfixExpression '=' expression ';'
     ;
 
 lambdaExpression
@@ -131,14 +140,9 @@ lambdaExpression
 
 postfixExpression
     :   primaryExpression
-    |   postfixExpression '[' expression ']'
-    |   postfixExpression '(' argumentExpressionList? ')'
+    |   postfixExpression '[' expressionList? ']'
+    |   postfixExpression '(' expressionList? ')'
     |   postfixExpression '.' Identifier
-    ;
-
-argumentExpressionList
-    :   conditionalExpression
-    |   argumentExpressionList ',' conditionalExpression
     ;
 
 unaryExpression

@@ -14,8 +14,13 @@ object EirAccessibility extends Enumeration {
 abstract class EirNode {
   var parent: Option[EirNode]
   var annotations: List[EirAnnotation] = Nil
-
   def validate(): Boolean
+  def scope: Option[EirScope] =
+    parent flatMap {
+      case x: EirScope => Some(x)
+      case x : EirNode => x.scope
+      case _ => None
+    }
 }
 
 abstract class EirExpressionNode extends EirNode {
@@ -26,7 +31,7 @@ abstract class EirExpressionNode extends EirNode {
   def toString: String
 }
 
-abstract class EirScope extends EirNode with EirScopedNode {
+abstract class EirScope extends EirNode {
   var cachedSymbols: Option[(Int, Map[String, EirNode])] = None
 
   def children: Iterable[EirNode]
@@ -68,20 +73,12 @@ trait EirNamedNode extends EirNode {
   override def hashCode(): Int = name.hashCode
 }
 
-trait EirScopedNode extends EirNode {
-  def scope: Option[EirScope] = {
-    parent match {
-      case Some(x: EirScope) => Some(x)
-      case Some(x: EirScopedNode) => x.scope
-      case _ => None
-    }
-  }
-}
-
 case class EirBlock(var parent: Option[EirNode], var children: Iterable[EirNode]) extends EirScope
 
 case object EirGlobalNamespace extends EirScope {
   private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
+
+  def clear(): Unit = modules.clear()
 
   def put(name: String, ns: EirNamespace): Option[EirNamespace] = modules.put(name, ns)
 
@@ -101,12 +98,12 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
                           var declaredType: types.Allowed, var initialValue: Option[EirExpressionNode])
-  extends EirNode with EirNamedNode with EirScopedNode {
+  extends EirNamedNode {
 
   override def validate(): Boolean = ???
 }
 
-trait EirInheritable[T <: EirType] extends EirScopedNode with EirType {
+trait EirInheritable[T <: EirType] extends EirNode with EirType {
   var extendsThis: Option[EirResolvable[T]]
   var implementsThese: List[EirResolvable[EirTrait]]
 }
@@ -121,6 +118,11 @@ case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var implementsThese: List[EirResolvable[EirTrait]])
   extends EirScope with EirNamedNode with EirInheritable[EirClass] {
   override def children: List[EirNode] = members ++ templateArgs
+
+  def needsInitialization: List[EirMember] =
+    members.collect {
+      case m@EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
+    }
 }
 
 case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
@@ -133,11 +135,13 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
-  override def toString: String = s"${accessibility.toString.toLowerCase} $name"
+  override def toString: String = s"Member($name)"
 
   override def validate(): Boolean = true
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
+
+  def isConstructorOf(other : EirClass): Boolean = parent.contains(other) && isConstructor
 
   override def name: String = member.name
 }
@@ -167,5 +171,9 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
                                var declaredType: types.Allowed, var isFinal: Boolean, var isSelfAssigning: Boolean)
   extends EirNamedNode {
+  override def validate(): Boolean = ???
+}
+
+case class EirAssignment(var parent: Option[EirNode], var target: EirExpressionNode, var value: EirExpressionNode) extends EirNode {
   override def validate(): Boolean = ???
 }

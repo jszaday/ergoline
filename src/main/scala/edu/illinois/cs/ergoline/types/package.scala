@@ -12,6 +12,8 @@ package object types {
     def name: String
 
     override def toString: String = name
+
+    def canAssignTo(other: EirType): Boolean = TypeChecking.compatible(this, other)
   }
 
   case class EirTupleType(var elements: List[Allowed]) extends EirType {
@@ -31,9 +33,15 @@ package object types {
   }
 
   case class EirResolvableType(var scope: EirScope, var resolvable: EirResolvable[EirType]) extends EirType {
-    override def name: String = resolvable.resolve(scope).get.name
+    override def name: String = resolvable.toString
 
-    override def toString: String = s"Pending!$resolvable"
+    def resolve() : EirType = resolvable.resolveDefinitely(scope)
+
+    def equals(obj: Any, strict : Boolean = false): Boolean = obj match {
+      case other : EirResolvableType =>
+        (strict && other.resolve() == resolve()) || (resolvable == other.resolvable)
+      case _ => false
+    }
   }
 
   object EirUnitType extends EirType {
@@ -44,6 +52,11 @@ package object types {
     def fromName(names: Iterable[String])(implicit scope: EirScope): EirResolvableType = {
       names.asResolvable[EirType].asType
     }
+  }
+
+  object TypeChecking {
+    // TODO actually implement this
+    def compatible(a: EirType, b: EirType): Boolean = true
   }
 
 }
