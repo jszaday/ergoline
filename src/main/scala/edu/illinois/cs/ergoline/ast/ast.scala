@@ -1,8 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.types
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.types.EirType
-import edu.illinois.cs.ergoline.util.EirResolvable
 
 import scala.collection.mutable
 
@@ -14,11 +13,13 @@ object EirAccessibility extends Enumeration {
 abstract class EirNode {
   var parent: Option[EirNode]
   var annotations: List[EirAnnotation] = Nil
+
   def validate(): Boolean
+
   def scope: Option[EirScope] =
     parent flatMap {
       case x: EirScope => Some(x)
-      case x : EirNode => x.scope
+      case x: EirNode => x.scope
       case _ => None
     }
 }
@@ -97,7 +98,7 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 }
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
-                          var declaredType: types.Allowed, var initialValue: Option[EirExpressionNode])
+                          var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
   override def validate(): Boolean = ???
@@ -106,6 +107,10 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
 trait EirInheritable[T <: EirType] extends EirNode with EirType {
   var extendsThis: Option[EirResolvable[T]]
   var implementsThese: List[EirResolvable[EirTrait]]
+
+  override def resolve(scope: EirScope): EirType = this
+
+  override def typeChildren: List[EirResolvable[EirType]] = Nil
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode]) extends EirNode {
@@ -141,7 +146,7 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
 
-  def isConstructorOf(other : EirClass): Boolean = parent.contains(other) && isConstructor
+  def isConstructorOf(other: EirClass): Boolean = parent.contains(other) && isConstructor
 
   override def name: String = member.name
 }
@@ -169,7 +174,7 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
 }
 
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
-                               var declaredType: types.Allowed, var isFinal: Boolean, var isSelfAssigning: Boolean)
+                               var declaredType: EirResolvable[EirType], var isFinal: Boolean, var isSelfAssigning: Boolean)
   extends EirNamedNode {
   override def validate(): Boolean = ???
 }

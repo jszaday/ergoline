@@ -1,15 +1,17 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowed, RichOption}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.types.EirType
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object CheckConstructors {
 
-  def classes: Iterable[EirClass] = util.findAll[EirClass](EirGlobalNamespace)
+  def classes: Iterable[EirClass] = Find.all[EirClass](EirGlobalNamespace)
 
   def constructorsByClass: List[(EirClass, List[EirMember])] =
     classes.map(c => {
-      (c, util.findMatching[EirMember]({
+      (c, Find.matching[EirMember]({
         case x: EirMember if x.isConstructorOf(c) => x
       }, c).toList)
     }).toList
@@ -33,15 +35,15 @@ object CheckConstructors {
     true
   }
 
-  def constructorAssignmentOk(decl: EirDeclaration, declaredType: types.Allowed): Boolean = {
-    declaredType.canAssignTo(decl.declaredType) && (!decl.isFinal || decl.initialValue.isEmpty)
+  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
+    !decl.isFinal || decl.initialValue.isEmpty
   }
 
   def selfAssignmentsOk(cls : EirClass, constructor : EirMember): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
       case x@EirFunctionArgument(_, _, _, _, true) => x
     }.map(arg => {
-      (util.find[EirMember](List(cls.name, arg.name), cls.parent.to[EirScope]), arg)
+      (Find.byName[EirMember](List(cls.name, arg.name), cls.parent.to[EirScope]), arg)
     })
     argDeclPairs.isEmpty || argDeclPairs.forall(x => x match {
       case (Some(EirMember(_, d: EirDeclaration, _)), arg: EirFunctionArgument) =>
@@ -61,7 +63,7 @@ object CheckConstructors {
         case EirFunctionArgument(_, n, t, _, true) =>
           n == decl.name && constructorAssignmentOk(decl, t)
         case _ => false
-      } || util.findMatching[EirAssignment]({
+      } || Find.matching[EirAssignment]({
         case x: EirAssignment if assignmentTargetsDeclaration(x, decl) => x
       }, constructor).nonEmpty
     })

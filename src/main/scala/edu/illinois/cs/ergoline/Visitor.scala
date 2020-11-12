@@ -3,8 +3,9 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.types._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichAllowedIterable, RichOption, RichType}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
@@ -143,25 +144,25 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitExpression(ctx: ExpressionContext): EirExpressionNode =
     super.visitExpression(ctx).asInstanceOf[EirExpressionNode]
 
-  override def visitType(ctx: TypeContext): Allowed = super.visitType(ctx).asInstanceOf[Allowed]
+  override def visitType(ctx: TypeContext): EirResolvable[EirType] = super.visitType(ctx).asInstanceOf[EirResolvable[EirType]]
 
-  override def visitTypeList(ctx: TypeListContext): Iterable[Allowed] = {
+  override def visitTypeList(ctx: TypeListContext): Iterable[EirResolvable[EirType]] = {
     Option(ctx).map(_.`type`.asScala).getOrElse(Nil).map(visitType)
   }
 
-  override def visitTupleType(ctx: TupleTypeContext): Allowed =
+  override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] =
     visitTypeList(ctx.typeList()).asType
 
-  override def visitBasicType(ctx: BasicTypeContext): Allowed = {
-    var base: EirType = EirResolvableType.fromName(visitFqn(ctx.fqn))
+  override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
+    var base: EirResolvable[EirType] = EirResolvable.fromName(visitFqn(ctx.fqn))
     val templates = visitTypeList(ctx.typeList()).toList
     if (templates.nonEmpty) {
-      base = EirTemplatedType(base.asAllowed, templates)
+      base = EirTemplatedType(base, templates)
     }
     if (ctx.Atpersand() != null) {
-      base = EirProxyType(base.asAllowed, Option(ctx.CollectiveKeyword()).map(_.getText))
+      base = EirProxyType(base, Option(ctx.CollectiveKeyword()).map(_.getText))
     }
-    base.asAllowed
+    base
   }
 
   override def visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): Any = visitBinaryExpression(ctx)
