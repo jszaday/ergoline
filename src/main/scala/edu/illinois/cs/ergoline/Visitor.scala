@@ -20,7 +20,8 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   parents.push(global)
 
-  def currentScope: Option[EirScope] = parents.headOption.flatMap(_.scope)
+  private def currentScope: Option[EirScope] = parents.headOption.flatMap(_.scope)
+  private def pop[T](): T = parents.pop().asInstanceOf[T]
 
   override def visitProgram(ctx: ProgramContext): Any = {
     val ps = Option(ctx.packageStatement())
@@ -56,17 +57,17 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
     println("importing the module " + ctx.fqn().Identifier().asScala.map(_.getText))
   }
 
-  override def visitClassDeclaration(ctx: ClassDeclarationContext): Any = {
+  override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {
     val c: EirClass = EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil)
     parents.push(c)
     c.members ++= ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
-    parents.pop()
+    pop[EirClass]()
   }
 
   override def visitAnnotatedMember(ctx: AnnotatedMemberContext): EirMember = {
     parents.push(visitMember(ctx.member()))
     parents.head.annotations ++= visitAnnotationList(ctx.annotation())
-    parents.pop().asInstanceOf[EirMember]
+    pop[EirMember]()
   }
 
   override def visitMember(ctx: MemberContext): EirNode = {
@@ -94,7 +95,7 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
     f.templateArgs = visitTemplateDecl(ctx.templateDecl())
     f.functionArgs = visitFunctionArgumentList(ctx.functionArgumentList)
     f.body = visitBlock(ctx.block())
-    parents.pop().asInstanceOf[EirFunction]
+    pop[EirFunction]()
   }
 
   override def visitBlock(ctx: BlockContext): Option[EirBlock] = {
@@ -160,25 +161,25 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
     base
   }
 
-  override def visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitAdditiveExpression(ctx: AdditiveExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitAdditiveExpression(ctx: AdditiveExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitShiftExpression(ctx: ShiftExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitShiftExpression(ctx: ShiftExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitRelationalExpression(ctx: RelationalExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitRelationalExpression(ctx: RelationalExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitEqualityExpression(ctx: EqualityExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitEqualityExpression(ctx: EqualityExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitAndExpression(ctx: AndExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitAndExpression(ctx: AndExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitExclusiveOrExpression(ctx: ExclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitExclusiveOrExpression(ctx: ExclusiveOrExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitInclusiveOrExpression(ctx: InclusiveOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitInclusiveOrExpression(ctx: InclusiveOrExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitLogicalAndExpression(ctx: LogicalAndExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitLogicalAndExpression(ctx: LogicalAndExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
-  override def visitLogicalOrExpression(ctx: LogicalOrExpressionContext): Any = visitBinaryExpression(ctx)
+  override def visitLogicalOrExpression(ctx: LogicalOrExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
   def visitBinaryExpression[T <: ParserRuleContext](ctx: T): EirExpressionNode = {
     val children = ctx.children.asScala.toList
@@ -193,7 +194,7 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
       parents.push(e)
       e.lhs = visit(children.head).asInstanceOf[EirExpressionNode]
       e.rhs = visit(children.last).asInstanceOf[EirExpressionNode]
-      parents.pop().asInstanceOf[EirExpressionNode]
+      pop[EirExpressionNode]()
     } else throw new RuntimeException("how did I get here?")
   }
 
@@ -215,11 +216,34 @@ class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor
     arg
   }
 
-  override def visitLambdaExpression(ctx: LambdaExpressionContext): Any = {
+  override def visitLambdaExpression(ctx: LambdaExpressionContext): EirExpressionNode = {
     val f = EirLambdaExpression(parents.headOption, null, null)
     parents.push(f)
     f.args = visitFunctionArgumentList(ctx.functionArgumentList())
     f.body = visitBlock(ctx.block()).getOrElse(util.encloseExpression(visitExpression(ctx.expression)))
-    parents.pop()
+    pop[EirExpressionNode]()
   }
+
+  override def visitConditionalExpression(ctx: ConditionalExpressionContext): EirExpressionNode = {
+    if (ctx.expression() == null) return visitLogicalOrExpression(ctx.logicalOrExpression())
+    val e = EirTernaryOperator(parents.headOption, null, null, null)
+    parents.push(e)
+    e.test = visitLogicalOrExpression(ctx.logicalOrExpression())
+    e.ifTrue = visitExpression(ctx.expression())
+    e.ifFalse = visitConditionalExpression(ctx.conditionalExpression())
+    pop[EirExpressionNode]()
+  }
+
+  override def visitUnaryExpression(ctx: UnaryExpressionContext): EirExpressionNode = {
+    if (ctx.unaryOperator() == null) visitPostfixExpression(ctx.postfixExpression())
+    else {
+      val e = EirUnaryExpression(parents.headOption, ctx.unaryOperator().getText, null)
+      parents.push(e)
+      e.rhs = visitCastExpression(ctx.castExpression())
+      pop[EirExpressionNode]()
+    }
+  }
+
+  override def visitCastExpression(ctx: CastExpressionContext): EirExpressionNode =
+    super.visitCastExpression(ctx).asInstanceOf[EirExpressionNode]
 }

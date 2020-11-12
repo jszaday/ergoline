@@ -41,4 +41,6 @@ object Find {
     }, scope)
 
   def returnType(block : EirBlock): EirResolvable[EirType] = ???
+
+  def unionType(types : EirResolvable[EirType]*) : EirType = ???
 }

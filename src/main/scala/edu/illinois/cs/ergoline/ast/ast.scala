@@ -174,6 +174,15 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
   override def toString: String = s"EirBinaryExpression($lhs $op $rhs)"
 }
 
+case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var rhs: EirExpressionNode)
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = List(rhs)
+
+  override def eirType: EirResolvable[EirType] = ???
+
+  override def validate(): Boolean = ???
+}
+
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
                                var declaredType: EirResolvable[EirType], var isFinal: Boolean, var isSelfAssigning: Boolean)
   extends EirNamedNode {
@@ -215,5 +224,14 @@ case class EirLambdaExpression(var parent : Option[EirNode], var args : List[Eir
 }
 
 case class EirReturn(var parent: Option[EirNode], var expression : EirExpressionNode) extends EirNode {
+  override def validate(): Boolean = ???
+}
+
+case class EirTernaryOperator(var parent : Option[EirNode], var test : EirExpressionNode, var ifTrue : EirExpressionNode, var ifFalse : EirExpressionNode)
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = List(test, ifTrue, ifFalse)
+
+  override def eirType: EirResolvable[EirType] = Find.unionType(ifTrue.eirType, ifFalse.eirType)
+
   override def validate(): Boolean = ???
 }
