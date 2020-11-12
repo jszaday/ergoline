@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.{globals, types}
 import edu.illinois.cs.ergoline.types.EirType
 
@@ -203,4 +203,17 @@ object EirTupleExpression {
         lst.foreach(x => if (x != null) x.parent = Some(t))
         t
     }
+}
+
+case class EirLambdaExpression(var parent : Option[EirNode], var args : List[EirFunctionArgument], var body : EirBlock)
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = args ++ List(body)
+
+  override def eirType: EirResolvable[EirType] = types.EirLambdaType(args.map(_.declaredType), Find.returnType(body))
+
+  override def validate(): Boolean = ???
+}
+
+case class EirReturn(var parent: Option[EirNode], var expression : EirExpressionNode) extends EirNode {
+  override def validate(): Boolean = ???
 }

@@ -25,12 +25,12 @@ package object types {
     override def typeChildren: List[EirResolvable[EirType]] = elements
   }
 
-  case class EirLambdaType(var from: EirResolvable[EirType], var to: EirResolvable[EirType]) extends EirType {
+  case class EirLambdaType(var from: List[EirResolvable[EirType]], var to: EirResolvable[EirType]) extends EirType {
     def name: String = s"$from => $to"
 
-    override def resolve(scope: EirScope): EirType = EirLambdaType(from.resolve(scope), to.resolve(scope))
+    override def resolve(scope: EirScope): EirType = EirLambdaType(from.map(_.resolve(scope)), to.resolve(scope))
 
-    override def typeChildren: List[EirResolvable[EirType]] = List(from, to)
+    override def typeChildren: List[EirResolvable[EirType]] = from ++ List(to)
   }
 
   case class EirTemplatedType(var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]]) extends EirType {

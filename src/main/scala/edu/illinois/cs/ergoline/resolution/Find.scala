@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.resolution
 
-import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode, EirScope}
+import edu.illinois.cs.ergoline.ast.{EirBlock, EirGlobalNamespace, EirNode, EirScope}
+import edu.illinois.cs.ergoline.types.EirType
 
 object Find {
   import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -38,4 +39,6 @@ object Find {
     matching[T]({
       case x : T if x.annotations.exists(_.name == name) => x
     }, scope)
+
+  def returnType(block : EirBlock): EirResolvable[EirType] = ???
 }

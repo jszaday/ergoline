@@ -12,13 +12,13 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-class Visitor extends ErgolineBaseVisitor[Any] {
+class Visitor(global : EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[Any] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
-  parents.push(EirGlobalNamespace)
+  parents.push(global)
 
   def currentScope: Option[EirScope] = parents.headOption.flatMap(_.scope)
 
@@ -206,11 +206,20 @@ class Visitor extends ErgolineBaseVisitor[Any] {
   override def visitTupleExpression(ctx: TupleExpressionContext): EirExpressionNode =
     EirTupleExpression.fromExpressions(parents.headOption, visitExpressionList(ctx.expressionList()))
 
+  // TODO fix parent resolution
   override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
     val arg = EirFunctionArgument(parents.headOption, ctx.Identifier.getText, null,
       isFinal = Option(ctx.VariableKeyword()).isEmpty,
       isSelfAssigning = Option(ctx.Equals()).isDefined)
     arg.declaredType = visitType(ctx.`type`())
     arg
+  }
+
+  override def visitLambdaExpression(ctx: LambdaExpressionContext): Any = {
+    val f = EirLambdaExpression(parents.headOption, null, null)
+    parents.push(f)
+    f.args = visitFunctionArgumentList(ctx.functionArgumentList())
+    f.body = visitBlock(ctx.block()).getOrElse(util.encloseExpression(visitExpression(ctx.expression)))
+    parents.pop()
   }
 }

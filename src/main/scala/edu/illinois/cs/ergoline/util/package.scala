@@ -29,6 +29,12 @@ package object util {
     }
   }
 
+  def encloseExpression(expression: EirExpressionNode): EirBlock = {
+    val b = EirBlock(expression.parent, List(expression))
+    expression.parent = Some(b)
+    b
+  }
+
   object EirUtilitySyntax {
 
     implicit class RichOption(option: Option[_]) {
