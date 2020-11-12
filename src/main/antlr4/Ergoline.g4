@@ -126,12 +126,16 @@ primaryExpression
     :   fqn
     |   Constant
     |   StringLiteral+
+    |   tupleExpression
     |   lambdaExpression
-    |   '(' expressionList? ')'
     ;
 
 assignmentStatement
     :   postfixExpression '=' expression ';'
+    ;
+
+tupleExpression
+    :   '(' expressionList? ')'
     ;
 
 lambdaExpression

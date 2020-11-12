@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.{globals, types}
 import edu.illinois.cs.ergoline.types.EirType
 
 import scala.collection.mutable
@@ -181,4 +182,25 @@ case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
 
 case class EirAssignment(var parent: Option[EirNode], var target: EirExpressionNode, var value: EirExpressionNode) extends EirNode {
   override def validate(): Boolean = ???
+}
+
+case class EirTupleExpression(var parent : Option[EirNode], var expressions : List[EirExpressionNode]) extends EirExpressionNode {
+  override def children: Iterable[EirNode] = expressions
+
+  override def eirType: EirResolvable[EirType] = types.EirTupleType(expressions.map(_.eirType))
+
+  override def validate(): Boolean = ???
+}
+
+object EirTupleExpression {
+  def fromExpressions(parent : Option[EirNode], expressions : List[EirExpressionNode]): EirExpressionNode =
+    expressions match {
+      case Nil => globals.UnitValue
+      case head :: Nil => head
+      case lst =>
+        val t = EirTupleExpression(parent, lst)
+        // TODO should not encounter null
+        lst.foreach(x => if (x != null) x.parent = Some(t))
+        t
+    }
 }

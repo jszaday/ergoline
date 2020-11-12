@@ -132,7 +132,8 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     parents.pop()
   }
 
-  override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = null
+  override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode =
+    Option(ctx).map(super.visitPostfixExpression).to[EirExpressionNode].orNull
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirNode = {
     val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType), None)
@@ -202,12 +203,22 @@ class Visitor extends ErgolineBaseVisitor[Any] {
     } else throw new RuntimeException("how did I get here?")
   }
 
+  override def visitExpressionList(expressionListContext: ExpressionListContext): List[EirExpressionNode] =
+    Option(expressionListContext).map(_.expression().asScala).getOrElse(Nil).map(visitExpression).toList
+
+  override def visitTupleExpression(ctx: TupleExpressionContext): EirExpressionNode = {
+    println(s"getting here with ${ctx.getText}")
+    EirTupleExpression.fromExpressions(parents.headOption, visitExpressionList(ctx.expressionList()))
+  }
+
   override def visitFunctionArgumentList(ctx: FunctionArgumentListContext): List[EirFunctionArgument] =
     Option(ctx).map(_.functionArgument).map(_.asScala).getOrElse(Nil).map(visitFunctionArgument).toList
 
   override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
-    EirFunctionArgument(parents.headOption, ctx.Identifier.getText, visitType(ctx.`type`()),
+    val arg = EirFunctionArgument(parents.headOption, ctx.Identifier.getText, null,
       isFinal = Option(ctx.VariableKeyword()).isEmpty,
       isSelfAssigning = Option(ctx.Equals()).isDefined)
+    arg.declaredType = visitType(ctx.`type`())
+    arg
   }
 }

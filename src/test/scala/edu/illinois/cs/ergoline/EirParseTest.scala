@@ -23,6 +23,19 @@ class EirParseTest extends FunSuite {
       case EirBinaryExpression(_, _, "+", EirBinaryExpression(_, _, "*", _)) =>
     }
   }
+  test("tuple tests") {
+    val v = new Visitor
+    val e1 = v.visitExpression(parserFromString("(4 + 4)").expression())
+    e1 should matchPattern {
+      case EirBinaryExpression(_, _, "+", _) =>
+    }
+    val e2 = v.visitExpression(parserFromString("()").expression())
+    e2 shouldEqual globals.UnitValue
+    val e3 = v.visitExpression(parserFromString("(4, 4)").expression())
+    e3 should matchPattern {
+      case EirTupleExpression(_, elements) if elements.length == 2 =>
+    }
+  }
   test("mini function args test") {
     val f = (new Visitor).visitFunction(parserFromString("func foo (var bar : unit, baz= : unit): unit { }").function())
     f.functionArgs.length shouldEqual 2
