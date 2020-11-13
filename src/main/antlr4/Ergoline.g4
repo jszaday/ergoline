@@ -124,8 +124,7 @@ expressionList
 
 primaryExpression
     :   fqn
-    |   Constant
-    |   StringLiteral+
+    |   constant
     |   tupleExpression
     |   lambdaExpression
     ;
@@ -278,10 +277,11 @@ Identifier
         )*
     ;
 
-Constant
+constant
     :   IntegerConstant
     |   FloatingConstant
     |   CharacterConstant
+    |   StringLiteral+
     ;
 
 fragment NonDigit
@@ -292,7 +292,6 @@ fragment Digit
     :   [0-9]
     ;
 
-fragment
 IntegerConstant
     :   DecimalConstant IntegerSuffix?
     |   OctalConstant IntegerSuffix?
@@ -363,7 +362,6 @@ LongLongSuffix
     :   'll' | 'LL'
     ;
 
-fragment
 FloatingConstant
     :   DecimalFloatingConstant
     |   HexadecimalFloatingConstant
@@ -424,7 +422,6 @@ FloatingSuffix
     :   'f' | 'l' | 'F' | 'L'
     ;
 
-fragment
 CharacterConstant
     :   '\'' CCharSequence '\''
     |   'L\'' CCharSequence '\''

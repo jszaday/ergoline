@@ -105,9 +105,9 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
   override def validate(): Boolean = ???
 }
 
-trait EirInheritable[T <: EirType] extends EirNode with EirType {
-  var extendsThis: Option[EirResolvable[T]]
-  var implementsThese: List[EirResolvable[EirTrait]]
+trait EirInheritable extends EirNode with EirType {
+  var extendsThis: Option[EirResolvable[EirType]]
+  var implementsThese: List[EirResolvable[EirType]]
 
   override def resolve(scope: EirScope): EirType = this
 
@@ -120,9 +120,9 @@ case class EirTemplateArgument(var parent: Option[EirNode]) extends EirNode {
 
 case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
-                    var extendsThis: Option[EirResolvable[EirClass]],
-                    var implementsThese: List[EirResolvable[EirTrait]])
-  extends EirScope with EirNamedNode with EirInheritable[EirClass] {
+                    var extendsThis: Option[EirResolvable[EirType]],
+                    var implementsThese: List[EirResolvable[EirType]])
+  extends EirScope with EirNamedNode with EirInheritable {
   override def children: List[EirNode] = members ++ templateArgs
 
   def needsInitialization: List[EirMember] =
@@ -133,9 +133,9 @@ case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
 
 case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
-                    var extendsThis: Option[EirResolvable[EirTrait]],
-                    var implementsThese: List[EirResolvable[EirTrait]])
-  extends EirScope with EirNamedNode with EirInheritable[EirTrait] {
+                    var extendsThis: Option[EirResolvable[EirType]],
+                    var implementsThese: List[EirResolvable[EirType]])
+  extends EirScope with EirNamedNode with EirInheritable {
   override def children: List[EirNode] = members ++ templateArgs
 }
 
@@ -232,6 +232,24 @@ case class EirTernaryOperator(var parent : Option[EirNode], var test : EirExpres
   override def children: Iterable[EirNode] = List(test, ifTrue, ifFalse)
 
   override def eirType: EirResolvable[EirType] = Find.unionType(ifTrue.eirType, ifFalse.eirType)
+
+  override def validate(): Boolean = ???
+}
+
+case class EirLiteral(var parent : Option[EirNode], var `type` : String, var value : String)
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = Nil
+
+  override def eirType: EirResolvable[EirType] = ???
+
+  override def validate(): Boolean = ???
+}
+
+case class EirIdentifier(var parent : Option[EirNode], var fqn : List[String])
+  extends EirExpressionNode {
+  override def children: Iterable[EirNode] = Nil
+
+  override def eirType: EirResolvable[EirType] = ???
 
   override def validate(): Boolean = ???
 }
