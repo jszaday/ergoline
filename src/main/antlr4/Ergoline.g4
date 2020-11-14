@@ -24,7 +24,8 @@ importStatement
     ;
 
 statement
-    :   block
+    :   assignment ';'
+    |   block
     |   forLoop
     |   function
     |   namespace
@@ -32,12 +33,19 @@ statement
     |   returnStatement
     |   classDeclaration
     |   topLevelDeclaration
-    |   assignmentStatement
+    ;
+
+identifierList
+    :   (Identifier ',')* Identifier
+    ;
+
+loopHeader
+    :   identifierList '<-' expression
+    |   (variableDeclaration? | ';') test=expression? ';' assignment?
     ;
 
 forLoop
-    :   'for' '(' Identifier '<-' expression ')' (block | statement)
-    // |   'for' '(' variableDeclaration expression ';' expression ')' (block | statement)
+    :   'for' '(' loopHeader ')' (block | statement)
     ;
 
 returnStatement
@@ -49,7 +57,7 @@ block
     ;
 
 templateDeclArg
-    :   Identifier
+    :   Identifier ('<:' upperBound=type)? ('>:' lowerBound=type)?
     ;
 
 templateDecl
@@ -129,8 +137,8 @@ primaryExpression
     |   lambdaExpression
     ;
 
-assignmentStatement
-    :   postfixExpression '=' expression ';'
+assignment
+    :   postfixExpression '=' expression
     ;
 
 tupleExpression
@@ -143,8 +151,8 @@ lambdaExpression
 
 postfixExpression
     :   primaryExpression
-    |   postfixExpression '[' expressionList? ']'
-    |   postfixExpression '(' expressionList? ')'
+    |   postfixExpression '[' arrArgs=expressionList? ']'
+    |   postfixExpression '(' fnArgs=expressionList? ')'
     |   postfixExpression '.' Identifier
     ;
 

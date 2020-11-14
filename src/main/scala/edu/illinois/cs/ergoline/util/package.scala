@@ -29,9 +29,9 @@ package object util {
     }
   }
 
-  def encloseExpression(expression: EirExpressionNode): EirBlock = {
-    val b = EirBlock(expression.parent, List(expression))
-    expression.parent = Some(b)
+  def encloseNodes(nodes: EirNode*): EirBlock = {
+    val b = EirBlock(nodes.head.parent, nodes)
+    nodes.foreach(_.parent = Some(b))
     b
   }
 
