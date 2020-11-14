@@ -35,6 +35,16 @@ package object util {
     b
   }
 
+  def makeTupleElementGetter(expression: EirExpressionNode, idx: Int): EirExpressionNode = {
+    val ref = EirArrayReference(expression.parent, expression, null)
+    expression.parent = Some(ref)
+    ref.args = List(EirLiteral(Some(ref), EirLiteralTypes.Integer, idx.toString))
+    ref
+  }
+
+  // TODO implement this
+  def deepCloneTree[T <: EirNode](node : T): T = node
+
   object EirUtilitySyntax {
 
     implicit class RichOption(option: Option[_]) {

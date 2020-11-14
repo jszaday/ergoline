@@ -319,7 +319,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
         Option(ctx.test).map(visitExpression),
         Option(ctx.assignment()).map(visitAssignment))
     } else {
-      EirForAllHeader(visitIdentifiers(ctx.identifierList().Identifier()), visitExpression(ctx.expression()))
+      EirForAllHeader(parents.headOption, visitIdentifiers(ctx.identifierList().Identifier()), visitExpression(ctx.expression()))
     }
   }
 
