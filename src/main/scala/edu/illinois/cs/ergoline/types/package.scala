@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.EirScope
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 package object types {
+
   trait EirType extends EirResolvable[EirType] {
     def name: String
 

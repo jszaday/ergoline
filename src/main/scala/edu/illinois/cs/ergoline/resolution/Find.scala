@@ -4,11 +4,12 @@ import edu.illinois.cs.ergoline.ast.{EirBlock, EirGlobalNamespace, EirNode, EirS
 import edu.illinois.cs.ergoline.types.EirType
 
 object Find {
+
   import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
   def byName[T: Manifest](fqn: List[String], scope: Option[EirScope]): Option[T] = {
     scope match {
-      case Some(s : EirScope) => byName(fqn, s)
+      case Some(s: EirScope) => byName(fqn, s)
       case _ => None
     }
   }
@@ -21,26 +22,26 @@ object Find {
     }
   }
 
-  def all[T: Manifest](scope : EirScope): Iterable[T] = {
-    scope.children.collect{
-      case x : EirScope => all(x)
+  def all[T: Manifest](scope: EirScope): Iterable[T] = {
+    scope.children.collect {
+      case x: EirScope => all(x)
     }.flatten ++ scope.children.collect {
-      case x : T => x
+      case x: T => x
     }
   }
 
-  def matching[T: Manifest](pattern : PartialFunction[EirNode, T], scope : EirScope): Iterable[T] = {
-    scope.children.collect{
-      case x : EirScope => matching(pattern, x)
+  def matching[T: Manifest](pattern: PartialFunction[EirNode, T], scope: EirScope): Iterable[T] = {
+    scope.children.collect {
+      case x: EirScope => matching(pattern, x)
     }.flatten ++ scope.children.collect(pattern)
   }
 
-  def annotatedWith[T <: EirNode: Manifest](name : String, scope : EirScope): Iterable[T] =
+  def annotatedWith[T <: EirNode : Manifest](name: String, scope: EirScope): Iterable[T] =
     matching[T]({
-      case x : T if x.annotations.exists(_.name == name) => x
+      case x: T if x.annotations.exists(_.name == name) => x
     }, scope)
 
-  def returnType(block : EirBlock): EirResolvable[EirType] = ???
+  def returnType(block: EirBlock): EirResolvable[EirType] = ???
 
-  def unionType(types : EirResolvable[EirType]*) : EirType = ???
+  def unionType(types: EirResolvable[EirType]*): EirType = ???
 }

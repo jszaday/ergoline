@@ -57,6 +57,7 @@ package object util {
       def mapOrEmpty[A, B](f: T => java.util.List[A], g: A => B): List[B] =
         Option(t).map(f).map(_.asScala).getOrElse(Nil).map(g).toList
     }
+
   }
 
 }

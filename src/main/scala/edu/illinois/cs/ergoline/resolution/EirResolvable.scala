@@ -7,5 +7,5 @@ trait EirResolvable[T] {
 }
 
 object EirResolvable {
-  def fromName[T : Manifest](fqn : Iterable[String]) = new EirResolvableName[T](fqn.toList)
+  def fromName[T: Manifest](fqn: Iterable[String]) = new EirResolvableName[T](fqn.toList)
 }

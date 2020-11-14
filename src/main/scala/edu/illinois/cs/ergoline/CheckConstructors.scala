@@ -7,15 +7,6 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object CheckConstructors {
 
-  def classes: Iterable[EirClass] = Find.all[EirClass](EirGlobalNamespace)
-
-  def constructorsByClass: List[(EirClass, List[EirMember])] =
-    classes.map(c => {
-      (c, Find.matching[EirMember]({
-        case x: EirMember if x.isConstructorOf(c) => x
-      }, c).toList)
-    }).toList
-
   def checkAllConstructors(): Int = {
     var numChecked = 0
     for ((cls, constructors) <- constructorsByClass) {
@@ -31,15 +22,20 @@ object CheckConstructors {
     numChecked
   }
 
+  def constructorsByClass: List[(EirClass, List[EirMember])] =
+    classes.map(c => {
+      (c, Find.matching[EirMember]({
+        case x: EirMember if x.isConstructorOf(c) => x
+      }, c).toList)
+    }).toList
+
+  def classes: Iterable[EirClass] = Find.all[EirClass](EirGlobalNamespace)
+
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = {
     true
   }
 
-  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
-    !decl.isFinal || decl.initialValue.isEmpty
-  }
-
-  def selfAssignmentsOk(cls : EirClass, constructor : EirMember): Boolean = {
+  def selfAssignmentsOk(cls: EirClass, constructor: EirMember): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
       case x@EirFunctionArgument(_, _, _, _, true) => x
     }.map(arg => {
@@ -52,10 +48,11 @@ object CheckConstructors {
     })
   }
 
-  // TODO actually implement this
-  private def assignmentTargetsDeclaration(x: EirAssignment, d: EirDeclaration) = true
+  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
+    !decl.isFinal || decl.initialValue.isEmpty
+  }
 
-  def fulfillsMandatoryAssignments(needsInitialization : List[EirMember], member: EirMember): Boolean = {
+  def fulfillsMandatoryAssignments(needsInitialization: List[EirMember], member: EirMember): Boolean = {
     val constructor = member.member.asInstanceOf[EirFunction]
     needsInitialization.isEmpty || needsInitialization.forall(variable => {
       val decl = variable.member.asInstanceOf[EirDeclaration]
@@ -68,4 +65,7 @@ object CheckConstructors {
       }, constructor).nonEmpty
     })
   }
+
+  // TODO actually implement this
+  private def assignmentTargetsDeclaration(x: EirAssignment, d: EirDeclaration) = true
 }
