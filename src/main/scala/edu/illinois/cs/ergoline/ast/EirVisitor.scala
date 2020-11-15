@@ -21,8 +21,11 @@ trait EirVisitor[T] {
       case x: EirLambdaExpression => visitLambdaExpression(x)
       case x: EirReturn => visitReturn(x)
       case x: EirSymbol[_] => visitSymbol(x)
+      case x: EirLiteral => visitLiteral(x)
     }
   }
+
+  def visitLiteral(value: EirLiteral): T
 
   def visitSymbol(value: EirSymbol[_]): T
 

@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.types.EirType
 import edu.illinois.cs.ergoline.{globals, types, util}
@@ -23,12 +24,14 @@ abstract class EirNode {
     }
 
   def children: Iterable[EirNode]
+
+  def unparse: String = UnparseAst.visit(this)
+
+  override def toString: String = unparse
 }
 
 abstract class EirExpressionNode extends EirNode {
   def eirType: EirResolvable[EirType]
-
-  def toString: String
 }
 
 abstract class EirScope extends EirNode {
@@ -138,8 +141,6 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
-  override def toString: String = s"Member($name)"
-
   override def name: String = member.name
 
   def isConstructorOf(other: EirClass): Boolean = parent.contains(other) && isConstructor
@@ -166,8 +167,6 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
   override def children: Iterable[EirNode] = List(lhs, rhs)
 
   override def eirType: EirResolvable[EirType] = ???
-
-  override def toString: String = s"EirBinaryExpression($lhs $op $rhs)"
 }
 
 case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var rhs: EirExpressionNode)
