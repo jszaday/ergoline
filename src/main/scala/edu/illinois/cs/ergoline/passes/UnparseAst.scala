@@ -22,6 +22,10 @@ object UnparseAst extends EirVisitor[String] {
 
   def tabs: String = List.fill(numTabs)(t).reduce(_ + _)
 
+  override def visit(node: EirNode): String = {
+    visit(node.annotations).mkString("") + super.visit(node)
+  }
+
   def visitResolvable[T](resolvable: EirResolvable[T]): String =
     resolvable.represents.mapOrEmpty(visit)
 
@@ -72,7 +76,7 @@ object UnparseAst extends EirVisitor[String] {
     s"func ${node.name}$templates($args): $retType " + node.body.mapOrSemi(visit)
   }
 
-  override def visitAnnotation(node: EirAnnotation): String = ???
+  override def visitAnnotation(node: EirAnnotation): String = s"@${node.name} "
 
   override def visitBinaryExpression(node: EirBinaryExpression): String =
     s"(${visit(node.lhs)} ${node.op} ${visit(node.rhs)})"

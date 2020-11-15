@@ -22,7 +22,7 @@ class EirUnparseTests extends FunSuite {
   test("namespace and c-style for loop") {
     val program =
       s"""namespace foo {
-        |${t}func bar(x: int, n: int): unit {
+        |${t}@entry func bar(x: int, n: int): unit {
         |$t${t}for (var y: int = ((x * 2) + 1); (y < n); y = (y + 1)) {
         |$t$t${t}println(y);
         |$t$t}
