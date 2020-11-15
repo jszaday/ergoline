@@ -35,7 +35,7 @@ object UnparseAst extends EirVisitor[String] {
     numTabs += 1
     val body = visitStatements(node.children)
     numTabs -= 1
-    val tail = if (body.strip.isEmpty) "" else tabs
+    val tail = if (body.trim.isEmpty) "" else tabs
     s"{$body$tail}"
   }
 
@@ -108,7 +108,8 @@ object UnparseAst extends EirVisitor[String] {
         declaration.mapOrSemi(visit) + " " +
           test.mapOrEmpty(visit) + "; " + increment.mapOrEmpty(visit)
       }
-      case EirForAllHeader(_, identifiers, expressionNode) => ""
+      case EirForAllHeader(_, identifiers, expressionNode) =>
+        (identifiers mkString ", ") + " <- " + visit(expressionNode)
     }
     s"for ($header) ${visit(loop.body)}"
   }

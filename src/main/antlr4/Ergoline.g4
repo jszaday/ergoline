@@ -40,7 +40,7 @@ identifierList
     ;
 
 loopHeader
-    :   identifierList '<-' expression
+    :   (identifierList | '(' identifierList ')') '<-' expression
     |   (variableDeclaration? | ';') test=expression? ';' assignment?
     ;
 
