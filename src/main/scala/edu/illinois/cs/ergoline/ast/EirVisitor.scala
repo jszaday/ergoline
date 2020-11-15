@@ -1,6 +1,8 @@
 package edu.illinois.cs.ergoline.ast
 
 trait EirVisitor[T] {
+  def visit(it : Iterable[EirNode]): Iterable[T] = it.map(visit)
+
   def visit(node: EirNode): T = {
     node match {
       case x: EirBlock => visitBlock(x)
@@ -18,8 +20,11 @@ trait EirVisitor[T] {
       case x: EirTupleExpression => visitTupleExpression(x)
       case x: EirLambdaExpression => visitLambdaExpression(x)
       case x: EirReturn => visitReturn(x)
+      case x: EirSymbol[_] => visitSymbol(x)
     }
   }
+
+  def visitSymbol(value: EirSymbol[_]): T
 
   def visitBlock(node: EirBlock): T
 

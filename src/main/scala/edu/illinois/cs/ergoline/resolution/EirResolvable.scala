@@ -1,11 +1,8 @@
 package edu.illinois.cs.ergoline.resolution
 
-import edu.illinois.cs.ergoline.ast.EirScope
+import edu.illinois.cs.ergoline.ast.{EirNode, EirScope}
 
 trait EirResolvable[T] {
   def resolve(scope: EirScope): T
-}
-
-object EirResolvable {
-  def fromName[T: Manifest](fqn: Iterable[String]) = new EirResolvableName[T](fqn.toList)
+  def represents: Option[EirNode]
 }

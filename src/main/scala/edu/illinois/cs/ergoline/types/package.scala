@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.EirScope
+import edu.illinois.cs.ergoline.ast.{EirNode, EirScope}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 package object types {
@@ -14,6 +14,8 @@ package object types {
     }
 
     def typeChildren: List[EirResolvable[EirType]]
+
+    override def represents: Option[EirNode] = ???
 
     override def toString: String = name
   }

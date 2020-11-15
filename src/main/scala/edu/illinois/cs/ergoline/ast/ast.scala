@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.resolution.{EirForwardedExpression, EirResolvable, EirTupleTypeElement, Find}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.types.EirType
 import edu.illinois.cs.ergoline.{globals, types, util}
 
@@ -102,6 +102,8 @@ trait EirInheritable extends EirNode with EirType {
 
   override def resolve(scope: EirScope): EirType = this
 
+  override def represents: Option[EirNode] = Some(this)
+
   override def typeChildren: List[EirResolvable[EirType]] = Nil
 }
 
@@ -149,7 +151,8 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 
 case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
                        var name: String, var templateArgs: List[EirTemplateArgument],
-                       var functionArgs: List[EirFunctionArgument])
+                       var functionArgs: List[EirFunctionArgument],
+                       var returnType: EirResolvable[EirType])
   extends EirScope with EirNamedNode {
   override def children: Iterable[EirNode] = body.map(List(_)).getOrElse(Nil) ++ templateArgs ++ functionArgs
 }
@@ -233,11 +236,15 @@ object EirLiteralTypes extends Enumeration {
   val String, Integer, Float, Character = Value
 }
 
-case class EirIdentifier(var parent: Option[EirNode], var fqn: List[String])
-  extends EirExpressionNode {
+case class EirSymbol[T](var parent: Option[EirNode], var qualifiedName: List[String])
+  extends EirExpressionNode with EirResolvable[T] {
   override def children: Iterable[EirNode] = Nil
 
   override def eirType: EirResolvable[EirType] = ???
+
+  override def resolve(scope: EirScope): T = ???
+
+  override def represents: Option[EirNode] = Some(this)
 }
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
@@ -281,27 +288,15 @@ case class EirCStyleHeader(var declaration: Option[EirDeclaration], var test: Op
 case class EirForAllHeader(var parent: Option[EirNode], var identifiers: List[String], var expressionNode: EirExpressionNode) extends EirForLoopHeader {
   override def children: List[EirNode] = declarations
 
-  def declarations: List[EirDeclaration] = {
-    val forwarded = new EirForwardedExpression(expressionNode)
-    if (identifiers.length == 1) {
-      val decl = EirDeclaration(parent, isFinal = true, identifiers.head, forwarded, null)
-      expressionNode.parent = Some(decl)
-      decl.initialValue = Some(expressionNode)
-      List(decl)
-    } else {
-      identifiers.zipWithIndex.map {
-        case (name, idx) =>
-          expressionNode = if (idx == 0) expressionNode else util.deepCloneTree(expressionNode)
-          val declTy = new EirTupleTypeElement(forwarded, idx)
-          val decl = EirDeclaration(parent, isFinal = true, name, declTy, null)
-          expressionNode.parent = Some(decl)
-          decl.initialValue = Some(util.makeTupleElementGetter(expressionNode, idx))
-          decl
-      }
-    }
-  }
+  def declarations: List[EirDeclaration] = ???
 }
 
 case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader, var body: EirBlock) extends EirScope {
   override def children: Iterable[EirNode] = header.children ++ List(body)
 }
+
+//case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
+//  override def eirType: EirResolvable[EirType] = exprNode.eirType
+//
+//  override def children: Iterable[EirNode] = List(exprNode)
+//}

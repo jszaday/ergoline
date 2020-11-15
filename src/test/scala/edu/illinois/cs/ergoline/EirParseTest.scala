@@ -50,7 +50,7 @@ class EirParseTest extends FunSuite {
     visitProgram(parserFromString("package foo; @entry func bar(): unit { }"))
     val fs = Find.annotatedWith[EirFunction]("entry", EirGlobalNamespace)
     fs should matchPattern {
-      case EirFunction(_, _, "bar", _, _) :: Nil =>
+      case EirFunction(_, _, "bar", _, _, _) :: Nil =>
     }
   }
 }
