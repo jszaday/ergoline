@@ -1,10 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 import util.Properties.{lineSeparator => n}
-
 
 object UnparseAst extends EirVisitor[String] {
   var numTabs = 0
@@ -25,9 +25,6 @@ object UnparseAst extends EirVisitor[String] {
   override def visit(node: EirNode): String = {
     visit(node.annotations).mkString("") + super.visit(node)
   }
-
-  def visitResolvable[T](resolvable: EirResolvable[T]): String =
-    resolvable.represents.mapOrEmpty(visit)
 
   def visitStatements(lst : Iterable[EirNode]): String = {
     def addSemi(x : String): String = if (x.endsWith("}") || x.endsWith(";")) x else s"$x;"
@@ -52,15 +49,15 @@ object UnparseAst extends EirVisitor[String] {
 
   override def visitDeclaration(node: EirDeclaration): String = {
     val kwd = if (node.isFinal) "val" else "var"
-    val declType = visitResolvable(node.declaredType)
+    val declType = visit(node.declaredType)
     val expr = node.initialValue.mapOrEmpty(x => s"= ${visit(x)}")
     s"$kwd ${node.name}: $declType $expr;"
   }
 
   override def visitTemplateArgument(node: EirTemplateArgument): String = {
     node.name +
-      node.upperBound.mapOrEmpty(x => " <: " + visitResolvable(x)) +
-      node.lowerBound.mapOrEmpty(x => " :> " + visitResolvable(x))
+      node.upperBound.mapOrEmpty(x => " <: " + visit(x)) +
+      node.lowerBound.mapOrEmpty(x => " :> " + visit(x))
   }
 
   override def visitClass(node: EirClass): String = ???
@@ -72,7 +69,7 @@ object UnparseAst extends EirVisitor[String] {
   override def visitFunction(node: EirFunction): String = {
     val args = node.functionArgs.map(visit) mkString ", "
     val templates = if (node.templateArgs.nonEmpty) "<" + node.templateArgs.map(visit).mkString(", ") + ">" else ""
-    val retType = node.returnType.represents.mapOrEmpty(visit)
+    val retType = visit(node.returnType)
     s"func ${node.name}$templates($args): $retType " + node.body.mapOrSemi(visit)
   }
 
@@ -82,7 +79,7 @@ object UnparseAst extends EirVisitor[String] {
     s"(${visit(node.lhs)} ${node.op} ${visit(node.rhs)})"
 
   override def visitFunctionArgument(node: EirFunctionArgument): String = {
-    val declTy = visitResolvable(node.declaredType)
+    val declTy = visit(node.declaredType)
     val equals = if (node.isSelfAssigning) "=" else ""
     s"${node.name}$equals: $declTy"
   }

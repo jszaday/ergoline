@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.types.EirType
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object CheckConstructors {

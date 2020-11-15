@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.EirResolvable
-import edu.illinois.cs.ergoline.types._
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichParserRuleContext, RichResolvableTypeIterable}
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
@@ -191,16 +191,16 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] =
-    visitTypeList(ctx.typeList()).toTupleType
+    visitTypeList(ctx.typeList()).toTupleType(parents.headOption)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     var base: EirResolvable[EirType] = symbolize(ctx.fqn.Identifier())
     val templates = visitTypeList(ctx.typeList())
     if (templates.nonEmpty) {
-      base = EirTemplatedType(base, templates)
+      base = EirTemplatedType(parents.headOption, base, templates)
     }
     if (ctx.Atpersand() != null) {
-      base = EirProxyType(base, Option(ctx.CollectiveKeyword()).map(_.getText))
+      base = EirProxyType(parents.headOption, base, Option(ctx.CollectiveKeyword()).map(_.getText))
     }
     base
   }
@@ -332,18 +332,20 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitLambdaType(ctx: LambdaTypeContext): EirType = {
     val children: List[ParseTree] = ctx.children.asScala.toList
-    val from = children.head match {
+    val l = EirLambdaType(parents.headOption, null, null)
+    parents.push(l)
+    l.from = children.head match {
       case x: TupleTypeContext => visitTupleType(x) match {
-        case x: EirTupleType => x.elements
+        case x: EirTupleType => x.children
         case x => List(x)
       }
       case x: BasicTypeContext => List(visitBasicType(x))
     }
-    val to = children.last match {
+    l.to = children.last match {
       case x: TupleTypeContext => visitTupleType(x)
       case x: BasicTypeContext => visitBasicType(x)
     }
-    EirLambdaType(from, to)
+    pop()
   }
 
   override def visitPrimaryExpression(ctx: PrimaryExpressionContext): Any = {

@@ -2,8 +2,8 @@ package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.types.EirType
-import edu.illinois.cs.ergoline.{globals, types, util}
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.globals
 
 import scala.collection.mutable
 
@@ -91,10 +91,6 @@ trait EirInheritable extends EirNode with EirType {
   var implementsThese: List[EirResolvable[EirType]]
 
   override def resolve(scope: EirScope): EirType = this
-
-  override def represents: Option[EirNode] = Some(this)
-
-  override def typeChildren: List[EirResolvable[EirType]] = Nil
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String) extends EirNamedNode {
@@ -176,7 +172,7 @@ case class EirAssignment(var parent: Option[EirNode], var target: EirExpressionN
 case class EirTupleExpression(var parent: Option[EirNode], var expressions: List[EirExpressionNode]) extends EirExpressionNode {
   override def children: Iterable[EirNode] = expressions
 
-  override def eirType: EirResolvable[EirType] = types.EirTupleType(expressions.map(_.eirType))
+  override def eirType: EirResolvable[EirType] = types.EirTupleType(parent, expressions.map(_.eirType))
 }
 
 object EirTupleExpression {
@@ -195,7 +191,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = args ++ List(body)
 
-  override def eirType: EirResolvable[EirType] = types.EirLambdaType(args.map(_.declaredType), Find.returnType(body))
+  override def eirType: EirResolvable[EirType] = types.EirLambdaType(parent, args.map(_.declaredType), Find.returnType(body))
 }
 
 case class EirReturn(var parent: Option[EirNode], var expression: EirExpressionNode) extends EirNode {
@@ -228,8 +224,6 @@ case class EirSymbol[T](var parent: Option[EirNode], var qualifiedName: List[Str
   override def eirType: EirResolvable[EirType] = ???
 
   override def resolve(scope: EirScope): T = ???
-
-  override def represents: Option[EirNode] = Some(this)
 }
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])

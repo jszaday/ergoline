@@ -1,8 +1,8 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.EirResolvable
-import edu.illinois.cs.ergoline.types.{EirTupleType, EirType}
 import org.antlr.v4.runtime.ParserRuleContext
 
 import scala.jdk.CollectionConverters.ListHasAsScala
@@ -59,11 +59,11 @@ package object util {
     }
 
     implicit class RichResolvableTypeIterable(types: Iterable[EirResolvable[EirType]]) {
-      def toTupleType: EirResolvable[EirType] =
+      def toTupleType(implicit parent : Option[EirNode]): EirResolvable[EirType] =
         types.toList match {
           case Nil => throw new RuntimeException("please use unit type")
           case element :: Nil => element
-          case x => EirTupleType(x)
+          case x => EirTupleType(parent, x)
         }
     }
 

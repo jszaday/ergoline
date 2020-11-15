@@ -1,12 +1,9 @@
 package edu.illinois.cs.ergoline.resolution
 
-import edu.illinois.cs.ergoline.ast.{EirBlock, EirGlobalNamespace, EirNamedNode, EirNode, EirScope}
-import edu.illinois.cs.ergoline.types.EirType
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types._
 
 object Find {
-
-  import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-
   def byName[T <: EirNamedNode: Manifest](fqn: List[String], scope: Option[EirScope]): Option[T] = {
     scope match {
       case Some(s: EirScope) => byName(fqn, s)
