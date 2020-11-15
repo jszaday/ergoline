@@ -20,7 +20,7 @@ object UnparseAst extends EirVisitor[String] {
 
   def t: String = "  "
 
-  def tabs: String = List.fill(numTabs)(t).reduce(_ + _)
+  def tabs: String = List.fill(numTabs)(t).mkString("")
 
   override def visit(node: EirNode): String = {
     visit(node.annotations).mkString("") + super.visit(node)

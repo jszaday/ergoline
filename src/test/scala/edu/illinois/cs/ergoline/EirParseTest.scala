@@ -7,6 +7,7 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
 class EirParseTest extends FunSuite {
+  EirGlobalNamespace.clear()
   test("define class and resolve it") {
     visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
     assert(Find.byName[EirClass](List("foo", "bar", "baz")).isDefined)
@@ -30,7 +31,7 @@ class EirParseTest extends FunSuite {
       case EirBinaryExpression(_, _, "+", _) =>
     }
     val e2 = v.visitExpression(parserFromString("()").expression())
-    e2 shouldEqual globals.UnitValue
+    e2.unparse shouldEqual "()"
     val e3 = v.visitExpression(parserFromString("(4, 4)").expression())
     e3 should matchPattern {
       case EirTupleExpression(_, elements) if elements.length == 2 =>

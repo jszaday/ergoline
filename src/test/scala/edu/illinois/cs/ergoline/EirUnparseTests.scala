@@ -1,10 +1,10 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
+import edu.illinois.cs.ergoline.Driver.parserFromString
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
+import edu.illinois.cs.ergoline.passes.{CheckEnclose, UnparseAst}
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
-import edu.illinois.cs.ergoline.passes.UnparseAst
 
 class EirUnparseTests extends FunSuite {
   EirGlobalNamespace.clear()
@@ -14,9 +14,10 @@ class EirUnparseTests extends FunSuite {
   test("test function and empty block") {
     val program =
       """func foo<T>(bar=: T, baz: T): T { }""".stripMargin
-    val namespace =
+    val function =
       (new Visitor).visitFunction(parserFromString(program).function())
-    program shouldEqual UnparseAst.visit(namespace)
+    CheckEnclose(function) shouldEqual None
+    program shouldEqual UnparseAst.visit(function)
   }
 
   test("namespace and c-style for loop") {
@@ -30,6 +31,7 @@ class EirUnparseTests extends FunSuite {
         |}""".stripMargin
     val namespace =
       (new Visitor).visitNamespace(parserFromString(program).namespace())
+    CheckEnclose(namespace) shouldEqual None
     program shouldEqual UnparseAst.visit(namespace)
   }
 }

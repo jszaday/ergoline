@@ -28,7 +28,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   import VisitorSyntax.RichTerminalNodeList
 
-  override def visitProgram(ctx: ProgramContext): Any = {
+  override def visitProgram(ctx: ProgramContext): EirNode = {
     val module = visitPackageStatement(ctx.packageStatement())
     parents.push(module)
     module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)

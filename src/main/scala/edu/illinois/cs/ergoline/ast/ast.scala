@@ -195,12 +195,11 @@ case class EirTupleExpression(var parent: Option[EirNode], var expressions: List
 object EirTupleExpression {
   def fromExpressions(parent: Option[EirNode], expressions: List[EirExpressionNode]): EirExpressionNode =
     expressions match {
-      case Nil => globals.UnitValue
+      case Nil => globals.unitLiteral(parent)
       case head :: Nil => head
       case lst =>
         val t = EirTupleExpression(parent, lst)
-        // TODO should not encounter null
-        lst.foreach(x => if (x != null) x.parent = Some(t))
+        lst.foreach(_.parent = Some(t))
         t
     }
 }
@@ -232,7 +231,7 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
 
 object EirLiteralTypes extends Enumeration {
   type EirLiteralTypes = Value
-  val String, Integer, Float, Character = Value
+  val String, Integer, Float, Character, Unit = Value
 }
 
 case class EirSymbol[T](var parent: Option[EirNode], var qualifiedName: List[String])

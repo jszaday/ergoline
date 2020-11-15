@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline
 
 import java.nio.file.{Path, Paths}
 
+import edu.illinois.cs.ergoline.ast.EirNode
 import org.antlr.v4.runtime.{CharStream, CharStreams, CommonTokenStream}
 
 object Driver extends App {
@@ -14,7 +15,7 @@ object Driver extends App {
     parserFromCharStream(CharStreams.fromPath(path))
   def parserFromString(s : String): ErgolineParser =
     parserFromCharStream(CharStreams.fromString(s))
-  def visitProgram(parser: ErgolineParser) =
+  def visitProgram(parser: ErgolineParser): EirNode =
     (new Visitor).visitProgram(parser.program())
   // get the options from the command-line args
   val (options, files) = args.partition(x => x startsWith "-")

@@ -2,13 +2,15 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
+import edu.illinois.cs.ergoline.passes.CheckEnclose
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirConstructorTests extends FunSuite {
+  EirGlobalNamespace.clear()
   test("expected ok, multiple constructors and assignment") {
     EirGlobalNamespace.clear()
-    visitProgram(parserFromString(
+    val module = visitProgram(parserFromString(
       """package foo;
         |class bar {
         |  func bar(self : bar, baz= : unit) : unit { }
@@ -18,6 +20,7 @@ class EirConstructorTests extends FunSuite {
         |""".stripMargin
     ))
     val numChecked : Int = CheckConstructors.checkAllConstructors()
+    CheckEnclose(module) shouldEqual None
     numChecked shouldEqual 2
   }
 
