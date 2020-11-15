@@ -28,16 +28,16 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   import VisitorSyntax.RichTerminalNodeList
 
-  override def visitProgram(ctx: ProgramContext): EirNode = {
-    val module = visitPackageStatement(ctx.packageStatement())
+  override def visitProgram(ctx: ProgramContext): EirNamespace = {
+    val module: EirNamespace = visitPackageStatement(ctx.packageStatement())
     parents.push(module)
     module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-    parents.pop()
+    pop()
   }
 
   override def visitPackageStatement(ctx: PackageStatementContext): EirNamespace = {
     val opt: Option[List[String]] = Option(ctx).map(_.fqn().Identifier.toStringList)
-    util.createOrGetNamespace(opt.getOrElse(List(defaultModuleName)), currentScope)
+    util.createOrFindNamespace(parents.headOption, opt.getOrElse(List(defaultModuleName)))
   }
 
   override def visitImportStatement(ctx: ImportStatementContext): Any = {
@@ -70,7 +70,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     Option(ctx).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
 
   override def visitNamespace(ctx: NamespaceContext): EirNamespace = {
-    val ns : EirNamespace = util.createOrGetNamespace(ctx.fqn().Identifier.toStringList, currentScope)
+    val ns : EirNamespace = util.createOrFindNamespace(parents.headOption, ctx.fqn().Identifier.toStringList)
     parents.push(ns)
     ns.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
     pop()

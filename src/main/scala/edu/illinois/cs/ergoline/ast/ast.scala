@@ -30,32 +30,20 @@ abstract class EirNode {
   override def toString: String = unparse
 }
 
-abstract class EirExpressionNode extends EirNode {
-  def eirType: EirResolvable[EirType]
+trait EirScope extends EirNode {
+  def enclosed: Iterable[EirNamedNode] = children.collect{ case x : EirNamedNode => x }
+  def findWithin[T <: EirNamedNode : Manifest](name : String): Option[T] = enclosed.collectFirst{
+    case x : T if x.name == name => x
+  }
+  def find[T <: EirNamedNode : Manifest](name : String): Option[T] =
+    this match {
+      case x : T if x.name == name => Some(x)
+      case _ => findWithin(name).orElse(scope.flatMap(_.findWithin(name)))
+    }
 }
 
-abstract class EirScope extends EirNode {
-  var cachedSymbols: Option[(Int, Map[String, EirNode])] = None
-
-  def contains(symbol: String): Boolean = symbols.contains(symbol)
-
-  def apply(symbol: String): Option[EirNode] =
-    if (contains(symbol)) Some(symbols(symbol)) else None
-
-  def symbols: Map[String, EirNode] =
-    (parent match {
-      case Some(x: EirScope) => x.symbols
-      case _ => Map.empty[String, EirNode]
-    }) ++ (cachedSymbols match {
-      case Some((hash, cached)) if hash == children.hashCode() => cached
-      case _ =>
-        cachedSymbols = Some(children.hashCode(), children.collect {
-          case x: EirNamedNode => (x.name, x)
-        }.toMap)
-        cachedSymbols.get._2
-    })
-
-  override def scope: Option[EirScope] = Some(this)
+abstract class EirExpressionNode extends EirNode {
+  def eirType: EirResolvable[EirType]
 }
 
 trait EirNamedNode extends EirNode {
@@ -69,9 +57,10 @@ trait EirNamedNode extends EirNode {
   override def hashCode(): Int = name.hashCode
 }
 
-case class EirBlock(var parent: Option[EirNode], var children: Iterable[EirNode]) extends EirScope
+case class EirBlock(var parent: Option[EirNode], var children: Iterable[EirNode]) extends EirNode with EirScope {
+}
 
-case object EirGlobalNamespace extends EirScope {
+case object EirGlobalNamespace extends EirNode with EirScope {
   private val modules: mutable.HashMap[String, EirNamespace] = new mutable.HashMap
 
   def clear(): Unit = modules.clear()
@@ -82,13 +71,11 @@ case object EirGlobalNamespace extends EirScope {
 
   override def parent_=(option: Option[EirNode]): Unit = ()
 
-  override def symbols: Map[String, EirNode] = modules.toMap
-
   override def children: Iterable[EirNode] = modules.values
 }
 
 case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode], var name: String)
-  extends EirScope with EirNamedNode {
+  extends EirNode with EirScope with EirNamedNode {
 
 }
 
@@ -121,7 +108,7 @@ case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirScope with EirNamedNode with EirInheritable {
+  extends EirNode with EirScope with EirNamedNode with EirInheritable {
   override def children: List[EirNode] = members ++ templateArgs
 
   def needsInitialization: List[EirMember] =
@@ -134,7 +121,7 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirScope with EirNamedNode with EirInheritable {
+  extends EirNode with EirScope with EirNamedNode with EirInheritable {
 
   override def children: List[EirNode] = members ++ templateArgs
 }
@@ -154,7 +141,7 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
                        var returnType: EirResolvable[EirType])
-  extends EirScope with EirNamedNode {
+  extends EirNode with EirScope with EirNamedNode {
   override def children: Iterable[EirNode] = body.map(List(_)).getOrElse(Nil) ++ templateArgs ++ functionArgs
 }
 
@@ -289,7 +276,7 @@ case class EirForAllHeader(var parent: Option[EirNode], var identifiers: List[St
   def declarations: List[EirDeclaration] = ???
 }
 
-case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader, var body: EirBlock) extends EirScope {
+case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader, var body: EirBlock) extends EirNode with EirScope {
   override def children: Iterable[EirNode] = header.children ++ List(body)
 }
 

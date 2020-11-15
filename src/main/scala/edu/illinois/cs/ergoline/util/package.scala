@@ -8,24 +8,28 @@ import org.antlr.v4.runtime.ParserRuleContext
 import scala.jdk.CollectionConverters.ListHasAsScala
 
 package object util {
-  def putIntoScope(node: EirNamespace, scope: Option[EirScope]): EirNamespace = {
-    scope match {
+
+  private def emplaceNamespace(parent : Option[EirNode], name : String): EirNamespace = {
+    val ns = EirNamespace(parent, Nil, name)
+    parent match {
       case Some(EirGlobalNamespace) =>
-        EirGlobalNamespace.put(node.name, node)
+        EirGlobalNamespace.put(ns.name, ns)
       case Some(x: EirNamespace) =>
-        x.children ++= List(node)
+        x.children ++= List(ns)
       case _ => throw new RuntimeException("unacceptable module target")
     }
-    node
+    ns
   }
 
-  import EirUtilitySyntax.RichOption;
+  def createOrFindNamespace(parent: Option[EirNode], fqn: Iterable[String]): EirNamespace =
+    createOrFindNamespace(parent, fqn.toList)
 
-  def createOrGetNamespace(fqn: Iterable[String], scope: Option[EirScope]): EirNamespace = {
-    fqn.toList match {
-      case head :: Nil => scope.flatMap(_.apply(head)).to[EirNamespace].getOrElse(putIntoScope(EirNamespace(scope, Nil, head), scope))
-      case init :+ last => createOrGetNamespace(List(last), Some(createOrGetNamespace(init, scope)))
-      case _ => null
+  def createOrFindNamespace(parent: Option[EirNode], fqn: List[String]): EirNamespace = {
+    fqn match {
+      case head :: Nil  => parent.flatMap(_.scope.flatMap(_.find(head))).getOrElse(emplaceNamespace(parent, head))
+      case init :+ last =>
+        val ns: Option[EirNamespace] = Some(createOrFindNamespace(parent, init))
+        createOrFindNamespace(ns, List(last))
     }
   }
 

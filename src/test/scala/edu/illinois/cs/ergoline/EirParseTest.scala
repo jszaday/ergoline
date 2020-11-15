@@ -9,13 +9,13 @@ import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 class EirParseTest extends FunSuite {
   EirGlobalNamespace.clear()
   test("define class and resolve it") {
-    visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
-    assert(Find.byName[EirClass](List("foo", "bar", "baz")).isDefined)
+    val ns = visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
+    assert(Find.byName[EirClass](List("foo", "bar", "baz"), ns).isDefined)
   }
   test("singleton tuple yields same type") {
-    visitProgram(parserFromString("package foo; class bar { var baz : (unit) ; var qux : unit ; }"))
-    val bazDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "baz")).map(_.declaredType)
-    val quxDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "qux")).map(_.declaredType)
+    val ns = visitProgram(parserFromString("package foo; class bar { var baz : (unit) ; var qux : unit ; }"))
+    val bazDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "baz"), ns).map(_.declaredType)
+    val quxDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "qux"), ns).map(_.declaredType)
     bazDeclaredType shouldEqual quxDeclaredType
   }
   test("mini bin op precedence test") {
