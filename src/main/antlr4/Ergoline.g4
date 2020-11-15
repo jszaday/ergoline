@@ -152,7 +152,7 @@ lambdaExpression
 postfixExpression
     :   primaryExpression
     |   postfixExpression '[' arrArgs=expressionList? ']'
-    |   postfixExpression '(' fnArgs=expressionList? ')'
+    |   postfixExpression LParen fnArgs=expressionList? RParen
     |   postfixExpression '.' Identifier
     ;
 
@@ -277,6 +277,9 @@ VariableKeyword : 'var' ;
 ValueKeyword : 'val' ;
 
 Equals : '=' ;
+
+LParen : '(' ;
+RParen : ')' ;
 
 Identifier
     :   NonDigit

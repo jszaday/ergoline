@@ -1,5 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.ast.types._
+
 trait EirVisitor[T] {
   def visit(it : Iterable[EirNode]): Iterable[T] = it.map(visit)
 
@@ -24,9 +26,30 @@ trait EirVisitor[T] {
       case x: EirLiteral => visitLiteral(x)
       case x: EirForLoop => visitForLoop(x)
       case x: EirFunctionCall => visitFunctionCall(x)
+      case x: EirImport => visitImport(x)
+      case x: EirProxyType => visitProxyType(x)
+      case x: EirTemplatedType => visitTemplatedType(x)
+      case x: EirLambdaType => visitLambdaType(x)
+      case x: EirTernaryOperator => visitTernaryOperator(x)
+      case x: EirFieldAccessor => visitFieldAccessor(x)
+      case x: EirArrayReference => visitArrayReference(x)
       case null => throw new RuntimeException("unexpected null?")
     }
   }
+
+  def visitArrayReference(x: EirArrayReference): T
+
+  def visitFieldAccessor(x: EirFieldAccessor): T
+
+  def visitTernaryOperator(x: EirTernaryOperator): T
+
+  def visitLambdaType(x: EirLambdaType): T
+
+  def visitTemplatedType(x: EirTemplatedType): T
+
+  def visitProxyType(x: EirProxyType): T
+
+  def visitImport(eirImport: EirImport): T
 
   def visitFunctionCall(call: EirFunctionCall): T
 

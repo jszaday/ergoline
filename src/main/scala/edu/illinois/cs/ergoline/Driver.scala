@@ -22,5 +22,5 @@ object Driver extends App {
   // open each specified file
   val parsers: Array[ErgolineParser] = files.map(Paths.get(_)).map(parserFromPath)
   // visit each file
-  parsers.foreach(visitProgram)
+  parsers.foreach(x => println(visitProgram(x).unparse))
 }

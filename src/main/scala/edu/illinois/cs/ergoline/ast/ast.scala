@@ -38,7 +38,7 @@ trait EirScope extends EirNode {
   def find[T <: EirNamedNode : Manifest](name : String): Option[T] =
     this match {
       case x : T if x.name == name => Some(x)
-      case _ => findWithin(name).orElse(scope.flatMap(_.findWithin(name)))
+      case _ => findWithin(name).orElse(scope.flatMap(_.find(name)))
     }
 }
 
@@ -90,7 +90,7 @@ trait EirInheritable extends EirNode with EirType {
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
-  override def resolve(scope: EirScope): EirType = this
+  override def resolved: EirType = this
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String) extends EirNamedNode {
@@ -139,6 +139,11 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
                        var returnType: EirResolvable[EirType])
   extends EirNode with EirScope with EirNamedNode {
   override def children: Iterable[EirNode] = body.map(List(_)).getOrElse(Nil) ++ templateArgs ++ functionArgs
+}
+
+case class EirImport(var parent: Option[EirNode], var symbol: EirSymbol[EirScope with EirNamedNode])
+  extends EirNode with EirScope {
+  override def children: Iterable[EirNode] = List(symbol)
 }
 
 case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {
@@ -223,7 +228,7 @@ case class EirSymbol[T](var parent: Option[EirNode], var qualifiedName: List[Str
 
   override def eirType: EirResolvable[EirType] = ???
 
-  override def resolve(scope: EirScope): T = ???
+  override def resolved: T = ???
 }
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])

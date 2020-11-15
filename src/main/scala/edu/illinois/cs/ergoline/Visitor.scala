@@ -40,30 +40,37 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     util.createOrFindNamespace(parents.headOption, opt.getOrElse(List(defaultModuleName)))
   }
 
-  override def visitImportStatement(ctx: ImportStatementContext): Any = {
-    println("importing the module " + ctx.fqn().Identifier().asScala.map(_.getText))
+  private def enter[T <: EirNode](node : T, f : T => Unit): T = {
+    parents.push(node)
+    f(node)
+    pop()
+  }
+
+  override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
+    enter(EirImport(parents.headOption, null), (i : EirImport) => {
+      i.symbol = symbolize(ctx.fqn().Identifier())
+    })
   }
 
   override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {
-    val c: EirClass = EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil)
-    parents.push(c)
-    c.members ++= ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
-    pop[EirClass]()
+    enter(EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil), (c : EirClass) => {
+      c.members ++= ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
+    })
   }
 
   override def visitAnnotatedMember(ctx: AnnotatedMemberContext): EirMember = {
-    parents.push(visitMember(ctx.member()))
-    parents.head.annotations ++= visitAnnotationList(ctx.annotation())
-    pop[EirMember]()
+    enter(visitMember(ctx.member()), (member : EirMember) => {
+      member.annotations ++= visitAnnotationList(ctx.annotation())
+    })
   }
 
-  override def visitMember(ctx: MemberContext): EirNode = {
+  override def visitMember(ctx: MemberContext): EirMember = {
     val m = EirMember(parents.headOption, null, visitAccessModifier(ctx.accessModifier))
     parents.push(m)
     Option(ctx.fieldDeclaration())
       .orElse(Option(ctx.topLevelStatement()))
-      .map(this.visit).foreach(x => m.member = x.asInstanceOf[EirNamedNode])
-    parents.pop()
+      .map(x => assertValid[EirNamedNode](visit(x))).foreach(m.member = _)
+    pop()
   }
 
   override def visitAccessModifier(ctx: AccessModifierContext): EirAccessibility =
@@ -75,8 +82,6 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     ns.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
     pop()
   }
-
-  private def currentScope: Option[EirScope] = parents.headOption.flatMap(_.scope)
 
   override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode = {
     val s = visitTopLevelStatement(ctx.topLevelStatement())
@@ -179,14 +184,14 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
       f.target = visitPostfixExpression(ctx.postfixExpression())
       f.args = visitExpressionList(ctx.arrArgs)
       pop()
-    } else if (ctx.fnArgs != null) {
+    } else if (ctx.LParen() != null) {
       val f = EirFunctionCall(parents.headOption, null, null)
       parents.push(f)
       f.target = visitPostfixExpression(ctx.postfixExpression())
-      f.args = visitExpressionList(ctx.fnArgs)
+      f.args = Option(ctx.fnArgs).map(visitExpressionList).getOrElse(Nil)
       pop()
     } else {
-      super.visitPostfixExpression(ctx).asInstanceOf[EirExpressionNode]
+      assertValid[EirExpressionNode](visitPrimaryExpression(ctx.primaryExpression()))
     }
   }
 
@@ -229,16 +234,12 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   def visitBinaryExpression[T <: ParserRuleContext](ctx: T): EirExpressionNode = {
     val children = ctx.children.asScala.toList
     if (children.length == 1) {
-      visit(children.head) match {
-        case e: EirExpressionNode => e
-        case _ => null
-      }
-    }
-    else if (children.length == 3) {
+      assertValid[EirExpressionNode](visit(children.head))
+    } else if (children.length == 3) {
       val e = EirBinaryExpression(parents.headOption, null, children(1).getText, null)
       parents.push(e)
-      e.lhs = visit(children.head).asInstanceOf[EirExpressionNode]
-      e.rhs = visit(children.last).asInstanceOf[EirExpressionNode]
+      e.lhs = assertValid[EirExpressionNode](visit(children.head))
+      e.rhs = assertValid[EirExpressionNode](visit(children.last))
       pop[EirExpressionNode]()
     } else throw new RuntimeException("how did I get here?")
   }
@@ -274,24 +275,22 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitUnaryExpression(ctx: UnaryExpressionContext): EirExpressionNode = {
-    if (ctx.unaryOperator() == null) visitPostfixExpression(ctx.postfixExpression())
-    else {
+    Option(ctx.postfixExpression()).map(x => assertValid[EirExpressionNode](visitPostfixExpression(x))).getOrElse({
       val e = EirUnaryExpression(parents.headOption, ctx.unaryOperator().getText, null)
       parents.push(e)
       e.rhs = visitCastExpression(ctx.castExpression())
       pop[EirExpressionNode]()
-    }
+    })
   }
 
   override def visitCastExpression(ctx: CastExpressionContext): EirExpressionNode = {
-    if (ctx.`type`() == null) visitUnaryExpression(ctx.unaryExpression())
-    else {
+    Option(ctx.unaryExpression()).map(x => assertValid[EirExpressionNode](visitUnaryExpression(x))).getOrElse({
       val t = EirTypeCast(parents.headOption, null, null)
       parents.push(t)
       t.to = visitType(ctx.`type`())
       t.value = visitCastExpression(ctx.castExpression())
       pop()
-    }
+    })
   }
 
   override def visitReturnStatement(ctx: ReturnStatementContext): EirNode = {
@@ -348,9 +347,22 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     pop()
   }
 
-  override def visitPrimaryExpression(ctx: PrimaryExpressionContext): Any = {
-    if (ctx.fqn() != null) symbolize[EirNamedNode](ctx.fqn().Identifier())
-    else super.visitPrimaryExpression(ctx)
+  override def visitPrimaryExpression(ctx: PrimaryExpressionContext): EirExpressionNode = {
+    if (ctx == null) {
+      throw new RuntimeException("encountered null")
+    } else if (ctx.fqn() != null) {
+      symbolize[EirNamedNode](ctx.fqn().Identifier())
+    } else {
+      assert(ctx.children.size() == 1)
+      assertValid[EirExpressionNode](visit(ctx.children.get(0)))
+    }
+  }
+
+  def assertValid[T : Manifest](value : Any): T = {
+    Option(value) match {
+      case Some(x : T) => x
+      case x => throw new RuntimeException(s"unexpected value ${x}")
+    }
   }
 
   override def visitConstant(ctx: ConstantContext): EirExpressionNode = {
