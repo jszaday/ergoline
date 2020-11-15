@@ -13,23 +13,23 @@ class EirUnparseTests extends FunSuite {
 
   test("test function and empty block") {
     val program =
-      """func foo<T>(bar: T, baz: T): T { }""".stripMargin
+      """func foo<T>(bar=: T, baz: T): T { }""".stripMargin
     val namespace =
       (new Visitor).visitFunction(parserFromString(program).function())
     program shouldEqual UnparseAst.visit(namespace)
   }
 
-  test("namespace and declaration") {
+  test("namespace and c-style for loop") {
     val program =
       s"""namespace foo {
-        |${t}func bar(): unit {
-        |$t${t}val x: int = 4;
+        |${t}func bar(x: int, n: int): unit {
+        |$t${t}for (var y: int = ((x * 2) + 1); (y < n); y = (y + 1)) {
+        |$t$t${t}println(y);
+        |$t$t}
         |$t}
         |}""".stripMargin
     val namespace =
       (new Visitor).visitNamespace(parserFromString(program).namespace())
-    val unparsed = UnparseAst.visit(namespace)
-    println(unparsed)
-    program shouldEqual unparsed
+    program shouldEqual UnparseAst.visit(namespace)
   }
 }

@@ -114,6 +114,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitStatement(ctx: StatementContext): EirNode = {
     if (ctx.assignment() != null) visitAssignment(ctx.assignment())
+    else if (ctx.expression() != null) visitExpression(ctx.expression())
     else super.visitStatement(ctx).asInstanceOf[EirNode]
   }
 
@@ -320,7 +321,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitLoopHeader(ctx: LoopHeaderContext): EirForLoopHeader = {
-    if (ctx.expression() == null) {
+    if (ctx.variableDeclaration() != null) {
       EirCStyleHeader(Option(ctx.variableDeclaration()).map(visitVariableDeclaration),
         Option(ctx.test).map(visitExpression),
         Option(ctx.assignment()).map(visitAssignment))

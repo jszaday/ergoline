@@ -12,6 +12,7 @@ object UnparseAst extends EirVisitor[String] {
   private object UnparseSyntax {
     implicit class RichOption[T](option : Option[T]) {
       def mapOrEmpty(f : T => String): String = option.map(f).getOrElse("")
+      def mapOrSemi(f : T => String): String = option.map(f).getOrElse(";")
     }
   }
 
@@ -25,15 +26,16 @@ object UnparseAst extends EirVisitor[String] {
     resolvable.represents.mapOrEmpty(visit)
 
   def visitStatements(lst : Iterable[EirNode]): String = {
-    val x = visit(lst).map(x => s"$n$tabs$x").mkString
+    def addSemi(x : String): String = if (x.endsWith("}") || x.endsWith(";")) x else s"$x;"
+    val x = visit(lst).map(addSemi).map(x => s"$n$tabs$x").mkString
     if (x == "") " " else s"$x$n"
   }
 
   override def visitBlock(node: EirBlock): String = {
     numTabs += 1
     val body = visitStatements(node.children)
-    val tail = if (body.strip.isEmpty) "" else t
     numTabs -= 1
+    val tail = if (body.strip.isEmpty) "" else tabs
     s"{$body$tail}"
   }
 
@@ -65,9 +67,9 @@ object UnparseAst extends EirVisitor[String] {
 
   override def visitFunction(node: EirFunction): String = {
     val args = node.functionArgs.map(visit) mkString ", "
-    val templates = if (node.templateArgs.isEmpty) "" else ("<" + node.templateArgs.map(visit).mkString(", ") + ">")
-    val retType = node.returnType.represents.map(visit).getOrElse("")
-    s"func ${node.name}$templates($args): $retType " + node.body.mapOrEmpty(visit)
+    val templates = if (node.templateArgs.nonEmpty) "<" + node.templateArgs.map(visit).mkString(", ") + ">" else ""
+    val retType = node.returnType.represents.mapOrEmpty(visit)
+    s"func ${node.name}$templates($args): $retType " + node.body.mapOrSemi(visit)
   }
 
   override def visitAnnotation(node: EirAnnotation): String = ???
@@ -81,7 +83,13 @@ object UnparseAst extends EirVisitor[String] {
     s"${node.name}$equals: $declTy"
   }
 
-  override def visitAssignment(node: EirAssignment): String = ???
+  override def visitAssignment(node: EirAssignment): String = {
+    val semi = node.parent match {
+      case Some(_ : EirForLoop) => ""
+      case _ => ";"
+    }
+    s"${visit(node.target)} = ${visit(node.value)}$semi"
+  }
 
   override def visitTupleExpression(node: EirTupleExpression): String =
     s"(${node.expressions.map(visit) mkString ", "})"
@@ -93,4 +101,19 @@ object UnparseAst extends EirVisitor[String] {
   override def visitSymbol(value: EirSymbol[_]): String = value.qualifiedName mkString "::"
 
   override def visitLiteral(value: EirLiteral): String = value.value
+
+  override def visitForLoop(loop: EirForLoop): String = {
+    val header : String = loop.header match {
+      case EirCStyleHeader(declaration, test, increment) => {
+        declaration.mapOrSemi(visit) + " " +
+          test.mapOrEmpty(visit) + "; " + increment.mapOrEmpty(visit)
+      }
+      case EirForAllHeader(_, identifiers, expressionNode) => ""
+    }
+    s"for ($header) ${visit(loop.body)}"
+  }
+
+  override def visitFunctionCall(call: EirFunctionCall): String = {
+    visit(call.target) + "(" + (call.args.map(visit) mkString ", ") + ")"
+  }
 }

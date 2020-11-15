@@ -22,8 +22,15 @@ trait EirVisitor[T] {
       case x: EirReturn => visitReturn(x)
       case x: EirSymbol[_] => visitSymbol(x)
       case x: EirLiteral => visitLiteral(x)
+      case x: EirForLoop => visitForLoop(x)
+      case x: EirFunctionCall => visitFunctionCall(x)
+      case null => throw new RuntimeException("unexpected null?")
     }
   }
+
+  def visitFunctionCall(call: EirFunctionCall): T
+
+  def visitForLoop(loop: EirForLoop): T
 
   def visitLiteral(value: EirLiteral): T
 
