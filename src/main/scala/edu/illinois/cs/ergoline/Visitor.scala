@@ -28,11 +28,22 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   import VisitorSyntax.RichTerminalNodeList
 
-  override def visitProgram(ctx: ProgramContext): EirNamespace = {
-    val module: EirNamespace = visitPackageStatement(ctx.packageStatement())
-    parents.push(module)
-    module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-    pop()
+  override def visitProgram(ctx: ProgramContext): EirScope = {
+    if (ctx.packageStatement() == null) {
+      ctx
+        .mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
+        .collect{
+          case x : EirNamespace => x
+          case x => throw new RuntimeException(s"$x cannot be put into the global namespace")
+        }
+        .foreach(x => EirGlobalNamespace.put(x.name, x))
+      EirGlobalNamespace
+    } else {
+      val module: EirNamespace = visitPackageStatement(ctx.packageStatement())
+      parents.push(module)
+      module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
+      pop()
+    }
   }
 
   override def visitPackageStatement(ctx: PackageStatementContext): EirNamespace = {

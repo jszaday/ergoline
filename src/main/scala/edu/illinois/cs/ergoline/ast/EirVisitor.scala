@@ -33,9 +33,12 @@ trait EirVisitor[T] {
       case x: EirTernaryOperator => visitTernaryOperator(x)
       case x: EirFieldAccessor => visitFieldAccessor(x)
       case x: EirArrayReference => visitArrayReference(x)
+      case EirGlobalNamespace => visitGlobalNamespace()
       case null => throw new RuntimeException("unexpected null?")
     }
   }
+
+  def visitGlobalNamespace(): T
 
   def visitArrayReference(x: EirArrayReference): T
 

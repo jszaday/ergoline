@@ -27,7 +27,7 @@ object UnparseAst extends EirVisitor[String] {
     visit(node.annotations).mkString("") + super.visit(node)
   }
 
-  def addSemi(x : String): String = if (x.endsWith("}") || x.endsWith(";")) x else s"$x;"
+  def addSemi(x : String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
 
   def visitStatements(lst : Iterable[EirNode]): String = {
     val x = visit(lst).map(addSemi).map(x => s"$n$tabs$x").mkString
@@ -46,7 +46,7 @@ object UnparseAst extends EirVisitor[String] {
     numTabs += 1
     val body = visitStatements(node.children)
     numTabs -= 1
-    s"namespace ${node.name} {$body}"
+    s"namespace ${node.name} {$body}$n"
   }
 
   override def visitDeclaration(node: EirDeclaration): String = {
@@ -81,7 +81,7 @@ object UnparseAst extends EirVisitor[String] {
       case lst => s"${visitStatements(lst)}$tabsMinusOne"
     }
     numTabs -= 1
-    s"class ${node.name}$decl${visitInheritable(node)} {$body}"
+    s"class ${node.name}$decl${visitInheritable(node)} {$body}$n"
   }
 
   override def visitTrait(node: EirTrait): String = ???
@@ -170,5 +170,9 @@ object UnparseAst extends EirVisitor[String] {
 
   override def visitArrayReference(x: EirArrayReference): String = {
     s"${visit(x.target)}[${x.args.map(visit) mkString ", "}]"
+  }
+
+  override def visitGlobalNamespace(): String = {
+    visitStatements(EirGlobalNamespace.children).trim + n
   }
 }

@@ -142,8 +142,10 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
 }
 
 case class EirImport(var parent: Option[EirNode], var symbol: EirSymbol[EirScope with EirNamedNode])
-  extends EirNode with EirScope {
+  extends EirNode with EirNamedNode with EirScope {
   override def children: Iterable[EirNode] = List(symbol)
+
+  override def name: String = symbol.qualifiedName.head
 }
 
 case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {

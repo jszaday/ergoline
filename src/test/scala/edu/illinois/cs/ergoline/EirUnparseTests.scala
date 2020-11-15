@@ -28,7 +28,8 @@ class EirUnparseTests extends FunSuite {
         |$t$t${t}println(y);
         |$t$t}
         |$t}
-        |}""".stripMargin
+        |}
+        |""".stripMargin
     val namespace =
       (new Visitor).visitNamespace(parserFromString(program).namespace())
     CheckEnclose(namespace) shouldEqual None
