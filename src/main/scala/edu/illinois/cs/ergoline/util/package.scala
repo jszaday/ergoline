@@ -34,7 +34,7 @@ package object util {
   }
 
   def encloseNodes(nodes: EirNode*): EirBlock = {
-    val b = EirBlock(nodes.head.parent, nodes)
+    val b = EirBlock(nodes.head.parent, nodes.toList)
     nodes.foreach(_.parent = Some(b))
     b
   }
@@ -44,6 +44,12 @@ package object util {
     expression.parent = Some(ref)
     ref.args = List(EirLiteral(Some(ref), EirLiteralTypes.Integer, idx.toString))
     ref
+  }
+
+  def visitAll[T](node : EirNode, f : EirNode => T): Seq[T] = {
+    f(node) +: node.children.flatMap(n => {
+      f(n) +: visitAll(n, f)
+    }).toSeq
   }
 
   // TODO implement this

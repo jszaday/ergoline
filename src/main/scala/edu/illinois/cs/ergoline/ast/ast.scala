@@ -27,6 +27,9 @@ abstract class EirNode {
 
   def unparse: String = UnparseAst.visit(this)
 
+  def contains(other : EirNode): Boolean = (this == other) ||
+    children.exists(child => child.contains(other))
+
   override def toString: String = unparse
 }
 
@@ -57,7 +60,12 @@ trait EirNamedNode extends EirNode {
   override def hashCode(): Int = name.hashCode
 }
 
-case class EirBlock(var parent: Option[EirNode], var children: Iterable[EirNode]) extends EirNode with EirScope {
+case class EirBlock(var parent: Option[EirNode], var children: List[EirNode]) extends EirNode with EirScope {
+  def findPositionOf(node : EirNode) : Option[Int] = {
+    children.zipWithIndex.collectFirst({
+      case (child, idx) if child.contains(node) => idx
+    })
+  }
 }
 
 case object EirGlobalNamespace extends EirNode with EirScope {

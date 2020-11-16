@@ -19,12 +19,11 @@ object Find {
     }
   }
 
-  def all[T: Manifest](scope: EirScope): Iterable[T] = {
-    scope.children.collect {
-      case x: EirScope => all(x)
-    }.flatten ++ scope.children.collect {
-      case x: T => x
-    }
+  def all[T: Manifest](node: EirNode): Iterable[T] = {
+    node.children.flatMap(all(_)) ++
+      node.children.collect{
+        case x: T => x
+      }
   }
 
   def matching[T: Manifest](pattern: PartialFunction[EirNode, T], scope: EirScope): Iterable[T] = {
@@ -41,4 +40,11 @@ object Find {
   def returnType(block: EirBlock): EirResolvable[EirType] = ???
 
   def unionType(types: EirResolvable[EirType]*): EirType = ???
+
+  def resolveSymbol[T](symbol: EirSymbol[T]): T = {
+    val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
+
+
+    symbol.resolved
+  }
 }
