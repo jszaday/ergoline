@@ -4,6 +4,8 @@ import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 package object types {
 
+  type EirNamedType = EirType with EirNamedNode
+
   trait EirType extends EirResolvable[EirType]
 
   case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {

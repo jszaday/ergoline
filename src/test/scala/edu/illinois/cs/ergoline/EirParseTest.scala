@@ -9,13 +9,20 @@ import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 class EirParseTest extends FunSuite {
   EirGlobalNamespace.clear()
   test("define class and resolve it") {
-    val ns = visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
-    assert(Find.byName[EirClass](List("foo", "bar", "baz"), ns).isDefined)
+    val result = visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
+    val namespace = Find.qualifications(result, List("foo", "bar")).toList
+    val found = Find.child[EirClass](namespace.head, Find.withName("baz"))
+    namespace.length shouldEqual 1
+    found.nonEmpty shouldBe true
   }
   test("singleton tuple yields same type") {
-    val ns = visitProgram(parserFromString("package foo; class bar { var baz : (unit) ; var qux : unit ; }"))
-    val bazDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "baz"), ns).map(_.declaredType)
-    val quxDeclaredType = Find.byName[EirDeclaration](List("foo", "bar", "qux"), ns).map(_.declaredType)
+    val result = visitProgram(parserFromString("package foo; class bar { var baz : (unit) ; var qux : unit ; }"))
+    val foo = Find.qualifications(result, List("foo")).toList
+    foo.length shouldEqual 1
+    val bar = Find.child[EirClass](foo.head, Find.withName("bar")).toList
+    bar.length shouldEqual 1
+    val bazDeclaredType = Find.child[EirDeclaration](bar.head, Find.withName("baz")).map(_.declaredType)
+    val quxDeclaredType = Find.child[EirDeclaration](bar.head, Find.withName("qux")).map(_.declaredType)
     bazDeclaredType shouldEqual quxDeclaredType
   }
   test("mini bin op precedence test") {

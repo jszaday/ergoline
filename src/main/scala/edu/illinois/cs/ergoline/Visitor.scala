@@ -60,7 +60,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
     enter(EirImport(parent, null), (i : EirImport) => {
-      i.symbol = symbolize(ctx.fqn().Identifier())
+      i.symbol = symbolize[EirNamedNode with EirScope](ctx.fqn().Identifier())
     })
   }
 
@@ -154,7 +154,8 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   override def visitValueDeclaration(ctx: ValueDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirDeclaration = {
-    enter(EirDeclaration(parent, isFinal, name.getText, visitType(declaredType), None), (d : EirDeclaration) => {
+    enter(EirDeclaration(parent, isFinal, name.getText, null, None), (d : EirDeclaration) => {
+      d.declaredType = visitType(declaredType)
       d.initialValue = Option(expressionContext).map(visitExpression)
     })
   }
@@ -199,7 +200,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     visitTypeList(ctx.typeList()).toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
-    var base: EirResolvable[EirType] = symbolize(ctx.fqn.Identifier())
+    var base: EirResolvable[EirType] = symbolize[EirType with EirNamedNode](ctx.fqn.Identifier())
     val templates = visitTypeList(ctx.typeList())
     if (templates.nonEmpty) {
       base = EirTemplatedType(parent, base, templates)
@@ -210,7 +211,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     base
   }
 
-  def symbolize[T](identifiers: java.util.List[TerminalNode]): EirSymbol[T]
+  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T]
     = EirSymbol[T](parent, identifiers.toStringList)
 
   override def visitTypeList(ctx: TypeListContext): List[EirResolvable[EirType]] = ctx.mapOrEmpty(_.`type`, visitType)

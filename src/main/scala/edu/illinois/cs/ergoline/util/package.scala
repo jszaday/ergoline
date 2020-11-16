@@ -2,7 +2,9 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import org.antlr.v4.runtime.ParserRuleContext
 
 import scala.jdk.CollectionConverters.ListHasAsScala
@@ -26,7 +28,9 @@ package object util {
 
   def createOrFindNamespace(parent: Option[EirNode], fqn: List[String]): EirNamespace = {
     fqn match {
-      case head :: Nil  => parent.flatMap(_.scope.flatMap(_.find(head))).getOrElse(emplaceNamespace(parent, head))
+      case head :: Nil  =>
+        parent.flatMap(_.scope.flatMap(_.findChild[EirNamespace](withName(head)).headOption))
+          .getOrElse(emplaceNamespace(parent, head))
       case init :+ last =>
         val ns: Option[EirNamespace] = Some(createOrFindNamespace(parent, init))
         createOrFindNamespace(ns, List(last))
@@ -53,9 +57,19 @@ package object util {
   }
 
   // TODO implement this
+  private def xCanAccessY(x : EirNode, y : EirNode): Boolean = true
+
+  // TODO implement this
   def deepCloneTree[T <: EirNode](node : T): T = node
 
   object EirUtilitySyntax {
+
+    implicit class RichEirNode(node : EirNode) {
+      def canAccess(other : EirNode): Boolean = xCanAccessY(node, other)
+      def visitAll[T](f : EirNode => T): Seq[T] = util.visitAll(node, f)
+      def findChild[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.child(node, predicate)
+      def findWithin[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.within(node, predicate)
+    }
 
     implicit class RichOption(option: Option[_]) {
       def to[T: Manifest]: Option[T] = option match {

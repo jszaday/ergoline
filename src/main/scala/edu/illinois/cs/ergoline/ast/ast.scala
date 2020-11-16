@@ -34,15 +34,7 @@ abstract class EirNode {
 }
 
 trait EirScope extends EirNode {
-  def enclosed: Iterable[EirNamedNode] = children.collect{ case x : EirNamedNode => x }
-  def findWithin[T <: EirNamedNode : Manifest](name : String): Option[T] = enclosed.collectFirst{
-    case x : T if x.name == name => x
-  }
-  def find[T <: EirNamedNode : Manifest](name : String): Option[T] =
-    this match {
-      case x : T if x.name == name => Some(x)
-      case _ => findWithin(name).orElse(scope.flatMap(_.find(name)))
-    }
+  var lastSearch : Int = -1
 }
 
 abstract class EirExpressionNode extends EirNode {
@@ -91,7 +83,7 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
-  override def children: Iterable[EirNode] = initialValue.map(List(_)).getOrElse(Nil)
+  override def children: Iterable[EirNode] = List(declaredType) ++ initialValue
 }
 
 trait EirInheritable extends EirNode with EirType {
@@ -232,13 +224,14 @@ object EirLiteralTypes extends Enumeration {
   val String, Integer, Float, Character, Unit = Value
 }
 
-case class EirSymbol[T](var parent: Option[EirNode], var qualifiedName: List[String])
+case class EirSymbol[+T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
   override def children: Iterable[EirNode] = Nil
 
-  override def eirType: EirResolvable[EirType] = ???
+  override def eirType: EirResolvable[EirType] = Find.typeOf(resolved)
 
-  override def resolved: T = ???
+  override def resolved: T = Find.fromSymbol(this).headOption
+    .getOrElse(throw new RuntimeException(s"could not resolve $this!"))
 }
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
