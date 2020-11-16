@@ -39,16 +39,17 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
         .foreach(x => EirGlobalNamespace.put(x.name, x))
       EirGlobalNamespace
     } else {
-      val module: EirNamespace = visitPackageStatement(ctx.packageStatement())
-      parents.push(module)
-      module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-      pop()
+      enter(visitPackageStatement(ctx.packageStatement()), (module : EirNamespace) => {
+        module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
+      })
     }
   }
 
+  private def parent: Option[EirNode] = parents.headOption
+
   override def visitPackageStatement(ctx: PackageStatementContext): EirNamespace = {
     val opt: Option[List[String]] = Option(ctx).map(_.fqn().Identifier.toStringList)
-    util.createOrFindNamespace(parents.headOption, opt.getOrElse(List(defaultModuleName)))
+    util.createOrFindNamespace(parent, opt.getOrElse(List(defaultModuleName)))
   }
 
   private def enter[T <: EirNode](node : T, f : T => Unit): T = {
@@ -58,13 +59,13 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
-    enter(EirImport(parents.headOption, null), (i : EirImport) => {
+    enter(EirImport(parent, null), (i : EirImport) => {
       i.symbol = symbolize(ctx.fqn().Identifier())
     })
   }
 
   override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {
-    enter(EirClass(parents.headOption, Nil, ctx.Identifier().getText, Nil, None, Nil), (c : EirClass) => {
+    enter(EirClass(parent, Nil, ctx.Identifier().getText, Nil, None, Nil), (c : EirClass) => {
       c.members ++= ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
     })
   }
@@ -76,29 +77,26 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitMember(ctx: MemberContext): EirMember = {
-    val m = EirMember(parents.headOption, null, visitAccessModifier(ctx.accessModifier))
-    parents.push(m)
-    Option(ctx.fieldDeclaration())
-      .orElse(Option(ctx.topLevelStatement()))
-      .map(x => assertValid[EirNamedNode](visit(x))).foreach(m.member = _)
-    pop()
+    enter(EirMember(parent, null, visitAccessModifier(ctx.accessModifier)), (m : EirMember) => {
+      Option(ctx.fieldDeclaration())
+        .orElse(Option(ctx.topLevelStatement()))
+        .map(x => assertValid[EirNamedNode](visit(x))).foreach(m.member = _)
+    })
   }
 
   override def visitAccessModifier(ctx: AccessModifierContext): EirAccessibility =
     Option(ctx).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
 
   override def visitNamespace(ctx: NamespaceContext): EirNamespace = {
-    val ns : EirNamespace = util.createOrFindNamespace(parents.headOption, ctx.fqn().Identifier.toStringList)
-    parents.push(ns)
-    ns.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-    pop()
+    enter(util.createOrFindNamespace(parent, ctx.fqn().Identifier.toStringList), (n : EirNamespace) => {
+      n.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
+    })
   }
 
   override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode = {
-    val s = visitTopLevelStatement(ctx.topLevelStatement())
-    parents.push(s)
-    s.annotations ++= visitAnnotationList(ctx.annotation())
-    parents.pop()
+    enter(visitTopLevelStatement(ctx.topLevelStatement()), (n : EirNode) => {
+      n.annotations ++= visitAnnotationList(ctx.annotation())
+    })
   }
 
   override def visitTopLevelStatement(ctx: TopLevelStatementContext): EirNode =
@@ -108,24 +106,21 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     annotations.asScala.map(this.visitAnnotation)
 
   override def visitAnnotation(ctx: AnnotationContext): EirAnnotation =
-    EirAnnotation(parents.headOption, ctx.Identifier().getText)
+    EirAnnotation(parent, ctx.Identifier().getText)
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
-    val f = EirFunction(parents.headOption, None, ctx.Identifier().getText, Nil, Nil, null)
-    parents.push(f)
-    f.templateArgs = visitTemplateDecl(ctx.templateDecl())
-    f.functionArgs = visitFunctionArgumentList(ctx.functionArgumentList)
-    f.returnType = visitType(ctx.`type`())
-    f.body = visitBlock(ctx.block())
-    pop[EirFunction]()
+    enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, null), (f : EirFunction) => {
+      f.templateArgs = visitTemplateDecl(ctx.templateDecl())
+      f.functionArgs = visitFunctionArgumentList(ctx.functionArgumentList)
+      f.returnType = visitType(ctx.`type`())
+      f.body = visitBlock(ctx.block())
+    })
   }
 
   override def visitBlock(ctx: BlockContext): Option[EirBlock] = {
-    if (ctx == null) return None
-    val b = EirBlock(parents.headOption, Nil)
-    parents.push(b)
-    b.children = ctx.mapOrEmpty(_.statement, visitStatement)
-    Some(parents.pop()).to[EirBlock]
+    Option(ctx).map(ctx => enter(EirBlock(parent, Nil), (b : EirBlock) => {
+      b.children = ctx.mapOrEmpty(_.statement, visitStatement)
+    }))
   }
 
   override def visitStatement(ctx: StatementContext): EirNode = {
@@ -138,32 +133,30 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     ctx.mapOrEmpty(_.templateDeclArg, visitTemplateDeclArg)
 
   override def visitTemplateDeclArg(ctx: TemplateDeclArgContext): EirTemplateArgument = {
-    val t = EirTemplateArgument(parents.headOption, ctx.Identifier().getText)
-    parents.push(t)
-    t.lowerBound = Option(ctx.lowerBound).map(visitType)
-    t.upperBound = Option(ctx.upperBound).map(visitType)
-    pop()
+    enter(EirTemplateArgument(parent, ctx.Identifier().getText), (t : EirTemplateArgument) => {
+      t.lowerBound = Option(ctx.lowerBound).map(visitType)
+      t.upperBound = Option(ctx.upperBound).map(visitType)
+    })
   }
 
   override def visitFunctionArgumentList(ctx: FunctionArgumentListContext): List[EirFunctionArgument] =
     ctx.mapOrEmpty(_.functionArgument, visitFunctionArgument)
 
   override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
-    val arg = EirFunctionArgument(parents.headOption, ctx.Identifier.getText, null,
+    val arg = EirFunctionArgument(parent, ctx.Identifier.getText, null,
       isFinal = Option(ctx.VariableKeyword()).isEmpty,
       isSelfAssigning = Option(ctx.Equals()).isDefined)
-    parents.push(arg)
-    arg.declaredType = visitType(ctx.`type`())
-    pop()
+    enter(arg, (_ : EirFunctionArgument) => {
+      arg.declaredType = visitType(ctx.`type`())
+    })
   }
 
   override def visitValueDeclaration(ctx: ValueDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirDeclaration = {
-    val d = EirDeclaration(parents.headOption, isFinal, name.getText, visitType(declaredType), None)
-    parents.push(d)
-    d.initialValue = Option(expressionContext).map(visitExpression)
-    pop()
+    enter(EirDeclaration(parent, isFinal, name.getText, visitType(declaredType), None), (d : EirDeclaration) => {
+      d.initialValue = Option(expressionContext).map(visitExpression)
+    })
   }
 
   override def visitType(ctx: TypeContext): EirResolvable[EirType] = super.visitType(ctx).asInstanceOf[EirResolvable[EirType]]
@@ -176,53 +169,49 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
   override def visitAssignment(ctx: AssignmentContext): EirAssignment = {
-    val a = EirAssignment(parents.headOption, null, null)
-    parents.push(a)
-    a.target = visitPostfixExpression(ctx.postfixExpression())
-    a.value = visitExpression(ctx.expression())
-    pop()
+    enter(EirAssignment(parent, null, null), (a : EirAssignment) => {
+      a.target = visitPostfixExpression(ctx.postfixExpression())
+      a.value = visitExpression(ctx.expression())
+    })
   }
 
   override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = {
     if (ctx.Identifier() != null) {
-      val f = EirFieldAccessor(parents.headOption, null, ctx.Identifier().getText)
-      parents.push(f)
-      f.target = visitPostfixExpression(ctx.postfixExpression())
-      pop()
+      enter(EirFieldAccessor(parent, null, ctx.Identifier().getText), (f : EirFieldAccessor) => {
+        f.target = visitPostfixExpression(ctx.postfixExpression())
+      })
     } else if (ctx.arrArgs != null) {
-      val f = EirArrayReference(parents.headOption, null, null)
-      parents.push(f)
-      f.target = visitPostfixExpression(ctx.postfixExpression())
-      f.args = visitExpressionList(ctx.arrArgs)
-      pop()
+      enter(EirArrayReference(parent, null, null), (f : EirArrayReference) => {
+        f.target = visitPostfixExpression(ctx.postfixExpression())
+        f.args = visitExpressionList(ctx.arrArgs)
+      })
     } else if (ctx.LParen() != null) {
-      val f = EirFunctionCall(parents.headOption, null, null)
-      parents.push(f)
-      f.target = visitPostfixExpression(ctx.postfixExpression())
-      f.args = Option(ctx.fnArgs).map(visitExpressionList).getOrElse(Nil)
-      pop()
+      enter(EirFunctionCall(parent, null, null), (f : EirFunctionCall) => {
+        f.target = visitPostfixExpression(ctx.postfixExpression())
+        f.args = Option(ctx.fnArgs).map(visitExpressionList).getOrElse(Nil)
+      })
     } else {
       assertValid[EirExpressionNode](visitPrimaryExpression(ctx.primaryExpression()))
     }
   }
 
   override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] =
-    visitTypeList(ctx.typeList()).toTupleType(parents.headOption)
+    visitTypeList(ctx.typeList()).toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     var base: EirResolvable[EirType] = symbolize(ctx.fqn.Identifier())
     val templates = visitTypeList(ctx.typeList())
     if (templates.nonEmpty) {
-      base = EirTemplatedType(parents.headOption, base, templates)
+      base = EirTemplatedType(parent, base, templates)
     }
     if (ctx.Atpersand() != null) {
-      base = EirProxyType(parents.headOption, base, Option(ctx.CollectiveKeyword()).map(_.getText))
+      base = EirProxyType(parent, base, Option(ctx.CollectiveKeyword()).map(_.getText))
     }
     base
   }
 
   def symbolize[T](identifiers: java.util.List[TerminalNode]): EirSymbol[T]
-    = EirSymbol[T](parents.headOption, identifiers.toStringList)
+    = EirSymbol[T](parent, identifiers.toStringList)
 
   override def visitTypeList(ctx: TypeListContext): List[EirResolvable[EirType]] = ctx.mapOrEmpty(_.`type`, visitType)
 
@@ -247,11 +236,10 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     if (children.length == 1) {
       assertValid[EirExpressionNode](visit(children.head))
     } else if (children.length == 3) {
-      val e = EirBinaryExpression(parents.headOption, null, children(1).getText, null)
-      parents.push(e)
-      e.lhs = assertValid[EirExpressionNode](visit(children.head))
-      e.rhs = assertValid[EirExpressionNode](visit(children.last))
-      pop[EirExpressionNode]()
+      enter(EirBinaryExpression(parent, null, children(1).getText, null), (e : EirBinaryExpression) => {
+        e.lhs = assertValid[EirExpressionNode](visit(children.head))
+        e.rhs = assertValid[EirExpressionNode](visit(children.last))
+      })
     } else throw new RuntimeException("how did I get here?")
   }
 
@@ -262,57 +250,52 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   override def visitLogicalOrExpression(ctx: LogicalOrExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
 
   override def visitTupleExpression(ctx: TupleExpressionContext): EirExpressionNode =
-    EirTupleExpression.fromExpressions(parents.headOption, visitExpressionList(ctx.expressionList()))
+    EirTupleExpression.fromExpressions(parent, visitExpressionList(ctx.expressionList()))
 
   override def visitExpressionList(ctx: ExpressionListContext): List[EirExpressionNode] =
     ctx.mapOrEmpty(_.expression, visitExpression)
 
   override def visitLambdaExpression(ctx: LambdaExpressionContext): EirExpressionNode = {
-    val f = EirLambdaExpression(parents.headOption, null, null)
-    parents.push(f)
-    f.args = visitFunctionArgumentList(ctx.functionArgumentList())
-    f.body = visitBlock(ctx.block()).getOrElse(util.encloseNodes(visitExpression(ctx.expression)))
-    pop[EirExpressionNode]()
+    enter(EirLambdaExpression(parent, null, null), (f : EirLambdaExpression) => {
+      f.args = visitFunctionArgumentList(ctx.functionArgumentList())
+      f.body = visitBlock(ctx.block()).getOrElse(util.encloseNodes(visitExpression(ctx.expression)))
+    })
   }
 
   override def visitConditionalExpression(ctx: ConditionalExpressionContext): EirExpressionNode = {
     if (ctx.expression() == null) return visitLogicalOrExpression(ctx.logicalOrExpression())
-    val e = EirTernaryOperator(parents.headOption, null, null, null)
-    parents.push(e)
-    e.test = visitLogicalOrExpression(ctx.logicalOrExpression())
-    e.ifTrue = visitExpression(ctx.expression())
-    e.ifFalse = visitConditionalExpression(ctx.conditionalExpression())
-    pop[EirExpressionNode]()
+    enter(EirTernaryOperator(parent, null, null, null), (e : EirTernaryOperator) => {
+      e.test = visitLogicalOrExpression(ctx.logicalOrExpression())
+      e.ifTrue = visitExpression(ctx.expression())
+      e.ifFalse = visitConditionalExpression(ctx.conditionalExpression())
+    })
   }
 
   override def visitUnaryExpression(ctx: UnaryExpressionContext): EirExpressionNode = {
     Option(ctx.postfixExpression()).map(x => assertValid[EirExpressionNode](visitPostfixExpression(x))).getOrElse({
-      val e = EirUnaryExpression(parents.headOption, ctx.unaryOperator().getText, null)
-      parents.push(e)
-      e.rhs = visitCastExpression(ctx.castExpression())
-      pop[EirExpressionNode]()
+      enter(EirUnaryExpression(parent, ctx.unaryOperator().getText, null), (u : EirUnaryExpression) => {
+        u.rhs = visitCastExpression(ctx.castExpression())
+      })
     })
   }
 
   override def visitCastExpression(ctx: CastExpressionContext): EirExpressionNode = {
     Option(ctx.unaryExpression()).map(x => assertValid[EirExpressionNode](visitUnaryExpression(x))).getOrElse({
-      val t = EirTypeCast(parents.headOption, null, null)
-      parents.push(t)
-      t.to = visitType(ctx.`type`())
-      t.value = visitCastExpression(ctx.castExpression())
-      pop()
+      enter(EirTypeCast(parent, null, null), (t : EirTypeCast) => {
+        t.to = visitType(ctx.`type`())
+        t.value = visitCastExpression(ctx.castExpression())
+      })
     })
   }
 
   override def visitReturnStatement(ctx: ReturnStatementContext): EirNode = {
-    val ret = EirReturn(parents.headOption, null)
-    parents.push(ret)
-    ret.expression = visitExpression(ctx.expression())
-    parents.pop()
+    enter(EirReturn(parent, null), (r : EirReturn) => {
+      r.expression = visitExpression(ctx.expression())
+    })
   }
 
   override def visitInheritanceDecl(ctx: InheritanceDeclContext): Any = {
-    val base: EirInheritable = parents.headOption.to[EirInheritable].get
+    val base: EirInheritable = parent.to[EirInheritable].get
     val children: Iterable[ParseTree] = ctx.children.asScala
     for (List(kwd, ty) <- children.sliding(2)) {
       kwd.getText match {
@@ -323,11 +306,10 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitForLoop(ctx: ForLoopContext): EirForLoop = {
-    val f = EirForLoop(parents.headOption, null, null)
-    parents.push(f)
-    f.header = visitLoopHeader(ctx.loopHeader())
-    f.body = Option(ctx.block()).flatMap(visitBlock).getOrElse(util.encloseNodes(visitStatement(ctx.statement())))
-    pop()
+    enter(EirForLoop(parent, null, null), (f : EirForLoop) => {
+      f.header = visitLoopHeader(ctx.loopHeader())
+      f.body = Option(ctx.block()).flatMap(visitBlock).getOrElse(util.encloseNodes(visitStatement(ctx.statement())))
+    })
   }
 
   override def visitLoopHeader(ctx: LoopHeaderContext): EirForLoopHeader = {
@@ -336,13 +318,13 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
         Option(ctx.test).map(visitExpression),
         Option(ctx.assignment()).map(visitAssignment))
     } else {
-      EirForAllHeader(parents.headOption, ctx.identifierList().Identifier().toStringList, visitExpression(ctx.expression()))
+      EirForAllHeader(parent, ctx.identifierList().Identifier().toStringList, visitExpression(ctx.expression()))
     }
   }
 
   override def visitLambdaType(ctx: LambdaTypeContext): EirType = {
     val children: List[ParseTree] = ctx.children.asScala.toList
-    val l = EirLambdaType(parents.headOption, null, null)
+    val l = EirLambdaType(parent, null, null)
     parents.push(l)
     l.from = children.head match {
       case x: TupleTypeContext => visitTupleType(x) match {
@@ -378,14 +360,14 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitConstant(ctx: ConstantContext): EirExpressionNode = {
     if (ctx.IntegerConstant() != null) {
-      EirLiteral(parents.headOption, EirLiteralTypes.Integer, ctx.IntegerConstant().getText)
+      EirLiteral(parent, EirLiteralTypes.Integer, ctx.IntegerConstant().getText)
     } else if (ctx.FloatingConstant() != null) {
-      EirLiteral(parents.headOption, EirLiteralTypes.Float, ctx.FloatingConstant().getText)
+      EirLiteral(parent, EirLiteralTypes.Float, ctx.FloatingConstant().getText)
     } else if (Option(ctx.StringLiteral()).exists(_.size() >= 1)) {
-      EirLiteral(parents.headOption, EirLiteralTypes.String, ctx.StringLiteral().asScala.map(_.getText).reduce(_ + _))
+      EirLiteral(parent, EirLiteralTypes.String, ctx.StringLiteral().asScala.map(_.getText).reduce(_ + _))
     } else {
       assert(ctx.CharacterConstant() != null)
-      EirLiteral(parents.headOption, EirLiteralTypes.Character, ctx.CharacterConstant().getText)
+      EirLiteral(parent, EirLiteralTypes.Character, ctx.CharacterConstant().getText)
     }
   }
 
