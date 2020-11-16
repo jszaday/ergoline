@@ -40,7 +40,7 @@ object CheckConstructors {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
       case x@EirFunctionArgument(_, _, _, _, true) => x
     }.map(arg => {
-      (cls.findWithin[EirMember](withName(arg.name)).headOption, arg)
+      (cls.findChild[EirMember](withName(arg.name)).headOption, arg)
     })
     argDeclPairs.isEmpty || argDeclPairs.forall(x => x match {
       case (Some(EirMember(_, d: EirDeclaration, _)), arg: EirFunctionArgument) =>

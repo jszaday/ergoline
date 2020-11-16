@@ -22,6 +22,7 @@ object Find {
     }
   }
 
+  // search up, down, and at a node
   def globally[T : Manifest](scope: EirScope, predicate: T => Boolean): Iterable[T] = {
     lastSearch += 1
     globally(scope, predicate, lastSearch)
@@ -31,12 +32,15 @@ object Find {
     Option(scope).flatMap({
       case t : T if predicate(t) => Some(t)
     }) ++ within(scope, predicate)
+    // TODO check siblings of the scope
   }
 
+  // recursively check all children of a node
   def within[T: Manifest](node : EirNode, predicate: T => Boolean): Iterable[T] = {
     Find.child(node, predicate) ++ node.children.flatMap(within(_, predicate))
   }
 
+  // check only the immediate children of the node (do not descend)
   def child[T: Manifest](node : EirNode, predicate: T => Boolean): Iterable[T] = {
     node.children.collect{
       case t : T if predicate(t) => t
@@ -73,8 +77,11 @@ object Find {
   def fromSymbol[T <: EirNamedNode : Manifest](symbol: EirSymbol[T]): Iterable[T] = {
     val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
     symbol.qualifiedName match {
-      case name :: Nil => Find.globally[T](scope, withName(name).and(symbol.canAccess(_)))
+      case name :: Nil =>
+        // global (unrestricted) search, may appear anywhere as long as its accessible
+        Find.globally[T](scope, withName(name).and(symbol.canAccess(_)))
       case init :+ last =>
+        // namespace (restricted) search, may only be a child of the specified namespace
         val qualified = Find.qualifications(scope, init).filter(symbol.canAccess(_))
         qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_))))
     }
