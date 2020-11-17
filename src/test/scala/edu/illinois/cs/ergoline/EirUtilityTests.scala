@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.ast.{EirBlock, EirClass, EirDeclaration, EirGlobalNamespace, EirLiteral, EirNamedNode, EirNode, EirSymbol}
+import edu.illinois.cs.ergoline.passes.FullyResolve
 import edu.illinois.cs.ergoline.resolution.Find
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
@@ -25,6 +26,16 @@ class EirUtilityTests extends FunSuite {
     })
     val dummy = EirLiteral(None, null, null)
     b.findPositionOf(dummy) shouldEqual None
+  }
+
+  test("fully resolve MADNESS pt 1") {
+    EirGlobalNamespace.clear()
+    val block = (new Visitor()).visitBlock(parserFromString("{ val x : int = 42; val y : int = x; val z : int = x * y; }").block())
+    try {
+      block.map(FullyResolve.visit)
+    } catch {
+      case unknown: Throwable => println(s"Got an unknown exception: $unknown")
+    }
   }
 
   test("symbol resolution") {
