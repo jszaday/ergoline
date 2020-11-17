@@ -24,8 +24,8 @@ object CheckConstructors {
     numChecked
   }
 
-  def constructorsByClassIn(scope: EirScope): Iterable[(EirClass, List[EirMember])] =
-    Find.all[EirClass](scope).map(c => {
+  def constructorsByClassIn(scope: EirScope): Iterable[(EirClassLike, List[EirMember])] =
+    Find.all[EirClassLike](scope).map(c => {
       (c, c.findWithin[EirMember](_.isConstructor).toList)
     })
 
@@ -33,7 +33,7 @@ object CheckConstructors {
     true
   }
 
-  def selfAssignmentsOk(cls: EirClass, constructor: EirMember): Boolean = {
+  def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
       case x@EirFunctionArgument(_, _, _, _, true) => x
     }.map(arg => {

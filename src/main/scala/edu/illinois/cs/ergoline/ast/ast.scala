@@ -92,7 +92,13 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
+  override def children: List[EirNode] = templateArgs ++ members
   override def resolved: EirType = this
+
+  def needsInitialization: List[EirMember] =
+    members.collect {
+      case m@EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
+    }
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String) extends EirNamedNode {
@@ -106,23 +112,13 @@ case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirNode with EirClassLike {
-  override def children: List[EirNode] = members ++ templateArgs
-
-  def needsInitialization: List[EirMember] =
-    members.collect {
-      case m@EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
-    }
-}
+  extends EirNode with EirClassLike
 
 case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirNode with EirScope with EirClassLike {
-
-  override def children: List[EirNode] = members ++ templateArgs
-}
+  extends EirNode with EirClassLike
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
