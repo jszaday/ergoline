@@ -177,4 +177,6 @@ object UnparseAst extends EirVisitor[String] {
   override def visitGlobalNamespace(): String = {
     visitStatements(EirGlobalNamespace.children).trim + n
   }
+
+  override def visitBuiltInType(x: EirBuiltInType): String = x.name
 }

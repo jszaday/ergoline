@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.ast.{EirBlock, EirClass, EirDeclaration, EirGlobalNamespace, EirLiteral, EirNamedNode, EirNode, EirSymbol}
 import edu.illinois.cs.ergoline.passes.FullyResolve
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 import util.EirUtilitySyntax.RichEirNode;
@@ -21,21 +21,18 @@ class EirUtilityTests extends FunSuite {
       .flatMap(b.findPositionOf(_)) shouldEqual List(1)
     b.children.zipWithIndex.foreach({
       case (n, i) => n.visitAll(x => {
-        b.findPositionOf(x) shouldEqual Some(i)
+        Option.when(!x.isInstanceOf[EirResolvable[_]])(b.findPositionOf(x) shouldEqual Some(i))
       })
     })
     val dummy = EirLiteral(None, null, null)
     b.findPositionOf(dummy) shouldEqual None
   }
 
-  test("fully resolve MADNESS pt 1") {
+  test("fully resolve and verify") {
     EirGlobalNamespace.clear()
     val block = (new Visitor()).visitBlock(parserFromString("{ val x : int = 42; val y : int = x; val z : int = x * y; }").block())
-    try {
-      block.map(FullyResolve.visit)
-    } catch {
-      case unknown: Throwable => println(s"Got an unknown exception: $unknown")
-    }
+    block.foreach(FullyResolve.visit)
+    block.exists(FullyResolve.verify(_)) shouldBe true
   }
 
   test("symbol resolution") {

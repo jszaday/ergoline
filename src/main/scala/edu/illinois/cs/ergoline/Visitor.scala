@@ -202,7 +202,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     visitTypeList(ctx.typeList()).toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
-    var base: EirResolvable[EirType] = symbolize[EirType with EirNamedNode](ctx.fqn.Identifier())
+    var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
     val templates = visitTypeList(ctx.typeList())
     if (templates.nonEmpty) {
       val templatedType = EirTemplatedType(parent, base, templates)
@@ -217,8 +217,21 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     base
   }
 
-  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] =
-    EirSymbol[T](parent, identifiers.toStringList)
+  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
+    val name = identifiers.toStringList
+    EirBuiltInTypes.contains(name.last)
+      .map(x => throw new RuntimeException(s"cannot override built-in symbol $x"))
+      .getOrElse(EirSymbol[T](parent, name))
+  }
+
+  def symbolizeType(identifiers: java.util.List[TerminalNode]): EirResolvable[EirType] = {
+    identifiers.toStringList match {
+      case head :: Nil =>
+        EirBuiltInTypes.contains(head).getOrElse(EirSymbol[EirNamedType](parent, List(head)))
+      case name =>
+        EirSymbol[EirNamedType](parent, name)
+    }
+  }
 
   override def visitTypeList(ctx: TypeListContext): List[EirResolvable[EirType]] = ctx.mapOrEmpty(_.`type`, visitType)
 

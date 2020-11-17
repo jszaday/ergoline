@@ -12,6 +12,21 @@ package object types {
 
   type EirNamedType = EirType with EirNamedNode
 
+  case class EirBuiltInType(name : String) extends EirType with EirNamedNode {
+    override var parent: Option[EirNode] = Some(EirGlobalNamespace)
+    override def children: Iterable[EirNode] = None
+    override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+  }
+
+  object EirBuiltInTypes {
+    val keywords = List("unit", "int", "float", "string")
+    val types: Map[String, EirBuiltInType] = keywords.zip(keywords.map(EirBuiltInType)).toMap
+
+    def contains(name : String): Option[EirType with EirNamedNode] = {
+      Option.when(types.contains(name))(types(name))
+    }
+  }
+
   case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       util.updateWithin(children, oldNode, newNode).map(children = _).isDefined

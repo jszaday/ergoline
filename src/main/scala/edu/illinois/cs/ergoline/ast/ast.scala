@@ -98,8 +98,8 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
   override def children: Iterable[EirNode] = List(declaredType) ++ initialValue
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
-    ((oldValue == declaredType) && util.applyOrFalse[EirResolvable[EirType]](declaredType = _, newValue)) ||
-      (initialValue.contains(oldValue) && util.applyOrFalse[EirExpressionNode](x => initialValue = Some(x), newValue))
+    (initialValue.contains(oldValue) && util.applyOrFalse[EirExpressionNode](x => initialValue = Some(x), newValue)) ||
+    ((oldValue == declaredType) && util.applyOrFalse[EirResolvable[EirType]](declaredType = _, newValue))
   }
 }
 
@@ -308,18 +308,28 @@ object EirLiteralTypes extends Enumeration {
   val String, Integer, Float, Character, Unit = Value
 }
 
-case class EirSymbol[+T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
+case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
+
+  private var _resolved : Option[T] = None
+
   override def children: Iterable[EirNode] = Nil
 
   override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
-  override def resolve(): T = Find.fromSymbol(this).headOption
-    .getOrElse(throw new RuntimeException(s"could not resolve $this!"))
+  override def resolve(): T = {
+    if (_resolved.isEmpty) {
+      _resolved = Find.fromSymbol(this).headOption
+    }
+    _resolved match {
+      case Some(x) => x
+      case None => throw new RuntimeException(s"could not resolve $this!")
+    }
+  }
 
-  override def resolved: Boolean = false
+  override def resolved: Boolean = _resolved.isDefined
 }
 
 trait EirPostfixExpression extends EirExpressionNode {
