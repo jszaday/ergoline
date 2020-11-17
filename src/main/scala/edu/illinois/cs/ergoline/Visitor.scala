@@ -62,7 +62,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
     enter(EirImport(parent, null), (i: EirImport) => {
-      i.symbol = symbolize[EirNamedNode with EirScope](ctx.fqn().Identifier())
+      i.symbol = symbolize[EirNamespace](ctx.fqn().Identifier())
     })
   }
 
@@ -173,8 +173,8 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
 
   override def visitAssignment(ctx: AssignmentContext): EirAssignment = {
     enter(EirAssignment(parent, null, null), (a: EirAssignment) => {
-      a.target = visitPostfixExpression(ctx.postfixExpression())
-      a.value = visitExpression(ctx.expression())
+      a.lval = visitPostfixExpression(ctx.postfixExpression())
+      a.rval = visitExpression(ctx.expression())
     })
   }
 

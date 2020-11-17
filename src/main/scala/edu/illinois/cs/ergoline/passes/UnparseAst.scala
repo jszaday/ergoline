@@ -115,7 +115,7 @@ object UnparseAst extends EirVisitor[String] {
       case Some(_: EirForLoop) => ""
       case _ => ";"
     }
-    s"${visit(node.target)} = ${visit(node.value)}$semi"
+    s"${visit(node.lval)} = ${visit(node.rval)}$semi"
   }
 
   override def visitTupleExpression(node: EirTupleExpression): String =

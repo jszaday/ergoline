@@ -57,6 +57,22 @@ package object util {
     }).toSeq
   }
 
+  def applyOrFalse[T <: EirNode : Manifest](function: T => Unit, value: EirNode): Boolean = {
+    value.isValid[T].map(function).isDefined
+  }
+
+  def updateWithin[T <: EirNode : Manifest](lst : List[T], oldNode : EirNode, newNode : EirNode): Option[List[T]] = {
+    val converted = (oldNode.isValid[T] ++ newNode.isValid[T]).toList
+    converted match {
+      case List(o, n) =>
+        lst.indexOf(o) match {
+          case -1 => None
+          case idx => Some(lst.updated(idx, n))
+        }
+      case _ => None
+    }
+  }
+
   private def xCanAccessYViaZ(x: EirNode, y: EirNode, z: EirNode): Boolean = {
     // TODO implement this
     true
@@ -82,6 +98,11 @@ package object util {
       def findChild[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.child(node, predicate)
 
       def findWithin[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.within(node, predicate)
+
+      def isValid[T : Manifest]: Option[T] = node match {
+        case t : T => Some(t)
+        case _ => None
+      }
     }
 
     implicit class RichOption(option: Option[_]) {
