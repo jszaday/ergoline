@@ -86,7 +86,9 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
   override def children: Iterable[EirNode] = List(declaredType) ++ initialValue
 }
 
-trait EirInheritable extends EirNode with EirType {
+trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType {
+  var members: List[EirMember]
+  var templateArgs: List[EirTemplateArgument]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
@@ -104,7 +106,7 @@ case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirNode with EirScope with EirNamedNode with EirInheritable {
+  extends EirNode with EirClassLike {
   override def children: List[EirNode] = members ++ templateArgs
 
   def needsInitialization: List[EirMember] =
@@ -117,7 +119,7 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirNode with EirScope with EirNamedNode with EirInheritable {
+  extends EirNode with EirScope with EirClassLike {
 
   override def children: List[EirNode] = members ++ templateArgs
 }

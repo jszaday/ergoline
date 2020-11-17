@@ -298,7 +298,7 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
   }
 
   override def visitInheritanceDecl(ctx: InheritanceDeclContext): Any = {
-    val base: EirInheritable = parent.to[EirInheritable].get
+    val base: EirClassLike = parent.to[EirClassLike].get
     val children: Iterable[ParseTree] = ctx.children.asScala
     for (List(kwd, ty) <- children.sliding(2)) {
       kwd.getText match {

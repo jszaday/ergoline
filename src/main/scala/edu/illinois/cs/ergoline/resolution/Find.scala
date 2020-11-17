@@ -63,9 +63,17 @@ object Find {
     Find.within[T](scope, _.annotations.exists(_.name == name))
   }
 
-  def returnType(block: EirBlock): EirResolvable[EirType] = ???
+  // find values strictly "owned" by the owner, such that no other instance of its class owns it as well
+  def owned[C <: EirNode : Manifest, T <: EirNode : Manifest](owner : C): Iterable[T] = {
+    owner.findWithin((t : T) => parentOf[C](t).contains(owner))
+  }
 
-  def unionType(types: EirResolvable[EirType]*): EirType = ???
+  def returnType(block: EirBlock): EirResolvable[EirType] =
+    unionType(Find.owned[EirBlock, EirReturn](block).map(_.expression.eirType))
+
+  def unionType(types: Iterable[EirResolvable[EirType]]): EirResolvable[EirType] = ???
+
+  def unionType(types: EirResolvable[EirType]*): EirResolvable[EirType] = unionType(types)
 
   def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))

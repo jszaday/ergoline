@@ -65,15 +65,7 @@ object UnparseAst extends EirVisitor[String] {
       node.lowerBound.mapOrEmpty(x => " :> " + visit(x))
   }
 
-  def visitInheritable(inheritable: EirInheritable): String = {
-    inheritable.extendsThis.mapOrEmpty(x => s" extends ${visit(x)}") +
-      inheritable.implementsThese.zipWithIndex.map {
-        case (x, 0) => s" implements ${visit(x)}"
-        case (x, _) => s" and ${visit(x)}"
-      }.mkString("")
-  }
-
-  override def visitClass(node: EirClass): String = {
+  def visitClassLike(keyword: String, node: EirClassLike): String = {
     val decl = node.templateArgs match {
       case Nil => ""
       case lst => s"<${lst.map(visit) mkString ", "}>"
@@ -84,10 +76,17 @@ object UnparseAst extends EirVisitor[String] {
       case lst => s"${visitStatements(lst)}$tabsMinusOne"
     }
     numTabs -= 1
-    s"class ${node.name}$decl${visitInheritable(node)} {$body}$n"
+    val inheritance: String = node.extendsThis.mapOrEmpty(x => s" extends ${visit(x)}") +
+      node.implementsThese.zipWithIndex.map {
+        case (x, 0) => s" implements ${visit(x)}"
+        case (x, _) => s" and ${visit(x)}"
+      }.mkString("")
+    s"$keyword ${node.name}$decl$inheritance {$body}$n"
   }
 
-  override def visitTrait(node: EirTrait): String = ???
+  override def visitClass(node: EirClass): String = visitClassLike("class", node)
+
+  override def visitTrait(node: EirTrait): String = visitClassLike("trait", node)
 
   override def visitMember(node: EirMember): String = {
     node.accessibility.toString.toLowerCase + " " + addSemi(visit(node.member))
@@ -125,7 +124,8 @@ object UnparseAst extends EirVisitor[String] {
   override def visitLambdaExpression(node: EirLambdaExpression): String =
     s"(${node.args.map(visit) mkString ", "}) => ${visit(node.body)}"
 
-  override def visitReturn(node: EirReturn): String = ???
+  override def visitReturn(node: EirReturn): String =
+    s"return ${visit(node)};"
 
   override def visitSymbol(value: EirSymbol[_]): String = value.qualifiedName mkString "::"
 
@@ -133,10 +133,9 @@ object UnparseAst extends EirVisitor[String] {
 
   override def visitForLoop(loop: EirForLoop): String = {
     val header: String = loop.header match {
-      case EirCStyleHeader(declaration, test, increment) => {
+      case EirCStyleHeader(declaration, test, increment) =>
         declaration.mapOrSemi(visit) + " " +
           test.mapOrEmpty(visit) + "; " + increment.mapOrEmpty(visit)
-      }
       case EirForAllHeader(_, identifiers, expressionNode) =>
         (identifiers mkString ", ") + " <- " + visit(expressionNode)
     }
