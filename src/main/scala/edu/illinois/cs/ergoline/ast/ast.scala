@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
 import scala.collection.mutable
 
@@ -27,8 +28,7 @@ abstract class EirNode {
 
   def unparse: String = UnparseAst.visit(this)
 
-  def contains(other : EirNode): Boolean = (this == other) ||
-    children.exists(child => child.contains(other))
+  def contains(other : EirNode): Boolean = (other == this) || this.findWithin(other == _).nonEmpty
 
   override def toString: String = unparse
 }

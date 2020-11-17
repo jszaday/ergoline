@@ -7,10 +7,10 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirConstructorTests extends FunSuite {
-  EirGlobalNamespace.clear()
-  test("expected ok, multiple constructors and assignment") {
+
+  private val bigProgram = {
     EirGlobalNamespace.clear()
-    val module = visitProgram(parserFromString(
+    visitProgram(parserFromString(
       """package foo;
         |class bar {
         |  func bar(self : bar, baz= : unit) : unit { }
@@ -19,14 +19,19 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     ))
-    val numChecked : Int = CheckConstructors.checkAllConstructors()
-    CheckEnclose(module) shouldEqual None
-    numChecked shouldEqual 2
+  }
+
+  test("expected ok, multiple constructors and assignment") {
+    CheckConstructors.checkConstructorsWithin(bigProgram) shouldEqual 2
+  }
+
+  test("expected ok, correct enclosure") {
+    CheckEnclose.visit(bigProgram) shouldEqual None
   }
 
   test("expected failure, invalid self-assignment") {
     EirGlobalNamespace.clear()
-    visitProgram(parserFromString(
+    val module = visitProgram(parserFromString(
       """package foo;
         |class bar {
         |  val baz : unit = ();
@@ -34,18 +39,20 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     ))
-    assertThrows[java.lang.AssertionError](CheckConstructors.checkAllConstructors())
+    assertThrows[java.lang.AssertionError](
+      CheckConstructors.checkConstructorsWithin(module))
   }
 
   test("expected failure, uninitialized field") {
     EirGlobalNamespace.clear()
-    visitProgram(parserFromString(
+    val module = visitProgram(parserFromString(
       """package foo;
         |class bar {
         |  val baz : unit;
         |}
         |""".stripMargin
     ))
-    assertThrows[java.lang.AssertionError](CheckConstructors.checkAllConstructors())
+    assertThrows[java.lang.AssertionError](
+      CheckConstructors.checkConstructorsWithin(module))
   }
 }

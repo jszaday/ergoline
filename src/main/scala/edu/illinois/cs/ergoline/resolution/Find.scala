@@ -2,18 +2,28 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
+
+import scala.collection.mutable
 
 object Find {
-  private var lastSearch : Int = -1
-
   type EirNamedScope = EirScope with EirNamedNode
+
+  def ancestors(x: EirNode): Seq[EirNode] = x.parent match {
+    case Some(parent) => parent +: ancestors(parent)
+    case None => Nil
+  }
+
+  // find where x's ancestors first overlap with y's
+  def commonAncestor(x : EirNode, y : EirNode): Option[EirNode] = {
+    val ancestors = Find.ancestors(x).toList
+    Find.ancestors(y).find(ancestors.contains(_))
+  }
 
   def withName[T <: EirNamedNode](name : String): T => Boolean =
     (n : T) => n.name == name
 
-  def qualifications(scope: EirScope, fqn: List[String]): Iterable[EirNamedScope] = {
+  def qualifications(scope: EirScope, fqn: List[String])(implicit ctx: Option[EirNode] = None): Iterable[EirNamedScope] = {
     fqn match {
       case head :: Nil  => globally[EirNamedScope](scope, withName(head))
       case init :+ last => qualifications(scope, init)
@@ -22,17 +32,12 @@ object Find {
     }
   }
 
-  // search up, down, and at a node
-  def globally[T : Manifest](scope: EirScope, predicate: T => Boolean): Iterable[T] = {
-    lastSearch += 1
-    globally(scope, predicate, lastSearch)
-  }
-
-  private def globally[T : Manifest](scope: EirScope, predicate: T => Boolean, key : Int): Iterable[T] = {
-    Option(scope).flatMap({
-      case t : T if predicate(t) => Some(t)
-    }) ++ within(scope, predicate)
-    // TODO check siblings of the scope
+  // search up and down from a node
+  def globally[T : Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
+    (ctx.forall(_.canAccess(scope)) && !searched.contains(scope)).ifTrue({
+      searched += scope
+      Find.within(scope, predicate) ++ scope.scope.toIterable.flatMap(globally(_, predicate, searched))
+    })
   }
 
   // recursively check all children of a node
@@ -54,16 +59,9 @@ object Find {
       }
   }
 
-  def matching[T: Manifest](pattern: PartialFunction[EirNode, T], scope: EirScope): Iterable[T] = {
-    scope.children.collect {
-      case x: EirScope => matching(pattern, x)
-    }.flatten ++ scope.children.collect(pattern)
+  def annotatedWith[T <: EirNode : Manifest](scope: EirScope, name: String): Iterable[T] = {
+    Find.within[T](scope, _.annotations.exists(_.name == name))
   }
-
-  def annotatedWith[T <: EirNode : Manifest](name: String, scope: EirScope): Iterable[T] =
-    matching[T]({
-      case x: T if x.annotations.exists(_.name == name) => x
-    }, scope)
 
   def returnType(block: EirBlock): EirResolvable[EirType] = ???
 
@@ -75,6 +73,7 @@ object Find {
   import FindSyntax.RichPredicate
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol: EirSymbol[T]): Iterable[T] = {
+    implicit val ctx: Option[EirNode] = Some(symbol)
     val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
     symbol.qualifiedName match {
       case name :: Nil =>

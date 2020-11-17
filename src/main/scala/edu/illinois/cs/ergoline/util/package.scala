@@ -4,12 +4,13 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichBoolean
 import org.antlr.v4.runtime.ParserRuleContext
 
 import scala.jdk.CollectionConverters.ListHasAsScala
 
 package object util {
+  import EirUtilitySyntax.{RichEirNode, RichIntOption}
 
   private def emplaceNamespace(parent : Option[EirNode], name : String): EirNamespace = {
     val ns = EirNamespace(parent, Nil, name)
@@ -56,8 +57,17 @@ package object util {
     }).toSeq
   }
 
-  // TODO implement this
-  private def xCanAccessY(x : EirNode, y : EirNode): Boolean = true
+  private def xCanAccessYViaZ(x : EirNode, y : EirNode, z : EirNode): Boolean = {
+    // TODO implement this
+    true
+  }
+
+  private def xCanAccessY(x : EirNode, y : EirNode): Boolean = {
+    Find.commonAncestor(x, y).exists{
+      case z : EirBlock => (z.findPositionOf(x) > z.findPositionOf(y)) && xCanAccessYViaZ(x, y, z)
+      case z => xCanAccessYViaZ(x, y, z)
+    }
+  }
 
   // TODO implement this
   def deepCloneTree[T <: EirNode](node : T): T = node
@@ -78,6 +88,13 @@ package object util {
       }
     }
 
+    implicit class RichIntOption(option: Option[Int]) {
+      def >(other: Option[Int]): Boolean = option ++ other match {
+        case List(x, y) => x > y
+        case _ => false
+      }
+    }
+
     implicit class RichResolvableTypeIterable(types: Iterable[EirResolvable[EirType]]) {
       def toTupleType(implicit parent : Option[EirNode]): EirResolvable[EirType] =
         types.toList match {
@@ -92,6 +109,11 @@ package object util {
         Option(t).map(f).map(_.asScala).getOrElse(Nil).map(g).toList
     }
 
+    implicit class RichBoolean(boolean: Boolean) {
+      def ifTrue[T](t : Iterable[T]): Iterable[T] = if (boolean) t else None
+      def ifFalse[T](t : Iterable[T]): Iterable[T] = if (boolean) None else t
+      def enclose[T](t : T): Option[T] = if (boolean) Option(t) else None
+    }
   }
 
 }

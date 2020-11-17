@@ -7,20 +7,24 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirUnparseTests extends FunSuite {
-  EirGlobalNamespace.clear()
-
   import UnparseAst.t
 
-  test("test function and empty block") {
-    val program =
-      """func foo<T>(bar=: T, baz: T): T { }""".stripMargin
-    val function =
-      (new Visitor).visitFunction(parserFromString(program).function())
-    CheckEnclose(function) shouldEqual None
-    program shouldEqual UnparseAst.visit(function)
+  private val genericFunction = "func foo<T>(bar=: T, baz: T): T { }"
+  private val parsedFunction = {
+    EirGlobalNamespace.clear()
+    (new Visitor).visitFunction(parserFromString(genericFunction).function())
+  }
+
+  test("check enclose of parsed function") {
+    CheckEnclose(parsedFunction) shouldEqual None
+  }
+
+  test("check unparsed function") {
+    genericFunction shouldEqual UnparseAst.visit(parsedFunction)
   }
 
   test("namespace and c-style for loop") {
+    EirGlobalNamespace.clear()
     val program =
       s"""namespace foo {
         |${t}@entry func bar(x: int, n: int): unit {

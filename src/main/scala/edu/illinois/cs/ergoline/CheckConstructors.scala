@@ -8,9 +8,10 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 
 object CheckConstructors {
 
-  def checkAllConstructors(): Int = {
+  def checkConstructorsWithin(module : EirScope): Int = {
     var numChecked = 0
-    for ((cls, constructors) <- constructorsByClass) {
+    val pairs = constructorsByClassIn(module)
+    for ((cls, constructors) <- pairs) {
       val needsInitialization = cls.needsInitialization
       assert(constructors.nonEmpty || needsInitialization.isEmpty)
       for (constructor <- constructors) {
@@ -23,14 +24,10 @@ object CheckConstructors {
     numChecked
   }
 
-  def constructorsByClass: List[(EirClass, List[EirMember])] =
-    classes.map(c => {
-      (c, Find.matching[EirMember]({
-        case x: EirMember if x.isConstructorOf(c) => x
-      }, c).toList)
-    }).toList
-
-  def classes: Iterable[EirClass] = Find.all[EirClass](EirGlobalNamespace)
+  def constructorsByClassIn(scope : EirScope): Iterable[(EirClass, List[EirMember])] =
+    Find.all[EirClass](scope).map(c => {
+      (c, c.findWithin[EirMember](_.isConstructor).toList)
+    })
 
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = {
     true
@@ -61,9 +58,7 @@ object CheckConstructors {
         case EirFunctionArgument(_, n, t, _, true) =>
           n == decl.name && constructorAssignmentOk(decl, t)
         case _ => false
-      } || Find.matching[EirAssignment]({
-        case x: EirAssignment if assignmentTargetsDeclaration(x, decl) => x
-      }, constructor).nonEmpty
+      } || constructor.findWithin[EirAssignment](assignmentTargetsDeclaration(_, decl)).nonEmpty
     })
   }
 
