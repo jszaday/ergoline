@@ -94,10 +94,10 @@ object Find {
     }
   }
 
-  def typeOf(node: EirNode): EirResolvable[EirType] = {
+  def typeOf(node: EirNode): EirType = {
     node match {
       case x: EirType => x
-      case x: EirExpressionNode => x.eirType
+      case x: EirExpressionNode => x.eirType.resolve()
       case _ => throw new RuntimeException(s"$node does not have a type!")
     }
   }

@@ -111,8 +111,6 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
 
-  override def resolved: EirType = this
-
   def needsInitialization: List[EirMember] =
     members.collect {
       case m@EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
@@ -244,7 +242,7 @@ case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNod
 case class EirTupleExpression(var parent: Option[EirNode], var expressions: List[EirExpressionNode]) extends EirExpressionNode {
   override def children: Iterable[EirNode] = expressions
 
-  override def eirType: EirResolvable[EirType] = types.EirTupleType(parent, expressions.map(_.eirType))
+  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     util.updateWithin(expressions, oldNode, newNode).map(expressions = _).isDefined
@@ -267,7 +265,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = args ++ List(body)
 
-  override def eirType: EirResolvable[EirType] = types.EirLambdaType(parent, args.map(_.declaredType), Find.returnType(body))
+  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
@@ -314,12 +312,14 @@ case class EirSymbol[+T <: EirNamedNode : Manifest](var parent: Option[EirNode],
   extends EirExpressionNode with EirResolvable[T] {
   override def children: Iterable[EirNode] = Nil
 
-  override def eirType: EirResolvable[EirType] = Find.typeOf(resolved)
-
-  override def resolved: T = Find.fromSymbol(this).headOption
-    .getOrElse(throw new RuntimeException(s"could not resolve $this!"))
+  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+
+  override def resolve(): T = Find.fromSymbol(this).headOption
+    .getOrElse(throw new RuntimeException(s"could not resolve $this!"))
+
+  override def resolved: Boolean = false
 }
 
 trait EirPostfixExpression extends EirExpressionNode {

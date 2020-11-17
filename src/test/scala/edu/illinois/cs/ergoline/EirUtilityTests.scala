@@ -41,7 +41,7 @@ class EirUtilityTests extends FunSuite {
   test("symbol resolution") {
     val foo = visitProgram(parserFromString("package foo ; class bar { val self : bar ; }"))
     val symbol = Find.all[EirSymbol[EirNamedType]](foo).headOption
-    symbol.map(_.resolved) should matchPattern {
+    symbol.map(_.resolve()) should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>
     }
   }
@@ -58,7 +58,7 @@ class EirUtilityTests extends FunSuite {
       case Some(_ : EirBlock) =>
     }
     assertThrows[java.lang.RuntimeException]({
-      symbol.get.resolved
+      symbol.get.resolve()
     })
   }
 }

@@ -3,5 +3,6 @@ package edu.illinois.cs.ergoline.resolution
 import edu.illinois.cs.ergoline.ast.EirNode
 
 trait EirResolvable[+T <: EirNode] extends EirNode {
-  def resolved: T
+  def resolve(): T
+  def resolved: Boolean
 }

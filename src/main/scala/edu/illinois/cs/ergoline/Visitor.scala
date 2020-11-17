@@ -205,16 +205,20 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     var base: EirResolvable[EirType] = symbolize[EirType with EirNamedNode](ctx.fqn.Identifier())
     val templates = visitTypeList(ctx.typeList())
     if (templates.nonEmpty) {
-      base = EirTemplatedType(parent, base, templates)
+      val templatedType = EirTemplatedType(parent, base, templates)
+      base.parent = Some(templatedType)
+      base = templatedType
     }
     if (ctx.Atpersand() != null) {
-      base = EirProxyType(parent, base, Option(ctx.CollectiveKeyword()).map(_.getText))
+      val proxyType = EirProxyType(parent, base, Option(ctx.CollectiveKeyword()).map(_.getText))
+      base.parent = Some(proxyType)
+      base = proxyType
     }
     base
   }
 
-  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T]
-  = EirSymbol[T](parent, identifiers.toStringList)
+  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] =
+    EirSymbol[T](parent, identifiers.toStringList)
 
   override def visitTypeList(ctx: TypeListContext): List[EirResolvable[EirType]] = ctx.mapOrEmpty(_.`type`, visitType)
 
