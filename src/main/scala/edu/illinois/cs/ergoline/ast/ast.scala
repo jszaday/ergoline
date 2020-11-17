@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.UnparseAst
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
 import scala.collection.mutable
@@ -28,13 +28,13 @@ abstract class EirNode {
 
   def unparse: String = UnparseAst.visit(this)
 
-  def contains(other : EirNode): Boolean = (other == this) || this.findWithin(other == _).nonEmpty
+  def contains(other: EirNode): Boolean = (other == this) || this.findWithin(other == _).nonEmpty
 
   override def toString: String = unparse
 }
 
 trait EirScope extends EirNode {
-  var lastSearch : Int = -1
+  var lastSearch: Int = -1
 }
 
 abstract class EirExpressionNode extends EirNode {
@@ -53,7 +53,7 @@ trait EirNamedNode extends EirNode {
 }
 
 case class EirBlock(var parent: Option[EirNode], var children: List[EirNode]) extends EirNode with EirScope {
-  def findPositionOf(node : EirNode) : Option[Int] = {
+  def findPositionOf(node: EirNode): Option[Int] = {
     children.zipWithIndex.collectFirst({
       case (child, idx) if child.contains(node) => idx
     })

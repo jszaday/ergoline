@@ -1,14 +1,14 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
 object CheckConstructors {
 
-  def checkConstructorsWithin(module : EirScope): Int = {
+  def checkConstructorsWithin(module: EirScope): Int = {
     var numChecked = 0
     val pairs = constructorsByClassIn(module)
     for ((cls, constructors) <- pairs) {
@@ -24,7 +24,7 @@ object CheckConstructors {
     numChecked
   }
 
-  def constructorsByClassIn(scope : EirScope): Iterable[(EirClass, List[EirMember])] =
+  def constructorsByClassIn(scope: EirScope): Iterable[(EirClass, List[EirMember])] =
     Find.all[EirClass](scope).map(c => {
       (c, c.findWithin[EirMember](_.isConstructor).toList)
     })

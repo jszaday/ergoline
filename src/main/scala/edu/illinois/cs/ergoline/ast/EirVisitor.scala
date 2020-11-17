@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.ast
 import edu.illinois.cs.ergoline.ast.types._
 
 trait EirVisitor[T] {
-  def visit(it : Iterable[EirNode]): Iterable[T] = it.map(visit)
+  def visit(it: Iterable[EirNode]): Iterable[T] = it.map(visit)
 
   def visit(node: EirNode): T = {
     node match {

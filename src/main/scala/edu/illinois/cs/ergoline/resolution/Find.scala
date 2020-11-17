@@ -15,17 +15,17 @@ object Find {
   }
 
   // find where x's ancestors first overlap with y's
-  def commonAncestor(x : EirNode, y : EirNode): Option[EirNode] = {
+  def commonAncestor(x: EirNode, y: EirNode): Option[EirNode] = {
     val ancestors = Find.ancestors(x).toList
     Find.ancestors(y).find(ancestors.contains(_))
   }
 
-  def withName[T <: EirNamedNode](name : String): T => Boolean =
-    (n : T) => n.name == name
+  def withName[T <: EirNamedNode](name: String): T => Boolean =
+    (n: T) => n.name == name
 
   def qualifications(scope: EirScope, fqn: List[String])(implicit ctx: Option[EirNode] = None): Iterable[EirNamedScope] = {
     fqn match {
-      case head :: Nil  => globally[EirNamedScope](scope, withName(head))
+      case head :: Nil => globally[EirNamedScope](scope, withName(head))
       case init :+ last => qualifications(scope, init)
         .flatMap(_.findChild[EirNamedScope](withName(last)))
       case _ => Nil
@@ -33,7 +33,7 @@ object Find {
   }
 
   // search up and down from a node
-  def globally[T : Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
+  def globally[T: Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
     (ctx.forall(_.canAccess(scope)) && !searched.contains(scope)).ifTrue({
       searched += scope
       Find.within(scope, predicate) ++ scope.scope.toIterable.flatMap(globally(_, predicate, searched))
@@ -41,14 +41,14 @@ object Find {
   }
 
   // recursively check all children of a node
-  def within[T: Manifest](node : EirNode, predicate: T => Boolean): Iterable[T] = {
+  def within[T: Manifest](node: EirNode, predicate: T => Boolean): Iterable[T] = {
     Find.child(node, predicate) ++ node.children.flatMap(within(_, predicate))
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T: Manifest](node : EirNode, predicate: T => Boolean): Iterable[T] = {
-    node.children.collect{
-      case t : T if predicate(t) => t
+  def child[T: Manifest](node: EirNode, predicate: T => Boolean): Iterable[T] = {
+    node.children.collect {
+      case t: T if predicate(t) => t
     }
   }
 
@@ -67,7 +67,7 @@ object Find {
 
   def unionType(types: EirResolvable[EirType]*): EirType = ???
 
-  def parentOf[T <: EirNode : Manifest](node : EirNode): Option[T] =
+  def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))
 
   import FindSyntax.RichPredicate
@@ -86,17 +86,20 @@ object Find {
     }
   }
 
-  def typeOf(node : EirNode): EirResolvable[EirType] = {
+  def typeOf(node: EirNode): EirResolvable[EirType] = {
     node match {
-      case x : EirType => x
-      case x : EirExpressionNode => x.eirType
+      case x: EirType => x
+      case x: EirExpressionNode => x.eirType
       case _ => throw new RuntimeException(s"$node does not have a type!")
     }
   }
 
   object FindSyntax {
+
     implicit class RichPredicate[T](predicate: T => Boolean) {
-      def and(other : T => Boolean): T => Boolean = (t : T) => predicate(t) && other(t)
+      def and(other: T => Boolean): T => Boolean = (t: T) => predicate(t) && other(t)
     }
+
   }
+
 }

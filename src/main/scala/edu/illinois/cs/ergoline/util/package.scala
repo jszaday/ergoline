@@ -4,15 +4,15 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichBoolean
 import org.antlr.v4.runtime.ParserRuleContext
 
 import scala.jdk.CollectionConverters.ListHasAsScala
 
 package object util {
+
   import EirUtilitySyntax.{RichEirNode, RichIntOption}
 
-  private def emplaceNamespace(parent : Option[EirNode], name : String): EirNamespace = {
+  private def emplaceNamespace(parent: Option[EirNode], name: String): EirNamespace = {
     val ns = EirNamespace(parent, Nil, name)
     parent match {
       case Some(EirGlobalNamespace) =>
@@ -29,7 +29,7 @@ package object util {
 
   def createOrFindNamespace(parent: Option[EirNode], fqn: List[String]): EirNamespace = {
     fqn match {
-      case head :: Nil  =>
+      case head :: Nil =>
         parent.flatMap(_.scope.flatMap(_.findChild[EirNamespace](withName(head)).headOption))
           .getOrElse(emplaceNamespace(parent, head))
       case init :+ last =>
@@ -51,33 +51,36 @@ package object util {
     ref
   }
 
-  def visitAll[T](node : EirNode, f : EirNode => T): Seq[T] = {
+  def visitAll[T](node: EirNode, f: EirNode => T): Seq[T] = {
     f(node) +: node.children.flatMap(n => {
       f(n) +: visitAll(n, f)
     }).toSeq
   }
 
-  private def xCanAccessYViaZ(x : EirNode, y : EirNode, z : EirNode): Boolean = {
+  private def xCanAccessYViaZ(x: EirNode, y: EirNode, z: EirNode): Boolean = {
     // TODO implement this
     true
   }
 
-  private def xCanAccessY(x : EirNode, y : EirNode): Boolean = {
-    Find.commonAncestor(x, y).exists{
-      case z : EirBlock => (z.findPositionOf(x) > z.findPositionOf(y)) && xCanAccessYViaZ(x, y, z)
+  private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
+    Find.commonAncestor(x, y).exists {
+      case z: EirBlock => (z.findPositionOf(x) > z.findPositionOf(y)) && xCanAccessYViaZ(x, y, z)
       case z => xCanAccessYViaZ(x, y, z)
     }
   }
 
   // TODO implement this
-  def deepCloneTree[T <: EirNode](node : T): T = node
+  def deepCloneTree[T <: EirNode](node: T): T = node
 
   object EirUtilitySyntax {
 
-    implicit class RichEirNode(node : EirNode) {
-      def canAccess(other : EirNode): Boolean = xCanAccessY(node, other)
-      def visitAll[T](f : EirNode => T): Seq[T] = util.visitAll(node, f)
+    implicit class RichEirNode(node: EirNode) {
+      def canAccess(other: EirNode): Boolean = xCanAccessY(node, other)
+
+      def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
+
       def findChild[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.child(node, predicate)
+
       def findWithin[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.within(node, predicate)
     }
 
@@ -96,7 +99,7 @@ package object util {
     }
 
     implicit class RichResolvableTypeIterable(types: Iterable[EirResolvable[EirType]]) {
-      def toTupleType(implicit parent : Option[EirNode]): EirResolvable[EirType] =
+      def toTupleType(implicit parent: Option[EirNode]): EirResolvable[EirType] =
         types.toList match {
           case Nil => throw new RuntimeException("please use unit type")
           case element :: Nil => element
@@ -110,10 +113,13 @@ package object util {
     }
 
     implicit class RichBoolean(boolean: Boolean) {
-      def ifTrue[T](t : Iterable[T]): Iterable[T] = if (boolean) t else None
-      def ifFalse[T](t : Iterable[T]): Iterable[T] = if (boolean) None else t
-      def enclose[T](t : T): Option[T] = if (boolean) Option(t) else None
+      def ifTrue[T](t: Iterable[T]): Iterable[T] = if (boolean) t else None
+
+      def ifFalse[T](t: Iterable[T]): Iterable[T] = if (boolean) None else t
+
+      def enclose[T](t: T): Option[T] = if (boolean) Option(t) else None
     }
+
   }
 
 }

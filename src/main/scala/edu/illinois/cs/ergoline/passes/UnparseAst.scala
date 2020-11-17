@@ -2,18 +2,20 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.EirResolvable
 
-import util.Properties.{lineSeparator => n}
+import scala.util.Properties.{lineSeparator => n}
 
 object UnparseAst extends EirVisitor[String] {
   var numTabs = 0
 
   private object UnparseSyntax {
-    implicit class RichOption[T](option : Option[T]) {
-      def mapOrEmpty(f : T => String): String = option.map(f).getOrElse("")
-      def mapOrSemi(f : T => String): String = option.map(f).getOrElse(";")
+
+    implicit class RichOption[T](option: Option[T]) {
+      def mapOrEmpty(f: T => String): String = option.map(f).getOrElse("")
+
+      def mapOrSemi(f: T => String): String = option.map(f).getOrElse(";")
     }
+
   }
 
   import UnparseSyntax.RichOption
@@ -21,15 +23,16 @@ object UnparseAst extends EirVisitor[String] {
   def t: String = "  "
 
   def tabs: String = List.fill(numTabs)(t).mkString("")
+
   def tabsMinusOne: String = List.fill(Math.max(numTabs - 1, 0))(t).mkString("")
 
   override def visit(node: EirNode): String = {
     visit(node.annotations).mkString("") + super.visit(node)
   }
 
-  def addSemi(x : String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
+  def addSemi(x: String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
 
-  def visitStatements(lst : Iterable[EirNode]): String = {
+  def visitStatements(lst: Iterable[EirNode]): String = {
     val x = visit(lst).map(addSemi).map(x => s"$n$tabs$x").mkString
     if (x == "") " " else s"$x$n"
   }
@@ -64,7 +67,7 @@ object UnparseAst extends EirVisitor[String] {
 
   def visitInheritable(inheritable: EirInheritable): String = {
     inheritable.extendsThis.mapOrEmpty(x => s" extends ${visit(x)}") +
-      inheritable.implementsThese.zipWithIndex.map{
+      inheritable.implementsThese.zipWithIndex.map {
         case (x, 0) => s" implements ${visit(x)}"
         case (x, _) => s" and ${visit(x)}"
       }.mkString("")
@@ -87,7 +90,7 @@ object UnparseAst extends EirVisitor[String] {
   override def visitTrait(node: EirTrait): String = ???
 
   override def visitMember(node: EirMember): String = {
-    node.accessibility.toString.toLowerCase + " "+ addSemi(visit(node.member))
+    node.accessibility.toString.toLowerCase + " " + addSemi(visit(node.member))
   }
 
   override def visitFunction(node: EirFunction): String = {
@@ -110,7 +113,7 @@ object UnparseAst extends EirVisitor[String] {
 
   override def visitAssignment(node: EirAssignment): String = {
     val semi = node.parent match {
-      case Some(_ : EirForLoop) => ""
+      case Some(_: EirForLoop) => ""
       case _ => ";"
     }
     s"${visit(node.target)} = ${visit(node.value)}$semi"
@@ -129,7 +132,7 @@ object UnparseAst extends EirVisitor[String] {
   override def visitLiteral(value: EirLiteral): String = value.value
 
   override def visitForLoop(loop: EirForLoop): String = {
-    val header : String = loop.header match {
+    val header: String = loop.header match {
       case EirCStyleHeader(declaration, test, increment) => {
         declaration.mapOrSemi(visit) + " " +
           test.mapOrEmpty(visit) + "; " + increment.mapOrEmpty(visit)
@@ -153,7 +156,7 @@ object UnparseAst extends EirVisitor[String] {
   }
 
   override def visitTemplatedType(x: EirTemplatedType): String = {
-     s"${visit(x.base)}<${x.args.map(visit) mkString ", "}>"
+    s"${visit(x.base)}<${x.args.map(visit) mkString ", "}>"
   }
 
   override def visitLambdaType(x: EirLambdaType): String = {
