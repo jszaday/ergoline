@@ -31,6 +31,15 @@ package object util {
     }
   }
 
+  def dropNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
+    for (node <- nodes) {
+      scope match {
+        case x : EirNamespace => x.removeChild(node)
+        case _ => throw new RuntimeException(s"could not drop $node from $scope")
+      }
+    }
+  }
+
   def encloseNodes(nodes: EirNode*): EirBlock = {
     val b = EirBlock(nodes.head.parent, nodes.toList)
     nodes.foreach(_.parent = Some(b))

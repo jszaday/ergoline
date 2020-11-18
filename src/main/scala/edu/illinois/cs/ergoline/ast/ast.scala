@@ -96,7 +96,12 @@ case object EirGlobalNamespace extends EirNode with EirScope {
 }
 
 case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode], var name: String)
-  extends EirSimpleContainer with EirNamedNode
+  extends EirSimpleContainer with EirNamedNode {
+  // TODO this should probably be a standard Node function/more sophisticated (i.e. indicate no match found)
+  def removeChild(node : EirNode): Unit = {
+    children = children.filter(_ == node)
+  }
+}
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
@@ -110,6 +115,7 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
   }
 }
 
+// NOTE this should be enclose exempt and only creatable through a factory
 case class EirFileSymbol(var parent : Option[EirNode], var file : File)
   extends EirScope with EirNamedNode with EirResolvable[EirNode] {
   override def resolve(): EirNode = ???

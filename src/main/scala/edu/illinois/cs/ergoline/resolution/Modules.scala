@@ -75,7 +75,7 @@ object Modules {
 
   def load(file: File, scope: EirScope): EirNamedNode = {
     val parser = parserFromPath(file.toPath)
-    val result = new Visitor(scope).visitProgram(parser.program(), Some(expectation(file)))
+    val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
       case Right(value) => value
       case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getAbsolutePath}")

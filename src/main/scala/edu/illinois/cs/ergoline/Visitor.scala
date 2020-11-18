@@ -12,6 +12,8 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import java.io.File
+import java.nio.file.Files
 
 class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor[Any] {
 
@@ -27,12 +29,40 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   import VisitorSyntax.RichTerminalNodeList
 
-  def visitProgram(ctx : ProgramContext, expectation : Option[String]): Either[EirScope, EirNamedNode] = {
+  private def loadPackage(qualified : List[String], fileOption : Option[File]): EirScope = {
+    fileOption match {
+      case None => Modules.retrieve(qualified, global)
+      case Some(file) =>
+        val absPath = file.toPath.toAbsolutePath
+        qualified.reverse.foldRight((absPath, global))((name, pathScope) => {
+          val parent = pathScope._1.getParent
+          if (parent.getFileName.endsWith(name)) {
+            val loaded = Modules.provisional(parent.toFile, pathScope._2).get
+            (parent, util.assertValid[EirScope](loaded))
+          } else {
+            throw new RuntimeException(s"could not locate $name within ${pathScope._1}")
+          }
+        })._2
+    }
+  }
+
+  def dropSelf(scope : EirScope, fileOption : Option[File]): Unit = {
+    fileOption match {
+      case Some(file) =>
+        util.dropNodes(scope, scope.findChild[EirFileSymbol](f => Files.isSameFile(f.file.toPath, file.toPath)))
+      case _ =>
+    }
+  }
+
+  def visitProgram(ctx : ProgramContext, file : Option[File]): Either[EirScope, EirNamedNode] = {
+    val expectation = file.map(Modules.expectation)
     val topLevel : EirScope =
       Option(ctx.packageStatement())
         .map(_.fqn().Identifier.toStringList)
-        .map(Modules.retrieve(_, global))
+        .map(loadPackage(_, file))
         .getOrElse(global)
+    // A provisional package sweep will include us, so we'll just drop that...
+    dropSelf(topLevel, file)
     parents.push(topLevel)
     val nodes = ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
     // namespaces are automatically placed into the top-level, and should not be replicated
