@@ -19,7 +19,7 @@ object Modules {
   val searchPathEnv = "ERG_CLASSPATH"
   val coreModules: Path =
     Paths.get(Properties.envOrElse(homePathEnv, "."))
-      .resolve(s"src${separator}libs")
+      .resolve("libs")
   val searchPathDefaults: Seq[Path] = Seq(coreModules, Paths.get("."))
   val searchPath: Seq[Path] = (searchPathDefaults ++
     Properties.envOrNone(searchPathEnv).toIterable
