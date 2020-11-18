@@ -179,4 +179,6 @@ object UnparseAst extends EirVisitor[String] {
   }
 
   override def visitBuiltInType(x: EirBuiltInType): String = x.name
+
+  override def visitDefault(x: EirNode): String = x.toString
 }

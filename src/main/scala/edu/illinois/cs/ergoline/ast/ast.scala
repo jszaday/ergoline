@@ -1,8 +1,10 @@
 package edu.illinois.cs.ergoline.ast
 
+import java.io.File
+
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
@@ -81,6 +83,9 @@ case object EirGlobalNamespace extends EirNode with EirScope {
 
   def put(name: String, ns: EirNamespace): Option[EirNamespace] = modules.put(name, ns)
 
+  def apply(name: String): Option[EirNamespace] =
+    Option.when(modules.contains(name))(modules(name))
+
   override def parent: Option[EirNode] = None
 
   override def parent_=(option: Option[EirNode]): Unit = ()
@@ -105,11 +110,25 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
   }
 }
 
+case class EirFileSymbol(var parent : Option[EirNode], var file : File)
+  extends EirScope with EirNamedNode with EirResolvable[EirNode] {
+  override def resolve(): EirNode = ???
+  override def resolved: Boolean = ???
+  override def children: Iterable[EirNode] = ???
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+
+  override def name: String = Modules.expectation(file)
+
+  override def toString: String = s"UNLOADED($name)"
+}
+
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType {
   var members: List[EirMember]
   var templateArgs: List[EirTemplateArgument]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
+
+  override def member(name: String): Option[EirMember] = members.find(_.name == name)
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
 
@@ -180,6 +199,14 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
     }
   }
 }
+
+//case class EirSystemFunction(parent: Option[EirNode], name : String, templateArgs: List[EirTemplateArgument],
+//                              functionArgs: List[EirFunctionArgument], returnType: EirResolvable[EirType])
+//  extends EirNode with EirNamedNode {
+//  override def children: Iterable[EirNode] = None
+//
+//  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+//}
 
 case class EirImport(var parent: Option[EirNode], var symbol: EirSymbol[EirNamespace])
   extends EirNode with EirNamedNode with EirScope {

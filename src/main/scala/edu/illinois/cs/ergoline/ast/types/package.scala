@@ -8,6 +8,7 @@ package object types {
   trait EirType extends EirResolvable[EirType] {
     def resolve(): EirType = this
     def resolved: Boolean = true
+    def member(name : String): Option[EirMember] = None
   }
 
   type EirNamedType = EirType with EirNamedNode

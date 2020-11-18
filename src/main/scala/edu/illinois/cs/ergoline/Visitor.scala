@@ -4,55 +4,62 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.EirResolvable
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichParserRuleContext, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Modules}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichParserRuleContext, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.assertValid
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[Any] {
+class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor[Any] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
-  parents.push(global)
-
   object VisitorSyntax {
-
     implicit class RichTerminalNodeList(list: java.util.List[TerminalNode]) {
       implicit def toStringList: List[String] = list.asScala.map(_.getText).toList
     }
-
   }
 
   import VisitorSyntax.RichTerminalNodeList
 
-  override def visitProgram(ctx: ProgramContext): EirScope = {
-    if (ctx.packageStatement() == null) {
-      ctx
-        .mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-        .collect {
-          case x: EirNamespace => x
-          case x => throw new RuntimeException(s"$x cannot be put into the global namespace")
-        }
-        .foreach(x => EirGlobalNamespace.put(x.name, x))
-      EirGlobalNamespace
-    } else {
-      enter(visitPackageStatement(ctx.packageStatement()), (module: EirNamespace) => {
-        module.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
-      })
+  def visitProgram(ctx : ProgramContext, expectation : Option[String]): Either[EirScope, EirNamedNode] = {
+    val topLevel : EirScope =
+      Option(ctx.packageStatement())
+        .map(_.fqn().Identifier.toStringList)
+        .map(Modules.retrieve(_, global))
+        .getOrElse(global)
+    parents.push(topLevel)
+    val nodes = ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
+    // namespaces are automatically placed into the top-level, and should not be replicated
+    util.placeNodes(topLevel, nodes.filterNot(_.isInstanceOf[EirNamespace]))
+    parents.pop()
+    expectation match {
+      case Some(name) =>
+        (topLevel +: nodes).find(_.hasName(name))
+          .map(x => Right(x.asInstanceOf[EirNamedNode]))
+          .getOrElse(Left(topLevel))
+      case None => Left(topLevel)
     }
   }
 
-  private def parent: Option[EirNode] = parents.headOption
-
-  override def visitPackageStatement(ctx: PackageStatementContext): EirNamespace = {
-    val opt: Option[List[String]] = Option(ctx).map(_.fqn().Identifier.toStringList)
-    util.createOrFindNamespace(parent, opt.getOrElse(List(defaultModuleName)))
+  override def visitProgram(ctx: ProgramContext): EirScope = {
+    visitProgram(ctx, None).left.getOrElse(throw new RuntimeException("unreachable"))
   }
+
+  private def parent: Option[EirNode] =
+    Option.when(parents.isEmpty)(global).orElse(parents.headOption)
+
+  private def scope: EirScope =
+    parent match {
+      case Some(x : EirScope) => x
+      case Some(x) => x.scope.orNull
+      case None => null
+    }
 
   private def enter[T <: EirNode](node: T, f: T => Unit): T = {
     parents.push(node)
@@ -90,13 +97,15 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     Option(ctx).map(_.getText.capitalize).map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
 
   override def visitNamespace(ctx: NamespaceContext): EirNamespace = {
-    enter(util.createOrFindNamespace(parent, ctx.fqn().Identifier.toStringList), (n: EirNamespace) => {
+    val qualified : List[String] = ctx.fqn().Identifier.toStringList
+    enter(Modules.retrieve(qualified, scope), (n: EirNamespace) => {
       n.children ++= ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
     })
   }
 
   override def visitAnnotatedTopLevelStatement(ctx: AnnotatedTopLevelStatementContext): EirNode = {
-    enter(visitTopLevelStatement(ctx.topLevelStatement()), (n: EirNode) => {
+    val target: ParseTree = Option(ctx.namespace()).getOrElse(ctx.topLevelStatement())
+    enter(visit(target).asInstanceOf[EirNode], (n: EirNode) => {
       n.annotations ++= visitAnnotationList(ctx.annotation())
     })
   }
@@ -368,13 +377,6 @@ class Visitor(global: EirNode = EirGlobalNamespace) extends ErgolineBaseVisitor[
     } else {
       assert(ctx.children.size() == 1)
       assertValid[EirExpressionNode](visit(ctx.children.get(0)))
-    }
-  }
-
-  def assertValid[T: Manifest](value: Any): T = {
-    Option(value) match {
-      case Some(x: T) => x
-      case x => throw new RuntimeException(s"unexpected value ${x}")
     }
   }
 

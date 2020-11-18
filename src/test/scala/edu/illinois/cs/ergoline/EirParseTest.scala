@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
@@ -22,14 +22,14 @@ class EirParseTest extends FunSuite {
 
   test("define class and resolve it") {
     EirGlobalNamespace.clear()
-    val result = visitProgram(parserFromString("package foo; namespace bar { class baz { } }"))
+    val result = Modules.load("package foo; namespace bar { class baz { } }")
     val namespace = Find.qualifications(result, List("foo", "bar")).headOnly
     Find.child[EirClass](namespace, withName("baz")).headOnly
   }
 
   test("singleton tuple yields same type") {
     EirGlobalNamespace.clear()
-    val result = visitProgram(parserFromString("package foo; class bar { var baz : (unit) ; var qux : unit ; }"))
+    val result = Modules.load("package foo; class bar { var baz : (unit) ; var qux : unit ; }")
     val foo = Find.qualifications(result, List("foo")).headOnly
     val bar = Find.child[EirClass](foo, withName("bar")).headOnly
     val bazDeclaredType = Find.child[EirDeclaration](bar, withName("baz")).map(_.declaredType)
@@ -71,8 +71,8 @@ class EirParseTest extends FunSuite {
   }
   test("annotated function retrieval test") {
     EirGlobalNamespace.clear()
-    visitProgram(parserFromString("package foo; @entry func bar(): unit { }"))
-    val fs = Find.annotatedWith[EirFunction](EirGlobalNamespace, "entry")
+    val ns = Modules.load("package foo; @entry func bar(): unit { }")
+    val fs = Find.annotatedWith[EirFunction](ns, "entry")
     fs should matchPattern {
       case EirFunction(_, _, "bar", _, _, _) :: Nil =>
     }

@@ -1,8 +1,8 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.Driver.parserFromString
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
 import edu.illinois.cs.ergoline.passes.{CheckEnclose, UnparseAst}
+import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 

@@ -12,29 +12,22 @@ package object util {
 
   import EirUtilitySyntax.{RichEirNode, RichIntOption}
 
-  private def emplaceNamespace(parent: Option[EirNode], name: String): EirNamespace = {
-    val ns = EirNamespace(parent, Nil, name)
-    parent match {
-      case Some(EirGlobalNamespace) =>
-        EirGlobalNamespace.put(ns.name, ns)
-      case Some(x: EirNamespace) =>
-        x.children ++= List(ns)
-      case _ => throw new RuntimeException("unacceptable module target")
+  def assertValid[T: Manifest](value: Any): T = {
+    Option(value) match {
+      case Some(x: T) => x
+      case x => throw new RuntimeException(s"unexpected value $x")
     }
-    ns
   }
 
-  def createOrFindNamespace(parent: Option[EirNode], fqn: Iterable[String]): EirNamespace =
-    createOrFindNamespace(parent, fqn.toList)
-
-  def createOrFindNamespace(parent: Option[EirNode], fqn: List[String]): EirNamespace = {
-    fqn match {
-      case head :: Nil =>
-        parent.flatMap(_.scope.flatMap(_.findChild[EirNamespace](withName(head)).headOption))
-          .getOrElse(emplaceNamespace(parent, head))
-      case init :+ last =>
-        val ns: Option[EirNamespace] = Some(createOrFindNamespace(parent, init))
-        createOrFindNamespace(ns, List(last))
+  def placeNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
+    for (node <- nodes) {
+      (scope, node) match {
+        case (EirGlobalNamespace, x : EirNamespace) =>
+          EirGlobalNamespace.put(x.name, x)
+        case (x: EirNamespace, _) =>
+          x.children +:= node
+        case _ => throw new RuntimeException(s"cannot place $node into $scope")
+      }
     }
   }
 
@@ -102,6 +95,13 @@ package object util {
       def isValid[T : Manifest]: Option[T] = node match {
         case t : T => Some(t)
         case _ => None
+      }
+
+      def hasName(name : String): Boolean = {
+        node match {
+          case x : EirNamedNode => x.name == name
+          case _ => false
+        }
       }
     }
 

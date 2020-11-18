@@ -5,12 +5,11 @@ program
     ;
 
 annotatedTopLevelStatement
-    :   annotation* topLevelStatement
+    :   annotation* (topLevelStatement | namespace)
     ;
 
 topLevelStatement
     :   function
-    |   namespace
     |   importStatement
     |   classDeclaration
     ;
@@ -28,7 +27,6 @@ statement
     |   block
     |   forLoop
     |   function
-    |   namespace
     |   expression ';'
     |   returnStatement
     |   classDeclaration

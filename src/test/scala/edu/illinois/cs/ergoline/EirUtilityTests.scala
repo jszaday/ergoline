@@ -1,13 +1,13 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
-import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
-import edu.illinois.cs.ergoline.ast.{EirBlock, EirClass, EirDeclaration, EirGlobalNamespace, EirLiteral, EirNamedNode, EirNode, EirSymbol}
+import edu.illinois.cs.ergoline.ast.types.EirNamedType
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.FullyResolve
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import org.scalatest.FunSuite
-import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
-import util.EirUtilitySyntax.RichEirNode;
+import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern};
 
 class EirUtilityTests extends FunSuite {
   EirGlobalNamespace.clear()
@@ -36,7 +36,7 @@ class EirUtilityTests extends FunSuite {
   }
 
   test("symbol resolution") {
-    val foo = visitProgram(parserFromString("package foo ; class bar { val self : bar ; }"))
+    val foo = Modules.load("package foo ; class bar { val self : bar ; }")
     val symbol = Find.all[EirSymbol[EirNamedType]](foo).headOption
     symbol.map(_.resolve()) should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>
@@ -45,7 +45,7 @@ class EirUtilityTests extends FunSuite {
 
   test("should not find before definition") {
     EirGlobalNamespace.clear()
-    val foo = visitProgram(parserFromString("package foo ; func bar(): unit { baz; val baz : unit = (); }"))
+    val foo = Modules.load("package foo ; func bar(): unit { baz; val baz : unit = (); }")
     val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
     val declaration = Find.all[EirDeclaration](foo).headOption
     symbol.isDefined shouldBe true

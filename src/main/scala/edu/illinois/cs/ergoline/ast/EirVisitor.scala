@@ -36,8 +36,11 @@ trait EirVisitor[T] {
       case x: EirArrayReference => visitArrayReference(x)
       case EirGlobalNamespace => visitGlobalNamespace()
       case null => throw new RuntimeException("unexpected null?")
+      case x: EirNode => visitDefault(x)
     }
   }
+
+  def visitDefault(x: EirNode): T
 
   def visitBuiltInType(x: EirBuiltInType): T
 

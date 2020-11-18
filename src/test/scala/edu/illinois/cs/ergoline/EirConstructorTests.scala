@@ -1,8 +1,8 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.Driver.{parserFromString, visitProgram}
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
 import edu.illinois.cs.ergoline.passes.CheckEnclose
+import edu.illinois.cs.ergoline.resolution.Modules
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
@@ -10,7 +10,7 @@ class EirConstructorTests extends FunSuite {
 
   private val bigProgram = {
     EirGlobalNamespace.clear()
-    visitProgram(parserFromString(
+    Modules.load(
       """package foo;
         |class bar {
         |  func bar(self : bar, baz= : unit) : unit { }
@@ -18,7 +18,7 @@ class EirConstructorTests extends FunSuite {
         |  val baz : unit;
         |}
         |""".stripMargin
-    ))
+    )
   }
 
   test("expected ok, multiple constructors and assignment") {
@@ -31,27 +31,27 @@ class EirConstructorTests extends FunSuite {
 
   test("expected failure, invalid self-assignment") {
     EirGlobalNamespace.clear()
-    val module = visitProgram(parserFromString(
+    val module = Modules.load(
       """package foo;
         |class bar {
         |  val baz : unit = ();
         |  func bar(self : bar, baz= : unit) : unit { }
         |}
         |""".stripMargin
-    ))
+    )
     assertThrows[java.lang.AssertionError](
       CheckConstructors.checkConstructorsWithin(module))
   }
 
   test("expected failure, uninitialized field") {
     EirGlobalNamespace.clear()
-    val module = visitProgram(parserFromString(
+    val module = Modules.load(
       """package foo;
         |class bar {
         |  val baz : unit;
         |}
         |""".stripMargin
-    ))
+    )
     assertThrows[java.lang.AssertionError](
       CheckConstructors.checkConstructorsWithin(module))
   }
