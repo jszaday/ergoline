@@ -37,6 +37,8 @@ abstract class EirNode {
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
 }
 
+trait EirEncloseExempt extends EirNode
+
 trait EirScope extends EirNode {
   var lastSearch: Int = -1
 }

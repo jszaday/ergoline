@@ -12,7 +12,7 @@ package object types {
 
   type EirNamedType = EirType with EirNamedNode
 
-  case class EirBuiltInType(name : String) extends EirType with EirNamedNode {
+  case class EirBuiltInType(name : String) extends EirType with EirNamedNode with EirEncloseExempt {
     override var parent: Option[EirNode] = Some(EirGlobalNamespace)
     override def children: Iterable[EirNode] = None
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false

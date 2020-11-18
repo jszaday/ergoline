@@ -1,14 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirNode
+import edu.illinois.cs.ergoline.ast.{EirEncloseExempt, EirNode}
 import edu.illinois.cs.ergoline.passes.CheckEnclose.CheckEncloseSyntax.RichEirNode
-import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object CheckEnclose {
   object CheckEncloseSyntax {
     implicit class RichEirNode(node : EirNode) {
       def validEnclose(other : EirNode): Boolean = {
-        node.isInstanceOf[EirResolvable[_]] || node.parent.contains(other)
+        node.isInstanceOf[EirEncloseExempt] || node.parent.contains(other)
       }
     }
   }
