@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
-import edu.illinois.cs.ergoline.passes.CheckEnclose
+import edu.illinois.cs.ergoline.passes.{CheckConstructors, CheckEnclose}
 import edu.illinois.cs.ergoline.resolution.Modules
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
