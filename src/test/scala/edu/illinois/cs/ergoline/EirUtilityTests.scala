@@ -30,7 +30,7 @@ class EirUtilityTests extends FunSuite {
 
   test("fully resolve and verify") {
     EirGlobalNamespace.clear()
-    val block = (new Visitor()).visitBlock(parserFromString("{ val x : int = 42; val y : int = x; val z : int = x * y; }").block())
+    val block = new Visitor().visitBlock(parserFromString("{ val x : int = 42; val y : int = x; val z : int = x * y; }").block())
     block.foreach(FullyResolve.visit)
     block.exists(FullyResolve.verify(_)) shouldBe true
   }

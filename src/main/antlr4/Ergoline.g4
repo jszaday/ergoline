@@ -113,7 +113,7 @@ fieldDeclaration
     ;
 
 function
-    :   'func' Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
+    :   ('def' | 'func') Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
     ;
 
 functionArgument

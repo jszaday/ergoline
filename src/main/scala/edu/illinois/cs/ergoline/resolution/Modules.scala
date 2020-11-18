@@ -10,6 +10,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
 import org.antlr.v4.runtime.{CharStream, CharStreams, CommonTokenStream}
 
+import scala.collection.mutable
 import scala.util.Properties
 
 object Modules {
@@ -23,6 +24,8 @@ object Modules {
   val searchPath: Seq[Path] = (searchPathDefaults ++
     Properties.envOrNone(searchPathEnv).toIterable
       .flatMap(_.split(pathSeparator)).map(Paths.get(_))).filter(Files.exists(_))
+
+  val loadedFiles : mutable.Map[File, EirNamedNode] = mutable.Map()
 
   def load(body: String, scope: EirScope = EirGlobalNamespace): EirScope = {
     new Visitor(scope).visitProgram(parserFromString(body).program())
@@ -41,20 +44,34 @@ object Modules {
     retrieve(qualified.last, qualified.reverse.tail.foldRight(scope)(retrieve))
   }
 
-  def apply(name: String, scope: EirScope = EirGlobalNamespace): Option[EirNamedNode] = {
+  def apply(qualified: List[String], scope: EirScope): Option[EirNamedNode] = {
+    qualified match {
+      case head :: Nil => this(head, scope)
+      case head :: tail => this(head, scope).map(x =>
+        retrieve(tail, util.assertValid[EirScope](x)))
+      case Nil => None
+    }
+  }
+
+  def apply(name: String, scope: EirScope): Option[EirNamedNode] = {
     // find a directory/file with the desired name, and provisionally import it
     searchPath.map(_.resolve(name).toFile).find(_.exists()).flatMap(provisional(_, scope))
   }
 
-  def provisional(file: File, scope: EirScope): Option[EirNamedNode] = {
-    if (file.isDirectory) {
+  def provisional(f: File, scope: EirScope): Option[EirNamedNode] = {
+    val file = f.getAbsoluteFile
+    if (loadedFiles.contains(file)) {
+      Some(loadedFiles(file))
+    } else if (file.isDirectory) {
       val name = file.getName
-      val children = file.listFiles()
-      val pkg: EirNamespace =
-        children.find(_.getName == packageFile).map(load(_, scope))
-          .map(util.assertValid[EirNamespace]).getOrElse(retrieve(name, scope))
+      val children = file.listFiles().map(_.getAbsoluteFile)
+      val pkg: EirNamespace = retrieve(name, scope)
+      loadedFiles(file) = pkg
+      children.find(_.getName == packageFile).foreach(load(_, scope))
       for (child <- children.filterNot(_.getName == packageFile)) {
-        pkg.children +:= EirFileSymbol(Some(pkg), child)
+        val symbol = EirFileSymbol(Some(pkg), child)
+        pkg.children +:= symbol
+        loadedFiles(child) = symbol
       }
       Some(pkg)
     } else if (file.isFile) {
@@ -73,11 +90,14 @@ object Modules {
       })
   }
 
-  def load(file: File, scope: EirScope): EirNamedNode = {
+  def load(f: File, scope: EirScope): EirNamedNode = {
+    val file = f.getAbsoluteFile
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
-      case Right(value) => value
+      case Right(value) =>
+        loadedFiles(file) = value
+        value
       case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getAbsolutePath}")
     }
   }
@@ -88,7 +108,7 @@ object Modules {
   def expectation(file: File): String = {
     val name = file.getName
     if (name == packageFile)
-      file.getAbsoluteFile.getParent
+      file.getAbsoluteFile.getParentFile.getName
     else {
       val idx = name.indexOf('.')
       if (idx >= 0) name.substring(0, idx)

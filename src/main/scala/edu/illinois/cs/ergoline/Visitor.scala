@@ -98,9 +98,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
-    enter(EirImport(parent, null), (i: EirImport) => {
-      i.symbol = symbolize[EirNamespace](ctx.fqn().Identifier())
-    })
+    EirImport(parent, ctx.fqn().Identifier().toStringList)
   }
 
   override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {

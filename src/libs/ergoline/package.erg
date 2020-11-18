@@ -1,0 +1,3 @@
+package ergoline;
+
+@system func println(s : string): unit;

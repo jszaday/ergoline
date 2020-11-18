@@ -146,8 +146,8 @@ object UnparseAst extends EirVisitor[String] {
     visit(call.target) + "(" + (call.args.map(visit) mkString ", ") + ")"
   }
 
-  override def visitImport(eirImport: EirImport): String = {
-    s"import ${visit(eirImport.symbol)};"
+  override def visitImport(x: EirImport): String = {
+    s"import ${x.qualified mkString "::"};"
   }
 
   override def visitProxyType(x: EirProxyType): String = {

@@ -3,4 +3,5 @@ package ergoline;
 @system class int {
     @system def plus(other : int): int;
     @system def minus(other : int): int;
+    @system def toString(): string;
 }

@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.{globals, util}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 
 import scala.collection.mutable
 
@@ -99,7 +99,7 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
   extends EirSimpleContainer with EirNamedNode {
   // TODO this should probably be a standard Node function/more sophisticated (i.e. indicate no match found)
   def removeChild(node : EirNode): Unit = {
-    children = children.filter(_ == node)
+    children = children.filter(_ != node)
   }
 }
 
@@ -118,10 +118,21 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
 // NOTE this should be enclose exempt and only creatable through a factory
 case class EirFileSymbol(var parent : Option[EirNode], var file : File)
   extends EirScope with EirNamedNode with EirResolvable[EirNode] {
-  override def resolve(): EirNode = ???
-  override def resolved: Boolean = ???
-  override def children: Iterable[EirNode] = ???
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  var _resolved : Option[EirNode] = None
+
+  override def resolve(): EirNode = {
+    _resolved = parent.to[EirScope].map(Modules.load(file, _))
+    _resolved match {
+      case Some(x) => x
+      case _ => throw new RuntimeException(s"could not resolve $file!")
+    }
+  }
+
+  override def resolved: Boolean = _resolved.nonEmpty
+
+  override def children: Iterable[EirNode] = _resolved
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
   override def name: String = Modules.expectation(file)
 
@@ -214,15 +225,28 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
 //  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 //}
 
-case class EirImport(var parent: Option[EirNode], var symbol: EirSymbol[EirNamespace])
-  extends EirNode with EirNamedNode with EirScope {
-  override def children: Iterable[EirNode] = List(symbol)
+case class EirImport(var parent: Option[EirNode], var qualified: List[String])
+  extends EirResolvable[EirNode] with EirScope with EirEncloseExempt {
+  var _resolved : Option[EirScope] = None
 
-  override def name: String = symbol.qualifiedName.head
+  def wildcard: Boolean = qualified.last == "_"
 
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    symbol == oldNode && util.applyOrFalse[EirSymbol[EirNamespace]](symbol = _, newNode)
+  override def children: Iterable[EirNode] = {
+    if (wildcard) _resolved.toIterable.flatMap(_.children)
+    else _resolved
   }
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+
+  override def resolve(): EirNode = {
+    _resolved = Modules(if (wildcard) qualified.init else qualified, EirGlobalNamespace).to[EirScope]
+    _resolved match {
+      case Some(x) => x
+      case _ => throw new RuntimeException("could not resolve import!")
+    }
+  }
+
+  override def resolved: Boolean = _resolved.nonEmpty
 }
 
 case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {
