@@ -27,14 +27,10 @@ class EirParseTest extends FunSuite {
     Find.child[EirClass](namespace, withName("baz")).headOnly
   }
 
-  test("singleton tuple yields same type") {
-    EirGlobalNamespace.clear()
-    val result = Modules.load("package foo; class bar { var baz : (unit) ; var qux : unit ; }")
-    val foo = Find.qualifications(result, List("foo")).headOnly
-    val bar = Find.child[EirClass](foo, withName("bar")).headOnly
-    val bazDeclaredType = Find.child[EirDeclaration](bar, withName("baz")).map(_.declaredType)
-    val quxDeclaredType = Find.child[EirDeclaration](bar, withName("qux")).map(_.declaredType)
-    bazDeclaredType shouldEqual quxDeclaredType
+  test("tuple with one element same type as base type") {
+    val types = (new Visitor).visitTypeList(parserFromString("(unit), unit").typeList())
+    types.length shouldBe 2
+    types.head shouldEqual types.last
   }
 
   test("mini bin op precedence test") {

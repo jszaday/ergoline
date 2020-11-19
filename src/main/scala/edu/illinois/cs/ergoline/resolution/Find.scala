@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 object Find {
   type EirNamedScope = EirScope with EirNamedNode
@@ -33,7 +34,7 @@ object Find {
   }
 
   // search up and down from a node
-  def globally[T: Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
+  def globally[T <: EirNode : Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
     (ctx.forall(_.canAccess(scope)) && !searched.contains(scope)).ifTrue({
       searched += scope
       Find.within(scope, predicate) ++ scope.scope.toIterable.flatMap(globally(_, predicate, searched))
@@ -41,18 +42,22 @@ object Find {
   }
 
   // recursively check all children of a node
-  def within[T: Manifest](node: EirNode, predicate: T => Boolean): Iterable[T] = {
-    Find.child(node, predicate) ++ node.children.flatMap(within(_, predicate))
+  def within[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
+    Find.child[T](node, predicate) ++ node.children.flatMap(within[T](_, predicate))
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T: Manifest](node: EirNode, predicate: T => Boolean): Iterable[T] = {
-    node.children.collect {
-      case t: T if predicate(t) => t
-    }
+  def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
+    node.children.filter(x => {
+      try {
+        predicate(x.asInstanceOf[T])
+      } catch {
+        case _ : ClassCastException => false
+      }
+    }).map(_.asInstanceOf[T])
   }
 
-  def all[T: Manifest](node: EirNode): Iterable[T] = {
+  def all[T <: EirNode : Manifest](node: EirNode): Iterable[T] = {
     node.children.flatMap(all(_)) ++
       node.children.collect {
         case x: T => x

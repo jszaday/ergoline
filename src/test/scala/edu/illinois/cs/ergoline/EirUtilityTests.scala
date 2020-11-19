@@ -28,13 +28,6 @@ class EirUtilityTests extends FunSuite {
     b.findPositionOf(dummy) shouldEqual None
   }
 
-  test("fully resolve and verify") {
-    EirGlobalNamespace.clear()
-    val block = new Visitor().visitBlock(parserFromString("{ val x : int = 42; val y : int = x; val z : int = x * y; }").block())
-    block.foreach(FullyResolve.visit)
-    block.exists(FullyResolve.verify(_)) shouldBe true
-  }
-
   test("symbol resolution") {
     val foo = Modules.load("package foo ; class bar { val self : bar ; }")
     val symbol = Find.all[EirSymbol[EirNamedType]](foo).headOption

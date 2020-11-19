@@ -255,19 +255,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
-    val name = identifiers.toStringList
-    EirBuiltInTypes.contains(name.last)
-      .map(x => throw new RuntimeException(s"cannot override built-in symbol $x"))
-      .getOrElse(EirSymbol[T](parent, name))
+    EirSymbol[T](parent, identifiers.toStringList)
   }
 
   def symbolizeType(identifiers: java.util.List[TerminalNode]): EirResolvable[EirType] = {
-    identifiers.toStringList match {
-      case head :: Nil =>
-        EirBuiltInTypes.contains(head).getOrElse(EirSymbol[EirNamedType](parent, List(head)))
-      case name =>
-        EirSymbol[EirNamedType](parent, name)
-    }
+    EirSymbol[EirNamedType](parent, identifiers.toStringList)
   }
 
   override def visitTypeList(ctx: TypeListContext): List[EirResolvable[EirType]] = ctx.mapOrEmpty(_.`type`, visitType)

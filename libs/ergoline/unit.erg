@@ -1,0 +1,7 @@
+package ergoline;
+
+@system class unit {
+    def toString(self : unit): string {
+        return "unit";
+    }
+}

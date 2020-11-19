@@ -97,9 +97,11 @@ package object util {
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 
-      def findChild[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.child(node, predicate)
+      def findChild[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
+        Find.child[T](node, predicate)
 
-      def findWithin[T: Manifest](predicate: T => Boolean): Iterable[T] = Find.within(node, predicate)
+      def findWithin[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
+        Find.within[T](node, predicate)
 
       def isValid[T : Manifest]: Option[T] = node match {
         case t : T => Some(t)

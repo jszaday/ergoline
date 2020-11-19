@@ -145,7 +145,7 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
-  override def member(name: String): Option[EirMember] = members.find(_.name == name)
+  def member(name: String): Option[EirMember] = members.find(_.name == name)
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
 

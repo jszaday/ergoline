@@ -7,7 +7,6 @@ trait EirVisitor[T] {
 
   def visit(node: EirNode): T = {
     node match {
-      case x: EirBuiltInType => visitBuiltInType(x)
       case x: EirBlock => visitBlock(x)
       case x: EirNamespace => visitNamespace(x)
       case x: EirDeclaration => visitDeclaration(x)
@@ -41,8 +40,6 @@ trait EirVisitor[T] {
   }
 
   def visitDefault(x: EirNode): T
-
-  def visitBuiltInType(x: EirBuiltInType): T
 
   def visitGlobalNamespace(): T
 
