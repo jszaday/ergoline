@@ -394,7 +394,7 @@ object EirLiteralTypes extends Enumeration {
 case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
-  private var _resolved : Option[T] = None
+  private var _resolved : Option[List[T]] = None
 
   override def children: Iterable[EirNode] = Nil
 
@@ -404,13 +404,15 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
 
   override def resolve(): T = {
     if (_resolved.isEmpty) {
-      _resolved = Find.fromSymbol(this).headOption
+      _resolved = Some(Find.fromSymbol(this).toList)
     }
     _resolved match {
-      case Some(x) => x
+      case Some(x) => x.head
       case None => throw new RuntimeException(s"could not resolve $this!")
     }
   }
+
+  def candidates: List[T] = _resolved.getOrElse(Nil)
 
   override def resolved: Boolean = _resolved.isDefined
 }

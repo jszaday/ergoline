@@ -73,10 +73,6 @@ object Find {
 //    owner.findWithin[T]((t : T) => parentOf[C](t).contains(owner))
 //  }
 
-  def returnType(block: EirBlock): Option[EirType] = {
-    unionType(Find.within[EirReturn](block, _ => true).map(_.expression.eirType.resolve()))
-  }
-
   def unionType(types: Iterable[EirType]): Option[EirType] = {
     types match {
       case Nil => None

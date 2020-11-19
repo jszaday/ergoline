@@ -14,7 +14,7 @@ class EirImportTests extends FunSuite {
       |import ergoline::_;
       |func bar(): unit {
       |  val x : int = 42;
-      |  val y : int = x * 2;
+      |  val y : int = x + 2;
       |  val z : int = x * y;
       |  println(z.toString);
       |}
