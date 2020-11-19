@@ -1,10 +1,8 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirGlobalNamespace}
-import edu.illinois.cs.ergoline.passes.{FullyResolve, TypeCheck}
-import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
+import edu.illinois.cs.ergoline.passes.{FullyResolve, CheckTypes}
 import edu.illinois.cs.ergoline.resolution.Modules
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
@@ -23,6 +21,6 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     FullyResolve.visit(module)
     FullyResolve.verify(module) shouldBe true
-    TypeCheck.visit(module)
+    CheckTypes.visit(module)
   }
 }

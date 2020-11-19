@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
-object TypeCheck extends EirVisitor[EirType] {
+object CheckTypes extends EirVisitor[EirType] {
   object TypeCheckSyntax {
     implicit class RichEirType(t: EirType) {
       def canAssignTo(other : EirType): Boolean = {
