@@ -69,16 +69,23 @@ object Find {
   }
 
   // find values strictly "owned" by the owner, such that no other instance of its class owns it as well
-  def owned[C <: EirNode : Manifest, T <: EirNode : Manifest](owner : C): Iterable[T] = {
-    owner.findWithin((t : T) => parentOf[C](t).contains(owner))
+//  def owned[C <: EirNode : Manifest, T <: EirNode : Manifest](owner : C): Iterable[T] = {
+//    owner.findWithin[T]((t : T) => parentOf[C](t).contains(owner))
+//  }
+
+  def returnType(block: EirBlock): Option[EirType] = {
+    unionType(Find.within[EirReturn](block, _ => true).map(_.expression.eirType.resolve()))
   }
 
-  def returnType(block: EirBlock): EirResolvable[EirType] =
-    unionType(Find.owned[EirBlock, EirReturn](block).map(_.expression.eirType))
+  def unionType(types: Iterable[EirType]): Option[EirType] = {
+    types match {
+      case Nil => None
+      case head :: Nil => Some(head)
+      case _ => ???
+    }
+  }
 
-  def unionType(types: Iterable[EirResolvable[EirType]]): EirResolvable[EirType] = ???
-
-  def unionType(types: EirResolvable[EirType]*): EirResolvable[EirType] = unionType(types)
+  def unionType(types: EirType*): Option[EirType] = unionType(types)
 
   def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))

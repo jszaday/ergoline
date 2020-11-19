@@ -30,7 +30,7 @@ class EirParseTest extends FunSuite {
   test("tuple with one element same type as base type") {
     val types = (new Visitor).visitTypeList(parserFromString("(unit), unit").typeList())
     types.length shouldBe 2
-    types.head shouldEqual types.last
+    types.head.toString shouldEqual types.last.toString
   }
 
   test("mini bin op precedence test") {

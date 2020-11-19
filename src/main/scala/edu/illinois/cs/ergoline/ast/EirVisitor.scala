@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 trait EirVisitor[T] {
   def visit(it: Iterable[EirNode]): Iterable[T] = it.map(visit)
@@ -35,11 +36,12 @@ trait EirVisitor[T] {
       case x: EirArrayReference => visitArrayReference(x)
       case EirGlobalNamespace => visitGlobalNamespace()
       case null => throw new RuntimeException("unexpected null?")
-      case x: EirNode => visitDefault(x)
+      case x : EirResolvable[_] if x.resolved => visit(x.resolve())
+      case x => throw new RuntimeException(s"could not match ${x.getClass.getName}!")
     }
   }
 
-  def visitDefault(x: EirNode): T
+//  def visitDefault(x: EirNode): T
 
   def visitGlobalNamespace(): T
 

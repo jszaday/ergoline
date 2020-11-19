@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.{EirFunction, EirGlobalNamespace}
-import edu.illinois.cs.ergoline.passes.FullyResolve
+import edu.illinois.cs.ergoline.passes.{FullyResolve, TypeCheck}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
@@ -23,5 +23,6 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     FullyResolve.visit(module)
     FullyResolve.verify(module) shouldBe true
+    TypeCheck.visit(module)
   }
 }

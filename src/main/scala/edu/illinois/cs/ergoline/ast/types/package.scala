@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.passes.FullyResolve
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util
 
@@ -29,6 +30,18 @@ package object types {
 
   case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]]) extends EirType {
     override def children: List[EirResolvable[EirType]] = List(base) ++ args
+    private var _registered = false
+
+    override def resolve(): EirType = {
+      FullyResolve.visit(this)
+      _registered = base.resolve() match {
+        case x : EirClassLike => x.putSpecialization(this); true
+        case _ => false
+      }
+      this
+    }
+
+    override def resolved: Boolean = _registered
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||

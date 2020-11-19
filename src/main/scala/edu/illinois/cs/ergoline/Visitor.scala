@@ -33,7 +33,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     fileOption match {
       case None => Modules.retrieve(qualified, global)
       case Some(file) =>
-        val absPath = file.toPath.toAbsolutePath
+        val absPath = file.getCanonicalFile.toPath
         qualified.reverse.foldRight((absPath, global))((name, pathScope) => {
           val parent = pathScope._1.getParent
           if (parent.getFileName.endsWith(name)) {
@@ -55,6 +55,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def visitProgram(ctx : ProgramContext, file : Option[File]): Either[EirScope, EirNamedNode] = {
+    file.map(_.getCanonicalPath).foreach(path => {
+      println(s"loading file: $path")
+    })
     val expectation = file.map(Modules.expectation)
     val topLevel : EirScope =
       Option(ctx.packageStatement())

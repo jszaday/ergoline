@@ -59,12 +59,12 @@ object Modules {
   }
 
   def provisional(f: File, scope: EirScope): Option[EirNamedNode] = {
-    val file = f.getAbsoluteFile
+    val file = f.getCanonicalFile
     if (loadedFiles.contains(file)) {
       Some(loadedFiles(file))
     } else if (file.isDirectory) {
       val name = file.getName
-      val children = file.listFiles().map(_.getAbsoluteFile)
+      val children = file.listFiles().map(_.getCanonicalFile)
       val pkg: EirNamespace = retrieve(name, scope)
       loadedFiles(file) = pkg
       children.find(_.getName == packageFile).foreach(load(_, scope))
@@ -91,14 +91,14 @@ object Modules {
   }
 
   def load(f: File, scope: EirScope): EirNamedNode = {
-    val file = f.getAbsoluteFile
+    val file = f.getCanonicalFile
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
       case Right(value) =>
         loadedFiles(file) = value
         value
-      case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getAbsolutePath}")
+      case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getCanonicalPath}")
     }
   }
 
@@ -108,7 +108,7 @@ object Modules {
   def expectation(file: File): String = {
     val name = file.getName
     if (name == packageFile)
-      file.getAbsoluteFile.getParentFile.getName
+      file.getCanonicalFile.getParentFile.getName
     else {
       val idx = name.indexOf('.')
       if (idx >= 0) name.substring(0, idx)

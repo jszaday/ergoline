@@ -80,7 +80,14 @@ package object util {
     true
   }
 
+  private def xImportsY(x : EirNode, y : EirNode): Boolean = {
+    true
+  }
+
   private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
+    if (y.isInstanceOf[EirEncloseExempt]) {
+      return xImportsY(x, y)
+    }
     Find.commonAncestor(x, y).exists {
       case z: EirBlock => (z.findPositionOf(x) > z.findPositionOf(y)) && xCanAccessYViaZ(x, y, z)
       case z => xCanAccessYViaZ(x, y, z)

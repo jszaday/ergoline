@@ -125,7 +125,7 @@ object UnparseAst extends EirVisitor[String] {
     s"(${node.args.map(visit) mkString ", "}) => ${visit(node.body)}"
 
   override def visitReturn(node: EirReturn): String =
-    s"return ${visit(node)};"
+    s"return ${visit(node.expression)};"
 
   override def visitSymbol(value: EirSymbol[_]): String = value.qualifiedName mkString "::"
 
@@ -177,6 +177,4 @@ object UnparseAst extends EirVisitor[String] {
   override def visitGlobalNamespace(): String = {
     visitStatements(EirGlobalNamespace.children).trim + n
   }
-
-  override def visitDefault(x: EirNode): String = x.toString
 }

@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.ast
 
 import java.io.File
 
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.{globals, util}
@@ -37,6 +37,13 @@ abstract class EirNode {
   override def hashCode(): Int = children.hashCode
 
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
+
+  override def equals(obj: Any): Boolean = {
+    // node comparisons should _generally_ be strict
+    // they may explode otherwise due to their recursive relationships
+    // besides, they should usually be singletons :)
+    this.asInstanceOf[AnyRef].eq(obj.asInstanceOf[AnyRef])
+  }
 }
 
 trait EirEncloseExempt extends EirNode
@@ -117,11 +124,13 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
 
 // NOTE this should be enclose exempt and only creatable through a factory
 case class EirFileSymbol(var parent : Option[EirNode], var file : File)
-  extends EirScope with EirNamedNode with EirResolvable[EirNode] {
+  extends EirScope with EirNamedNode with EirResolvable[EirNode] with EirEncloseExempt {
   var _resolved : Option[EirNode] = None
 
   override def resolve(): EirNode = {
-    _resolved = parent.to[EirScope].map(Modules.load(file, _))
+    if (_resolved.isEmpty) {
+      _resolved = parent.to[EirScope].map(Modules.load(file, _))
+    }
     _resolved match {
       case Some(x) => x
       case _ => throw new RuntimeException(s"could not resolve $file!")
@@ -144,6 +153,14 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var templateArgs: List[EirTemplateArgument]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
+  var specializations: List[EirTemplatedType] = Nil
+
+  def putSpecialization(x : EirTemplatedType): Unit = {
+    if (templateArgs.length != x.args.length) {
+      throw new RuntimeException(s"invalid template specialization: $x")
+    }
+    specializations +:= x
+  }
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
@@ -198,15 +215,17 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   }
 }
 
-case class EirFunction(var parent: Option[EirNode], var body: Option[EirNode],
+case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
                        var returnType: EirResolvable[EirType])
   extends EirNode with EirScope with EirNamedNode {
-  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs
+  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs :+ returnType
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    if (body.contains(oldNode)) { body = Some(newNode); true }
+    if (body.contains(oldNode)) {
+      util.applyOrFalse[EirBlock](x => body = Some(x), newNode)
+    }
     else if (returnType == oldNode) {
       util.applyOrFalse[EirResolvable[EirType]](returnType = _, newNode)
     } else {
@@ -332,6 +351,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
   }
 }
 
+// TODO expression should be an optional!
 case class EirReturn(var parent: Option[EirNode], var expression: EirExpressionNode) extends EirNode {
   override def children: Iterable[EirNode] = List(expression)
 
@@ -344,7 +364,7 @@ case class EirTernaryOperator(var parent: Option[EirNode], var test: EirExpressi
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = List(test, ifTrue, ifFalse)
 
-  override def eirType: EirResolvable[EirType] = Find.unionType(ifTrue.eirType, ifFalse.eirType)
+  override def eirType: EirResolvable[EirType] = ??? // Find.unionType(ifTrue.eirType, ifFalse.eirType)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     ((test == oldNode) && util.applyOrFalse[EirExpressionNode](test = _, newNode)) ||
@@ -364,7 +384,11 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
 
 object EirLiteralTypes extends Enumeration {
   type EirLiteralTypes = Value
-  val String, Integer, Float, Character, Unit = Value
+  val String = Value("string")
+  val Integer = Value("int")
+  val Float = Value("float")
+  val Character = Value("char")
+  val Unit = Value("unit")
 }
 
 case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])

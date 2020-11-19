@@ -14,10 +14,20 @@ object FullyResolve {
     })
   }
 
+  private def fullyResolve(x : EirResolvable[_ <: EirNode]): Unit = {
+    var curr : Option[EirResolvable[_]] = Some(x);
+    do {
+      curr = curr.flatMap(_.resolve() match {
+        case x: EirResolvable[_] if !x.resolved => Some(x)
+        case _ => None
+      })
+    } while (curr.exists(!_.resolved))
+  }
+
   def seekOthers(node : EirNode): Unit = {
     node.children.foreach({
       case x: EirResolvable[_] if !x.resolved =>
-        x.resolve()
+        fullyResolve(x)
       case child => seekOthers(child)
     })
   }
