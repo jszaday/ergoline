@@ -40,17 +40,20 @@ package object util {
     }
   }
 
+  def setParent[T <: EirNode](parent : T): T = {
+    parent.children.foreach(_.parent = Some(parent))
+    parent
+  }
+
   def encloseNodes(nodes: EirNode*)(implicit addReturn: Boolean = false): EirBlock = {
-    val block = EirBlock(nodes.head.parent, Nil)
-    block.children = if (addReturn && nodes.length == 1) {
-      val node = nodes.head
-      val ret = EirReturn(Some(block), assertValid[EirExpressionNode](node))
-      node.parent = Some(ret)
-      List(ret)
-    } else {
-      nodes.map(x => { x.parent = Some(block); x }).toList
-    }
-    block
+    setParent(EirBlock(nodes.head.parent, {
+      if (!addReturn || nodes.length != 1) nodes.toList
+      else {
+        val ret = EirReturn(None, assertValid[EirExpressionNode](nodes.head))
+        nodes.head.parent = Some(ret)
+        List(ret)
+      }
+    }))
   }
 
   def makeTupleElementGetter(expression: EirExpressionNode, idx: Int): EirExpressionNode = {
