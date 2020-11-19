@@ -310,7 +310,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitLambdaExpression(ctx: LambdaExpressionContext): EirExpressionNode = {
     enter(EirLambdaExpression(parent, null, null), (f: EirLambdaExpression) => {
       f.args = visitFunctionArgumentList(ctx.functionArgumentList())
-      f.body = visitBlock(ctx.block()).getOrElse(util.encloseNodes(visitExpression(ctx.expression)))
+      f.body = visitBlock(ctx.block()).getOrElse(util.encloseNodes(visitExpression(ctx.expression))(addReturn = true))
     })
   }
 

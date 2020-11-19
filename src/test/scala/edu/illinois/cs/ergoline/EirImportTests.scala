@@ -23,4 +23,23 @@ class EirImportTests extends FunSuite {
     FullyResolve.verify(module) shouldBe true
     CheckTypes.visit(module)
   }
+
+  test("can resolve lambdas type-check") {
+    EirGlobalNamespace.clear()
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |class bar {
+      |  def baz(self: bar): (int => int) {
+      |    val f: (int => int) = (x : int) => x * 2;
+      |    return f;
+      |  }
+      |  def qux(self: bar): int {
+      |    return self.baz()(4);
+      |  }
+      |}
+      |""".stripMargin)
+    FullyResolve.visit(module)
+    CheckTypes.visit(module)
+  }
 }

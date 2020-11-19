@@ -9,6 +9,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.assertValid
 
 object CheckTypes extends EirVisitor[EirType] {
+
   object TypeCheckSyntax {
     implicit class RichEirType(t: EirType) {
       def canAssignTo(other : EirType): Boolean = {
@@ -46,18 +47,23 @@ object CheckTypes extends EirVisitor[EirType] {
 
   override def visitFieldAccessor(x: EirFieldAccessor): EirType = {
     val candidates = findCandidates(x).toList
-    if (candidates.length == 1) {
-      candidates.head match {
-        case EirLambdaType(_, args, retTy) if autoApply(x.target, args) => visit(retTy)
-        case _ => candidates.head
+    for (candidate <- candidates) {
+      candidate match {
+        case EirLambdaType(_, args, retTy) =>
+          if (autoApply(x.target, args)) return visit(retTy)
+        case _ => return visit(candidate)
       }
     }
-    else throw TypeCheckException(s"multiple candidates for $x")
+    throw TypeCheckException(s"unable to find unique candidate for $x")
   }
 
   override def visitTernaryOperator(x: EirTernaryOperator): EirType = ???
 
-  override def visitLambdaType(x: types.EirLambdaType): EirType = ???
+  override def visitLambdaType(x: types.EirLambdaType): EirType = {
+    x.from = x.from.map(visit)
+    x.to = visit(x.to)
+    x
+  }
 
   override def visitTemplatedType(x: types.EirTemplatedType): EirType = ???
 
@@ -85,10 +91,10 @@ object CheckTypes extends EirVisitor[EirType] {
               return visit(retTy)
             }
           }
-        case x => throw TypeCheckException(s"unsure how to resolve call to $x")
+        case x => throw TypeCheckException(s"unsure how to apply $x")
       }
     }
-    throw TypeCheckException(s"could not find callable candidate for $call")
+    throw TypeCheckException(s"could not find suitable candidate for call $call")
   }
 
   override def visitForLoop(loop: EirForLoop): EirType = ???
@@ -102,14 +108,18 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   override def visitBlock(node: EirBlock): EirType = {
-    var retTy : List[EirType] = Nil
-    for (child <- node.children) {
-      child match {
-        case r : EirReturn => retTy +:= visit(r)
-        case _ => visit(child)
-      }
+    node.children.foreach(visit)
+    val retTys : List[EirType] = Find.descendant(node, {
+      case _: EirLambdaExpression => None
+      case _: EirFunction => None
+      case _: EirReturn => Some(true)
+      case _ => Some(false)
+    }).map(visit).toList
+    if (retTys.isEmpty) null
+    else Find.unionType(retTys) match {
+      case Some(x) => x
+      case None => throw TypeCheckException(s"could not find union of return types $retTys")
     }
-    Find.unionType(retTy).orNull
   }
 
   override def visitNamespace(node: EirNamespace): EirType = {
@@ -189,7 +199,11 @@ object CheckTypes extends EirVisitor[EirType] {
 
   override def visitTupleExpression(node: EirTupleExpression): EirType = ???
 
-  override def visitLambdaExpression(node: EirLambdaExpression): EirType = ???
+  override def visitLambdaExpression(node: EirLambdaExpression): EirType = {
+    val retTy = visit(node.body)
+    if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
+    EirLambdaType(Some(node), node.args.map(visit), retTy)
+  }
 
   override def visitReturn(node: EirReturn): EirType = {
     visit(node.expression)

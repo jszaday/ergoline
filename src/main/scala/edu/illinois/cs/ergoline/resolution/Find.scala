@@ -41,6 +41,12 @@ object Find {
     })
   }
 
+  def descendant(node: EirNode, predicate: EirNode => Option[Boolean]): Iterable[EirNode] = {
+    node.children.zip(node.children.map(predicate)).collect({
+      case (node, Some(x)) => Option.when(x)(node) ++ descendant(node, predicate)
+    }).flatten
+  }
+
   // recursively check all children of a node
   def within[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
     Find.child[T](node, predicate) ++ node.children.flatMap(within[T](_, predicate))

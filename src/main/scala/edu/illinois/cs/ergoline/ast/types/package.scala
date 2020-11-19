@@ -26,6 +26,14 @@ package object types {
       util.updateWithin(from, oldNode, newNode).map(from = _).isDefined ||
         ((to == oldNode) && util.applyOrFalse[EirResolvable[EirType]](to = _, newNode))
     }
+
+    override def equals(any: Any): Boolean = {
+      any match {
+        case EirLambdaType(_, theirFrom, theirTo) =>
+          (from == theirFrom) && (theirTo == to)
+        case _ => false
+      }
+    }
   }
 
   case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]]) extends EirType {

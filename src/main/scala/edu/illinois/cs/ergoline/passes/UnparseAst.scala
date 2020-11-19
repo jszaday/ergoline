@@ -27,7 +27,11 @@ object UnparseAst extends EirVisitor[String] {
   def tabsMinusOne: String = List.fill(Math.max(numTabs - 1, 0))(t).mkString("")
 
   override def visit(node: EirNode): String = {
-    visit(node.annotations).mkString("") + super.visit(node)
+    val annotations = Option(node)
+      .map(_.annotations)
+      .map(visit).toIterable
+      .flatten.mkString("")
+    annotations + super.visit(node)
   }
 
   def addSemi(x: String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
