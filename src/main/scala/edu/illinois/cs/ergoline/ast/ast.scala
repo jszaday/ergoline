@@ -345,6 +345,8 @@ object EirTupleExpression {
 
 case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFunctionArgument], var body: EirBlock)
   extends EirExpressionNode {
+  var found : Option[EirType] = None
+
   override def children: Iterable[EirNode] = args ++ List(body)
 
   override def eirType: EirResolvable[EirType] = ???
@@ -411,8 +413,8 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
       _resolved = Some(Find.fromSymbol(this).toList)
     }
     _resolved match {
-      case Some(x) => x.head
-      case None => throw new RuntimeException(s"could not resolve $this!")
+      case Some(x) if x.nonEmpty => x.head
+      case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }
 
@@ -435,6 +437,7 @@ trait EirPostfixExpression extends EirExpressionNode {
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
   extends EirPostfixExpression {
+  var found : Option[EirNode] = None
   override def eirType: EirResolvable[EirType] = ???
 }
 

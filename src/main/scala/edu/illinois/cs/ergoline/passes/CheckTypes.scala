@@ -31,12 +31,12 @@ object CheckTypes extends EirVisitor[EirType] {
 
   override def visitArrayReference(x: EirArrayReference): EirType = ???
 
-  def findCandidates(x: EirFieldAccessor): Iterable[EirType] = {
+  def findCandidates(x: EirFieldAccessor): Iterable[EirMember] = {
     val lhs = visit(x.target)
     if (!lhs.isInstanceOf[EirClassLike]) {
       throw TypeCheckException(s"expected $lhs to be a class-like type in $x")
     }
-    lhs.findChild[EirMember](withName(x.field)).map(visit(_))
+    lhs.findChild[EirMember](withName(x.field))
   }
 
   def autoApply(target : EirExpressionNode, args : List[EirResolvable[EirType]]): Boolean = {
@@ -44,7 +44,7 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   override def visitFieldAccessor(x: EirFieldAccessor): EirType = {
-    val candidates = findCandidates(x).toList
+    val candidates = findCandidates(x).map(visit(_)).toList
     for (candidate <- candidates) {
       candidate match {
         case EirLambdaType(_, args, retTy) =>
@@ -75,17 +75,18 @@ object CheckTypes extends EirVisitor[EirType] {
       case x : EirFieldAccessor =>
         args = visit(x.target) +: args
         findCandidates(x)
-      case x : EirSymbol[_] => visit(x.candidates)
-      case x => Seq(visit(x))
+      case x : EirSymbol[_] => x.candidates
+      case x => Seq(x)
     }
     // TODO save any found candidates for code generation phase
     for (candidate <- candidates) {
-      candidate match {
+      visit(candidate) match {
         case EirLambdaType(_, theirArgs, retTy) =>
           if (theirArgs.length == args.length) {
             if (theirArgs.zip(args).forall({
               case (theirs, ours) => ours.canAssignTo(visit(theirs))
             })) {
+              call.found = Some(candidate)
               return visit(retTy)
             }
           }
@@ -200,6 +201,7 @@ object CheckTypes extends EirVisitor[EirType] {
   override def visitLambdaExpression(node: EirLambdaExpression): EirType = {
     val retTy = visit(node.body)
     if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
+    node.found = Some(retTy)
     EirLambdaType(Some(node), node.args.map(visit), retTy)
   }
 

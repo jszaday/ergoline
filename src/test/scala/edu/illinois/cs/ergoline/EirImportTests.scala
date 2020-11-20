@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
-import edu.illinois.cs.ergoline.passes.{FullyResolve, CheckTypes}
+import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
 import edu.illinois.cs.ergoline.resolution.Modules
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
@@ -19,9 +19,8 @@ class EirImportTests extends FunSuite {
       |  println(z.toString);
       |}
       |""".stripMargin)
-    FullyResolve.visit(module)
+    Processes.onLoad(module)
     FullyResolve.verify(module) shouldBe true
-    CheckTypes.visit(module)
   }
 
   test("can resolve lambdas type-check") {
@@ -39,7 +38,7 @@ class EirImportTests extends FunSuite {
       |  }
       |}
       |""".stripMargin)
-    FullyResolve.visit(module)
-    CheckTypes.visit(module)
+    Processes.onLoad(module)
+//    println(GenerateCpp.visit(module))
   }
 }
