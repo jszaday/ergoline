@@ -97,21 +97,6 @@ object Find {
 
   import FindSyntax.RichPredicate
 
-//  def fromSymbol[T <: EirNamedNode : Manifest](symbol: EirSymbol[T]): Iterable[T] = {
-//    implicit val ctx: Option[EirNode] = Some(symbol)
-//    val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
-//    println(new SymbolSearch(symbol).results)
-//    symbol.qualifiedName match {
-//      case name :: Nil =>
-//        // global (unrestricted) search, may appear anywhere as long as its accessible
-//        Find.globally[T](scope, withName(name).and(symbol.canAccess(_)))
-//      case init :+ last =>
-//        // namespace (restricted) search, may only be a child of the specified namespace
-//        val qualified = Find.qualifications(scope, init).filter(symbol.canAccess(_))
-//        qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_))))
-//    }
-//  }
-
   def isTopLevel(x : EirNode): Boolean = x match {
     case _ : EirBlock => true
     case _ : EirLambdaExpression => true
@@ -126,9 +111,11 @@ object Find {
     val name = symbol.qualifiedName.last
     val ancestors = Find.ancestors(symbol).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
-    val predicate: (EirNode => Option[Boolean]) = {
+    val predicate: EirNode => Option[Boolean] = {
       case _ : EirBlock => None
-      case f : EirFunction => Option.when(matches(f))(true)
+      case x : EirFunction => Option.when(matches(x))(true)
+      case x : EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
+      case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
       case x => Some(matches(x))
     }
     ancestors.flatMap(ancestor =>
@@ -138,7 +125,7 @@ object Find {
           case _ => true
         }
       })
-    )// TODO .filter(symbol.canAccess(_)) <- i.e. check if protected/public/private member!
+    ).filter(symbol.canAccess(_))
   }
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
@@ -146,6 +133,7 @@ object Find {
       case name :: Nil => anywhereAccessible(symbol)
       case init :+ last =>
         // namespace (restricted) search, may only be a child of the specified namespace
+        // todo update to use anywhereAccessible as well?
         val qualified = Find.qualifications(symbol.scope.get, init).filter(symbol.canAccess(_))
         qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_)))).toSeq
     }

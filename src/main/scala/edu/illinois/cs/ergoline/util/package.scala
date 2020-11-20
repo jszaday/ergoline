@@ -85,22 +85,19 @@ package object util {
     }
   }
 
-  private def xCanAccessYViaZ(x: EirNode, y: EirNode, z: EirNode): Boolean = {
-    // TODO implement this
-    true
-  }
-
-  private def xImportsY(x : EirNode, y : EirNode): Boolean = {
-    true
-  }
+  private def xDescendantOfY(x : EirClassLike, y : EirClassLike) = (x == y)
 
   private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
-    if (y.isInstanceOf[EirEncloseExempt]) {
-      return xImportsY(x, y)
-    }
-    Find.commonAncestor(x, y).exists {
-      case z: EirBlock => (z.findPositionOf(x) > z.findPositionOf(y)) && xCanAccessYViaZ(x, y, z)
-      case z => xCanAccessYViaZ(x, y, z)
+    y match {
+      case m : EirMember if m.accessibility == EirAccessibility.Public => true
+      case m : EirMember =>
+        val xParentOption : Option[EirClassLike] = Find.parentOf[EirClassLike](x)
+        val yParent : EirClassLike = assertValid[EirClassLike](y.parent)
+        xParentOption.exists(xParent => {
+          if (m.accessibility == EirAccessibility.Private) xParent == yParent
+          else xDescendantOfY(xParent, yParent)
+        })
+      case _ => true
     }
   }
 
