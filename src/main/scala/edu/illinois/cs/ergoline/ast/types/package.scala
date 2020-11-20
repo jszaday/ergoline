@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.util
 package object types {
 
   trait EirType extends EirResolvable[EirType] {
-    override def resolve(): EirType = this
+    override def resolve(): List[EirType] = List(this)
     override def resolved: Boolean = true
   }
 
@@ -40,13 +40,15 @@ package object types {
     override def children: List[EirResolvable[EirType]] = List(base) ++ args
     private var _registered = false
 
-    override def resolve(): EirType = {
-      FullyResolve.visit(this)
-      _registered = base.resolve() match {
-        case x : EirClassLike => x.putSpecialization(this); true
-        case _ => false
+    override def resolve(): List[EirType] = {
+      if (_registered) {
+        FullyResolve.visit(this)
+        _registered = base.resolve() match {
+          case x : EirClassLike => x.putSpecialization(this); true
+          case _ => false
+        }
       }
-      this
+      List(this)
     }
 
     override def resolved: Boolean = _registered

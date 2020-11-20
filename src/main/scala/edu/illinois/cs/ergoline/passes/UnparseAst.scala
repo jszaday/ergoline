@@ -131,7 +131,9 @@ object UnparseAst extends EirVisitor[String] {
   override def visitReturn(node: EirReturn): String =
     s"return ${visit(node.expression)};"
 
-  override def visitSymbol(value: EirSymbol[_]): String = value.qualifiedName mkString "::"
+  override def visitSymbol[A <: EirNamedNode](value: EirSymbol[A]): String = {
+    value.qualifiedName mkString "::"
+  }
 
   override def visitLiteral(value: EirLiteral): String = value.value
 

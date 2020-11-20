@@ -131,12 +131,12 @@ case class EirFileSymbol(var parent : Option[EirNode], var file : File)
   extends EirScope with EirNamedNode with EirResolvable[EirNode] with EirEncloseExempt {
   var _resolved : Option[EirNode] = None
 
-  override def resolve(): EirNode = {
+  override def resolve(): List[EirNode] = {
     if (_resolved.isEmpty) {
       _resolved = parent.to[EirScope].map(Modules.load(file, _))
     }
     _resolved match {
-      case Some(x) => x
+      case Some(x) => List(x)
       case _ => throw new RuntimeException(s"could not resolve $file!")
     }
   }
@@ -261,10 +261,12 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
-  override def resolve(): EirNode = {
-    _resolved = Modules(if (wildcard) qualified.init else qualified, EirGlobalNamespace).to[EirScope]
+  override def resolve(): List[EirNode] = {
+    if (_resolved.isEmpty) {
+      _resolved = Modules(if (wildcard) qualified.init else qualified, EirGlobalNamespace).to[EirScope]
+    }
     _resolved match {
-      case Some(x) => x
+      case Some(x) => List(x)
       case _ => throw new RuntimeException("could not resolve import!")
     }
   }
@@ -408,12 +410,12 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
-  override def resolve(): T = {
+  override def resolve(): List[T] = {
     if (_resolved.isEmpty) {
       _resolved = Some(Find.fromSymbol(this).toList)
     }
     _resolved match {
-      case Some(x) if x.nonEmpty => x.head
+      case Some(x) if x.nonEmpty => x
       case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }

@@ -1,8 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+
 import scala.util.Properties.{lineSeparator => n}
 import UnparseAst.t
+import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateCpp extends EirVisitor[String] {
   var numTabs = 0
@@ -45,8 +47,8 @@ object GenerateCpp extends EirVisitor[String] {
 
   override def visitLiteral(x: EirLiteral): String = x.value
 
-  override def visitSymbol(x: EirSymbol[_]): String = {
-    generateName(x.resolve().asInstanceOf[EirNamedNode])
+  override def visitSymbol[A <: EirNamedNode](x: EirSymbol[A]): String = {
+    generateName(Find.singleReference(x).get)
   }
 
   override def visitBlock(x: EirBlock): String = {

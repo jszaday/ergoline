@@ -102,8 +102,8 @@ object CheckTypes extends EirVisitor[EirType] {
     globals.typeOfLiteral(value)
   }
 
-  override def visitSymbol(value: EirSymbol[_]): EirType = {
-    visit(value.resolve().asInstanceOf[EirNode])
+  override def visitSymbol[A <: EirNamedNode](value: EirSymbol[A]): EirType = {
+    visit(Find.singleReference(value).get)
   }
 
   override def visitBlock(node: EirBlock): EirType = {

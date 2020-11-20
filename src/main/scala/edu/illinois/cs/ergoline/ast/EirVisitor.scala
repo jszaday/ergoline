@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 trait EirVisitor[T] {
   def error(node : EirNode): T = {
@@ -38,7 +38,7 @@ trait EirVisitor[T] {
       case x: EirTernaryOperator => visitTernaryOperator(x)
       case x: EirFieldAccessor => visitFieldAccessor(x)
       case x: EirArrayReference => visitArrayReference(x)
-      case x: EirResolvable[_] if x.resolved => visit(x.resolve())
+      case x: EirResolvable[_] if x.resolved => visit(Find.singleReference(x).get)
       case x: EirUserNode => x.accept(this)
       case null => error(null)
       case x => error(x)
@@ -69,7 +69,7 @@ trait EirVisitor[T] {
 
   def visitLiteral(value: EirLiteral): T
 
-  def visitSymbol(value: EirSymbol[_]): T
+  def visitSymbol[A <: EirNamedNode](value: EirSymbol[A]): T
 
   def visitBlock(node: EirBlock): T
 

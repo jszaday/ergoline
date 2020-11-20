@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichIntOption
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
 
 import scala.collection.mutable
@@ -52,15 +53,17 @@ object Find {
     Find.child[T](node, predicate) ++ node.children.flatMap(within[T](_, predicate))
   }
 
+  def matchesPredicate[T](predicate: T => Boolean)(x : Any): Boolean = {
+    try {
+      predicate(x.asInstanceOf[T])
+    } catch {
+      case _ : ClassCastException => false
+    }
+  }
+
   // check only the immediate children of the node (do not descend)
   def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
-    node.children.filter(x => {
-      try {
-        predicate(x.asInstanceOf[T])
-      } catch {
-        case _ : ClassCastException => false
-      }
-    }).map(_.asInstanceOf[T])
+    node.children.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
   }
 
   def all[T <: EirNode : Manifest](node: EirNode): Iterable[T] = {
@@ -94,26 +97,63 @@ object Find {
 
   import FindSyntax.RichPredicate
 
-  def fromSymbol[T <: EirNamedNode : Manifest](symbol: EirSymbol[T]): Iterable[T] = {
-    implicit val ctx: Option[EirNode] = Some(symbol)
-    val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
+//  def fromSymbol[T <: EirNamedNode : Manifest](symbol: EirSymbol[T]): Iterable[T] = {
+//    implicit val ctx: Option[EirNode] = Some(symbol)
+//    val scope = symbol.scope.getOrElse(throw new RuntimeException(s"no scope for symbol $symbol"))
+//    println(new SymbolSearch(symbol).results)
+//    symbol.qualifiedName match {
+//      case name :: Nil =>
+//        // global (unrestricted) search, may appear anywhere as long as its accessible
+//        Find.globally[T](scope, withName(name).and(symbol.canAccess(_)))
+//      case init :+ last =>
+//        // namespace (restricted) search, may only be a child of the specified namespace
+//        val qualified = Find.qualifications(scope, init).filter(symbol.canAccess(_))
+//        qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_))))
+//    }
+//  }
+
+  def isTopLevel(x : EirNode): Boolean = x match {
+    case _ : EirBlock => true
+    case _ : EirLambdaExpression => true
+    case _ : EirFunction => true
+    case _ : EirClassLike => true
+    case _ : EirNamespace => true
+    case _ : EirImport => true
+    case _ => false
+  }
+
+  def anywhereAccessible[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
+    val name = symbol.qualifiedName.last
+    val ancestors = Find.ancestors(symbol).filter(isTopLevel)
+    val matches = matchesPredicate(withName(name))(_)
+    val predicate: (EirNode => Option[Boolean]) = {
+      case _ : EirBlock => None
+      case f : EirFunction => Option.when(matches(f))(true)
+      case x => Some(matches(x))
+    }
+    ancestors.flatMap(ancestor =>
+      Find.descendant(ancestor, predicate).map(_.asInstanceOf[T]).filter((x : T) => {
+        ancestor match {
+          case block: EirBlock => block.findPositionOf(symbol) > block.findPositionOf(x)
+          case _ => true
+        }
+      })
+    )// TODO .filter(symbol.canAccess(_)) <- i.e. check if protected/public/private member!
+  }
+
+  def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case name :: Nil =>
-        // global (unrestricted) search, may appear anywhere as long as its accessible
-        Find.globally[T](scope, withName(name).and(symbol.canAccess(_)))
+      case name :: Nil => anywhereAccessible(symbol)
       case init :+ last =>
         // namespace (restricted) search, may only be a child of the specified namespace
-        val qualified = Find.qualifications(scope, init).filter(symbol.canAccess(_))
-        qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_))))
+        val qualified = Find.qualifications(symbol.scope.get, init).filter(symbol.canAccess(_))
+        qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_)))).toSeq
     }
   }
 
-  def typeOf(node: EirNode): EirType = {
-    node match {
-      case x: EirType => x
-      case x: EirExpressionNode => x.eirType.resolve()
-      case _ => throw new RuntimeException(s"$node does not have a type!")
-    }
+  def singleReference[T <: EirNode](resolvable: EirResolvable[T]): Option[T] = {
+    val found = resolvable.resolve()
+    Option.when(found.length == 1)(found.head)
   }
 
   object FindSyntax {
