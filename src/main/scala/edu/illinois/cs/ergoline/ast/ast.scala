@@ -46,6 +46,10 @@ abstract class EirNode {
   }
 }
 
+abstract class EirUserNode extends EirNode {
+  def accept[T](visitor: EirVisitor[T]): T
+}
+
 trait EirEncloseExempt extends EirNode
 
 trait EirScope extends EirNode {

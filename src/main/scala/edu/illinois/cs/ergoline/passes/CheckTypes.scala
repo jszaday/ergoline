@@ -27,9 +27,7 @@ object CheckTypes extends EirVisitor[EirType] {
 
   final case class TypeCheckException(message: String) extends Exception(message)
 
-  import TypeCheckSyntax.RichEirType;
-
-  override def visitGlobalNamespace(): EirType = ???
+  import TypeCheckSyntax.RichEirType
 
   override def visitArrayReference(x: EirArrayReference): EirType = ???
 

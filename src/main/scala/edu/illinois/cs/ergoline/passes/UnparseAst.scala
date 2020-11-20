@@ -177,8 +177,4 @@ object UnparseAst extends EirVisitor[String] {
   override def visitArrayReference(x: EirArrayReference): String = {
     s"${visit(x.target)}[${x.args.map(visit) mkString ", "}]"
   }
-
-  override def visitGlobalNamespace(): String = {
-    visitStatements(EirGlobalNamespace.children).trim + n
-  }
 }

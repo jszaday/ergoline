@@ -4,6 +4,10 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 trait EirVisitor[T] {
+  def error(node : EirNode): T = {
+    throw new RuntimeException(s"could not visit item of unknown type: ${if (node == null) node else node.getClass.getSimpleName}")
+  }
+
   def visit(it: Iterable[EirNode]): Iterable[T] = it.map(visit)
 
   def visit(node: EirNode): T = {
@@ -34,16 +38,16 @@ trait EirVisitor[T] {
       case x: EirTernaryOperator => visitTernaryOperator(x)
       case x: EirFieldAccessor => visitFieldAccessor(x)
       case x: EirArrayReference => visitArrayReference(x)
-      case EirGlobalNamespace => visitGlobalNamespace()
-      case null => throw new RuntimeException("unexpected null?")
-      case x : EirResolvable[_] if x.resolved => visit(x.resolve())
-      case x => throw new RuntimeException(s"could not match ${x.getClass.getName}!")
+      case x: EirResolvable[_] if x.resolved => visit(x.resolve())
+      case x: EirUserNode => x.accept(this)
+      case null => error(null)
+      case x => error(x)
     }
   }
 
 //  def visitDefault(x: EirNode): T
 
-  def visitGlobalNamespace(): T
+//  def visitGlobalNamespace(): T
 
   def visitArrayReference(x: EirArrayReference): T
 
