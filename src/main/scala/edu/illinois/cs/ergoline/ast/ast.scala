@@ -51,13 +51,11 @@ abstract class EirUserNode extends EirNode {
 }
 
 trait EirEncloseExempt extends EirNode
-
-trait EirScope extends EirNode {
-  var lastSearch: Int = -1
-}
+trait EirScope extends EirNode
 
 abstract class EirExpressionNode extends EirNode {
-  def eirType: EirResolvable[EirType]
+  var disambiguation: Option[EirNode] = None
+  var foundType: Option[EirType] = None
 }
 
 trait EirNamedNode extends EirNode {
@@ -284,8 +282,6 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = List(lhs, rhs)
 
-  override def eirType: EirResolvable[EirType] = ???
-
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     if (lhs == oldNode) util.applyOrFalse[EirExpressionNode](lhs = _, newNode)
     else if (rhs == oldNode) util.applyOrFalse[EirExpressionNode](rhs = _, newNode)
@@ -296,8 +292,6 @@ case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressi
 case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var rhs: EirExpressionNode)
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = List(rhs)
-
-  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (oldNode == rhs) && util.applyOrFalse[EirExpressionNode](rhs = _, newNode)
@@ -326,8 +320,6 @@ case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNod
 case class EirTupleExpression(var parent: Option[EirNode], var expressions: List[EirExpressionNode]) extends EirExpressionNode {
   override def children: Iterable[EirNode] = expressions
 
-  override def eirType: EirResolvable[EirType] = ???
-
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     util.updateWithin(expressions, oldNode, newNode).map(expressions = _).isDefined
   }
@@ -347,11 +339,7 @@ object EirTupleExpression {
 
 case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFunctionArgument], var body: EirBlock)
   extends EirExpressionNode {
-  var found : Option[EirType] = None
-
   override def children: Iterable[EirNode] = args ++ List(body)
-
-  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
@@ -372,8 +360,6 @@ case class EirTernaryOperator(var parent: Option[EirNode], var test: EirExpressi
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = List(test, ifTrue, ifFalse)
 
-  override def eirType: EirResolvable[EirType] = ??? // Find.unionType(ifTrue.eirType, ifFalse.eirType)
-
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     ((test == oldNode) && util.applyOrFalse[EirExpressionNode](test = _, newNode)) ||
       ((ifTrue == oldNode) && util.applyOrFalse[EirExpressionNode](x => ifTrue = x, newNode)) ||
@@ -384,8 +370,6 @@ case class EirTernaryOperator(var parent: Option[EirNode], var test: EirExpressi
 case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.Value, var value: String)
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = Nil
-
-  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 }
@@ -405,8 +389,6 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
   private var _resolved : Option[List[T]] = None
 
   override def children: Iterable[EirNode] = Nil
-
-  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
@@ -439,20 +421,15 @@ trait EirPostfixExpression extends EirExpressionNode {
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
   extends EirPostfixExpression {
-  var found : Option[EirNode] = None
-  override def eirType: EirResolvable[EirType] = ???
 }
 
 case class EirArrayReference(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
   extends EirPostfixExpression {
-  override def eirType: EirResolvable[EirType] = ???
 }
 
 case class EirFieldAccessor(var parent: Option[EirNode], var target: EirExpressionNode, var field: String)
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = Seq(target)
-
-  override def eirType: EirResolvable[EirType] = ???
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (target == oldNode) && util.applyOrFalse[EirExpressionNode](target = _, newNode)
@@ -463,8 +440,6 @@ case class EirTypeCast(var parent: Option[EirNode], var to: EirResolvable[EirTyp
   extends EirExpressionNode {
   override def children: Iterable[EirNode] = Seq(to, value)
 
-  override def eirType: EirResolvable[EirType] = to
-
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     ((to == oldNode) && util.applyOrFalse[EirResolvable[EirType]](to = _, newNode)) ||
       ((value == oldNode) && util.applyOrFalse[EirExpressionNode](x => value = x, newNode))
@@ -473,6 +448,7 @@ case class EirTypeCast(var parent: Option[EirNode], var to: EirResolvable[EirTyp
 
 trait EirForLoopHeader {
   def children: Iterable[EirNode]
+
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
 }
 

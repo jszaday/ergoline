@@ -144,6 +144,11 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
+  def candidatesFor(x : EirFieldAccessor): List[EirMember] = {
+    // TODO also search parent classes (ignoring overrides, ofc) :)
+    x.target.foundType.map(child[EirMember](_, withName(x.field).and(x.canAccess(_))).toList).getOrElse(Nil)
+  }
+
   object FindSyntax {
 
     implicit class RichPredicate[T](predicate: T => Boolean) {

@@ -29,27 +29,37 @@ object CheckTypes extends EirVisitor[EirType] {
 
   import TypeCheckSyntax.RichEirType
 
-  override def visitArrayReference(x: EirArrayReference): EirType = ???
-
-  def findCandidates(x: EirFieldAccessor): Iterable[EirMember] = {
-    val lhs = visit(x.target)
-    if (!lhs.isInstanceOf[EirClassLike]) {
-      throw TypeCheckException(s"expected $lhs to be a class-like type in $x")
+  override def visit(node: EirNode): EirType = {
+    node match {
+      case x : EirExpressionNode => {
+        if (x.foundType.isEmpty) x.foundType = Option(super.visit(x))
+        x.foundType.getOrElse(throw TypeCheckException(s"cannot find type of $x"))
+      }
+      case x => super.visit(x)
     }
-    lhs.findChild[EirMember](withName(x.field))
   }
+
+  override def visitArrayReference(x: EirArrayReference): EirType = ???
 
   def autoApply(target : EirExpressionNode, args : List[EirResolvable[EirType]]): Boolean = {
     (args.length == 1) && visit(target).canAssignTo(visit(args.head))
   }
 
   override def visitFieldAccessor(x: EirFieldAccessor): EirType = {
-    val candidates = findCandidates(x).map(visit(_)).toList
-    for (candidate <- candidates) {
-      candidate match {
+    // visit the target to find its class
+    visit(x.target)
+    // iterate through found candidates
+    for (candidate <- Find.candidatesFor(x)) {
+      val ty = visit(candidate)
+      ty match {
         case EirLambdaType(_, args, retTy) =>
-          if (autoApply(x.target, args)) return visit(retTy)
-        case _ => return visit(candidate)
+          if (autoApply(x.target, args)) {
+            x.disambiguation = Some(candidate)
+            return visit(retTy)
+          }
+        case _ =>
+          x.disambiguation = Some(candidate)
+          return ty
       }
     }
     throw TypeCheckException(s"unable to find unique candidate for $x")
@@ -74,7 +84,7 @@ object CheckTypes extends EirVisitor[EirType] {
     val candidates = call.target match {
       case x : EirFieldAccessor =>
         args = visit(x.target) +: args
-        findCandidates(x)
+        Find.candidatesFor(x)
       case x : EirSymbol[_] => x.candidates
       case x => Seq(x)
     }
@@ -86,7 +96,7 @@ object CheckTypes extends EirVisitor[EirType] {
             if (theirArgs.zip(args).forall({
               case (theirs, ours) => ours.canAssignTo(visit(theirs))
             })) {
-              call.found = Some(candidate)
+              call.target.disambiguation = Some(candidate)
               return visit(retTy)
             }
           }
@@ -103,7 +113,8 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   override def visitSymbol[A <: EirNamedNode](value: EirSymbol[A]): EirType = {
-    visit(Find.singleReference(value).get)
+    value.disambiguation = Find.singleReference(value)
+    visit(value.disambiguation.get)
   }
 
   override def visitBlock(node: EirBlock): EirType = {
@@ -187,6 +198,7 @@ object CheckTypes extends EirVisitor[EirType] {
     val func = globals.operatorToFunction(node.op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
     val f = EirFunctionCall(Some(node), null, List(node.rhs))
     f.target = EirFieldAccessor(Some(f), node.lhs, func)
+    node.disambiguation = Some(f)
     visit(f)
   }
 
@@ -201,7 +213,6 @@ object CheckTypes extends EirVisitor[EirType] {
   override def visitLambdaExpression(node: EirLambdaExpression): EirType = {
     val retTy = visit(node.body)
     if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
-    node.found = Some(retTy)
     EirLambdaType(Some(node), node.args.map(visit), retTy)
   }
 

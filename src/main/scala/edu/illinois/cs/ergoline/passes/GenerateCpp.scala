@@ -39,7 +39,7 @@ object GenerateCpp extends EirVisitor[String] {
   }
 
   override def visitFunctionCall(x: EirFunctionCall): String = {
-    val target = handleOption(x.found).getOrElse(visit(x.target))
+    val target = handleOption(x.target.disambiguation).getOrElse(visit(x.target))
     s"($target(${x.args.map(visit) mkString ", "}))"
   }
 
@@ -134,8 +134,8 @@ object GenerateCpp extends EirVisitor[String] {
   }
 
   override def visitLambdaExpression(x: EirLambdaExpression): String = {
-    val found = handleOption(x.found).getOrElse("")
-    s"[=] (${visit(x.args) mkString ", "}) -> $found ${visit(x.body)}"
+    val retTy = handleOption(x.foundType).getOrElse("")
+    s"[=] (${visit(x.args) mkString ", "}) -> $retTy ${visit(x.body)}"
   }
 
   override def visitReturn(x: EirReturn): String = {
