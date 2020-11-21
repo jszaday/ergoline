@@ -67,6 +67,14 @@ package object types {
       util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
         ((base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode))
     }
+
+    override def equals(any: Any): Boolean = {
+      any match {
+        case EirTemplatedType(_, theirBase, theirArgs) =>
+          (base == theirBase) && (theirArgs == args)
+        case _ => false
+      }
+    }
   }
 
   case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String]) extends EirType {

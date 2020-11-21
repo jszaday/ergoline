@@ -148,6 +148,7 @@ object Find {
 
   def candidatesFor(x : EirFieldAccessor): List[EirMember] = {
     // TODO also search parent classes (ignoring overrides, ofc) :)
+    // TODO handle templated types :p
     x.target.foundType.map(child[EirMember](_, withName(x.field).and(x.canAccess(_))).toList).getOrElse(Nil)
   }
 

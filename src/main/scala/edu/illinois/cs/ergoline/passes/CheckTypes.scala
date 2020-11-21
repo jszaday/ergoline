@@ -74,8 +74,11 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   override def visitTemplatedType(x: types.EirTemplatedType): EirType = {
-    specializations.push(x.args.map(visit))
+    x.args = x.args.map(visit)
+    val prevSize = specializations.length
+    specializations.push(x.args.map(_.asInstanceOf[EirType]))
     x.base = visit(x.base)
+    if (specializations.length != prevSize) throw TypeCheckException("unexpected behavior for $x")
     x
   }
 
@@ -87,7 +90,7 @@ object CheckTypes extends EirVisitor[EirType] {
     val (ty, ns) = try {
       (visit(candidate), false)
     } catch {
-      case MissingSpecializationException(_, node) => (node, true)
+      case MissingSpecializationException(_, node) if specialization.nonEmpty => (node, true)
     }
     ty match {
       case EirLambdaType(_, theirArgs, retTy) =>
@@ -115,7 +118,7 @@ object CheckTypes extends EirVisitor[EirType] {
     }
     // TODO save any found candidates for code generation phase
     for (candidate <- candidates) {
-      checkCandidate(candidate, args, specialization) match {
+      checkCandidate(candidate, specialization, args) match {
         case Some((node, ty)) =>
           call.target.disambiguation = Some(node)
           return ty
