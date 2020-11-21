@@ -48,19 +48,19 @@ object CheckTypes extends EirVisitor[EirType] {
   override def visitFieldAccessor(x: EirFieldAccessor): EirType = {
     // visit the target to find its class
     visit(x.target)
+    val (subst : Option[EirSubstitution], candidates : List[EirMember]) =
+      Find.candidatesFor(x)
+    if (subst.isDefined) substitutions.push(subst.get)
     // iterate through found candidates
-    for (candidate <- Find.candidatesFor(x)) {
+    for (candidate <- candidates) {
       val ty = visit(candidate)
-      ty match {
-        case EirLambdaType(_, args, retTy) =>
-          if (autoApply(x.target, args)) {
-            x.disambiguation = Some(candidate)
-            return visit(retTy)
-          }
-        case _ =>
-          x.disambiguation = Some(candidate)
-          return ty
+      x.disambiguation = Some(candidate)
+      val retTy = ty match {
+        case EirLambdaType(_, args, retTy) if autoApply(x.target, args) => visit(retTy)
+        case _ => ty
       }
+      if (subst.isDefined) substitutions.pop()
+      return retTy
     }
     throw TypeCheckException(s"unable to find unique candidate for $x")
   }
@@ -112,7 +112,7 @@ object CheckTypes extends EirVisitor[EirType] {
     val candidates = call.target match {
       case x : EirFieldAccessor =>
         args = visit(x.target) +: args
-        Find.candidatesFor(x)
+        Find.candidatesFor(x)._2
       case x : EirSymbol[_] => x.candidates
       case x => Seq(x)
     }

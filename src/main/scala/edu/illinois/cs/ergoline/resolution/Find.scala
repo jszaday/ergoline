@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichIntOption
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.assertValid
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -146,10 +147,18 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
-  def candidatesFor(x : EirFieldAccessor): List[EirMember] = {
+  def candidatesFor(x : EirFieldAccessor): (Option[EirSubstitution], List[EirMember]) = {
     // TODO also search parent classes (ignoring overrides, ofc) :)
     // TODO handle templated types :p
-    x.target.foundType.map(child[EirMember](_, withName(x.field).and(x.canAccess(_))).toList).getOrElse(Nil)
+    val (substitution, c) = x.target.foundType match {
+      case Some(c : EirClassLike) => (None, c)
+      case Some(t : EirTemplatedType) =>
+        val c = assertValid[EirClassLike](t.base)
+        (Some(EirSubstitution(c.templateArgs, t.args.map(_.asInstanceOf[EirType]))), c)
+      case _ => throw new RuntimeException("unsure how to find members for $x")
+    }
+    val candidates = child[EirMember](c, withName(x.field).and(x.canAccess(_))).toList
+    (substitution, candidates)
   }
 
   def callable(x : EirClassLike): List[EirMember] = {

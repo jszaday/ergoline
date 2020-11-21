@@ -19,13 +19,18 @@ object GenerateCpp extends EirVisitor[String] {
 
   override def visitArrayReference(x: EirArrayReference): String = ???
 
-  override def visitFieldAccessor(x: EirFieldAccessor): String = ???
+  override def visitFieldAccessor(x: EirFieldAccessor): String = {
+    // TODO handle self applications :3
+    s"${x.target}.${x.field}"
+  }
 
   override def visitTernaryOperator(x: EirTernaryOperator): String = ???
 
   override def visitLambdaType(x: types.EirLambdaType): String = "auto"
 
-  override def visitTemplatedType(x: types.EirTemplatedType): String = ???
+  override def visitTemplatedType(x: types.EirTemplatedType): String = {
+    s"${generateName(x.base)}<${x.args.map(generateName) mkString ", "}>"
+  }
 
   override def visitProxyType(x: types.EirProxyType): String = ???
 
@@ -92,7 +97,8 @@ object GenerateCpp extends EirVisitor[String] {
   }
 
   def dropSelf(x : EirFunction): List[EirFunctionArgument] = {
-    x.parent match {
+    if (x.functionArgs.isEmpty) x.functionArgs
+    else x.parent match {
       case Some(_ : EirMember) if x.functionArgs.head.name == "self" =>  x.functionArgs.tail
       case _ => x.functionArgs
     }
@@ -111,6 +117,13 @@ object GenerateCpp extends EirVisitor[String] {
 
   override def visitBinaryExpression(x: EirBinaryExpression): String = {
     s"(${visit(x.lhs)} ${x.op} ${visit(x.rhs)})"
+  }
+
+  def generateName(x : EirNode): String = {
+    x match {
+      case x : EirNamedNode => generateName(x)
+      case _ => throw new RuntimeException(s"name of $x is unknown")
+    }
   }
 
   def generateName(x : EirNamedNode): String = {
