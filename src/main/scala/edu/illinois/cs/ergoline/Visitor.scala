@@ -106,7 +106,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {
     enter(EirClass(parent, Nil, ctx.Identifier().getText, Nil, None, Nil), (c: EirClass) => {
-      c.members ++= ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
+      Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
+      c.templateArgs = visitTemplateDecl(ctx.templateDecl())
+      c.members = ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
     })
   }
 
@@ -229,21 +231,25 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         f.args = visitExpressionList(ctx.arrArgs)
       })
     } else if (ctx.LParen() != null) {
-      enter(EirFunctionCall(parent, null, null), (f: EirFunctionCall) => {
+      enter(EirFunctionCall(parent, null, null, null), (f: EirFunctionCall) => {
         f.target = visitPostfixExpression(ctx.postfixExpression())
         f.args = Option(ctx.fnArgs).map(visitExpressionList).getOrElse(Nil)
+        f.specialization = visitSpecialization(ctx.specialization())
       })
     } else {
       assertValid[EirExpressionNode](visitPrimaryExpression(ctx.primaryExpression()))
     }
   }
 
+  override def visitSpecialization(ctx: SpecializationContext): List[EirResolvable[EirType]] =
+    Option(ctx).map(_.typeList).map(visitTypeList).getOrElse(Nil)
+
   override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] =
     visitTypeList(ctx.typeList()).toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
-    val templates = visitTypeList(ctx.typeList())
+    val templates = visitSpecialization(ctx.specialization())
     if (templates.nonEmpty) {
       val templatedType = EirTemplatedType(parent, base, templates)
       base.parent = Some(templatedType)
@@ -346,9 +352,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
-  override def visitInheritanceDecl(ctx: InheritanceDeclContext): Any = {
+  override def visitInheritanceDecl(ctx: InheritanceDeclContext): Unit = {
     val base: EirClassLike = parent.to[EirClassLike].get
-    val children: Iterable[ParseTree] = ctx.children.asScala
+    val children: Iterable[ParseTree] = Option(ctx.children.asScala).getOrElse(Nil)
     for (List(kwd, ty) <- children.sliding(2)) {
       kwd.getText match {
         case "extends" => base.extendsThis = Some(visitType(ty.asInstanceOf[TypeContext]))

@@ -1,12 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirSubstitution, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
-import edu.illinois.cs.ergoline.util.assertValid
+
+import scala.collection.mutable
 
 object CheckTypes extends EirVisitor[EirType] {
 
@@ -26,6 +25,7 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   final case class TypeCheckException(message: String) extends Exception(message)
+  final case class MissingSpecializationException(message: String, node : EirClassLike) extends Exception(message)
 
   import TypeCheckSyntax.RichEirType
 
@@ -73,14 +73,39 @@ object CheckTypes extends EirVisitor[EirType] {
     x
   }
 
-  override def visitTemplatedType(x: types.EirTemplatedType): EirType = ???
+  override def visitTemplatedType(x: types.EirTemplatedType): EirType = {
+    specializations.push(x.args.map(visit))
+    x.base = visit(x.base)
+    x
+  }
 
   override def visitProxyType(x: types.EirProxyType): EirType = ???
 
   override def visitImport(eirImport: EirImport): EirType = null
 
+  def checkCandidate(candidate: EirNode, specialization: List[EirType], args : List[EirType]): Option[(EirNode, EirType)] = {
+    val (ty, ns) = try {
+      (visit(candidate), false)
+    } catch {
+      case MissingSpecializationException(_, node) => (node, true)
+    }
+    ty match {
+      case EirLambdaType(_, theirArgs, retTy) =>
+        Option.when((theirArgs.length == args.length) && theirArgs.zip(args).forall({
+          case (theirs, ours) => ours.canAssignTo(visit(theirs))
+        }))((candidate, visit(retTy)))
+      case x: EirClassLike =>
+        if (ns) substitutions.push(EirSubstitution(x.templateArgs, specialization))
+        val result = Find.callable(x).map(checkCandidate(_, args, specialization)).find(_.isDefined).flatten
+        if (ns) substitutions.pop()
+        result
+      case x => throw TypeCheckException(s"unsure how to apply $x")
+    }
+  }
+
   override def visitFunctionCall(call: EirFunctionCall): EirType = {
-    var args = call.args.map(visit(_))
+    var args = call.args.map(visit)
+    val specialization = call.specialization.map(visit)
     val candidates = call.target match {
       case x : EirFieldAccessor =>
         args = visit(x.target) +: args
@@ -90,17 +115,11 @@ object CheckTypes extends EirVisitor[EirType] {
     }
     // TODO save any found candidates for code generation phase
     for (candidate <- candidates) {
-      visit(candidate) match {
-        case EirLambdaType(_, theirArgs, retTy) =>
-          if (theirArgs.length == args.length) {
-            if (theirArgs.zip(args).forall({
-              case (theirs, ours) => ours.canAssignTo(visit(theirs))
-            })) {
-              call.target.disambiguation = Some(candidate)
-              return visit(retTy)
-            }
-          }
-        case x => throw TypeCheckException(s"unsure how to apply $x")
+      checkCandidate(candidate, args, specialization) match {
+        case Some((node, ty)) =>
+          call.target.disambiguation = Some(node)
+          return ty
+        case _ =>
       }
     }
     throw TypeCheckException(s"could not find suitable candidate for call $call")
@@ -113,8 +132,13 @@ object CheckTypes extends EirVisitor[EirType] {
   }
 
   override def visitSymbol[A <: EirNamedNode](value: EirSymbol[A]): EirType = {
-    value.disambiguation = Find.singleReference(value)
-    visit(value.disambiguation.get)
+    if (value.disambiguation.isEmpty) {
+      value.disambiguation = Find.singleReference(value)
+    }
+    value.disambiguation match {
+      case Some(node) => visit(node)
+      case None => throw TypeCheckException(s"could not find type of $value")
+    }
   }
 
   override def visitBlock(node: EirBlock): EirType = {
@@ -146,20 +170,30 @@ object CheckTypes extends EirVisitor[EirType] {
     lval
   }
 
-  override def visitTemplateArgument(node: EirTemplateArgument): EirType = ???
+  override def visitTemplateArgument(node: EirTemplateArgument): EirType = {
+    substitutions.map(x => x(node)).find(_.isDefined).flatten.getOrElse({
+      throw TypeCheckException(s"could not find type of $node")
+    })
+  }
 
+  var specializations: mutable.Stack[List[EirType]] = mutable.Stack()
+  var substitutions: mutable.Stack[EirSubstitution] = mutable.Stack()
   var classCache: List[EirClass] = Nil
 
   override def visitClass(node: EirClass): EirType = {
-    if (node.templateArgs.isEmpty) {
-      if (!classCache.contains(node)) {
-        classCache +:= node
-        visit(node.members)
+    if (node.templateArgs.nonEmpty) {
+      // TODO a mechanism to verify these specialization are intended for this class is necessary
+      if (specializations.isEmpty) {
+        throw MissingSpecializationException(s"no specialization for $node", node)
       }
-      node
-    } else {
-      throw TypeCheckException("no can halp u")
+      substitutions.push(EirSubstitution(node.templateArgs, visit(specializations.pop()).toList))
     }
+    if (!classCache.contains(node)) {
+      classCache +:= node
+      visit(node.members)
+    }
+    if (node.templateArgs.nonEmpty) substitutions.pop()
+    node
   }
 
   override def visitTrait(node: EirTrait): EirType = ???
@@ -196,7 +230,7 @@ object CheckTypes extends EirVisitor[EirType] {
 
   override def visitBinaryExpression(node: EirBinaryExpression): EirType = {
     val func = globals.operatorToFunction(node.op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
-    val f = EirFunctionCall(Some(node), null, List(node.rhs))
+    val f = EirFunctionCall(Some(node), null, List(node.rhs), Nil)
     f.target = EirFieldAccessor(Some(f), node.lhs, func)
     node.disambiguation = Some(f)
     visit(f)

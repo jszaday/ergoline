@@ -397,7 +397,10 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
       _resolved = Some(Find.fromSymbol(this).toList)
     }
     _resolved match {
-      case Some(x) if x.nonEmpty => x
+      case Some(x) if x.nonEmpty =>
+        if (x.length != x.distinct.length) {
+          throw new RuntimeException(s"repeated elements detected when attempting to resolve $this")
+        } else x
       case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }
@@ -419,8 +422,10 @@ trait EirPostfixExpression extends EirExpressionNode {
   }
 }
 
-case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
+case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode,
+                           var args: List[EirExpressionNode], var specialization: List[EirResolvable[EirType]])
   extends EirPostfixExpression {
+  override def children: Iterable[EirNode] = super.children ++ specialization
 }
 
 case class EirArrayReference(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])

@@ -115,7 +115,9 @@ object Find {
       case _ : EirBlock => None
       case x : EirFunction => Option.when(matches(x))(true)
       case x : EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
+      case x : EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
+      case x if !isTopLevel(x) => Option.when(matches(x))(true)
       case x => Some(matches(x))
     }
     ancestors.flatMap(ancestor =>
@@ -130,7 +132,7 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case name :: Nil => anywhereAccessible(symbol)
+      case _ :: Nil => anywhereAccessible(symbol)
       case init :+ last =>
         // namespace (restricted) search, may only be a child of the specified namespace
         // todo update to use anywhereAccessible as well?
@@ -147,6 +149,11 @@ object Find {
   def candidatesFor(x : EirFieldAccessor): List[EirMember] = {
     // TODO also search parent classes (ignoring overrides, ofc) :)
     x.target.foundType.map(child[EirMember](_, withName(x.field).and(x.canAccess(_))).toList).getOrElse(Nil)
+  }
+
+  def callable(x : EirClassLike): List[EirMember] = {
+    // TODO may need to check if first argument is self or not?
+    child[EirMember](x, withName("apply").and(x.canAccess(_))).toList
   }
 
   object FindSyntax {

@@ -160,12 +160,19 @@ object UnparseAst extends EirVisitor[String] {
     visit(x.base) + "@" + x.collective.getOrElse("")
   }
 
+  def superficial(node : EirNode): String = {
+    node match {
+      case x : EirNamedNode => x.name
+      case _ => visit(node)
+    }
+  }
+
   override def visitTemplatedType(x: EirTemplatedType): String = {
-    s"${visit(x.base)}<${x.args.map(visit) mkString ", "}>"
+    s"${superficial(x.base)}<${x.args.map(superficial) mkString ", "}>"
   }
 
   override def visitLambdaType(x: EirLambdaType): String = {
-    s"((${x.from.map(visit) mkString ", "}) => ${visit(x.to)})"
+    s"((${x.from.map(superficial) mkString ", "}) => ${superficial(x.to)})"
   }
 
   override def visitTernaryOperator(x: EirTernaryOperator): String = {

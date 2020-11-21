@@ -89,6 +89,7 @@ package object util {
 
   private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
     y match {
+      case _ : EirTemplateArgument => Find.commonAncestor(x, y) == y.parent
       case m : EirMember if m.accessibility == EirAccessibility.Public => true
       case m : EirMember =>
         val xParentOption : Option[EirClassLike] = Find.parentOf[EirClassLike](x)

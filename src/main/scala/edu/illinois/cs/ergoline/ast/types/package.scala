@@ -11,6 +11,16 @@ package object types {
     override def resolved: Boolean = true
   }
 
+  case class EirSubstitution(args : List[EirTemplateArgument], types : List[EirType]) {
+    if (args.length != types.length) {
+      throw new RuntimeException(s"cannot use $args as a specialization for $types")
+    }
+    // TODO, check upper and lower type bounds :)
+    val substitution: Map[EirTemplateArgument, EirType] = args.zip(types).toMap
+    def apply(argument: EirTemplateArgument): Option[EirType] =
+      Option.when(substitution.contains(argument))(substitution(argument))
+  }
+
   type EirNamedType = EirType with EirNamedNode
 
   case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {
