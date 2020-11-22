@@ -11,16 +11,6 @@ package object types {
     override def resolved: Boolean = true
   }
 
-  case class EirSubstitution(args : List[EirTemplateArgument], types : List[EirType]) {
-    if (args.length != types.length) {
-      throw new RuntimeException(s"cannot use $args as a specialization for $types")
-    }
-    // TODO, check upper and lower type bounds :)
-    val substitution: Map[EirTemplateArgument, EirType] = args.zip(types).toMap
-    def apply(argument: EirTemplateArgument): Option[EirType] =
-      Option.when(substitution.contains(argument))(substitution(argument))
-  }
-
   type EirNamedType = EirType with EirNamedNode
 
   case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {
@@ -46,22 +36,13 @@ package object types {
     }
   }
 
-  case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]]) extends EirType {
+  case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]])
+    extends EirType with EirSpecialization {
+
     override def children: List[EirResolvable[EirType]] = List(base) ++ args
-    private var _registered = false
 
-    override def resolve(): List[EirType] = {
-      if (_registered) {
-        FullyResolve.visit(this)
-        _registered = base.resolve() match {
-          case x : EirClassLike => x.putSpecialization(this); true
-          case _ => false
-        }
-      }
-      List(this)
-    }
-
-    override def resolved: Boolean = _registered
+    // TODO upon resolution TT's should register with their base class
+    //      so the compiler knows which specializations to forward-declare!
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
@@ -75,6 +56,8 @@ package object types {
         case _ => false
       }
     }
+
+    override def specialization: List[EirResolvable[EirType]] = args
   }
 
   case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String]) extends EirType {

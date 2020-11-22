@@ -1,15 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirImport, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirFunctionCall, EirImport, EirNode, EirSymbol}
 import edu.illinois.cs.ergoline.passes.FullyResolve.visit
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 object FullyResolve {
 
   def seekImports(node : EirNode): Unit = {
     node.children.foreach({
-      case x: EirImport if !x.resolved =>
-        x.resolve()
+      case x: EirImport if !x.resolved => x.resolve()
       case child => seekImports(child)
     })
   }
@@ -26,8 +25,7 @@ object FullyResolve {
 
   def seekOthers(node : EirNode): Unit = {
     node.children.foreach({
-      case x: EirResolvable[_] if !x.resolved =>
-        fullyResolve(x)
+      case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
       case child => seekOthers(child)
     })
   }

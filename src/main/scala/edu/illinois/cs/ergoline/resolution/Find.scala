@@ -128,7 +128,10 @@ object Find {
           case _ => true
         }
       })
-    ).filter(symbol.canAccess(_))
+    ).filter(symbol.canAccess(_)).map({
+      case fs : EirFileSymbol => fs.resolve().head.asInstanceOf[T]
+      case x => x
+    })
   }
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
@@ -147,19 +150,19 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
-  def candidatesFor(x : EirFieldAccessor): (Option[EirSubstitution], List[EirMember]) = {
-    // TODO also search parent classes (ignoring overrides, ofc) :)
-    // TODO handle templated types :p
-    val (substitution, c) = x.target.foundType match {
-      case Some(c : EirClassLike) => (None, c)
-      case Some(t : EirTemplatedType) =>
-        val c = assertValid[EirClassLike](t.base)
-        (Some(EirSubstitution(c.templateArgs, t.args.map(_.asInstanceOf[EirType]))), c)
-      case _ => throw new RuntimeException("unsure how to find members for $x")
-    }
-    val candidates = child[EirMember](c, withName(x.field).and(x.canAccess(_))).toList
-    (substitution, candidates)
-  }
+//  def accessibleMem(x : ): List[EirMember] = {
+//    // TODO also search parent classes (ignoring overrides, ofc) :)
+//    // TODO handle templated types :p
+//    x.target.foundType match {
+//      case Some(c : EirClassLike) => child[EirMember](c, withName(x.field).and(x.canAccess(_))).toList
+//      case Some(t : EirTemplatedType) =>
+//        val c = assertValid[EirClassLike](t.base)
+//        (Some(EirSubstitution(c.templateArgs, t.args.map(_.asInstanceOf[EirType]))), c)
+//      case _ => throw new RuntimeException("unsure how to find members for $x")
+//    }
+//    val candidates =
+//    (substitution, candidates)
+//  }
 
   def callable(x : EirClassLike): List[EirMember] = {
     // TODO may need to check if first argument is self or not?
