@@ -59,4 +59,20 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     Processes.onLoad(module)
   }
+
+  test("check sophisticated and chained templates") {
+    EirGlobalNamespace.clear()
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |@main func hello(args : array<string>): unit {
+      |    val arg : int =
+      |        args.getOrNone(1) // -> option[string]
+      |            .flatMap<int>(string::tryParse<int>) // -> option[int]
+      |            .getOrElse(16); // -> int
+      |    println("hello with: " + arg.toString());
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
+  }
 }

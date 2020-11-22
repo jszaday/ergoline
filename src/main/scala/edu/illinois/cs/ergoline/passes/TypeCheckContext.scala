@@ -19,7 +19,7 @@ class TypeCheckContext {
   def specialize(s : EirSpecializable): EirSpecialization = {
     val sp = specialization
       .find(_.specialization.length == s.templateArgs.length)
-      .getOrElse(throw MissingSpecializationException(s"no specialization available", s))
+      .getOrElse(throw MissingSpecializationException(s"no specialization available for $s", s))
     _substitutions += (s -> sp)
     sp
   }

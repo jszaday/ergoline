@@ -108,8 +108,8 @@ object Find {
     case _ => false
   }
 
-  def anywhereAccessible[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
-    val name = symbol.qualifiedName.last
+  def anywhereAccessible[T <: EirNamedNode : Manifest](symbol : EirSymbol[_], name : String): Seq[T] = {
+//    val name = symbol.qualifiedName.last
     val ancestors = Find.ancestors(symbol).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
     val predicate: EirNode => Option[Boolean] = {
@@ -136,12 +136,13 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case _ :: Nil => anywhereAccessible(symbol)
+      case last :: Nil => anywhereAccessible[T](symbol, last)
       case init :+ last =>
-        // namespace (restricted) search, may only be a child of the specified namespace
-        // todo update to use anywhereAccessible as well?
-        val qualified = Find.qualifications(symbol.scope.get, init).filter(symbol.canAccess(_))
-        qualified.flatMap(_.findChild[T](withName(last).and(symbol.canAccess(_)))).toSeq
+        var namespace = anywhereAccessible[EirNamedNode](symbol, init.head)
+        for (mid <- init.tail) {
+          namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
+        }
+        namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)))
     }
   }
 

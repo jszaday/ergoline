@@ -115,8 +115,14 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     visited +:= x
     val body = x.body.map(visit(ctx, _)).getOrElse(";")
     val args = dropSelf(x).map(visit(ctx, _))
+    val static = x.parent.collect({
+      case m : EirMember if m.isStatic => "static "
+    }).getOrElse("")
+    val const = x.parent.collect({
+      case m : EirMember if m.isConst => " const"
+    }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"${visit(ctx, x.returnType)} ${generateName(x)}(${args mkString ", "}) $body"
+    s"$static${visit(ctx, x.returnType)} ${generateName(x)}(${args mkString ", "})$const $body"
   }
 
   override def visitAnnotation(ctx: CppContext, x: EirAnnotation): String = s"/* @${x.name} */ "

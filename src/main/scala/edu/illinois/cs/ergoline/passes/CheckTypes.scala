@@ -206,7 +206,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     visit(ctx, node.member)
   }
 
-  override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirType = {
+  override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
     // TODO check self-assigning arguments?
 //    val args = node.functionArgs.map(_.declaredType).map(visit(ctx, _))
 //    val retTy: EirType = visit(ctx, node.returnType)
@@ -299,13 +299,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
     val specializable = Find.singleReference(x.symbol).get
-    if (specializable.templateArgs.length == x.specialization.length) {
-      specializable match {
-        case c : EirClassLike => EirTemplatedType(Some(x), c, x.specialization)
-        case _ => error(ctx, x, "i'm still stupid")
-      }
-    } else {
-      error(ctx, x, s"cannot be applied to $specializable")
+    specializable.asInstanceOf[Any] match {
+      case c : EirClassLike if c.templateArgs.length == x.specialization.length => EirTemplatedType(Some(x), c, x.specialization)
+      // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
+      case EirMember(_, f : EirFunction, _) if f.templateArgs.length == x.specialization.length =>
+        val enter = ctx.specialize(f, x);
+        val result = visitFunction(ctx, f)
+        result.from = result.from.map(visit(ctx, _))
+        result.to = visit(ctx, result.to)
+        result.templateArgs = Nil
+        ctx.leave(enter)
+        result
+      case _ => error(ctx, x, "i'm still stupid")
     }
   }
 }

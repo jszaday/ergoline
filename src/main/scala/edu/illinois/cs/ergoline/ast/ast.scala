@@ -207,6 +207,24 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
 
+  def isFinal: Boolean = member match {
+    case d : EirDeclaration => d.isFinal
+    case _ => false
+  }
+
+  // TODO these checks should be more robust
+  def isConst: Boolean = member match {
+    case f : EirFunction =>
+      f.functionArgs.headOption.filter(arg => arg.name == "self").exists(_.isFinal)
+    case _ => false
+  }
+
+  def isStatic: Boolean = member match {
+    case f : EirFunction =>
+      !f.functionArgs.headOption.exists(_.name == "self")
+    case _ => false
+  }
+
   override def name: String = member.name
 
   override def children: Iterable[EirNode] = List(member)
