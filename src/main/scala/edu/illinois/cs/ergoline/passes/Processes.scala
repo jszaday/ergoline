@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
 object Processes {
   def onLoad(x : EirNode): Unit = {
     FullyResolve.visit(x)
-    CheckTypes.visit(x)
+    CheckTypes.visit(new TypeCheckContext, x)
   }
 
   def generateCpp(): Iterable[String] = {
