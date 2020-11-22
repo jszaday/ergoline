@@ -12,6 +12,7 @@ trait EirVisitor[Context, Value] {
 
   def visit(ctx: Context, node: EirNode): Value = {
     node match {
+      case x: EirSpecializedSymbol => visitSpecializedSymbol(ctx, x)
       case x: EirBlock => visitBlock(ctx, x)
       case x: EirNamespace => visitNamespace(ctx, x)
       case x: EirDeclaration => visitDeclaration(ctx, x)
@@ -52,6 +53,7 @@ trait EirVisitor[Context, Value] {
 //  def visitDefault(ctx: Context, x: EirNode): Value
 
 //  def visitGlobalNamespace(ctx: Context, x: Value
+  def visitSpecializedSymbol(ctx: Context, x: EirSpecializedSymbol): Value
 
   def visitArrayReference(ctx: Context, x: EirArrayReference): Value
 

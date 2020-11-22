@@ -477,6 +477,18 @@ case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader,
   }
 }
 
+case class EirSpecializedSymbol(var parent: Option[EirNode],
+                                var symbol: EirResolvable[EirNamedNode with EirSpecializable],
+                                var specialization: List[EirResolvable[EirType]])
+  extends EirExpressionNode with EirSpecialization {
+  override def children: Iterable[EirNode] = symbol +: specialization
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    util.updateWithin(specialization, oldNode, newNode).map(specialization = _).isDefined ||
+      ((symbol == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](symbol = _, newNode))
+  }
+}
+
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
 //  override def eirType: EirResolvable[EirType] = exprNode.eirType
 //

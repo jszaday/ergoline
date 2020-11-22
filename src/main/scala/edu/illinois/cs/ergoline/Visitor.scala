@@ -402,7 +402,13 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     if (ctx == null) {
       throw new RuntimeException("encountered null")
     } else if (ctx.fqn() != null) {
-      symbolize[EirNamedNode](ctx.fqn().Identifier())
+      if (ctx.specialization() == null) {
+        symbolize[EirNamedNode](ctx.fqn().Identifier())
+      } else {
+        enter(EirSpecializedSymbol(parent, null, visitSpecialization(ctx.specialization())), (s : EirSpecializedSymbol) => {
+          s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
+        })
+      }
     } else {
       assert(ctx.children.size() == 1)
       assertValid[EirExpressionNode](visit(ctx.children.get(0)))

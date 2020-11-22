@@ -129,7 +129,7 @@ expressionList
     ;
 
 primaryExpression
-    :   fqn
+    :   fqn specialization?
     |   constant
     |   tupleExpression
     |   lambdaExpression

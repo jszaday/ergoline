@@ -28,7 +28,9 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
 
   import UnparseSyntax.RichOption
 
-
+  override def error(ctx: UnparseContext, node: EirNode): String = {
+    throw new RuntimeException(s"could not unparse node of type ${node.getClass.getSimpleName}")
+  }
 
   def visit(node: EirNode): String = visit(new UnparseContext, node)
 
@@ -155,7 +157,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitFunctionCall(ctx: UnparseContext, call: EirFunctionCall): String = {
-    visit(ctx, call.target) + "(" + (call.args.map(visit(ctx, _)) mkString ", ") + ")"
+    visit(ctx, call.target) + visitSpecialization(ctx, call) + "(" + (call.args.map(visit(ctx, _)) mkString ", ") + ")"
   }
 
   override def visitImport(ctx: UnparseContext, x: EirImport): String = {
@@ -170,6 +172,14 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     node match {
       case x : EirNamedNode => x.name
       case _ => visit(ctx, node)
+    }
+  }
+
+  def visitSpecialization(ctx : UnparseContext, s : EirSpecialization): String = {
+    if (s.specialization.isEmpty) {
+      ""
+    } else {
+      s"<${s.specialization.map(superficial(ctx, _)) mkString ", "}>"
     }
   }
 
@@ -191,5 +201,9 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = {
     s"${visit(ctx, x.target)}[${x.args.map(visit(ctx, _)) mkString ", "}]"
+  }
+
+  override def visitSpecializedSymbol(ctx: UnparseContext, x: EirSpecializedSymbol): String = {
+    superficial(ctx, x.symbol) + visitSpecialization(ctx, x)
   }
 }

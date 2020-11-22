@@ -161,4 +161,6 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
   override def visitReturn(ctx: CppContext, x: EirReturn): String = {
     s"return ${visit(ctx, x.expression)};"
   }
+
+  override def visitSpecializedSymbol(ctx: CppContext, x: EirSpecializedSymbol): String = ???
 }

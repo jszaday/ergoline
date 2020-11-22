@@ -27,7 +27,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         val base = visit(ctx, x.base)
         Some(ctx.specialize(base.asInstanceOf[EirSpecializable], x))
       case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
-
       case _ => None
     }
   }
@@ -40,6 +39,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val expectsSelf = x.target match {
       // we do not expect ourself for static applications and that's it :)
       case s: EirSymbol[_] => !Find.singleReference(s).get.isInstanceOf[EirClassLike]
+      // one may only make field accesses to a specialized class
+      // NOTE unless self-symbol application is added i.e. f<3> sugaring to f<3>()...
+      // NOTE i think that's fairly unlikely tho cause' it's kinda vague
+      case _: EirSpecializedSymbol => false
       case _ => true
     }
     val prevFc: Option[EirFunctionCall] = ctx.cameVia[EirFunctionCall]
@@ -49,7 +52,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         (if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil)
     }.toList
     // find the candidates ^_^
-    val results = Find.accessibleMember(base, x).map(candidate => {
+    val candidates = Find.accessibleMember(base, x)
+    val results = candidates.map(candidate => {
       val member = visit(ctx, candidate)
       val innerSpec = handleSpecialization(ctx, member)
       val found = member match {
@@ -100,7 +104,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
     val target = visit(ctx, call.target) match {
-      case _: EirClassLike =>
+      case EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike =>
         val accessor = EirFieldAccessor(Some(call), call.target, "apply")
         call.target.parent = Some(accessor)
         call.target = accessor
@@ -198,7 +202,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = ???
 
-  override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = visit(ctx, node.member)
+  override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = {
+    visit(ctx, node.member)
+  }
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirType = {
     // TODO check self-assigning arguments?
@@ -289,5 +295,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }
     }
 
+  }
+
+  override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
+    val specializable = Find.singleReference(x.symbol).get
+    if (specializable.templateArgs.length == x.specialization.length) {
+      specializable match {
+        case c : EirClassLike => EirTemplatedType(Some(x), c, x.specialization)
+        case _ => error(ctx, x, "i'm still stupid")
+      }
+    } else {
+      error(ctx, x, s"cannot be applied to $specializable")
+    }
   }
 }
