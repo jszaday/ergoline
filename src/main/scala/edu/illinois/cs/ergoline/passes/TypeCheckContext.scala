@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.CheckTypes.error
+import edu.illinois.cs.ergoline.passes.CheckTypes.{MissingSpecializationException, error}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 import scala.collection.mutable
@@ -10,24 +10,29 @@ import scala.collection.mutable
 
 class TypeCheckContext {
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
-  private val _substitutions: mutable.Stack[(EirSpecializable, EirSpecialization)] = new mutable.Stack
+  private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
 
   def enterNode(n: EirNode): Unit = {
     stack.push(n)
-    n match {
-      case s: EirSpecializable =>
-        val ourLength = s.templateArgs.length
-        val theirLength = specialization.map(_.specialization).getOrElse(Nil).length
-        if (theirLength != ourLength) {
-          error(this, n, s"expected $ourLength template arguments, got $theirLength instead")
-        }
-        else if (ourLength > 0) emplaceSubstitution(s)
-      case _ =>
-    }
   }
 
-  def emplaceSubstitution(s: EirSpecializable): Unit = {
-    _substitutions.push((s, specialization.get))
+  def specialize(s : EirSpecializable): EirSpecialization = {
+    val sp = specialization
+      .find(_.specialization.length == s.templateArgs.length)
+      .getOrElse(throw MissingSpecializationException(s"no specialization available", s))
+    _substitutions += (s -> sp)
+    sp
+  }
+
+  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
+    _substitutions += (s -> sp)
+    sp
+  }
+
+  def leave(ours: EirSpecialization): Unit = {
+    _substitutions = _substitutions.filterNot({
+      case (_, theirs) => ours == theirs
+    })
   }
 
   def specialization: Option[EirSpecialization] = {
@@ -47,12 +52,7 @@ class TypeCheckContext {
   }
 
   def leaveWith(t: EirType): EirType = {
-    val leaving = stack.pop()
-    if (_substitutions.headOption.exists({
-      case (node, _) => leaving == node
-    })) {
-      _substitutions.pop()
-    }
+    stack.pop()
     t
   }
 

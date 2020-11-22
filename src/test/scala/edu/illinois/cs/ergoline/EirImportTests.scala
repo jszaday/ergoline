@@ -48,10 +48,13 @@ class EirImportTests extends FunSuite {
       |package foo;
       |import ergoline::_;
       |func hello(): unit {
-      |  val opt : option<int> = option<int>(42);
-      |  assert(opt.nonEmpty());
-      |  val got : int = opt.get();
-      |  println("hello " + got.toString());
+      |  val s: string = "42";
+      |  val x: option<int> = option<int>(42);
+      |  val y: option<int> = s.tryParse<int>();
+      |  assert(x.nonEmpty());
+      |  assert(y.nonEmpty());
+      |  assert(x.get() == y.get());
+      |  println("hello " + x.get().toString());
       |}
       |""".stripMargin)
     Processes.onLoad(module)

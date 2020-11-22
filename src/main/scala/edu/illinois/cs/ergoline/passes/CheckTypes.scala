@@ -20,52 +20,59 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     (args.length == 1) && visit(ctx, target).canAssignTo(visit(ctx, args.head))
   }
 
-  override def visitFieldAccessor(ctx: TypeCheckContext, x: EirFieldAccessor): EirType = {
-    // visit the target to find its class
-    val (sp, cls) = super.visit(ctx, x.target) match {
-      case c: EirClassLike => (None, c)
-      case t: EirTemplatedType => (Some(t), t.base.asInstanceOf[EirClassLike])
-      case x => throw TypeCheckException(s"$x is not a class-like object with members")
+
+  def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
+    x match {
+      case x : EirTemplatedType =>
+        val base = visit(ctx, x.base)
+        Some(ctx.specialize(base.asInstanceOf[EirSpecializable], x))
+      case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
+
+      case _ => None
     }
+  }
+
+  override def visitFieldAccessor(ctx: TypeCheckContext, x: EirFieldAccessor): EirType = {
+    val base = visit(ctx, x.target)
+    val spec = handleSpecialization(ctx, base)
     // TODO detection of cameViaFC and expectsSelf not at 100% yet, need to work on these
     //      and implement self-application as well (i.e. (42).toString vs 42.toString())
     val expectsSelf = x.target match {
-      // we do not expect ourself for class applications and that's it :)
+      // we do not expect ourself for static applications and that's it :)
       case s: EirSymbol[_] => !Find.singleReference(s).get.isInstanceOf[EirClassLike]
       case _ => true
     }
     val prevFc: Option[EirFunctionCall] = ctx.cameVia[EirFunctionCall]
     val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
     val ours = {
-      Option.when(expectsSelf)(sp.getOrElse(cls)) ++
+      Option.when(expectsSelf)(base) ++
         (if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil)
     }.toList
-    // enter the found class
-    sp.foreach(ctx.enterNode)
-    ctx.enterNode(cls)
     // find the candidates ^_^
-    // TODO check parent classes as well!
-    val candidates = Find.child[EirMember](cls, withName(x.field).and(x.canAccess(_))).toList
-    val results = candidates.map(candidate => {
-      val resolved = visit(ctx, candidate)
-      resolved match {
-        case t@EirLambdaType(_, theirs, retTy) if argumentsMatch(ours, theirs.map(visit(ctx, _))) => {
-          val args = if (cameViaFuncCall && expectsSelf) theirs.tail else theirs
-          (candidate, EirLambdaType(t.parent, args, retTy))
-        }
+    val results = Find.accessibleMember(base, x).map(candidate => {
+      val member = visit(ctx, candidate)
+      val innerSpec = handleSpecialization(ctx, member)
+      val found = member match {
+        case t : EirLambdaType =>
+          val theirs = t.from.map(visit(ctx, _))
+          if (argumentsMatch(ours, theirs)) {
+            val args = if (cameViaFuncCall && expectsSelf) theirs.tail else theirs
+            (candidate, EirLambdaType(t.parent, args, visit(ctx, t.to)))
+          } else {
+            null
+          }
         case x if ours.isEmpty => (candidate, x)
         case _ => null
       }
+      innerSpec.foreach(ctx.leave)
+      found
     }).filterNot(_ == null)
-    // and pop the substitution :3
-    // find the first matching value
+    spec.foreach(ctx.leave)
     if (results.length == 1) {
-      val (chosen, retTy) = results.head
-      x.disambiguation = Some(chosen)
-      sp.foreach(_ => ctx.leaveWith(null))
-      ctx.leaveWith(retTy)
+      x.disambiguation = Some(results.head._1)
+      return results.head._2
     }
-    else error(ctx, x, s"unable to uniquely resolve, found ${results.length} out of ${candidates.length} candidates")
+    error(ctx, x, s"attempting to access field ${x.field} of $base")
   }
 
   import TypeCheckSyntax.RichEirType
@@ -79,11 +86,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
-    val base = visit(ctx, x.base)
-    // the specialization only applies to the base, so now we leave
-    ctx.leaveWith(null)
-    // then everything else is resolved "above" us
-    EirTemplatedType(x.parent, base, x.args.map(visit(ctx, _)))
+    // visit our base
+    visit(ctx, x.base) match {
+      case c : EirClassLike if c.templateArgs.length == x.args.length =>
+        EirTemplatedType(x.parent, c, x.args.map(visit(ctx, _)))
+      case _ => error(ctx, x, s"unsure how to specialize ${x.base}")
+    }
   }
 
   override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = ???
@@ -93,17 +101,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
     val target = visit(ctx, call.target) match {
       case _: EirClassLike =>
-        val accessor = EirFieldAccessor(call.target.parent, call.target, "apply")
+        val accessor = EirFieldAccessor(Some(call), call.target, "apply")
+        call.target.parent = Some(accessor)
+        call.target = accessor
         // call.target.disambiguation = Some(accessor)
-        visit(ctx, accessor)
+        return visit(ctx, call)
       case ty => ty
     }
-    // a function call's specialization only applies to its target, so we leave midway through
-    ctx.leaveWith(null)
     val ours = call.args.map(visit(ctx, _))
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
-      case EirLambdaType(_, args, retTy) if argumentsMatch(args, ours) => {
+      case EirLambdaType(_, args, retTy, _) if argumentsMatch(ours, args.map(visit(ctx, _))) => {
         retTy match {
           case t: EirType => t
           case _ => visit(ctx, retTy)
@@ -175,10 +183,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitClass(ctx: TypeCheckContext, node: EirClass): EirType = {
-    if (!classCache.contains(node)) {
-      classCache +:= node
-      visit(ctx, node.members)
-    }
+//    if (!classCache.contains(node)) {
+//      classCache +:= node
+//      for (member <- node.members) {
+//        try {
+//          visit(ctx, member)
+//        } catch {
+//          case MissingSpecializationException(_, _) =>
+//        }
+//      }
+//    }
     node
   }
 
@@ -188,21 +202,23 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirType = {
     // TODO check self-assigning arguments?
-    val args = node.functionArgs.map(_.declaredType).map(visit(ctx, _))
-    val retTy: EirType = visit(ctx, node.returnType)
-    val found: Option[EirType] = node.body.flatMap(body => Option(visit(ctx, body)))
-    // TODO or member of abstract class (to be added
-    val noReturnOk = retTy.isUnitType ||
-      (node.body.isEmpty && annotationsOf(node).map(_.name).contains("system"))
-    found match {
-      case None if !noReturnOk =>
-        throw TypeCheckException(s"expected a return value of type $retTy for ${node.name}")
-      case Some(other) if !other.canAssignTo(retTy) =>
-        throw TypeCheckException(s"${node.name} cannot return a value of type $other")
-      case _ =>
+//    val args = node.functionArgs.map(_.declaredType).map(visit(ctx, _))
+//    val retTy: EirType = visit(ctx, node.returnType)
+//    val found: Option[EirType] = node.body.flatMap(body => Option(visit(ctx, body)))
+//    // TODO or member of abstract class (to be added
+//    val noReturnOk = retTy.isUnitType ||
+//      (node.body.isEmpty && annotationsOf(node).map(_.name).contains("system"))
+//    found match {
+//      case None if !noReturnOk =>
+//        throw TypeCheckException(s"expected a return value of type $retTy for ${node.name}")
+//      case Some(other) if !other.canAssignTo(retTy) =>
+//        throw TypeCheckException(s"${node.name} cannot return a value of type $other")
+//      case _ =>
+//    }
+    if (node.templateArgs.isEmpty) {
+      node.body.foreach(visit(ctx, _))
     }
-    node.body.foreach(visit(ctx, _))
-    EirLambdaType(Some(node), args, retTy)
+    EirLambdaType(Some(node), node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
   }
 
   def annotationsOf(node: EirFunction): List[EirAnnotation] = {
@@ -256,7 +272,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   final case class TypeCheckException(message: String) extends Exception(message)
 
-  final case class MissingSpecializationException(message: String, node: EirClassLike) extends Exception(message)
+  final case class MissingSpecializationException(message: String, node: EirSpecializable) extends Exception(message)
 
   object TypeCheckSyntax {
 

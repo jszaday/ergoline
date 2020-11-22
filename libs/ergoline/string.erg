@@ -6,4 +6,6 @@ package ergoline;
     }
 
     @system def plus(self: string, other: string): string;
+
+    @system def tryParse<A>(self: string): option<A>;
 }

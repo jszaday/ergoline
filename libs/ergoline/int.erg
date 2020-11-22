@@ -4,5 +4,6 @@ package ergoline;
     @system def plus(self: int, other : int): int;
     @system def minus(self: int, other : int): int;
     @system def times(self: int, other : int): int;
+    @system def equals(self: int, other : int): bool;
     @system def toString(self: int): string;
 }

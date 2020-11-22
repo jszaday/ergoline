@@ -150,19 +150,16 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
-//  def accessibleMem(x : ): List[EirMember] = {
-//    // TODO also search parent classes (ignoring overrides, ofc) :)
-//    // TODO handle templated types :p
-//    x.target.foundType match {
-//      case Some(c : EirClassLike) => child[EirMember](c, withName(x.field).and(x.canAccess(_))).toList
-//      case Some(t : EirTemplatedType) =>
-//        val c = assertValid[EirClassLike](t.base)
-//        (Some(EirSubstitution(c.templateArgs, t.args.map(_.asInstanceOf[EirType]))), c)
-//      case _ => throw new RuntimeException("unsure how to find members for $x")
-//    }
-//    val candidates =
-//    (substitution, candidates)
-//  }
+
+  def accessibleMember(base : EirNode, x : EirFieldAccessor): List[EirMember] = {
+    val scope = base match {
+      case EirTemplatedType(_, s : EirClassLike, _) => s
+      case s : EirClassLike => s
+      case _ => throw new RuntimeException(s"unsure how to find members of $base")
+    }
+    // TODO check parent classes as well!
+    child[EirMember](scope, withName(x.field).and(x.canAccess(_))).toList
+  }
 
   def callable(x : EirClassLike): List[EirMember] = {
     // TODO may need to check if first argument is self or not?
