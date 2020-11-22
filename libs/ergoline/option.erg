@@ -1,0 +1,9 @@
+package ergoline;
+
+class option<T> {
+    @system def apply(t : T): option<T>;
+    @system def apply(): option<T>;
+    @system def isEmpty(self : option<T>): bool;
+    @system def nonEmpty(self : option<T>): bool;
+    @system def get(self : option<T>): T;
+}

@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichIntOption
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.assertValid
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -115,7 +116,9 @@ object Find {
       case _ : EirBlock => None
       case x : EirFunction => Option.when(matches(x))(true)
       case x : EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
+      case x : EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
+      case x if !isTopLevel(x) => Option.when(matches(x))(true)
       case x => Some(matches(x))
     }
     ancestors.flatMap(ancestor =>
@@ -125,12 +128,15 @@ object Find {
           case _ => true
         }
       })
-    ).filter(symbol.canAccess(_))
+    ).filter(symbol.canAccess(_)).map({
+      case fs : EirFileSymbol => fs.resolve().head.asInstanceOf[T]
+      case x => x
+    })
   }
 
   def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case name :: Nil => anywhereAccessible(symbol)
+      case _ :: Nil => anywhereAccessible(symbol)
       case init :+ last =>
         // namespace (restricted) search, may only be a child of the specified namespace
         // todo update to use anywhereAccessible as well?
@@ -144,9 +150,23 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
-  def candidatesFor(x : EirFieldAccessor): List[EirMember] = {
-    // TODO also search parent classes (ignoring overrides, ofc) :)
-    x.target.foundType.map(child[EirMember](_, withName(x.field).and(x.canAccess(_))).toList).getOrElse(Nil)
+//  def accessibleMem(x : ): List[EirMember] = {
+//    // TODO also search parent classes (ignoring overrides, ofc) :)
+//    // TODO handle templated types :p
+//    x.target.foundType match {
+//      case Some(c : EirClassLike) => child[EirMember](c, withName(x.field).and(x.canAccess(_))).toList
+//      case Some(t : EirTemplatedType) =>
+//        val c = assertValid[EirClassLike](t.base)
+//        (Some(EirSubstitution(c.templateArgs, t.args.map(_.asInstanceOf[EirType]))), c)
+//      case _ => throw new RuntimeException("unsure how to find members for $x")
+//    }
+//    val candidates =
+//    (substitution, candidates)
+//  }
+
+  def callable(x : EirClassLike): List[EirMember] = {
+    // TODO may need to check if first argument is self or not?
+    child[EirMember](x, withName("apply").and(x.canAccess(_))).toList
   }
 
   object FindSyntax {

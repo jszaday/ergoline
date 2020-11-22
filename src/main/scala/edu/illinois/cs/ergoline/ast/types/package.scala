@@ -36,27 +36,28 @@ package object types {
     }
   }
 
-  case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]]) extends EirType {
+  case class EirTemplatedType(var parent: Option[EirNode], var base: EirResolvable[EirType], var args: List[EirResolvable[EirType]])
+    extends EirType with EirSpecialization {
+
     override def children: List[EirResolvable[EirType]] = List(base) ++ args
-    private var _registered = false
 
-    override def resolve(): List[EirType] = {
-      if (_registered) {
-        FullyResolve.visit(this)
-        _registered = base.resolve() match {
-          case x : EirClassLike => x.putSpecialization(this); true
-          case _ => false
-        }
-      }
-      List(this)
-    }
-
-    override def resolved: Boolean = _registered
+    // TODO upon resolution TT's should register with their base class
+    //      so the compiler knows which specializations to forward-declare!
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
         ((base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode))
     }
+
+    override def equals(any: Any): Boolean = {
+      any match {
+        case EirTemplatedType(_, theirBase, theirArgs) =>
+          (base == theirBase) && (theirArgs == args)
+        case _ => false
+      }
+    }
+
+    override def specialization: List[EirResolvable[EirType]] = args
   }
 
   case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String]) extends EirType {

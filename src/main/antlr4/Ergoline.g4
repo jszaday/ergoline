@@ -150,7 +150,7 @@ lambdaExpression
 postfixExpression
     :   primaryExpression
     |   postfixExpression '[' arrArgs=expressionList? ']'
-    |   postfixExpression LParen fnArgs=expressionList? RParen
+    |   postfixExpression specialization? LParen fnArgs=expressionList? RParen
     |   postfixExpression '.' Identifier
     ;
 
@@ -244,8 +244,12 @@ tupleType
     :   '(' typeList ')'
     ;
 
+specialization
+    :   '<' typeList '>'
+    ;
+
 basicType
-    :   fqn ('<' typeList '>')? (Atpersand CollectiveKeyword?)?
+    :   fqn specialization? (Atpersand CollectiveKeyword?)?
     ;
 
 lambdaType

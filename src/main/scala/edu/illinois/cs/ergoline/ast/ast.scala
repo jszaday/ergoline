@@ -47,7 +47,7 @@ abstract class EirNode {
 }
 
 abstract class EirUserNode extends EirNode {
-  def accept[T](visitor: EirVisitor[T]): T
+  def accept[Context, Value](context: Context, visitor: EirVisitor[Context, Value]): Value
 }
 
 trait EirEncloseExempt extends EirNode
@@ -150,19 +150,18 @@ case class EirFileSymbol(var parent : Option[EirNode], var file : File)
   override def toString: String = s"UNLOADED($name)"
 }
 
-trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType {
-  var members: List[EirMember]
+trait EirSpecializable extends EirNode {
   var templateArgs: List[EirTemplateArgument]
+}
+
+trait EirSpecialization extends EirNode {
+  def specialization: List[EirResolvable[EirType]]
+}
+
+trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
+  var members: List[EirMember]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
-  var specializations: List[EirTemplatedType] = Nil
-
-  def putSpecialization(x : EirTemplatedType): Unit = {
-    if (templateArgs.length != x.args.length) {
-      throw new RuntimeException(s"invalid template specialization: $x")
-    }
-    specializations +:= x
-  }
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
@@ -221,7 +220,7 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
                        var returnType: EirResolvable[EirType])
-  extends EirNode with EirScope with EirNamedNode {
+  extends EirNode with EirScope with EirNamedNode with EirSpecializable {
   override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs :+ returnType
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
@@ -237,14 +236,6 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
     }
   }
 }
-
-//case class EirSystemFunction(parent: Option[EirNode], name : String, templateArgs: List[EirTemplateArgument],
-//                              functionArgs: List[EirFunctionArgument], returnType: EirResolvable[EirType])
-//  extends EirNode with EirNamedNode {
-//  override def children: Iterable[EirNode] = None
-//
-//  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
-//}
 
 case class EirImport(var parent: Option[EirNode], var qualified: List[String])
   extends EirResolvable[EirNode] with EirScope with EirEncloseExempt {
@@ -397,7 +388,10 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
       _resolved = Some(Find.fromSymbol(this).toList)
     }
     _resolved match {
-      case Some(x) if x.nonEmpty => x
+      case Some(x) if x.nonEmpty =>
+        if (x.length != x.distinct.length) {
+          throw new RuntimeException(s"repeated elements detected when attempting to resolve $this")
+        } else x
       case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }
@@ -419,8 +413,10 @@ trait EirPostfixExpression extends EirExpressionNode {
   }
 }
 
-case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
-  extends EirPostfixExpression {
+case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode,
+                           var args: List[EirExpressionNode], var specialization: List[EirResolvable[EirType]])
+  extends EirPostfixExpression with EirSpecialization {
+  override def children: Iterable[EirNode] = super.children ++ specialization
 }
 
 case class EirArrayReference(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])

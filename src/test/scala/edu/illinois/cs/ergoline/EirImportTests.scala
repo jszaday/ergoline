@@ -16,7 +16,7 @@ class EirImportTests extends FunSuite {
       |  val x : int = 42;
       |  val y : int = x + 2;
       |  val z : int = x * y;
-      |  println(z.toString);
+      |  println(z.toString());
       |}
       |""".stripMargin)
     Processes.onLoad(module)
@@ -40,5 +40,20 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     Processes.onLoad(module)
 //    println(GenerateCpp.visit(module))
+  }
+
+  test("can resolve template types") {
+    EirGlobalNamespace.clear()
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |func hello(): unit {
+      |  val opt : option<int> = option<int>(42);
+      |  assert(opt.nonEmpty());
+      |  val got : int = opt.get();
+      |  println("hello " + got.toString());
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
   }
 }
