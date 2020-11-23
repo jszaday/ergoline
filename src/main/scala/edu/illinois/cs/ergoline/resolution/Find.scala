@@ -100,6 +100,7 @@ object Find {
 
   def isTopLevel(x : EirNode): Boolean = x match {
     case _ : EirBlock => true
+    case _ : EirForLoop => true
     case _ : EirLambdaExpression => true
     case _ : EirFunction => true
     case _ : EirClassLike => true

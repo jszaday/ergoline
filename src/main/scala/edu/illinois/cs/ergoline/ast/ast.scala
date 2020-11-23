@@ -390,6 +390,7 @@ object EirLiteralTypes extends Enumeration {
   val Float = Value("float")
   val Character = Value("char")
   val Unit = Value("unit")
+  val Boolean = Value("bool")
 }
 
 case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
@@ -504,6 +505,17 @@ case class EirSpecializedSymbol(var parent: Option[EirNode],
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     util.updateWithin(specialization, oldNode, newNode).map(specialization = _).isDefined ||
       ((symbol == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](symbol = _, newNode))
+  }
+}
+
+case class EirIfElse(var parent: Option[EirNode], var test: EirExpressionNode,
+                     var ifTrue: Option[EirNode], var ifFalse: Option[EirNode]) extends EirNode {
+  override def children: Iterable[EirNode] = Seq(test) ++ ifTrue ++ ifFalse
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    ((test == oldNode) && util.applyOrFalse[EirExpressionNode](test = _, newNode)) ||
+      (ifTrue.contains(oldNode) && util.applyOrFalse[EirNode](x => ifTrue = Some(x), newNode)) ||
+      (ifFalse.contains(oldNode) && util.applyOrFalse[EirNode](x => ifFalse = Some(x), newNode))
   }
 }
 

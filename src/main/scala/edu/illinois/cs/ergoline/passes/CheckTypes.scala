@@ -130,10 +130,24 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x.zip(y).forall({ case (ours: EirType, theirs: EirType) => ours.canAssignTo(theirs) case _ => false })
   }
 
-  override def visitForLoop(ctx: TypeCheckContext, loop: EirForLoop): EirType = ???
+  override def visitForLoop(ctx: TypeCheckContext, loop: EirForLoop): EirType = {
+    loop.header match {
+      case EirCStyleHeader(decl, test, incr) => {
+        visit(ctx, decl)
+        val ttype = test.map(visit(ctx, _))
+        if (!ttype.exists(_.canAssignTo(globals.typeFor(EirLiteralTypes.Boolean)))) {
+          error(ctx, loop, s"expected a boolean-like value, instead got $ttype")
+        }
+        visit(ctx, incr)
+      }
+      case _ =>
+    }
+
+    visit(ctx, loop.body)
+  }
 
   override def visitLiteral(ctx: TypeCheckContext, value: EirLiteral): EirType = {
-    globals.typeOfLiteral(value)
+    globals.typeFor(value)
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
@@ -242,7 +256,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val f = EirFunctionCall(Some(node), null, List(node.rhs), Nil)
     f.target = EirFieldAccessor(Some(f), node.lhs, func)
     node.disambiguation = Some(f)
-    visit(ctx, f)
+    val retTy = visit(ctx, f)
+    if (func == "compareTo") {
+      if (retTy.canAssignTo(globals.typeFor(EirLiteralTypes.Integer))) {
+        globals.typeFor(EirLiteralTypes.Boolean)
+      } else {
+        error(ctx, node, s"expected $retTy to compatible with integer")
+      }
+    } else {
+      retTy
+    }
   }
 
   override def visitFunctionArgument(ctx: TypeCheckContext, node: EirFunctionArgument): EirType = {
@@ -262,7 +285,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
-  override def visitAssignment(ctx: TypeCheckContext, node: EirAssignment): EirType = ???
+  def isFinalDecl(lval : EirExpressionNode): Boolean = {
+    lval match {
+      case s : EirSymbol[_] => Find.singleReference(s) match {
+        case Some(d : EirDeclaration) => d.isFinal
+        case Some(a : EirFunctionArgument) => a.isFinal
+        case _ => false
+      }
+      case _ => ???
+    }
+  }
+
+  override def visitAssignment(ctx: TypeCheckContext, node: EirAssignment): EirType = {
+    val lval = visit(ctx, node.rval)
+    val rval = visit(ctx, node.lval)
+    if (!rval.canAssignTo(lval)) {
+      error(ctx, node, s"$rval cannot be assigned to $lval")
+    } else if (isFinalDecl(node.lval)) {
+      error(ctx, node, s"$rval cannot be assigned to final ${node.lval}")
+    } else {
+      null
+    }
+  }
 
   override def visitTupleExpression(ctx: TypeCheckContext, node: EirTupleExpression): EirType = ???
 
@@ -312,5 +356,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         result
       case _ => error(ctx, x, "i'm still stupid")
     }
+  }
+
+  override def visitIfElse(ctx: TypeCheckContext, x: EirIfElse): EirType = {
+    val retTy = visit(ctx, x.test)
+    if (!retTy.canAssignTo(globals.typeFor(EirLiteralTypes.Boolean))) {
+      error(ctx, x.test, s"expected $x to be a boolean")
+    }
+    x.ifTrue.foreach(visit(ctx, _))
+    x.ifFalse.foreach(visit(ctx, _))
+    null
   }
 }

@@ -27,10 +27,15 @@ statement
     |   block
     |   forLoop
     |   function
+    |   ifThenElse
     |   expression ';'
     |   returnStatement
     |   classDeclaration
     |   topLevelDeclaration
+    ;
+
+ifThenElse
+    :   'if' '(' condition=expression ')' (';' | ifTrue=statement) ('else' ifFalse=statement)?
     ;
 
 identifierList

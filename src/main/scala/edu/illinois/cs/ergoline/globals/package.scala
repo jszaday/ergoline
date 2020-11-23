@@ -14,7 +14,7 @@ package object globals {
   }
 
   val operators: Map[String, String] = Map(
-    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals"
+    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals", "<" -> "compareTo", "%" -> "rem"
   )
 
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
@@ -23,9 +23,11 @@ package object globals {
     Option.when(operators.contains(op))(operators(op))
   }
 
-  def typeOfLiteral(literal: EirLiteral): EirType = {
-    val name : String = literal.`type`.toString.toLowerCase
+  def typeFor(litTy: EirLiteralTypes.Value): EirType = {
+    val name : String = litTy.toString.toLowerCase
     this.ergolineModule.flatMap(Find.child[EirClass](_, withName(name)).headOption)
-      .getOrElse(throw new RuntimeException(s"could not find type of $literal"))
+      .getOrElse(throw new RuntimeException(s"could not find type of $litTy"))
   }
+
+  def typeFor(literal: EirLiteral): EirType = typeFor(literal.`type`)
 }

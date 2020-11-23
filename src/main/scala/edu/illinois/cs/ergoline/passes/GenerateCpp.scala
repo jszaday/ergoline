@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 
 import scala.util.Properties.{lineSeparator => n}
-import UnparseAst.t
+import UnparseAst.{superficial, t}
 import edu.illinois.cs.ergoline.resolution.Find
 
 
@@ -49,12 +49,30 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     })
   }
 
-  override def visitFunctionCall(ctx: CppContext, x: EirFunctionCall): String = {
-    val target = handleOption(ctx, x.target.disambiguation).getOrElse(visit(ctx, x.target))
-    s"($target(${x.args.map(visit(ctx, _)) mkString ", "}))"
+  def visitSpecialization(ctx: CppContext, x: EirSpecialization): String = {
+    x.specialization match {
+      case Nil => ""
+      case x => s"<${visit(ctx, x) mkString ", "}>"
+    }
   }
 
-  override def visitForLoop(ctx: CppContext, x: EirForLoop): String = ???
+  override def visitFunctionCall(ctx: CppContext, x: EirFunctionCall): String = {
+    val target = visit(x.target)
+    // handleOption(ctx, x.target.disambiguation).getOrElse(visit(ctx, x.target))
+    s"($target${visitSpecialization(ctx, x)}(${x.args.map(visit(ctx, _)) mkString ", "}))"
+  }
+
+  override def visitForLoop(ctx: CppContext, x: EirForLoop): String = {
+    x.header match {
+      case EirCStyleHeader(d, t, i) => {
+        val decl = visit(ctx, d).headOption.getOrElse(";")
+        val test = visit(ctx, t).headOption.getOrElse("")
+        val incr = visit(ctx, i).headOption.getOrElse("")
+        s"for ($decl $test; $incr) " + visit(ctx, x.body)
+      }
+      case _ => ???
+    }
+  }
 
   override def visitLiteral(ctx: CppContext, x: EirLiteral): String = x.value
 
@@ -168,5 +186,15 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     s"return ${visit(ctx, x.expression)};"
   }
 
-  override def visitSpecializedSymbol(ctx: CppContext, x: EirSpecializedSymbol): String = ???
+  override def visitSpecializedSymbol(ctx: CppContext, x: EirSpecializedSymbol): String = {
+    s"${visit(ctx, x.symbol)}${visitSpecialization(ctx, x)}"
+  }
+
+  override def visitIfElse(ctx: CppContext, x: EirIfElse): String = {
+    val ifFalse = x.ifFalse match {
+      case Some(n : EirNode) => s"else ${visit(ctx, n)}"
+      case None => ""
+    }
+    s"if (${visit(x.test)}) ${x.ifTrue.map(visit(ctx, _)).getOrElse("")} $ifFalse"
+  }
 }

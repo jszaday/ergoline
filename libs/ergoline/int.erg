@@ -1,9 +1,11 @@
 package ergoline;
 
 @system class int {
-    @system def plus(self: int, other : int): int;
-    @system def minus(self: int, other : int): int;
-    @system def times(self: int, other : int): int;
-    @system def equals(self: int, other : int): bool;
+    @system def plus(self: int, other: int): int;
+    @system def minus(self: int, other: int): int;
+    @system def times(self: int, other: int): int;
+    @system def rem(self: int, other: int): int;
+    @system def equals(self: int, other: int): bool;
+    @system def compareTo(self: int, other: int): int;
     @system def toString(self: int): string;
 }

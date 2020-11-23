@@ -66,11 +66,15 @@ class EirImportTests extends FunSuite {
       |package foo;
       |import ergoline::_;
       |@main func hello(args : array<string>): unit {
-      |    val arg : int =
+      |    val n : int =
       |        args.getOrNone(1) // -> option[string]
       |            .flatMap<int>(string::tryParse<int>) // -> option[int]
       |            .getOrElse(16); // -> int
-      |    println("hello with: " + arg.toString());
+      |    for (var i : int = 0; i < n; i = i + 1) {
+      |        if (i % 2 == 0) {
+      |            println("hello #" + i.toString());
+      |        }
+      |    }
       |}
       |""".stripMargin)
     Processes.onLoad(module)

@@ -39,6 +39,7 @@ trait EirVisitor[Context, Value] {
       case x: EirTernaryOperator => visitTernaryOperator(ctx, x)
       case x: EirFieldAccessor => visitFieldAccessor(ctx, x)
       case x: EirArrayReference => visitArrayReference(ctx, x)
+      case x: EirIfElse => visitIfElse(ctx, x)
       case x: EirResolvable[_] if x.resolved =>
         Find.singleReference(x) match {
           case Some(v) => visit(ctx, v)
@@ -49,6 +50,8 @@ trait EirVisitor[Context, Value] {
       case x => error(ctx, x)
     }
   }
+
+  def visitIfElse(ctx: Context, x: EirIfElse): Value
 
 //  def visitDefault(ctx: Context, x: EirNode): Value
 

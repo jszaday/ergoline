@@ -206,4 +206,12 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitSpecializedSymbol(ctx: UnparseContext, x: EirSpecializedSymbol): String = {
     superficial(ctx, x.symbol) + visitSpecialization(ctx, x)
   }
+
+  override def visitIfElse(ctx: UnparseContext, x: EirIfElse): String = {
+    val ifFalse = x.ifFalse match {
+      case Some(n : EirNode) => s"else ${visit(ctx, n)}"
+      case None => ""
+    }
+    s"if (${visit(ctx, x.test)}) ${x.ifTrue.mapOrEmpty(visit(ctx, _))} $ifFalse"
+  }
 }
