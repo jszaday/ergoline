@@ -5,7 +5,7 @@ import ergoline::_;
 @main class hello with acceptor {
     val selfProxy: hello@;
 
-    @entry def hello(var self: hello, selfProxy=: hello@, args: array<string>): unit {
+    @entry def hello(var self: hello, =selfProxy: hello@, args: array<string>): unit {
         val n: int = 16;
         new fib@(selfProxy, n);
     }
@@ -21,7 +21,7 @@ class fib with acceptor {
     val selfProxy: fib@;
     val parent: acceptor@;
 
-    @entry def fib(var self: fib, selfProxy=: fib@, parent=: acceptor@, n: int): unit {
+    @entry def fib(var self: fib, =selfProxy: fib@, =parent: acceptor@, n: int): unit {
         if (n > 1) {
             new fib@(selfProxy, n - 1);
             new fib@(selfProxy, n - 2);

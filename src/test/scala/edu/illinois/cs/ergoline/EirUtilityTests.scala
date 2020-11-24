@@ -38,7 +38,7 @@ class EirUtilityTests extends FunSuite {
 
   test("should not find before definition") {
     EirGlobalNamespace.clear()
-    val foo = Modules.load("package foo ; func bar(): unit { baz; val baz : unit = (); }")
+    val foo = Modules.load("package foo ; def bar(): unit { baz; val baz : unit = (); }")
     val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
     val declaration = Find.all[EirDeclaration](foo).headOption
     symbol.isDefined shouldBe true

@@ -12,7 +12,7 @@ class EirImportTests extends FunSuite {
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
-      |func bar(): unit {
+      |def bar(): unit {
       |  val x : int = 42;
       |  val y : int = x + 2;
       |  val z : int = x * y;
@@ -47,7 +47,7 @@ class EirImportTests extends FunSuite {
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
-      |func hello(): unit {
+      |def hello(): unit {
       |  val s: string = "42";
       |  val x: option<int> = option<int>(42);
       |  val y: option<int> = s.tryParse<int>();
@@ -65,7 +65,7 @@ class EirImportTests extends FunSuite {
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
-      |@main func hello(args : array<string>): unit {
+      |@main def hello(args : array<string>): unit {
       |    val n : int =
       |        args.getOrNone(1) // -> option[string]
       |            .flatMap<int>(string::tryParse<int>) // -> option[int]

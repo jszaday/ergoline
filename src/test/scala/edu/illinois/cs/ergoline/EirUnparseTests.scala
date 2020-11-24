@@ -9,7 +9,7 @@ import org.scalatest.Matchers.convertToAnyShouldWrapper
 class EirUnparseTests extends FunSuite {
   import UnparseAst.t
 
-  private val genericFunction = "func foo<T>(bar=: T, baz: T): T { }"
+  private val genericFunction = "def foo<T>(=bar: T, baz: T): T { }"
   private val parsedFunction = {
     EirGlobalNamespace.clear()
     (new Visitor).visitFunction(parserFromString(genericFunction).function())
@@ -27,8 +27,8 @@ class EirUnparseTests extends FunSuite {
     EirGlobalNamespace.clear()
     val program =
       s"""namespace foo {
-        |$t@entry func bar(x: int, n: int): unit {
-        |$t${t}for (var y: int = ((x * 2) + 1); (y < n); y = (y + 1)) {
+        |$t@entry def bar(x: int, n: int): unit {
+        |$t${t}for (var y: int = ((x * 2) + 1); (y < n); y += 1) {
         |$t$t${t}println(y);
         |$t$t}
         |$t}

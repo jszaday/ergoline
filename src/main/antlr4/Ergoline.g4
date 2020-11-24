@@ -122,7 +122,7 @@ function
     ;
 
 functionArgument
-    :   VariableKeyword? Identifier Equals? ':' type
+    :   VariableKeyword? Equals? Identifier ':' type
     ;
 
 functionArgumentList
@@ -306,7 +306,7 @@ AbstractKwd : 'abstract';
 OverrideKwd : 'override';
 ClassKwd : 'class';
 TraitKwd : 'trait';
-FunctionKwd : 'func' | 'def';
+FunctionKwd : 'def';
 
 Equals : '=' ;
 PlusAssign: '+=';

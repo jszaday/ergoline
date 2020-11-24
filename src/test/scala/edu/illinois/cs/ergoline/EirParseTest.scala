@@ -56,7 +56,7 @@ class EirParseTest extends FunSuite {
   }
   test("mini function args test") {
     EirGlobalNamespace.clear()
-    val f = (new Visitor).visitFunction(parserFromString("func foo (var bar : unit, baz= : unit): unit { }").function())
+    val f = (new Visitor).visitFunction(parserFromString("def foo (var bar : unit, =baz : unit): unit { }").function())
     f.functionArgs.length shouldEqual 2
     f.functionArgs.head should matchPattern {
       case EirFunctionArgument(_, "bar", _, false, false) =>
@@ -67,7 +67,7 @@ class EirParseTest extends FunSuite {
   }
   test("annotated function retrieval test") {
     EirGlobalNamespace.clear()
-    val ns = Modules.load("package foo; @entry func bar(): unit { }")
+    val ns = Modules.load("package foo; @entry def bar(): unit { }")
     val fs = Find.annotatedWith[EirFunction](ns, "entry")
     fs should matchPattern {
       case EirFunction(_, _, "bar", _, _, _) :: Nil =>

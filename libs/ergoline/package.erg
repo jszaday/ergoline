@@ -1,5 +1,5 @@
 package ergoline;
 
-@system func println(s : string): unit;
-@system func assert(b : bool): unit;
-@system func assertNot(b : bool): unit;
+@system def println(s : string): unit;
+@system def assert(b : bool): unit;
+@system def assertNot(b : bool): unit;

@@ -113,7 +113,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     val args = node.functionArgs.map(visit(ctx, _)) mkString ", "
     val templates = if (node.templateArgs.nonEmpty) "<" + node.templateArgs.map(visit(ctx, _)).mkString(", ") + ">" else ""
     val retType = visit(ctx, node.returnType)
-    s"func ${node.name}$templates($args): $retType " + node.body.mapOrSemi(visit(ctx, _))
+    s"def ${node.name}$templates($args): $retType " + node.body.mapOrSemi(visit(ctx, _))
   }
 
   override def visitAnnotation(ctx: UnparseContext, node: EirAnnotation): String = s"@${node.name} "
@@ -124,7 +124,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitFunctionArgument(ctx: UnparseContext, node: EirFunctionArgument): String = {
     val declTy = visit(ctx, node.declaredType)
     val equals = if (node.isSelfAssigning) "=" else ""
-    s"${node.name}$equals: $declTy"
+    s"$equals${node.name}: $declTy"
   }
 
   override def visitAssignment(ctx: UnparseContext, node: EirAssignment): String = {
@@ -132,7 +132,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
       case Some(_: EirForLoop) => ""
       case _ => ";"
     }
-    s"${visit(ctx, node.lval)} = ${visit(ctx, node.rval)}$semi"
+    s"${visit(ctx, node.lval)} ${node.op} ${visit(ctx, node.rval)}$semi"
   }
 
   override def visitTupleExpression(ctx: UnparseContext, node: EirTupleExpression): String =

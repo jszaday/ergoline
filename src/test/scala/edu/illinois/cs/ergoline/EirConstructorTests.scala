@@ -13,8 +13,8 @@ class EirConstructorTests extends FunSuite {
     Modules.load(
       """package foo;
         |class bar {
-        |  func bar(self : bar, baz= : unit) : unit { }
-        |  func bar(self : bar) : unit { baz = (); }
+        |  def bar(self : bar, =baz : unit) : unit { }
+        |  def bar(self : bar) : unit { baz = (); }
         |  val baz : unit;
         |}
         |""".stripMargin
@@ -35,7 +35,7 @@ class EirConstructorTests extends FunSuite {
       """package foo;
         |class bar {
         |  val baz : unit = ();
-        |  func bar(self : bar, baz= : unit) : unit { }
+        |  def bar(self : bar, =baz : unit) : unit { }
         |}
         |""".stripMargin
     )
