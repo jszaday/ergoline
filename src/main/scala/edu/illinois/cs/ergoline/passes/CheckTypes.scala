@@ -367,4 +367,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     x.ifFalse.foreach(visit(ctx, _))
     null
   }
+
+  override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = ???
 }

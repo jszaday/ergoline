@@ -104,8 +104,16 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     EirImport(parent, ctx.fqn().Identifier().toStringList)
   }
 
-  override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClass = {
-    enter(EirClass(parent, Nil, ctx.Identifier().getText, Nil, None, Nil), (c: EirClass) => {
+  override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClassLike = {
+    val name = ctx.Identifier().getText
+    val node: EirClassLike =
+      if (ctx.ClassKwd() != null) {
+        EirClass(parent, null, name, null, None, Nil)
+      } else {
+        EirTrait(parent, null, name, null, None, Nil)
+      }
+    enter(node, (c: EirClassLike) => {
+      c.isAbstract = ctx.AbstractKwd() != null
       Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
       c.templateArgs = visitTemplateDecl(ctx.templateDecl())
       c.members = ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)
@@ -120,6 +128,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitMember(ctx: MemberContext): EirMember = {
     enter(EirMember(parent, null, visitAccessModifier(ctx.accessModifier)), (m: EirMember) => {
+      m.isOverride = ctx.OverrideKwd() != null
       Option(ctx.fieldDeclaration())
         .orElse(Option(ctx.topLevelStatement()))
         .map(x => assertValid[EirNamedNode](visit(x))).foreach(m.member = _)
@@ -228,8 +237,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
   override def visitAssignment(ctx: AssignmentContext): EirAssignment = {
-    enter(EirAssignment(parent, null, null), (a: EirAssignment) => {
+    enter(EirAssignment(parent, null, null, null), (a: EirAssignment) => {
       a.lval = visitPostfixExpression(ctx.postfixExpression())
+      a.op = ctx.assignmentOperator.getText
       a.rval = visitExpression(ctx.expression())
     })
   }
@@ -343,10 +353,21 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
+  override def visitNewExpression(ctx: NewExpressionContext): EirNew = {
+    enter(EirNew(parent, null, null), (n : EirNew) => {
+      n.target = visitType(ctx.`type`())
+      if (ctx.tupleExpression() != null) {
+        n.args = visitExpressionList(ctx.tupleExpression().expressionList())
+      }
+    })
+  }
+
   override def visitUnaryExpression(ctx: UnaryExpressionContext): EirExpressionNode = {
-    Option(ctx.postfixExpression()).map(x => assertValid[EirExpressionNode](visitPostfixExpression(x))).getOrElse({
-      enter(EirUnaryExpression(parent, ctx.unaryOperator().getText, null), (u: EirUnaryExpression) => {
-        u.rhs = visitCastExpression(ctx.castExpression())
+    Option(ctx.newExpression()).map(visitNewExpression).getOrElse({
+      Option(ctx.postfixExpression()).map(x => assertValid[EirExpressionNode](visitPostfixExpression(x))).getOrElse({
+        enter(EirUnaryExpression(parent, ctx.unaryOperator().getText, null), (u: EirUnaryExpression) => {
+          u.rhs = visitCastExpression(ctx.castExpression())
+        })
       })
     })
   }
@@ -368,11 +389,12 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitInheritanceDecl(ctx: InheritanceDeclContext): Unit = {
     val base: EirClassLike = parent.to[EirClassLike].get
-    val children: Iterable[ParseTree] = Option(ctx.children.asScala).getOrElse(Nil)
-    for (List(kwd, ty) <- children.sliding(2)) {
+    val children: List[ParseTree] = Option(ctx.children).toIterable.flatMap(_.asScala).toList
+    val grouped: List[List[ParseTree]] = children.grouped(2).toList
+    for (List(kwd, ty) <- grouped) {
       kwd.getText match {
         case "extends" => base.extendsThis = Some(visitType(ty.asInstanceOf[TypeContext]))
-        case "implements" | "and" => base.implementsThese ++= List(visitType(ty.asInstanceOf[TypeContext]))
+        case "with" | "and" => base.implementsThese ++= List(visitType(ty.asInstanceOf[TypeContext]))
       }
     }
   }

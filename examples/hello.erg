@@ -1,14 +1,44 @@
 package examples;
-import ck;
 
-@main class hello {
-    val proxy: hello@;
+import ergoline::_;
 
-    @entry func hello(self : hello, proxy= : hello@, args : list<string>): unit {
-        val f : int => unit =
-            (i : int) => ck::println("hello $i");
-        val n : int = args.size() > 1 ? args[1].toInt() : 16;
-        for (i <- range(n)) f(i);
-        ck::exit();
+@main class hello with acceptor {
+    val selfProxy: hello@;
+
+    @entry def hello(var self: hello, selfProxy=: hello@, args: array<string>): unit {
+        val n: int = 16;
+        new fib@(selfProxy, n);
     }
+
+    @entry override def accept(x: int): unit {
+        println("result = " + x.toString());
+    }
+}
+
+class fib with acceptor {
+    var count: int = 0;
+    var value: int = 0;
+    val selfProxy: fib@;
+    val parent: acceptor@;
+
+    @entry def fib(var self: fib, selfProxy=: fib@, parent=: acceptor@, n: int): unit {
+        if (n > 1) {
+            new fib@(selfProxy, n - 1);
+            new fib@(selfProxy, n - 2);
+        } else {
+            parent.accept(n);
+        }
+    }
+
+    @entry override def accept(x: int): unit {
+        count += 1;
+        value += x;
+        if (count >= 2) {
+            parent.accept(value);
+        }
+    }
+}
+
+trait acceptor {
+    @entry def accept(x: int): unit;
 }

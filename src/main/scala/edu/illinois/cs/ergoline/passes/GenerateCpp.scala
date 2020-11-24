@@ -197,4 +197,6 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     }
     s"if (${visit(x.test)}) ${x.ifTrue.map(visit(ctx, _)).getOrElse("")} $ifFalse"
   }
+
+  override def visitNew(ctx: CppContext, x: EirNew): String = ???
 }

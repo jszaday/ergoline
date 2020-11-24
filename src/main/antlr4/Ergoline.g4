@@ -72,11 +72,11 @@ accessModifier
     ;
 
 inheritanceDecl
-    :   ('extends' type)? ('implements' type ('and' type)*)?
+    :   ('extends' type)? ('with' type ('and' type)*)?
     ;
 
 classDeclaration
-    :   'class' Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    :   AbstractKwd? (ClassKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
     ;
 
 annotatedMember
@@ -84,7 +84,7 @@ annotatedMember
     ;
 
 member
-    :   accessModifier? 'override'? ( fieldDeclaration | topLevelStatement )
+    :   accessModifier? OverrideKwd? ( fieldDeclaration | topLevelStatement )
     ;
 
 namespace
@@ -118,7 +118,7 @@ fieldDeclaration
     ;
 
 function
-    :   ('def' | 'func') Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
+    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
     ;
 
 functionArgument
@@ -141,8 +141,22 @@ primaryExpression
     ;
 
 assignment
-    :   postfixExpression '=' expression
+    :   postfixExpression assignmentOperator expression
     ;
+
+assignmentOperator
+    : Equals
+	| StarAssign
+	| DivAssign
+	| ModAssign
+	| PlusAssign
+	| MinusAssign
+	| RightShiftAssign
+	| LeftShiftAssign
+	| AndAssign
+	| XorAssign
+	| OrAssign
+	;
 
 tupleExpression
     :   '(' expressionList? ')'
@@ -162,12 +176,17 @@ postfixExpression
 unaryExpression
     :   postfixExpression
     |   unaryOperator castExpression
+    |   newExpression
     // |   'sizeof' unaryExpression
     // |   'sizeof' '(' type ')'
     ;
 
 unaryOperator
     :   '+' | '-' | '~' | '!'
+    ;
+
+newExpression
+    :   'new' type tupleExpression?
     ;
 
 castExpression
@@ -204,7 +223,7 @@ relationalExpression
 
 equalityExpression
     :   relationalExpression
-    |   equalityExpression '==' relationalExpression
+    |   equalityExpression ('==' || '===') relationalExpression
     |   equalityExpression '!=' relationalExpression
     ;
 
@@ -280,10 +299,26 @@ CollectiveKeyword
     |   'nodegroup'
     |   'group'
     ;
+
 VariableKeyword : 'var' ;
 ValueKeyword : 'val' ;
+AbstractKwd : 'abstract';
+OverrideKwd : 'override';
+ClassKwd : 'class';
+TraitKwd : 'trait';
+FunctionKwd : 'func' | 'def';
 
 Equals : '=' ;
+PlusAssign: '+=';
+MinusAssign: '-=';
+StarAssign: '*=';
+DivAssign: '/=';
+ModAssign: '%=';
+XorAssign: '^=';
+AndAssign: '&=';
+OrAssign: '|=';
+LeftShiftAssign: '<<=';
+RightShiftAssign: '>>=';
 
 LParen : '(' ;
 RParen : ')' ;

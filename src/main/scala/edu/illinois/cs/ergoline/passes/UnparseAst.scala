@@ -90,7 +90,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     ctx.numTabs -= 1
     val inheritance: String = node.extendsThis.mapOrEmpty(x => s" extends ${visit(ctx, x)}") +
       node.implementsThese.zipWithIndex.map {
-        case (x, 0) => s" implements ${visit(ctx, x)}"
+        case (x, 0) => s" with ${visit(ctx, x)}"
         case (x, _) => s" and ${visit(ctx, x)}"
       }.mkString("")
     s"$keyword ${node.name}$decl$inheritance {$body}$n"
@@ -101,7 +101,12 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTrait(ctx: UnparseContext, node: EirTrait): String = visitClassLike(ctx, "trait", node)
 
   override def visitMember(ctx: UnparseContext, node: EirMember): String = {
-    node.accessibility.toString.toLowerCase + " " + addSemi(visit(ctx, node.member))
+    val overrides = if (node.isOverride) "override " else ""
+    val accessibility: String = node.accessibility match {
+      case EirAccessibility.Public => ""
+      case x => x.toString.toLowerCase + " "
+    }
+    accessibility + overrides + addSemi(visit(ctx, node.member))
   }
 
   override def visitFunction(ctx: UnparseContext, node: EirFunction): String = {
@@ -213,5 +218,9 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
       case None => ""
     }
     s"if (${visit(ctx, x.test)}) ${x.ifTrue.mapOrEmpty(visit(ctx, _))} $ifFalse"
+  }
+
+  override def visitNew(ctx: UnparseContext, x: EirNew): String = {
+    s"new ${visit(ctx, x.target)}(${visit(ctx, x.args) mkString ", "})"
   }
 }

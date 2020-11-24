@@ -159,6 +159,7 @@ trait EirSpecialization extends EirNode {
 }
 
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
+  var isAbstract: Boolean = false
   var members: List[EirMember]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
@@ -203,13 +204,15 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
+  var isOverride: Boolean = false
+
   def isConstructorOf(other: EirClass): Boolean = parent.contains(other) && isConstructor
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
 
   def isFinal: Boolean = member match {
     case d : EirDeclaration => d.isFinal
-    case _ => false
+    case _ => true
   }
 
   // TODO these checks should be more robust
@@ -317,7 +320,7 @@ case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
   }
 }
 
-case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNode, var rval: EirExpressionNode) extends EirNode {
+case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNode, var op: String, var rval: EirExpressionNode) extends EirNode {
   override def children: Iterable[EirNode] = Seq(lval, rval)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
@@ -517,6 +520,13 @@ case class EirIfElse(var parent: Option[EirNode], var test: EirExpressionNode,
       (ifTrue.contains(oldNode) && util.applyOrFalse[EirNode](x => ifTrue = Some(x), newNode)) ||
       (ifFalse.contains(oldNode) && util.applyOrFalse[EirNode](x => ifFalse = Some(x), newNode))
   }
+}
+
+case class EirNew(var parent: Option[EirNode], var target: EirResolvable[EirType],
+                  var args: List[EirExpressionNode]) extends EirExpressionNode {
+  override def children: Iterable[EirNode] = target +: args
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
