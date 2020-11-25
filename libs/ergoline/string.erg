@@ -1,11 +1,7 @@
 package ergoline;
 
 @system class string {
-    def toString(self: string): string {
-        return self;
-    }
-
+    @system def toString(self: string): string;
     @system def plus(self: string, other: string): string;
-
     @system def tryParse<A>(self: string): option<A>;
 }

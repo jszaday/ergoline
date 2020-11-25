@@ -1,6 +1,6 @@
 package ergoline;
 
-class option<A> {
+@system class option<A> {
     @system def apply(t : A): option<A>;
     @system def apply(): option<A>;
     @system def isEmpty(self : option<A>): bool;

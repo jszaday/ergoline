@@ -10,7 +10,7 @@ import ergoline::_;
         new fib@(selfProxy, n);
     }
 
-    @entry override def accept(x: int): unit {
+    @entry override def accept(self: hello, x: int): unit {
         println("result = " + x.toString());
     }
 }
@@ -30,7 +30,7 @@ class fib with acceptor {
         }
     }
 
-    @entry override def accept(x: int): unit {
+    @entry override def accept(var self: fib, x: int): unit {
         count += 1;
         value += x;
         if (count >= 2) {
@@ -40,5 +40,5 @@ class fib with acceptor {
 }
 
 trait acceptor {
-    @entry def accept(x: int): unit;
+    @entry def accept(self: acceptor, x: int): unit;
 }
