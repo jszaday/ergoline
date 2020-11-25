@@ -109,12 +109,14 @@ object Find {
     case _ => false
   }
 
-  def anywhereAccessible[T <: EirNamedNode : Manifest](symbol : EirSymbol[_], name : String): Seq[T] = {
+  def anywhereAccessible(ctx : EirNode, name : String): Seq[EirNamedNode] = {
 //    val name = symbol.qualifiedName.last
-    val ancestors = Find.ancestors(symbol).filter(isTopLevel)
+    val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
     val predicate: EirNode => Option[Boolean] = {
       case _ : EirBlock => None
+      // only allowed to consider members when within the class?
+      case x : EirMember => Option.when(x.parent.exists(ancestors.contains))(matches(x))
       case x : EirFunction => Option.when(matches(x))(true)
       case x : EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x : EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
@@ -123,23 +125,25 @@ object Find {
       case x => Some(matches(x))
     }
     ancestors.flatMap(ancestor =>
-      Find.descendant(ancestor, predicate).map(_.asInstanceOf[T]).filter((x : T) => {
+      Find.descendant(ancestor, predicate).filter(x => {
         ancestor match {
-          case block: EirBlock => block.findPositionOf(symbol) > block.findPositionOf(x)
+          case block: EirBlock => block.findPositionOf(ctx) > block.findPositionOf(x)
           case _ => true
         }
       })
-    ).filter(symbol.canAccess(_)).map({
-      case fs : EirFileSymbol => fs.resolve().head.asInstanceOf[T]
+    ).filter(ctx.canAccess(_)).map({
+      case fs : EirFileSymbol => fs.resolve().head
       case x => x
-    })
+    }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol[T <: EirNamedNode : Manifest](symbol : EirSymbol[T]): Seq[T] = {
+  def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case last :: Nil => anywhereAccessible[T](symbol, last)
+      case last :: Nil => anywhereAccessible(symbol, last).collect({
+        case x: T => x
+      })
       case init :+ last =>
-        var namespace = anywhereAccessible[EirNamedNode](symbol, init.head)
+        var namespace = anywhereAccessible(symbol, init.head)
         for (mid <- init.tail) {
           namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
         }

@@ -4,6 +4,8 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.Find
 
+import scala.annotation.tailrec
+
 object CheckClasses {
 
   final case class ClassCheckException(node: EirClassLike, message: String) extends Exception(message)
@@ -26,6 +28,8 @@ object CheckClasses {
     }
 
     checkImplements(node, traits)
+
+    traits.foreach(asClassLike(_).derived +:= node)
 
     checked +:= node
   }
@@ -61,7 +65,7 @@ object CheckClasses {
   def visitTrait(node : EirTrait): List[EirType] = {
     node.members.foreach(x => {
       x.member match {
-        case f : EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
+        case _ : EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
         case x => error(node, s"cannot have member $x")
       }
     })
@@ -70,7 +74,17 @@ object CheckClasses {
 
   def visitClass(node : EirClass): List[EirType] = {
     val base: Option[EirType] = node.extendsThis.map(Find.uniqueResolution[EirType])
+    base.foreach(asClassLike(_).derived +:= node)
     val traits: List[EirType] = Find.uniqueResolution(node.implementsThese).toList
     traits
+  }
+
+  @tailrec
+  def asClassLike(node : EirNode): EirClassLike = {
+    node match {
+      case t: EirTemplatedType => asClassLike(Find.uniqueResolution(t.base))
+      case c: EirClassLike => c
+      case _ => throw new RuntimeException(s"$node is not a class-like type")
+    }
   }
 }

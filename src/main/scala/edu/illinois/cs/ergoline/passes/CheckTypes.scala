@@ -214,7 +214,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     node
   }
 
-  override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = ???
+  override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = {
+    node
+  }
 
   override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = {
     visit(ctx, node.member)

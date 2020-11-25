@@ -9,6 +9,7 @@ import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
@@ -160,6 +161,8 @@ trait EirSpecialization extends EirNode {
 
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
   var isAbstract: Boolean = false
+  var derived: List[EirClassLike] = Nil
+
   var members: List[EirMember]
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
@@ -181,7 +184,8 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   }
 }
 
-case class EirTemplateArgument(var parent: Option[EirNode], var name: String) extends EirNamedNode {
+case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
+  extends EirType with EirNamedNode {
   var lowerBound: Option[EirResolvable[EirType]] = None
   var upperBound: Option[EirResolvable[EirType]] = None
 
@@ -200,7 +204,9 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
                     var name: String, var templateArgs: List[EirTemplateArgument],
                     var extendsThis: Option[EirResolvable[EirType]],
                     var implementsThese: List[EirResolvable[EirType]])
-  extends EirNode with EirClassLike
+  extends EirNode with EirClassLike {
+  isAbstract = true
+}
 
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
@@ -396,7 +402,7 @@ object EirLiteralTypes extends Enumeration {
   val Boolean = Value("bool")
 }
 
-case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], var qualifiedName: List[String])
+case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
   private var _resolved : Option[List[T]] = None
@@ -407,13 +413,13 @@ case class EirSymbol[T <: EirNamedNode : Manifest](var parent: Option[EirNode], 
 
   override def resolve(): List[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Some(Find.fromSymbol(this).toList)
+      _resolved = Some(
+        Find.fromSymbol[T](this).toList)
     }
     _resolved match {
       case Some(x) if x.nonEmpty =>
-        if (x.length != x.distinct.length) {
-          throw new RuntimeException(s"repeated elements detected when attempting to resolve $this")
-        } else x
+        if (x.length == x.distinct.length) x
+        else throw new RuntimeException(s"repeated elements detected when attempting to resolve $this")
       case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }
