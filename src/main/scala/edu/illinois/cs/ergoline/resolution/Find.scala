@@ -152,6 +152,16 @@ object Find {
     Option.when(found.length == 1)(found.head)
   }
 
+  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
+    x.resolve() match {
+      case head :: Nil => head
+      case _ => throw new RuntimeException(s"unable to uniquely resolve $x")
+    }
+  }
+
+  def uniqueResolution[T <: EirNode](iterable: Iterable[EirResolvable[T]]): Iterable[T] = {
+    iterable.map(uniqueResolution[T])
+  }
 
   def accessibleMember(base : EirNode, x : EirFieldAccessor): List[EirMember] = {
     val scope = base match {

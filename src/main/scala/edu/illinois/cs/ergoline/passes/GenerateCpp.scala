@@ -38,7 +38,9 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     s"${generateName(x.base)}<${x.args.map(generateName) mkString ", "}>"
   }
 
-  override def visitProxyType(ctx: CppContext, x: types.EirProxyType): String = ???
+  override def visitProxyType(ctx: CppContext, x: types.EirProxyType): String = {
+    "CProxy_" + visit(ctx, x.base)
+  }
 
   override def visitImport(ctx: CppContext, x: EirImport): String = ""
 
@@ -77,7 +79,11 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
   override def visitLiteral(ctx: CppContext, x: EirLiteral): String = x.value
 
   override def visitSymbol[A <: EirNamedNode](ctx: CppContext, x: EirSymbol[A]): String = {
-    generateName(Find.singleReference(x).get)
+    try {
+      generateName(Find.singleReference(x).get)
+    } catch {
+      case _: Throwable => x.qualifiedName.mkString("::")
+    }
   }
 
   override def visitBlock(ctx: CppContext, x: EirBlock): String = {
@@ -105,11 +111,19 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     s"typename ${generateName(x)}"
   }
 
-  override def visitClass(ctx: CppContext, x: EirClass): String = {
-    visitTemplateArgs(ctx, x.templateArgs) + s"class ${generateName(x)} {$n" + visitChildren(ctx, x.children) + s"$n$tabs};$n"
+  def visitInherits(ctx: CppContext, x: EirClassLike): String = {
+    val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
+    if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ")
+    else ""
   }
 
-  override def visitTrait(ctx: CppContext, x: EirTrait): String = ???
+  def visitClassLike(ctx: CppContext, x: EirClassLike): String = {
+    visitTemplateArgs(ctx, x.templateArgs) + s"class ${generateName(x)}"+visitInherits(ctx, x)+s" {$n" + visitChildren(ctx, x.members) + s"$n$tabs};$n"
+  }
+
+  override def visitClass(ctx: CppContext, x: EirClass): String = visitClassLike(ctx, x)
+
+  override def visitTrait(ctx: CppContext, x: EirTrait): String = visitClassLike(ctx, x)
 
   override def visitMember(ctx: CppContext, x: EirMember): String = {
     visit(ctx, x.member)
