@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.ast
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util
+import edu.illinois.cs.ergoline.util.AstManipulation
 
 package object types {
 
@@ -16,7 +17,7 @@ package object types {
 
   case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      util.updateWithin(children, oldNode, newNode).map(children = _).isDefined
+      AstManipulation.updateWithin(children, oldNode, newNode).map(children = _).isDefined
     }
   }
 
@@ -26,7 +27,7 @@ package object types {
     override def children: List[EirResolvable[EirType]] = from ++ List(to)
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      util.updateWithin(from, oldNode, newNode).map(from = _).isDefined ||
+      AstManipulation.updateWithin(from, oldNode, newNode).map(from = _).isDefined ||
         ((to == oldNode) && util.applyOrFalse[EirResolvable[EirType]](to = _, newNode))
     }
 
@@ -48,7 +49,7 @@ package object types {
     //      so the compiler knows which specializations to forward-declare!
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
+      AstManipulation.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
         ((base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode))
     }
 

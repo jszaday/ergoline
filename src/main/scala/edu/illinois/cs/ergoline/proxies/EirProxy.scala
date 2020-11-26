@@ -30,5 +30,12 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   override var implementsThese: List[EirResolvable[types.EirType]] = Nil
   override var templateArgs: List[EirTemplateArgument] = base.templateArgs
 
+  override def isDescendantOf(other: EirClassLike): Boolean = {
+    other match {
+      case proxy: EirProxy => base.isDescendantOf(proxy.base)
+      case _ => false
+    }
+  }
+
   override def name: String = ???
 }

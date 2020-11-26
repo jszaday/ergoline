@@ -6,6 +6,7 @@ import java.nio.file.{Files, Path, Paths}
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.util.AstManipulation
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
 import org.antlr.v4.runtime.{CharStream, CharStreams, CommonTokenStream}
@@ -85,7 +86,7 @@ object Modules {
     scope.findChild[EirNamespace](withName(name)).headOption
       .getOrElse({
         val ns = EirNamespace(Some(scope), Nil, name)
-        util.placeNodes(scope, List(ns))
+        AstManipulation.placeNodes(scope, List(ns))
         ns
       })
   }

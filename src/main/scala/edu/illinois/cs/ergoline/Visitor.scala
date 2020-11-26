@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichParserRuleContext, RichResolvableTypeIterable}
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
@@ -49,7 +49,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   def dropSelf(scope : EirScope, fileOption : Option[File]): Unit = {
     fileOption match {
       case Some(file) =>
-        util.dropNodes(scope, scope.findChild[EirFileSymbol](f => Files.isSameFile(f.file.toPath, file.toPath)))
+        AstManipulation.dropNodes(scope, scope.findChild[EirFileSymbol](f => Files.isSameFile(f.file.toPath, file.toPath)))
       case _ =>
     }
   }
@@ -69,7 +69,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     parents.push(topLevel)
     val nodes = ctx.mapOrEmpty(_.annotatedTopLevelStatement, visitAnnotatedTopLevelStatement)
     // namespaces are automatically placed into the top-level, and should not be replicated
-    util.placeNodes(topLevel, nodes.filterNot(_.isInstanceOf[EirNamespace]))
+    AstManipulation.placeNodes(topLevel, nodes.filterNot(_.isInstanceOf[EirNamespace]))
     parents.pop()
     expectation match {
       case Some(name) =>
@@ -340,7 +340,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitLambdaExpression(ctx: LambdaExpressionContext): EirExpressionNode = {
     enter(EirLambdaExpression(parent, null, null), (f: EirLambdaExpression) => {
       f.args = visitFunctionArgumentList(ctx.functionArgumentList())
-      f.body = visitBlock(ctx.block()).getOrElse(util.encloseNodes(visitExpression(ctx.expression))(addReturn = true))
+      f.body = visitBlock(ctx.block()).getOrElse(AstManipulation.encloseNodes(visitExpression(ctx.expression))(addReturn = true))
     })
   }
 
@@ -402,7 +402,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitForLoop(ctx: ForLoopContext): EirForLoop = {
     enter(EirForLoop(parent, null, null), (f: EirForLoop) => {
       f.header = visitLoopHeader(ctx.loopHeader())
-      f.body = Option(ctx.block()).flatMap(visitBlock).getOrElse(util.encloseNodes(visitStatement(ctx.statement())))
+      f.body = Option(ctx.block()).flatMap(visitBlock).getOrElse(AstManipulation.encloseNodes(visitStatement(ctx.statement())))
     })
   }
 

@@ -1,15 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirProxyType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.CheckTypes.TypeCheckSyntax.RichEirType
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.Find.FindSyntax.RichPredicate
-import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -21,7 +17,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def autoApply(ctx: TypeCheckContext, target: EirExpressionNode, args: List[EirResolvable[EirType]]): Boolean = {
     (args.length == 1) && visit(ctx, target).canAssignTo(visit(ctx, args.head))
   }
-
 
   def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
     x match {
@@ -80,8 +75,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     error(ctx, x, s"attempting to access field ${x.field} of $base")
   }
-
-  import TypeCheckSyntax.RichEirType
 
   override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = ???
 
@@ -313,23 +306,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class TypeCheckException(message: String) extends Exception(message)
 
   final case class MissingSpecializationException(message: String, node: EirSpecializable) extends Exception(message)
-
-  object TypeCheckSyntax {
-
-    implicit class RichEirType(t: EirType) {
-      def canAssignTo(other: EirType): Boolean = {
-        t == other
-      }
-
-      def isUnitType: Boolean = {
-        t match {
-          case n: EirNamedNode => n.name == "unit"
-          case _ => false
-        }
-      }
-    }
-
-  }
 
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
     val specializable = Find.singleReference(x.symbol).get

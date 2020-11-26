@@ -2,7 +2,6 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import org.antlr.v4.runtime.ParserRuleContext
 
@@ -10,57 +9,13 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 
 package object util {
 
-  import EirUtilitySyntax.{RichEirNode, RichIntOption}
+  import EirUtilitySyntax.RichEirNode
 
   def assertValid[T: Manifest](value: Any): T = {
     Option(value) match {
       case Some(x: T) => x
       case x => throw new RuntimeException(s"unexpected value $x")
     }
-  }
-
-  def placeNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
-    for (node <- nodes) {
-      (scope, node) match {
-        case (EirGlobalNamespace, x : EirNamespace) =>
-          EirGlobalNamespace.put(x.name, x)
-        case (x: EirNamespace, _) =>
-          x.children +:= node
-        case _ => throw new RuntimeException(s"cannot place $node into $scope")
-      }
-    }
-  }
-
-  def dropNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
-    for (node <- nodes) {
-      scope match {
-        case x : EirNamespace => x.removeChild(node)
-        case _ => throw new RuntimeException(s"could not drop $node from $scope")
-      }
-    }
-  }
-
-  def setParent[T <: EirNode](parent : T): T = {
-    parent.children.foreach(_.parent = Some(parent))
-    parent
-  }
-
-  def encloseNodes(nodes: EirNode*)(implicit addReturn: Boolean = false): EirBlock = {
-    setParent(EirBlock(nodes.head.parent, {
-      if (!addReturn || nodes.length != 1) nodes.toList
-      else {
-        val ret = EirReturn(None, assertValid[EirExpressionNode](nodes.head))
-        nodes.head.parent = Some(ret)
-        List(ret)
-      }
-    }))
-  }
-
-  def makeTupleElementGetter(expression: EirExpressionNode, idx: Int): EirExpressionNode = {
-    val ref = EirArrayReference(expression.parent, expression, null)
-    expression.parent = Some(ref)
-    ref.args = List(EirLiteral(Some(ref), EirLiteralTypes.Integer, idx.toString))
-    ref
   }
 
   def visitAll[T](node: EirNode, f: EirNode => T): Seq[T] = {
@@ -71,18 +26,6 @@ package object util {
 
   def applyOrFalse[T <: EirNode : Manifest](function: T => Unit, value: EirNode): Boolean = {
     value.isValid[T].map(function).isDefined
-  }
-
-  def updateWithin[T <: EirNode : Manifest](lst : List[T], oldNode : EirNode, newNode : EirNode): Option[List[T]] = {
-    val converted = (oldNode.isValid[T] ++ newNode.isValid[T]).toList
-    converted match {
-      case List(o, n) =>
-        lst.indexOf(o) match {
-          case -1 => None
-          case idx => Some(lst.updated(idx, n))
-        }
-      case _ => None
-    }
   }
 
   private def xDescendantOfY(x : EirClassLike, y : EirClassLike) = (x == y)

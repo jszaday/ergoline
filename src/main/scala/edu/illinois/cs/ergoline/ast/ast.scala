@@ -5,6 +5,7 @@ import java.io.File
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.util.AstManipulation
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 
@@ -74,7 +75,7 @@ trait EirSimpleContainer extends EirNode with EirScope {
   var children: List[EirNode]
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
-    util.updateWithin(children, oldValue, newValue).map(children = _).isDefined
+    AstManipulation.updateWithin(children, oldValue, newValue).map(children = _).isDefined
   }
 }
 
@@ -167,6 +168,17 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
+  def isDescendantOf(other: EirClassLike): Boolean = {
+    def helper(resolvable: EirResolvable[EirType]): Boolean = {
+      Find.uniqueResolution(resolvable) match {
+        case x if x == other => true
+        case c : EirClassLike => c.isDescendantOf(other)
+        case _ => false
+      }
+    }
+    extendsThis.exists(helper) || implementsThese.exists(helper)
+  }
+
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
@@ -178,9 +190,9 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
     (extendsThis.contains(oldValue) && util.applyOrFalse[EirResolvable[EirType]](x => extendsThis = Some(x), newValue)) ||
-      util.updateWithin(templateArgs, oldValue, newValue).map(templateArgs = _).isDefined ||
-      util.updateWithin(implementsThese, oldValue, newValue).map(implementsThese = _).isDefined ||
-      util.updateWithin(members, oldValue, newValue).map(members = _).isDefined
+      AstManipulation.updateWithin(templateArgs, oldValue, newValue).map(templateArgs = _).isDefined ||
+      AstManipulation.updateWithin(implementsThese, oldValue, newValue).map(implementsThese = _).isDefined ||
+      AstManipulation.updateWithin(members, oldValue, newValue).map(members = _).isDefined
   }
 }
 
@@ -264,8 +276,8 @@ case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
     else if (returnType == oldNode) {
       util.applyOrFalse[EirResolvable[EirType]](returnType = _, newNode)
     } else {
-      util.updateWithin(templateArgs, oldNode, newNode).map(templateArgs = _).orElse(
-        util.updateWithin(functionArgs, oldNode, newNode).map(functionArgs = _)
+      AstManipulation.updateWithin(templateArgs, oldNode, newNode).map(templateArgs = _).orElse(
+        AstManipulation.updateWithin(functionArgs, oldNode, newNode).map(functionArgs = _)
       ).isDefined
     }
   }
@@ -346,7 +358,7 @@ case class EirTupleExpression(var parent: Option[EirNode], var expressions: List
   override def children: Iterable[EirNode] = expressions
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    util.updateWithin(expressions, oldNode, newNode).map(expressions = _).isDefined
+    AstManipulation.updateWithin(expressions, oldNode, newNode).map(expressions = _).isDefined
   }
 }
 
@@ -367,7 +379,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
   override def children: Iterable[EirNode] = args ++ List(body)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
+    AstManipulation.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
       ((body == oldNode) && util.applyOrFalse[EirBlock](body = _, newNode))
   }
 }
@@ -443,7 +455,7 @@ trait EirPostfixExpression extends EirExpressionNode {
   override def children: Iterable[EirNode] = target +: args
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    util.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
+    AstManipulation.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
       ((target == oldNode) && util.applyOrFalse[EirExpressionNode](target = _, newNode))
   }
 }
@@ -519,7 +531,7 @@ case class EirSpecializedSymbol(var parent: Option[EirNode],
   override def children: Iterable[EirNode] = symbol +: specialization
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    util.updateWithin(specialization, oldNode, newNode).map(specialization = _).isDefined ||
+    AstManipulation.updateWithin(specialization, oldNode, newNode).map(specialization = _).isDefined ||
       ((symbol == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](symbol = _, newNode))
   }
 }
