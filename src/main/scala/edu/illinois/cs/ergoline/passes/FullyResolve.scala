@@ -1,8 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirFunctionCall, EirImport, EirNode, EirSymbol}
-import edu.illinois.cs.ergoline.passes.FullyResolve.visit
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.ast.{EirImport, EirNode}
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object FullyResolve {
 

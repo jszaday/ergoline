@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 trait EirVisitor[Context, Value] {
@@ -41,11 +42,12 @@ trait EirVisitor[Context, Value] {
       case x: EirArrayReference => visitArrayReference(ctx, x)
       case x: EirIfElse => visitIfElse(ctx, x)
       case x: EirNew => visitNew(ctx, x)
-      case x: EirResolvable[_] if x.resolved =>
-        Find.singleReference(x) match {
-          case Some(v) => visit(ctx, v)
-          case None => error(ctx, x)
-        }
+      case x: EirProxy => visitProxy(ctx, x)
+      case x: EirResolvable[_] if x.resolved => {
+        val found = Find.uniqueResolution(x)
+        if (found == x) error(ctx, found)
+        else visit(ctx, found)
+      }
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)
       case x => error(ctx, x)
@@ -55,6 +57,8 @@ trait EirVisitor[Context, Value] {
   def visitNew(ctx: Context, x: EirNew): Value
 
   def visitIfElse(ctx: Context, x: EirIfElse): Value
+
+  def visitProxy(ctx: Context, x: EirProxy): Value
 
 //  def visitDefault(ctx: Context, x: EirNode): Value
 

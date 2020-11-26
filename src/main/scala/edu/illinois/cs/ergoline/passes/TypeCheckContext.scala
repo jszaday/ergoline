@@ -11,9 +11,31 @@ import scala.collection.mutable
 class TypeCheckContext {
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
+  private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
 
   def enterNode(n: EirNode): Unit = {
     stack.push(n)
+  }
+
+
+
+  def shouldCheck(s: EirSpecializable): Boolean = {
+    if (s.templateArgs.isEmpty) {
+      if (_checked.contains(s)) false
+      else { _checked += (s -> Nil); true }
+    } else {
+      _substitutions.get(s) match {
+        case Some(sp) => {
+          val checked = _checked.getOrElse(s, Nil)
+          if (checked.contains(sp)) false
+          else {
+            _checked += (s -> (checked :+ sp))
+            true
+          }
+        }
+        case None => false
+      }
+    }
   }
 
   def specialize(s : EirSpecializable): EirSpecialization = {

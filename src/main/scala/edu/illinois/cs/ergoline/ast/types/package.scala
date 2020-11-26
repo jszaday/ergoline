@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util
 
@@ -67,6 +68,15 @@ package object types {
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       (base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode)
+    }
+
+    private var _resolved: Option[EirProxy] = None
+
+    override def resolved: Boolean = _resolved.isDefined
+
+    override def resolve(): List[EirType] = {
+      if (_resolved.isEmpty) _resolved = Some(ProxyManager.proxyFor(this))
+      _resolved.toList
     }
   }
 

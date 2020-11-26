@@ -2,19 +2,26 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
+import edu.illinois.cs.ergoline.proxies.EirProxy
 
 import scala.util.Properties.{lineSeparator => n}
 
-class UnparseContext {
-  var numTabs = 0
-  // def t: String = "  "
+object UnparseAst {
+  val tab = "  "
 
-  def t(n : Int = numTabs): String = List.fill(n)(UnparseAst.t).mkString("")
-  // def tabsMinusOne: String = List.fill(Math.max(numTabs - 1, 0))(t).mkString("")
+  class UnparseContext {
+    var numTabs = 0
+    /* (n : Int = numTabs) */
+    def t: String = List.fill(numTabs)(tab).mkString("")
+  }
+
+  private val _instance = new UnparseAst
+
+  def visit(node: EirNode): String = _instance.visit(new UnparseContext, node)
 }
 
-object UnparseAst extends EirVisitor[UnparseContext, String] {
-  def t = "  "
+class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   private object UnparseSyntax {
 
@@ -32,20 +39,18 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     throw new RuntimeException(s"could not unparse node of type ${node.getClass.getSimpleName}")
   }
 
-  def visit(node: EirNode): String = visit(new UnparseContext, node)
+  def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
+    annotations.map(visitAnnotation(ctx, _)).mkString(" ")
+  }
 
   override def visit(ctx: UnparseContext, node: EirNode): String = {
-    val annotations = Option(node)
-      .map(_.annotations)
-      .map(visit(ctx, _)).toIterable
-      .flatten.mkString("")
-    annotations + super.visit(ctx, node)
+    visitAnnotations(ctx, Option(node).map(_.annotations).getOrElse(Nil)) + super.visit(ctx, node)
   }
 
   def addSemi(x: String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
 
   def visitStatements(ctx: UnparseContext, lst: Iterable[EirNode]): String = {
-    val x = visit(ctx, lst).map(addSemi).map(x => s"$n${ctx.t()}$x").mkString
+    val x = visit(ctx, lst).map(addSemi).map(x => s"$n${ctx.t}$x").mkString
     if (x == "") " " else s"$x$n"
   }
 
@@ -53,7 +58,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     ctx.numTabs += 1
     val body = visitStatements(ctx, node.children)
     ctx.numTabs -= 1
-    val tail = if (body.trim.isEmpty) "" else ctx.t()
+    val tail = if (body.trim.isEmpty) "" else ctx.t
     s"{$body$tail}"
   }
 
@@ -77,28 +82,37 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
       node.lowerBound.mapOrEmpty(x => " :> " + visit(ctx, x))
   }
 
-  def visitClassLike(ctx: UnparseContext, keyword: String, node: EirClassLike): String = {
-    val decl = node.templateArgs match {
-      case Nil => ""
-      case lst => s"<${lst.map(visit(ctx, _)) mkString ", "}>"
-    }
+  def visitChildren(ctx: UnparseContext, children: List[EirNode]): String = {
     ctx.numTabs += 1
-    val body = node.members match {
+    val body = children match {
       case Nil => " "
       case lst => s"${visitStatements(ctx, lst)}${ctx.t(ctx.numTabs - 1)}"
     }
     ctx.numTabs -= 1
+    "{" + body + s"${ctx.t}}"
+  }
+
+  def visitClassLike(ctx: UnparseContext, node: EirClassLike): String = {
+    val keyword = node match {
+      case _: EirClass => "class"
+      case _: EirTrait => "trait"
+    }
+    val decl = node.templateArgs match {
+      case Nil => ""
+      case lst => s"<${lst.map(visit(ctx, _)) mkString ", "}>"
+    }
+    val body = visitChildren(ctx, node.members)
     val inheritance: String = node.extendsThis.mapOrEmpty(x => s" extends ${visit(ctx, x)}") +
       node.implementsThese.zipWithIndex.map {
         case (x, 0) => s" with ${visit(ctx, x)}"
         case (x, _) => s" and ${visit(ctx, x)}"
       }.mkString("")
-    s"$keyword ${node.name}$decl$inheritance {$body}$n"
+    s"$keyword ${node.name}$decl$inheritance $body$n"
   }
 
-  override def visitClass(ctx: UnparseContext, node: EirClass): String = visitClassLike(ctx, "class", node)
+  override def visitClass(ctx: UnparseContext, node: EirClass): String = visitClassLike(ctx, node)
 
-  override def visitTrait(ctx: UnparseContext, node: EirTrait): String = visitClassLike(ctx, "trait", node)
+  override def visitTrait(ctx: UnparseContext, node: EirTrait): String = visitClassLike(ctx, node)
 
   override def visitMember(ctx: UnparseContext, node: EirMember): String = {
     val overrides = if (node.isOverride) "override " else ""
@@ -173,7 +187,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     visit(ctx, x.base) + "@" + x.collective.getOrElse("")
   }
 
-  def superficial(ctx : UnparseContext, node : EirNode): String = {
+  def nameFor(ctx : UnparseContext, node : EirNode): String = {
     node match {
       case x : EirNamedNode => x.name
       case _ => visit(ctx, node)
@@ -184,16 +198,16 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
     if (s.specialization.isEmpty) {
       ""
     } else {
-      s"<${s.specialization.map(superficial(ctx, _)) mkString ", "}>"
+      s"<${s.specialization.map(nameFor(ctx, _)) mkString ", "}>"
     }
   }
 
   override def visitTemplatedType(ctx: UnparseContext, x: EirTemplatedType): String = {
-    s"${superficial(ctx, x.base)}<${x.args.map(superficial(ctx, _)) mkString ", "}>"
+    s"${nameFor(ctx, x.base)}<${x.args.map(nameFor(ctx, _)) mkString ", "}>"
   }
 
   override def visitLambdaType(ctx: UnparseContext, x: EirLambdaType): String = {
-    s"((${x.from.map(superficial(ctx, _)) mkString ", "}) => ${superficial(ctx, x.to)})"
+    s"((${x.from.map(nameFor(ctx, _)) mkString ", "}) => ${nameFor(ctx, x.to)})"
   }
 
   override def visitTernaryOperator(ctx: UnparseContext, x: EirTernaryOperator): String = {
@@ -209,7 +223,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitSpecializedSymbol(ctx: UnparseContext, x: EirSpecializedSymbol): String = {
-    superficial(ctx, x.symbol) + visitSpecialization(ctx, x)
+    nameFor(ctx, x.symbol) + visitSpecialization(ctx, x)
   }
 
   override def visitIfElse(ctx: UnparseContext, x: EirIfElse): String = {
@@ -223,4 +237,7 @@ object UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitNew(ctx: UnparseContext, x: EirNew): String = {
     s"new ${visit(ctx, x.target)}(${visit(ctx, x.args) mkString ", "})"
   }
+
+  override def visitProxy(ctx: UnparseContext, x: EirProxy): String =
+    visitProxyType(ctx, EirProxyType(x.parent, x.base, x.collective))
 }

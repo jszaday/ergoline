@@ -110,7 +110,6 @@ object Find {
   }
 
   def anywhereAccessible(ctx : EirNode, name : String): Seq[EirNamedNode] = {
-//    val name = symbol.qualifiedName.last
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
     val predicate: EirNode => Option[Boolean] = {
@@ -139,9 +138,10 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case last :: Nil => anywhereAccessible(symbol, last).collect({
-        case x: T => x
-      })
+      case last :: Nil => {
+        val found = anywhereAccessible(symbol, last)
+        found.collect({ case x: T => x })
+      }
       case init :+ last =>
         var namespace = anywhereAccessible(symbol, init.head)
         for (mid <- init.tail) {
@@ -157,8 +157,13 @@ object Find {
   }
 
   def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
-    x.resolve() match {
+    val found = x.resolve()
+    found match {
       case head :: Nil => head
+      case head :: _ => {
+        println(s"WARNING: found $found when resolving $x")
+        head
+      }
       case _ => throw new RuntimeException(s"unable to uniquely resolve $x")
     }
   }

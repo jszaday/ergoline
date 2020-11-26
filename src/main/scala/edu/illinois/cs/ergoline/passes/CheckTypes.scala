@@ -1,13 +1,15 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirProxyType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.CheckTypes.TypeCheckSyntax.RichEirType
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find.FindSyntax.RichPredicate
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.assertValid
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -38,7 +40,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     //      and implement self-application as well (i.e. (42).toString vs 42.toString())
     val expectsSelf = x.target match {
       // we do not expect ourself for static applications and that's it :)
-      case s: EirSymbol[_] => !Find.singleReference(s).get.isInstanceOf[EirClassLike]
+      case s: EirSymbol[_] => !Find.uniqueResolution(s).isInstanceOf[EirClassLike]
       // one may only make field accesses to a specialized class
       // NOTE unless self-symbol application is added i.e. f<3> sugaring to f<3>()...
       // NOTE i think that's fairly unlikely tho cause' it's kinda vague
@@ -98,7 +100,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = ???
+  override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = x.resolve().head
 
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
 
@@ -151,13 +153,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
-    if (value.disambiguation.isEmpty) {
-      value.disambiguation = Find.singleReference(value)
-    }
-    value.disambiguation match {
-      case Some(node) => visit(ctx, node)
-      case None => throw TypeCheckException(s"could not find type of $value")
-    }
+    visit(ctx, Find.uniqueResolution(value))
   }
 
   override def visitBlock(ctx: TypeCheckContext, node: EirBlock): EirType = {
@@ -200,27 +196,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     throw TypeCheckException(s"error in $ctx on $node: $message")
   }
 
-  override def visitClass(ctx: TypeCheckContext, node: EirClass): EirType = {
-//    if (!classCache.contains(node)) {
-//      classCache +:= node
-//      for (member <- node.members) {
-//        try {
-//          visit(ctx, member)
-//        } catch {
-//          case MissingSpecializationException(_, _) =>
-//        }
-//      }
-//    }
+
+  def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
+    if (ctx.shouldCheck(node)) {
+      node.members.foreach(visitMember(ctx, _))
+    }
     node
   }
 
-  override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = {
-    node
-  }
+  override def visitClass(ctx: TypeCheckContext, node: EirClass): EirType = visitClassLike(ctx, node)
 
-  override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = {
-    visit(ctx, node.member)
-  }
+  override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = visitClassLike(ctx, node)
+
+  override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = visit(ctx, node.member)
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
     // TODO check self-assigning arguments?
@@ -237,7 +225,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //        throw TypeCheckException(s"${node.name} cannot return a value of type $other")
 //      case _ =>
 //    }
-    if (node.templateArgs.isEmpty) {
+    if (ctx.shouldCheck(node)) {
       node.body.foreach(visit(ctx, _))
     }
     EirLambdaType(Some(node), node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
@@ -370,5 +358,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
-  override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = ???
+  override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
+    val target = visit(ctx, x.target)
+    // validate constructor arguments
+    target
+  }
+
+  override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = x
 }

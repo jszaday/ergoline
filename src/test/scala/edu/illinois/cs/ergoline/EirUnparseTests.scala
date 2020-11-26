@@ -7,7 +7,7 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirUnparseTests extends FunSuite {
-  import UnparseAst.t
+  import UnparseAst.{tab => t}
 
   private val genericFunction = "def foo<T>(=bar: T, baz: T): T { }"
   private val parsedFunction = {

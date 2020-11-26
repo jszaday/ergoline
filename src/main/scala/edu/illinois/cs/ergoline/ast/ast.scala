@@ -216,6 +216,13 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 
   def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
 
+  // TODO ensure first argument is "self"
+  // TODO also ensure return type is "unit" unless a/sync or local
+  def isEntry: Boolean = member match {
+    case _: EirFunction => annotations.exists(_.name == "entry")
+    case _ => false
+  }
+
   def isFinal: Boolean = member match {
     case d : EirDeclaration => d.isFinal
     case _ => true

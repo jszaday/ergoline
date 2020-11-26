@@ -1,70 +1,53 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirProxyType
+import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 
 import scala.util.Properties.{lineSeparator => n}
-import UnparseAst.{superficial, t}
 import edu.illinois.cs.ergoline.resolution.Find
 
-
-class CppContext { }
-
-object GenerateCpp extends EirVisitor[CppContext, String] {
-  var numTabs = 0
+object GenerateCpp extends UnparseAst {
   var visited : List[EirNode] = Nil
 
-  def visit(node: EirNode): String = visit(new CppContext, node)
+  def visit(node: EirNode): String = visit(new UnparseContext, node)
 
-  override def error(ctx: CppContext, node : EirNode): String = {
+  override def error(ctx: UnparseContext, node : EirNode): String = {
     println(s"silently ignoring my failure to process $node")
     ""
   }
 
-  // TODO should use same character as other unparse passes
-  def tabs: String = List.fill(numTabs)(t).mkString("")
+  override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
 
-  override def visitArrayReference(ctx: CppContext, x: EirArrayReference): String = ???
-
-  override def visitFieldAccessor(ctx: CppContext, x: EirFieldAccessor): String = {
+  override def visitFieldAccessor(ctx: UnparseContext, x: EirFieldAccessor): String = {
     // TODO handle self applications :3
     s"${visit(ctx, x.target)}.${x.field}"
   }
 
-  override def visitTernaryOperator(ctx: CppContext, x: EirTernaryOperator): String = ???
+  override def visitTernaryOperator(ctx: UnparseContext, x: EirTernaryOperator): String = ???
 
-  override def visitLambdaType(ctx: CppContext, x: types.EirLambdaType): String = "auto"
+  override def visitLambdaType(ctx: UnparseContext, x: types.EirLambdaType): String = "auto"
 
-  override def visitTemplatedType(ctx: CppContext, x: types.EirTemplatedType): String = {
-    s"${generateName(x.base)}<${x.args.map(generateName) mkString ", "}>"
-  }
-
-  override def visitProxyType(ctx: CppContext, x: types.EirProxyType): String = {
+  override def visitProxyType(ctx: UnparseContext, x: types.EirProxyType): String = {
     "CProxy_" + visit(ctx, x.base)
   }
 
-  override def visitImport(ctx: CppContext, x: EirImport): String = ""
+  override def visitImport(ctx: UnparseContext, x: EirImport): String = ""
 
-  def handleOption(ctx: CppContext, x : Option[EirNode]): Option[String] = {
+  def handleOption(ctx: UnparseContext, x : Option[EirNode]): Option[String] = {
     x.map({
-      case n : EirNamedNode => generateName(n)
+      case n : EirNamedNode => nameFor(ctx, n)
       case n => visit(ctx, n)
     })
   }
 
-  def visitSpecialization(ctx: CppContext, x: EirSpecialization): String = {
-    x.specialization match {
-      case Nil => ""
-      case x => s"<${visit(ctx, x) mkString ", "}>"
-    }
-  }
-
-  override def visitFunctionCall(ctx: CppContext, x: EirFunctionCall): String = {
+  override def visitFunctionCall(ctx: UnparseContext, x: EirFunctionCall): String = {
     val target = visit(x.target)
     // handleOption(ctx, x.target.disambiguation).getOrElse(visit(ctx, x.target))
     s"($target${visitSpecialization(ctx, x)}(${x.args.map(visit(ctx, _)) mkString ", "}))"
   }
 
-  override def visitForLoop(ctx: CppContext, x: EirForLoop): String = {
+  override def visitForLoop(ctx: UnparseContext, x: EirForLoop): String = {
     x.header match {
       case EirCStyleHeader(d, t, i) => {
         val decl = visit(ctx, d).headOption.getOrElse(";")
@@ -76,62 +59,43 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     }
   }
 
-  override def visitLiteral(ctx: CppContext, x: EirLiteral): String = x.value
+  override def visitLiteral(ctx: UnparseContext, x: EirLiteral): String = x.value
 
-  override def visitSymbol[A <: EirNamedNode](ctx: CppContext, x: EirSymbol[A]): String = {
+  override def visitSymbol[A <: EirNamedNode](ctx: UnparseContext, x: EirSymbol[A]): String = {
     try {
-      generateName(Find.singleReference(x).get)
+      nameFor(ctx, Find.uniqueResolution(x))
     } catch {
       case _: Throwable => x.qualifiedName.mkString("::")
     }
   }
 
-  override def visitBlock(ctx: CppContext, x: EirBlock): String = {
-    s"{$n" + visitChildren(ctx, x.children) + s"$n$tabs}"
-  }
-
-  def visitChildren(ctx: CppContext, x : List[EirNode]): String = {
-    numTabs += 1
-    val str = visit(ctx, x).map(x => s"$tabs$x").mkString(n)
-    numTabs -= 1
-    str
-  }
-
-  override def visitNamespace(ctx: CppContext, x: EirNamespace): String = {
-    s"namespace ${generateName(x)} {$n" + visitChildren(ctx, x.children) + s"$n$tabs};$n"
-  }
-
-  override def visitDeclaration(ctx: CppContext, x: EirDeclaration): String = {
-    s"${visit(ctx, x.declaredType)} ${generateName(x)}" + {
+  override def visitDeclaration(ctx: UnparseContext, x: EirDeclaration): String = {
+    s"${visit(ctx, x.declaredType)} ${nameFor(ctx, x)}" + {
       x.initialValue.map(x => s" = ${visit(ctx, x)}").getOrElse("")
     } + ";"
   }
 
-  override def visitTemplateArgument(ctx: CppContext, x: EirTemplateArgument): String = {
-    s"typename ${generateName(x)}"
+  override def visitTemplateArgument(ctx: UnparseContext, x: EirTemplateArgument): String = {
+    s"typename ${nameFor(ctx, x)}"
   }
 
-  def visitInherits(ctx: CppContext, x: EirClassLike): String = {
+  def visitInherits(ctx: UnparseContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
     if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ")
     else ""
   }
 
-  def visitClassLike(ctx: CppContext, x: EirClassLike): String = {
-    visitTemplateArgs(ctx, x.templateArgs) + s"class ${generateName(x)}"+visitInherits(ctx, x)+s" {$n" + visitChildren(ctx, x.members) + s"$n$tabs};$n"
+  override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
+    visitTemplateArgs(ctx, x.templateArgs) + s"class ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";$n"
   }
 
-  override def visitClass(ctx: CppContext, x: EirClass): String = visitClassLike(ctx, x)
-
-  override def visitTrait(ctx: CppContext, x: EirTrait): String = visitClassLike(ctx, x)
-
-  override def visitMember(ctx: CppContext, x: EirMember): String = {
+  override def visitMember(ctx: UnparseContext, x: EirMember): String = {
     visit(ctx, x.member)
   }
 
-  def visitTemplateArgs(ctx: CppContext, args : List[EirTemplateArgument]): String = {
+  def visitTemplateArgs(ctx: UnparseContext, args : List[EirTemplateArgument]): String = {
     if (args.isEmpty) ""
-    else s"template<${args.map(visit(ctx, _)) mkString ", "}>$n"
+    else s"template<${args.map(visit(ctx, _)) mkString ", "}>$n${ctx.t}"
   }
 
   def dropSelf(x : EirFunction): List[EirFunctionArgument] = {
@@ -142,7 +106,7 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     }
   }
 
-  override def visitFunction(ctx: CppContext, x: EirFunction): String = {
+  override def visitFunction(ctx: UnparseContext, x: EirFunction): String = {
     if (visited.contains(x)) return ""
     visited +:= x
     val body = x.body.map(visit(ctx, _)).getOrElse(";")
@@ -154,36 +118,27 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
       case m : EirMember if m.isConst => " const"
     }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"$static${visit(ctx, x.returnType)} ${generateName(x)}(${args mkString ", "})$const $body"
+    s"$static${visit(ctx, x.returnType)} ${nameFor(ctx, x)}(${args mkString ", "})$const $body"
   }
 
-  override def visitAnnotation(ctx: CppContext, x: EirAnnotation): String = s"/* @${x.name} */ "
+  override def visitAnnotation(ctx: UnparseContext, x: EirAnnotation): String = s"/* @${x.name} */ "
 
-  override def visitBinaryExpression(ctx: CppContext, x: EirBinaryExpression): String = {
+  override def visitBinaryExpression(ctx: UnparseContext, x: EirBinaryExpression): String = {
     s"(${visit(ctx, x.lhs)} ${x.op} ${visit(ctx, x.rhs)})"
   }
 
-  def generateName(x : EirNode): String = {
+  override def nameFor(ctx: UnparseContext, x : EirNode): String = {
     x match {
-      case x : EirNamedNode => generateName(x)
-      case x : EirSymbol[_] => x.qualifiedName.last
-      case _ => throw new RuntimeException(s"name of $x is unknown")
+      case n : EirNamedNode if n.name == "self" => "this"
+      case _ => super.nameFor(ctx, x)
     }
   }
 
-  def generateName(x : EirNamedNode): String = {
-    if (x.name == "self") "this" else x.name
+  override def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument): String = {
+    s"${visit(ctx, x.declaredType)} ${nameFor(ctx, x)}"
   }
 
-  override def visitFunctionArgument(ctx: CppContext, x: EirFunctionArgument): String = {
-    s"${visit(ctx, x.declaredType)} ${generateName(x)}"
-  }
-
-  override def visitAssignment(ctx: CppContext, x: EirAssignment): String = {
-    s"${x.lval} = ${x.rval};"
-  }
-
-  override def visitTupleExpression(ctx: CppContext, x: EirTupleExpression): String = {
+  override def visitTupleExpression(ctx: UnparseContext, x: EirTupleExpression): String = {
     val func = x.parent match {
       case Some(a : EirAssignment) if a.lval == x => "tie"
       case _ => "make_tuple"
@@ -191,26 +146,16 @@ object GenerateCpp extends EirVisitor[CppContext, String] {
     s"std::$func(${visit(ctx, x) mkString ", "})"
   }
 
-  override def visitLambdaExpression(ctx: CppContext, x: EirLambdaExpression): String = {
+  override def visitLambdaExpression(ctx: UnparseContext, x: EirLambdaExpression): String = {
     val retTy = handleOption(ctx, x.foundType).getOrElse("")
     s"[=] (${visit(ctx, x.args) mkString ", "}) -> $retTy ${visit(ctx, x.body)}"
   }
 
-  override def visitReturn(ctx: CppContext, x: EirReturn): String = {
-    s"return ${visit(ctx, x.expression)};"
-  }
-
-  override def visitSpecializedSymbol(ctx: CppContext, x: EirSpecializedSymbol): String = {
-    s"${visit(ctx, x.symbol)}${visitSpecialization(ctx, x)}"
-  }
-
-  override def visitIfElse(ctx: CppContext, x: EirIfElse): String = {
-    val ifFalse = x.ifFalse match {
-      case Some(n : EirNode) => s"else ${visit(ctx, n)}"
-      case None => ""
+  override def visitNew(ctx: UnparseContext, x: EirNew): String = {
+    x.target match {
+      case t: EirProxyType =>
+        visit(ctx, t) + s"::ckNew(${visit(ctx, x.args) mkString ", "})"
+      case _ => super.visitNew(ctx, x)
     }
-    s"if (${visit(x.test)}) ${x.ifTrue.map(visit(ctx, _)).getOrElse("")} $ifFalse"
   }
-
-  override def visitNew(ctx: CppContext, x: EirNew): String = ???
 }

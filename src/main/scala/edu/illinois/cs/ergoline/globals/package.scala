@@ -14,7 +14,7 @@ package object globals {
   }
 
   val operators: Map[String, String] = Map(
-    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals", "<" -> "compareTo", "%" -> "rem"
+    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals", ">=" -> "compareTo", ">" -> "compareTo", "<" -> "compareTo", "%" -> "rem"
   )
 
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
