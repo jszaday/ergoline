@@ -77,7 +77,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     error(ctx, x, s"attempting to access field ${x.field} of $base")
   }
 
-  override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = ???
+  override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = {
+    if (visit(ctx, x.test).canAssignTo(globals.typeFor(EirLiteralTypes.Boolean))) {
+      Find.unionType(visit(ctx, x.ifTrue), visit(ctx, x.ifFalse)) match {
+        case Some(found) => found
+        case None => error(ctx, x, s"could not unify type of ${x.ifTrue} and ${x.ifFalse}")
+      }
+    } else {
+      error(ctx, x, s"${x.test} is an unsuitable test")
+    }
+  }
 
   override def visitLambdaType(ctx: TypeCheckContext, x: types.EirLambdaType): EirType = {
     x.from = x.from.map(visit(ctx, _))
@@ -233,7 +242,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  override def visitAnnotation(ctx: TypeCheckContext, node: EirAnnotation): EirType = ???
+  override def visitAnnotation(ctx: TypeCheckContext, node: EirAnnotation): EirType =
+    error(ctx, node, "annotations are type-less")
 
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
     val func = globals.operatorToFunction(node.op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
@@ -309,12 +319,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class MissingSpecializationException(message: String, node: EirSpecializable) extends Exception(message)
 
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
-    val specializable = Find.singleReference(x.symbol).get
+    val specializable = Find.uniqueResolution(x.symbol)
     specializable.asInstanceOf[Any] match {
       case c : EirClassLike if c.templateArgs.length == x.specialization.length => EirTemplatedType(Some(x), c, x.specialization)
       // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
       case EirMember(_, f : EirFunction, _) if f.templateArgs.length == x.specialization.length =>
-        val enter = ctx.specialize(f, x);
+        val enter = ctx.specialize(f, x)
         val result = visitFunction(ctx, f)
         result.from = result.from.map(visit(ctx, _))
         result.to = visit(ctx, result.to)

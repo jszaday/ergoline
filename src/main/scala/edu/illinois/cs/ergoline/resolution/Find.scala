@@ -2,9 +2,8 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichIntOption
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichOption}
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -83,12 +82,19 @@ object Find {
 //    owner.findWithin[T]((t : T) => parentOf[C](t).contains(owner))
 //  }
 
+  def unionType(x: EirType, y: EirType): Option[EirType] = {
+    if (x == y) Some(x)
+    else if (x.canAssignTo(y)) Some(y)
+    else Some(x).filter(y.canAssignTo)
+    // TODO seek common ancestor classes and cast
+  }
+
   def unionType(types: Iterable[EirType]): Option[EirType] = {
-    types match {
-      case Nil => None
-      case head :: Nil => Some(head)
-      case _ => ???
-    }
+    val distinct = types.toList.distinct
+    distinct.tail.foldRight(distinct.headOption)((x, oY) => oY match {
+      case Some(y) => unionType(x, y)
+      case None => None
+    })
   }
 
   def unionType(types: EirType*): Option[EirType] = unionType(types)
@@ -138,10 +144,9 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case last :: Nil => {
+      case last :: Nil =>
         val found = anywhereAccessible(symbol, last)
         found.collect({ case x: T => x })
-      }
       case init :+ last =>
         var namespace = anywhereAccessible(symbol, init.head)
         for (mid <- init.tail) {
@@ -160,10 +165,9 @@ object Find {
     val found = x.resolve()
     found match {
       case head :: Nil => head
-      case head :: _ => {
+      case head :: _ =>
         println(s"WARNING: found $found when resolving $x")
         head
-      }
       case _ => throw new RuntimeException(s"unable to uniquely resolve $x")
     }
   }

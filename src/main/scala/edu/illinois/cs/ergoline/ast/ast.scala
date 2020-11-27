@@ -2,12 +2,12 @@ package edu.illinois.cs.ergoline.ast
 
 import java.io.File
 
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.AstManipulation
-import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.{globals, util}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -103,7 +103,14 @@ case object EirGlobalNamespace extends EirNode with EirScope {
 
   override def children: Iterable[EirNode] = modules.values
 
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    (oldNode, newNode) match {
+      case (x : EirNamespace, y: EirNamespace) if modules.contains(x.name) =>
+        modules(x.name) = y
+        true
+      case _ => false
+    }
+  }
 }
 
 case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode], var name: String)
@@ -413,12 +420,12 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
 
 object EirLiteralTypes extends Enumeration {
   type EirLiteralTypes = Value
-  val String = Value("string")
-  val Integer = Value("int")
-  val Float = Value("float")
-  val Character = Value("char")
-  val Unit = Value("unit")
-  val Boolean = Value("bool")
+  val String: Value = Value("string")
+  val Integer: Value = Value("int")
+  val Float: Value = Value("float")
+  val Character: Value = Value("char")
+  val Unit: Value = Value("unit")
+  val Boolean: Value = Value("bool")
 }
 
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])

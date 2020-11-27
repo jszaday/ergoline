@@ -1,6 +1,8 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.CheckTypes.TypeCheckException
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
@@ -72,5 +74,18 @@ class EirParseTest extends FunSuite {
     fs should matchPattern {
       case EirFunction(_, _, "bar", _, _, _) :: Nil =>
     }
+  }
+  test("type-check ternary operator") {
+    EirGlobalNamespace.clear()
+    val v = new Visitor
+    val t = new TypeCheckContext
+    val a = v.visitExpression(parserFromString("1 < 2 ? 1 : 2").expression())
+    val b = v.visitExpression(parserFromString("1 ? 1 : 2").expression())
+    val c = v.visitExpression(parserFromString("1 < 2 ? \"potato\" : 2").expression())
+    CheckTypes.visit(t, a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
+    // cannot use non-boolean as test
+    assertThrows[TypeCheckException](CheckTypes.visit(t, b))
+    // must be able to unify expressions' types
+    assertThrows[TypeCheckException](CheckTypes.visit(t, c))
   }
 }

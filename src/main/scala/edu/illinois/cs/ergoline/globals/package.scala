@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClass, EirExpressionNode, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirClass, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 
@@ -25,7 +25,11 @@ package object globals {
 
   def typeFor(litTy: EirLiteralTypes.Value): EirType = {
     val name : String = litTy.toString.toLowerCase
-    this.ergolineModule.flatMap(Find.child[EirClass](_, withName(name)).headOption)
+    this.ergolineModule.flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
+      .collect({
+        case f: EirFileSymbol => f.resolve().head.asInstanceOf[EirClass]
+        case c: EirClass => c
+      })
       .getOrElse(throw new RuntimeException(s"could not find type of $litTy"))
   }
 
