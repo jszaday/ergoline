@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirT
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -335,9 +336,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
-    val target = visit(ctx, x.target)
-    // validate constructor arguments
-    target
+    val target = visit(ctx, x.target) match {
+      case c : EirClassLike if !c.isAbstract => c
+      case c => throw TypeCheckException(s"cannot instantiate $c")
+    }
+    val candidates =
+      target.members
+        .filter(m => m.isConstructor && x.canAccess(m))
+        .map(_.member.asInstanceOf[EirFunction].functionArgs.tail)
+        // proxy-related args are provided by the runtime
+        .map(m => if (target.isInstanceOf[EirProxy]) m.tail else m)
+        .map(visit(ctx, _).toList)
+    val ours = visit(ctx, x.args).toList
+    if (candidates.exists(argumentsMatch(ours, _))) target
+    else error(ctx, x, "could not find a suitable constructor")
   }
 
   override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = x

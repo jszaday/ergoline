@@ -37,5 +37,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     }
   }
 
-  override def name: String = ???
+  // TODO this may have to be changed eventually
+  //     (if it's inaccessible it's not a problem)
+  override def name: String = base.name
 }
