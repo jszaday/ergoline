@@ -113,7 +113,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         EirTrait(parent, null, name, null, None, Nil)
       }
     enter(node, (c: EirClassLike) => {
-      c.isAbstract = ctx.AbstractKwd() != null
+      c.isAbstract = c.isAbstract || ctx.AbstractKwd() != null
       Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
       c.templateArgs = visitTemplateDecl(ctx.templateDecl())
       c.members = ctx.mapOrEmpty(_.annotatedMember, visitAnnotatedMember)

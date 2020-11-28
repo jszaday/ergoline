@@ -28,19 +28,17 @@ package object util {
     value.isValid[T].map(function).isDefined
   }
 
-  private def xDescendantOfY(x : EirClassLike, y : EirClassLike) = (x == y)
-
   private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
     y match {
       case _ : EirTemplateArgument => Find.commonAncestor(x, y) == y.parent
       case m : EirMember if m.accessibility == EirAccessibility.Public => true
       case m : EirMember =>
-        val xParentOption : Option[EirClassLike] = Find.parentOf[EirClassLike](x)
-        val yParent : EirClassLike = assertValid[EirClassLike](y.parent)
-        xParentOption.exists(xParent => {
-          if (m.accessibility == EirAccessibility.Private) xParent == yParent
-          else xDescendantOfY(xParent, yParent)
-        })
+        (Find.parentOf[EirClassLike](x), y.parent) match {
+          case (Some(xParent: EirClassLike), Some(yParent: EirClassLike)) =>
+            if (m.accessibility == EirAccessibility.Private) xParent == yParent
+            else xParent.isDescendantOf(yParent)
+          case _ => false
+        }
       case _ => true
     }
   }

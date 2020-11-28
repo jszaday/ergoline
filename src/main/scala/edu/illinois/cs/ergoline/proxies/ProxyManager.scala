@@ -8,6 +8,8 @@ import edu.illinois.cs.ergoline.util.assertValid
 object ProxyManager {
   private var _proxies: Map[EirClassLike, EirProxy] = Map()
 
+  def proxies: Iterable[EirProxy] = _proxies.values
+
   def checkProxyable(base: EirClassLike, collective: Option[String]): EirProxy = {
     // validate base has an entry constructor of the appropriate nature
     EirProxy(Some(base), base, collective)

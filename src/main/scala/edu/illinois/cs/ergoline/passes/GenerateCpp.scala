@@ -111,6 +111,11 @@ object GenerateCpp extends UnparseAst {
     visited +:= x
     val body = x.body.map(visit(ctx, _)).getOrElse(";")
     val args = dropSelf(x).map(visit(ctx, _))
+    val cons = x.parent.exists({
+      case m: EirMember => m.isConstructor
+      case _ => false
+    })
+    val retTy = if (cons) "" else { visit(ctx, x.returnType) + " " }
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
     }).getOrElse("")
@@ -118,7 +123,7 @@ object GenerateCpp extends UnparseAst {
       case m : EirMember if m.isConst => " const"
     }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"$static${visit(ctx, x.returnType)} ${nameFor(ctx, x)}(${args mkString ", "})$const $body"
+    s"$static$retTy${nameFor(ctx, x)}(${args mkString ", "})$const $body"
   }
 
   override def visitAnnotation(ctx: UnparseContext, x: EirAnnotation): String = s"/* @${x.name} */ "
