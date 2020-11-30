@@ -27,11 +27,11 @@ class EirUnparseTests extends FunSuite {
     EirGlobalNamespace.clear()
     val program =
       s"""namespace foo {
-        |$t@entry def bar(x: int, n: int): unit {
-        |$t${t}for (var y: int = ((x * 2) + 1); (y < n); y += 1) {
-        |$t$t${t}println(y);
-        |$t$t}
+        |@entry def bar(x: int, n: int): unit {
+        |${t}for (var y: int = ((x * 2) + 1); (y < n); y += 1) {
+        |$t${t}println(y);
         |$t}
+        |}
         |}
         |""".stripMargin
     val namespace =

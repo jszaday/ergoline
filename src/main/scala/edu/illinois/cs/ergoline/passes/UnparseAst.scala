@@ -47,11 +47,14 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     visitAnnotations(ctx, Option(node).map(_.annotations).getOrElse(Nil)) + super.visit(ctx, node)
   }
 
-  def addSemi(x: String): String = if (x.endsWith(n) || x.endsWith("}") || x.endsWith(";")) x else s"$x;"
+  def addSemi(x: String): String = {
+    val trimmed = x.stripTrailing()
+    if (trimmed.endsWith("}") || trimmed.endsWith(";") || trimmed.isEmpty) trimmed else s"$trimmed;"
+  }
 
   def visitStatements(ctx: UnparseContext, lst: Iterable[EirNode]): String = {
-    val x = visit(ctx, lst).map(addSemi).map(x => s"$n${ctx.t}$x").mkString
-    if (x == "") " " else s"$x$n"
+    val x = visit(ctx, lst).map(addSemi).filter(_.nonEmpty).map(x => s"$n${ctx.t}$x").mkString
+    if (x.nonEmpty) s"$x$n" else " "
   }
 
   override def visitBlock(ctx: UnparseContext, node: EirBlock): String = {
@@ -63,10 +66,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitNamespace(ctx: UnparseContext, node: EirNamespace): String = {
-    ctx.numTabs += 1
-    val body = visitStatements(ctx, node.children)
-    ctx.numTabs -= 1
-    s"namespace ${node.name} {$body}$n"
+    s"namespace ${node.name} {${visitStatements(ctx, node.children)}}$n"
   }
 
   override def visitDeclaration(ctx: UnparseContext, node: EirDeclaration): String = {
@@ -84,10 +84,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   def visitChildren(ctx: UnparseContext, children: List[EirNode]): String = {
     ctx.numTabs += 1
-    val body = children match {
-      case Nil => " "
-      case lst => s"${visitStatements(ctx, lst)}${ctx.t(ctx.numTabs - 1)}"
-    }
+    val body = visitStatements(ctx, children)
     ctx.numTabs -= 1
     "{" + body + s"${ctx.t}}"
   }

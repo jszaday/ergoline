@@ -14,9 +14,13 @@ object Processes {
 
   def generateCpp(): Iterable[String] = {
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
-    a.map(GenerateCpp.forwardDecl(_)) ++ Seq("#include \"generate.decl.h\"") ++
-    a.map(GenerateCpp.visit) ++
-    EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit) ++
-    c.map(GenerateCpp.visit) ++  Seq(n + "#include \"generate.def.h\"")
+    val body = a.map(GenerateCpp.visit) ++
+      EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit) ++ c.map(GenerateCpp.visit)
+    val gathered = body.map(_.trim).groupBy(x => x.substring(0, x.indexOf('{') + 1)).map(x => {
+      x._1 + n + x._2.map(y => y.substring(x._1.length + 1, y.length - 1)).mkString("") + n + "}"
+    })
+    a.map(GenerateCpp.forwardDecl(_)) ++
+      Seq("#include \"generate.decl.h\"") ++
+      gathered ++ Seq(n + "#include \"generate.def.h\"")
   }
 }

@@ -121,7 +121,7 @@ object GenerateCpp extends UnparseAst {
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
     // if (x.annotations.exists(_.name == "system")) "" else
-    visitTemplateArgs(ctx, x.templateArgs) + s"struct ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";$n"
+    visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";"
   }
 
   override def visitMember(ctx: UnparseContext, x: EirMember): String = {
@@ -166,7 +166,15 @@ object GenerateCpp extends UnparseAst {
       case m: EirMember => m.isConstructor
       case _ => false
     })
-    val args = dropSelf(x).map(visit(ctx, _))
+    val args = {
+      val tmp = dropSelf(x).map(visit(ctx, _))
+      // NOTE kludgy solution to detect if we need to drop selfProxy
+      if (cons && x.parent.flatMap(_.parent).to[EirProxy].isDefined) {
+        tmp.tail
+      } else {
+        tmp
+      }
+    }
     val retTy = if (cons) "" else { visit(ctx, x.returnType) + " " }
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
@@ -181,7 +189,10 @@ object GenerateCpp extends UnparseAst {
     s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$const$over $body"
   }
 
-  override def visitAnnotation(ctx: UnparseContext, x: EirAnnotation): String = s"/* @${x.name} */$n${ctx.t}"
+  override def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
+    if (annotations.nonEmpty) s"$n${ctx.t}/* " + super.visitAnnotations(ctx, annotations) + "*/ "
+    else ""
+  }
 
   override def visitBinaryExpression(ctx: UnparseContext, x: EirBinaryExpression): String = {
     s"(${visit(ctx, x.lhs)} ${x.op} ${visit(ctx, x.rhs)})"
@@ -308,7 +319,7 @@ object GenerateCpp extends UnparseAst {
       if (proxy.exists(_.isMain)) {
         name + "(CkArgMsg* msg) "
       } else {
-        visit(ctx, f).init.replace(base, name)
+        visit(ctx, f).init.replaceFirst(base, name)
       }
     } else visit(ctx, f).init
     vf + s"{$n" + {
