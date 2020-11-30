@@ -3,8 +3,11 @@ package edu.illinois.cs.ergoline
 import java.nio.file.Paths
 
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.passes.{GenerateCi, Processes}
 import edu.illinois.cs.ergoline.resolution.Modules.load
+import java.io.{File, PrintWriter}
+import scala.util.Properties.{lineSeparator => n}
+
 
 object Driver extends App {
   // get the options from the command-line args
@@ -16,5 +19,12 @@ object Driver extends App {
   modules.foreach(x => Processes.onLoad(x.scope.get))
   // visit each file
 //  modules.foreach(x => println(x.unparse))
-  Processes.generateCpp().foreach(println)
+
+  val cpp = new PrintWriter(new File("generate.cc" ))
+  cpp.write(Processes.generateCpp().mkString(n))
+  cpp.close()
+
+  val ci = new PrintWriter(new File("generate.ci" ))
+  ci.write(GenerateCi.visitAll())
+  ci.close()
 }

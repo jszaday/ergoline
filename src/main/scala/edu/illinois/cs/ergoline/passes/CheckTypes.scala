@@ -351,14 +351,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case c => throw TypeCheckException(s"cannot instantiate $c")
     }
     val candidates =
-      target.members
-        .filter(m => m.isConstructor && x.canAccess(m))
-        .map(_.member.asInstanceOf[EirFunction].functionArgs.tail)
-        // proxy-related args are provided by the runtime
-        .map(m => if (target.isInstanceOf[EirProxy]) m.tail else m)
-        .map(visit(ctx, _).toList)
+      target.members.filter(m => m.isConstructor && x.canAccess(m))
     val ours = visit(ctx, x.args).toList
-    if (candidates.exists(argumentsMatch(ours, _))) target
+    x.disambiguation = candidates.find((m : EirMember) => {
+      val f = m.member.asInstanceOf[EirFunction]
+      val theirs =
+        // proxy-related args are provided by the runtime
+        f.functionArgs.drop(if (target.isInstanceOf[EirProxy]) 2 else 1).map(visit(ctx, _))
+      argumentsMatch(ours, theirs)
+    })
+    if (x.disambiguation.isDefined) target
     else error(ctx, x, "could not find a suitable constructor")
   }
 

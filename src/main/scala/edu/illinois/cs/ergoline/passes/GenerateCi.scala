@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import scala.util.Properties.{lineSeparator => n}
 import UnparseAst.UnparseContext
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirMember}
+import edu.illinois.cs.ergoline.ast.{EirFunction, EirMember, EirNamespace}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 
 import scala.util.matching.Regex
@@ -12,24 +12,40 @@ object GenerateCi {
 
   def visitAll(): String = {
     val ctx = new UnparseContext
-    ProxyManager.proxies
+    ctx.numTabs += 1
+    val body = ProxyManager.proxies
       .filterNot(_.base.isAbstract)
-      .map(visit(ctx, _)).mkString(n)
+      .map(x => (x.namespaces.toList, x))
+      .groupBy(_._1)
+      .map({
+        case (k, v) => visitNamespaces(ctx, k, v.map(_._2).toList)
+      }).mkString(n)
+    ctx.numTabs -= 1
+    s"mainmodule generate {$n$body}$n"
+  }
+
+  def visitNamespaces(ctx: UnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
+    namespaces.map(ns => s"${n}namespace ${ns.name} {").mkString("") + n + {
+      proxies.map(visit(ctx, _)).mkString("")
+    } + "}" + n
   }
 
   def visit(ctx: UnparseContext, proxy: EirProxy): String = {
     val template: String = GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
-    val isMain = proxy.base.annotations.exists(_.name == "main")
+    val name = s"${proxy.name}_"
     val header =
-      template + ctx.t + visitChareType(isMain, proxy.collective) + " " + proxy.name + s" {$n"
+      template + ctx.t + visitChareType(proxy.isMain, proxy.collective) + s" $name {$n"
     ctx.numTabs += 1
-    val body = proxy.members.map(visit(ctx, _)).mkString(n)
+    val body = proxy.members.map(visit(ctx, proxy, _)).mkString(n)
     ctx.numTabs -= 1
-    header + body + s"${ctx.t}}$n"
+    header + body + s"${ctx.t}};$n"
   }
 
-  def visit(ctx: UnparseContext, f: EirMember): String = {
-    s"${ctx.t} entry " + GenerateCpp.visit(ctx, f.member) + n
+  def visit(ctx: UnparseContext, proxy: EirProxy, f: EirMember): String = {
+    val body =
+      GenerateCpp.visit(ctx, f.member)
+        .replace(proxy.name, s"${proxy.name}_")
+    s"${ctx.t} entry $body$n"
   }
 
   def visitChareType(isMain: Boolean, o: Option[String]): String = {

@@ -1,14 +1,21 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String]) extends EirClassLike {
 
   isAbstract = base.isAbstract
 
+  def isMain: Boolean =
+    base.annotations.exists(_.name == "main") && collective.isEmpty
+
   override def derived: List[EirClassLike] =
     base.derived.flatMap(ProxyManager.proxiesFor)
+
+  def namespaces: Seq[EirNamespace] = Find.ancestors(base).collect({
+    case n : EirNamespace => n
+  })
 
   // replace "self" with "selfProxy"
   // TODO use clone

@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirProxyType
+import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
 
@@ -14,6 +14,13 @@ object GenerateCpp extends UnparseAst {
   var visited : List[EirNode] = Nil
 
   def visit(node: EirNode): String = visit(new UnparseContext, node)
+
+  def forwardDecl(x: EirProxy, ctx: UnparseContext = new UnparseContext): String = {
+    val ns = x.namespaces.toList
+    (ns.map(ns => s"${n}namespace ${nameFor(ctx, ns)} {") ++ {
+      Seq(s"struct ${nameFor(ctx, x)};")
+    } ++ ns.map(_ => "}")).mkString(n)
+  }
 
   override def error(ctx: UnparseContext, node : EirNode): String = {
     println(s"silently ignoring my failure to process $node")
@@ -44,10 +51,34 @@ object GenerateCpp extends UnparseAst {
     })
   }
 
+  def visitCallArgument(ctx: UnparseContext)(t: (EirExpressionNode, EirFunctionArgument)): String = {
+    val theirs = t._2.declaredType.resolve().headOption
+    (t._1.foundType, theirs) match {
+      case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) => {
+        s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
+      }
+      case _ => visit(ctx, t._1)
+    }
+  }
+
+  def visitArguments(ctx: UnparseContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): List[String] = {
+    val theirs: List[EirFunctionArgument] =
+      disambiguation match {
+        case Some(m@EirMember(_, f: EirFunction, _)) =>
+          if (m.isStatic) f.functionArgs
+          else f.functionArgs.drop(if (m.isConstructor && m.isEntry) 2 else 1)
+        case Some(f: EirFunction) => f.functionArgs
+        case _ => Nil
+      }
+    if (theirs.length == args.length) args.zip(theirs).map(visitCallArgument(ctx))
+    else args.map(visit(ctx, _))
+  }
+
   override def visitFunctionCall(ctx: UnparseContext, x: EirFunctionCall): String = {
     val target = visit(x.target)
+    val args: List[String] = visitArguments(ctx)(x.target.disambiguation, x.args)
     // handleOption(ctx, x.target.disambiguation).getOrElse(visit(ctx, x.target))
-    s"($target${visitSpecialization(ctx, x)}(${x.args.map(visit(ctx, _)) mkString ", "}))"
+    s"($target${visitSpecialization(ctx, x)}(${args mkString ", "}))"
   }
 
   override def visitForLoop(ctx: UnparseContext, x: EirForLoop): String = {
@@ -90,7 +121,7 @@ object GenerateCpp extends UnparseAst {
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
     // if (x.annotations.exists(_.name == "system")) "" else
-    visitTemplateArgs(ctx, x.templateArgs) + s"class ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";$n"
+    visitTemplateArgs(ctx, x.templateArgs) + s"struct ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";$n"
   }
 
   override def visitMember(ctx: UnparseContext, x: EirMember): String = {
@@ -135,14 +166,7 @@ object GenerateCpp extends UnparseAst {
       case m: EirMember => m.isConstructor
       case _ => false
     })
-    val entry = x.parent.exists({
-      case m: EirMember => m.isEntry
-      case _ => false
-    })
-    val args = {
-      if (entry && cons) dropSelf(x).tail.map(visit(ctx, _))
-      else dropSelf(x).map(visit(ctx, _))
-    }
+    val args = dropSelf(x).map(visit(ctx, _))
     val retTy = if (cons) "" else { visit(ctx, x.returnType) + " " }
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
@@ -178,7 +202,8 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument): String = {
-    val argTy = { if (x.isFinal) s"const " else "" } + visit(ctx, x.declaredType) + "&"
+    val argTy = visit(ctx, x.declaredType)
+      // { if (x.isFinal) s"const " else "" } + visit(ctx, x.declaredType) + "&"
     s"$argTy ${nameFor(ctx, x)}"
   }
 
@@ -196,16 +221,20 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def visitNew(ctx: UnparseContext, x: EirNew): String = {
+    val args: List[String] = visitArguments(ctx)(x.disambiguation, x.args)
     x.target match {
       case t: EirProxyType =>
-        visit(ctx, t) + s"::ckNew(${visit(ctx, x.args) mkString ", "})"
+        visit(ctx, t) + s"::ckNew(${args mkString ", "})"
       case _ => super.visitNew(ctx, x)
     }
   }
 
   override def visitProxy(ctx: UnparseContext, x: EirProxy): String = {
-    if (x.isAbstract) visitAbstractProxy(ctx, x)
-    else visitConcreteProxy(ctx, x)
+    val ns = x.namespaces.toList
+    ns.map(ns => s"${n}namespace ${nameFor(ctx, ns)} {").mkString("") + n + {
+      if (x.isAbstract) visitAbstractProxy(ctx, x)
+      else visitConcreteProxy(ctx, x)
+    } + n + ns.map(_ => "}").mkString("")
   }
 
   def visitAbstractPup(ctx: UnparseContext, numImpls: Int): String = {
@@ -255,15 +284,15 @@ object GenerateCpp extends UnparseAst {
 
   def visitConcreteProxy(ctx: UnparseContext, x: EirProxy): String = {
     val base = nameFor(ctx, x.base)
-    val name = s"${base}_${x.collective.getOrElse("")}"
-    // TODO add destructor
+    val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
+    // TODO add destructor and pupper
     s"struct $name: public CBase_$name {" + {
       ctx.numTabs += 1
       val res = x.members.map(x => s"$n${ctx.t}${visitProxyMember(ctx, x)}").mkString("") +
         s"$n${ctx.t}$base *impl_;"
       ctx.numTabs -= 1
       res
-    } + s"$n${ctx.t}};$n"
+    } + s"$n${ctx.t}};"
   }
 
   def visitProxyMember(ctx: UnparseContext, x: EirMember): String = {
@@ -273,10 +302,19 @@ object GenerateCpp extends UnparseAst {
     val index = Option.when(isCollective)("[thisIndex]").getOrElse("")
     val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
     val f = assertValid[EirFunction](x.member)
-    visit(ctx, f).init + s"{$n" + {
+    val vf = if (isConstructor) {
+      // TODO this is hacky, better means of name fetching is necessary
+      val name = s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
+      if (proxy.exists(_.isMain)) {
+        name + "(CkArgMsg* msg) "
+      } else {
+        visit(ctx, f).init.replace(base, name)
+      }
+    } else visit(ctx, f).init
+    vf + s"{$n" + {
       ctx.numTabs += 1
       val res = s"${ctx.t}" + {
-        if (isConstructor) s"this->impl_ = new $base(thisProxy$index, ${f.functionArgs.tail.tail.map(nameFor(ctx, _)).mkString(", ")});"
+        if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ f.functionArgs.tail.tail.map(nameFor(ctx, _))).mkString(", ")});"
         // TODO support non-void returns
         else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.tail.map(nameFor(ctx, _)).mkString(", ")});"
       }

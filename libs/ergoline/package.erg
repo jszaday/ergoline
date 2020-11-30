@@ -3,3 +3,4 @@ package ergoline;
 @system def println(s : string): unit;
 @system def assert(b : bool): unit;
 @system def assertNot(b : bool): unit;
+@system def exit(): unit;

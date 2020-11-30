@@ -12,6 +12,7 @@ import ergoline::_;
 
     @entry override def accept(var self: hello, x: int): unit {
         println("result = " + x.toString());
+        exit();
     }
 }
 
