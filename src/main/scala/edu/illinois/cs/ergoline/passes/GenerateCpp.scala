@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
 
 import scala.util.Properties.{lineSeparator => n}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.assertValid
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
@@ -74,11 +74,33 @@ object GenerateCpp extends UnparseAst {
     else args.map(visit(ctx, _))
   }
 
+  def visitSystemCall(ctx: UnparseContext, target: EirExpressionNode, disambiguated: EirNode, args: List[String]): String = {
+    val base = target match {
+      case f: EirFieldAccessor => f.target
+      case _ => target
+    }
+    disambiguated.asInstanceOf[EirNamedNode] match {
+      case m : EirMember if m.name == "toString" =>
+        s"std::to_string(${visit(ctx, base)})"
+      case f : EirFunction if f.name == "exit" => s"CkExit(${args.mkString(", ")})"
+      case f : EirFunction if f.name == "println" => "CkPrintf(\"%s\\n\", " + s"${args.map(x => x + ".c_str()").mkString(", ")})"
+      case _ => error(ctx, target)
+    }
+  }
+
+  def disambiguate(x: EirExpressionNode): EirNode = {
+    x.disambiguation.getOrElse(x match {
+      case x: EirResolvable[_] => Find.uniqueResolution(x)
+      case x => x
+    })
+  }
+
   override def visitFunctionCall(ctx: UnparseContext, x: EirFunctionCall): String = {
-    val target = visit(x.target)
-    val args: List[String] = visitArguments(ctx)(x.target.disambiguation, x.args)
-    // handleOption(ctx, x.target.disambiguation).getOrElse(visit(ctx, x.target))
-    s"($target${visitSpecialization(ctx, x)}(${args mkString ", "}))"
+    val disambiguated = disambiguate(x.target)
+    val isSystem = disambiguated.annotations.exists(_.name == "system")
+    val args: List[String] = visitArguments(ctx)(Some(disambiguated), x.args)
+    if (isSystem) visitSystemCall(ctx, x.target, disambiguated, args)
+    else s"(${visit(ctx, x.target)}${visitSpecialization(ctx, x)}(${args mkString ", "}))"
   }
 
   override def visitForLoop(ctx: UnparseContext, x: EirForLoop): String = {

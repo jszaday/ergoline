@@ -48,7 +48,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   def addSemi(x: String): String = {
-    val trimmed = x.stripTrailing()
+    val trimmed = x.replaceAll("""(?m)\s+$""", "") // .stripTrailing()
     if (trimmed.endsWith("}") || trimmed.endsWith(";") || trimmed.isEmpty) trimmed else s"$trimmed;"
   }
 
