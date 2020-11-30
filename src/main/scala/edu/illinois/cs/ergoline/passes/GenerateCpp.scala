@@ -3,9 +3,12 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirProxyType
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
+import edu.illinois.cs.ergoline.proxies.EirProxy
 
 import scala.util.Properties.{lineSeparator => n}
 import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object GenerateCpp extends UnparseAst {
   var visited : List[EirNode] = Nil
@@ -29,7 +32,7 @@ object GenerateCpp extends UnparseAst {
   override def visitLambdaType(ctx: UnparseContext, x: types.EirLambdaType): String = "auto"
 
   override def visitProxyType(ctx: UnparseContext, x: types.EirProxyType): String = {
-    "CProxy_" + visit(ctx, x.base)
+    "CProxy_" + visit(ctx, x.base) + s"_${x.collective.getOrElse("")}"
   }
 
   override def visitImport(ctx: UnparseContext, x: EirImport): String = ""
@@ -81,11 +84,12 @@ object GenerateCpp extends UnparseAst {
 
   def visitInherits(ctx: UnparseContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
-    if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ")
+    if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") + " "
     else ""
   }
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
+    // if (x.annotations.exists(_.name == "system")) "" else
     visitTemplateArgs(ctx, x.templateArgs) + s"class ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";$n"
   }
 
@@ -106,15 +110,39 @@ object GenerateCpp extends UnparseAst {
     }
   }
 
+  def generateAssignments(ctx: UnparseContext, x: EirFunction): String = {
+    // TODO generate constructor assignments (i.e. vals with expressions)
+    ctx.numTabs += 1
+    val res = x.functionArgs.filter(_.isSelfAssigning).map(x => {
+      n + ctx.t + "this->" + x.name + "=" + x.name + ";"
+    }).mkString("")
+    ctx.numTabs -= 1
+    res
+  }
+
   override def visitFunction(ctx: UnparseContext, x: EirFunction): String = {
     if (visited.contains(x)) return ""
     visited +:= x
-    val body = x.body.map(visit(ctx, _)).getOrElse(";")
-    val args = dropSelf(x).map(visit(ctx, _))
+    val virtual =
+      Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual ").getOrElse("")
+    val body = x.body.map(visit(ctx, _)).map(s => {
+      s"{" + generateAssignments(ctx, x) + s.tail
+    }).getOrElse({
+      if (virtual.nonEmpty) "= 0;"
+      else ";"
+    })
     val cons = x.parent.exists({
       case m: EirMember => m.isConstructor
       case _ => false
     })
+    val entry = x.parent.exists({
+      case m: EirMember => m.isEntry
+      case _ => false
+    })
+    val args = {
+      if (entry && cons) dropSelf(x).tail.map(visit(ctx, _))
+      else dropSelf(x).map(visit(ctx, _))
+    }
     val retTy = if (cons) "" else { visit(ctx, x.returnType) + " " }
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
@@ -122,11 +150,14 @@ object GenerateCpp extends UnparseAst {
     val const = x.parent.collect({
       case m : EirMember if m.isConst => " const"
     }).getOrElse("")
+    val over = x.parent.collect({
+      case m : EirMember if m.isOverride => " override"
+    }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"$static$retTy${nameFor(ctx, x)}(${args mkString ", "})$const $body"
+    s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$const$over $body"
   }
 
-  override def visitAnnotation(ctx: UnparseContext, x: EirAnnotation): String = s"/* @${x.name} */ "
+  override def visitAnnotation(ctx: UnparseContext, x: EirAnnotation): String = s"/* @${x.name} */$n${ctx.t}"
 
   override def visitBinaryExpression(ctx: UnparseContext, x: EirBinaryExpression): String = {
     s"(${visit(ctx, x.lhs)} ${x.op} ${visit(ctx, x.rhs)})"
@@ -134,13 +165,21 @@ object GenerateCpp extends UnparseAst {
 
   override def nameFor(ctx: UnparseContext, x : EirNode): String = {
     x match {
+      case n : EirNamedNode if n.name == "unit" => "void"
+//      case n : EirNamedNode if n.name == "selfProxy" => "thisProxy"
       case n : EirNamedNode if n.name == "self" => "this"
+      case p : EirProxy => {
+        "CProxy_" + super.nameFor(ctx, p.base) + "_" + {
+          p.collective.map(_ + "_").getOrElse("")
+        }
+      }
       case _ => super.nameFor(ctx, x)
     }
   }
 
   override def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument): String = {
-    s"${visit(ctx, x.declaredType)} ${nameFor(ctx, x)}"
+    val argTy = { if (x.isFinal) s"const " else "" } + visit(ctx, x.declaredType) + "&"
+    s"$argTy ${nameFor(ctx, x)}"
   }
 
   override def visitTupleExpression(ctx: UnparseContext, x: EirTupleExpression): String = {
@@ -162,5 +201,87 @@ object GenerateCpp extends UnparseAst {
         visit(ctx, t) + s"::ckNew(${visit(ctx, x.args) mkString ", "})"
       case _ => super.visitNew(ctx, x)
     }
+  }
+
+  override def visitProxy(ctx: UnparseContext, x: EirProxy): String = {
+    if (x.isAbstract) visitAbstractProxy(ctx, x)
+    else visitConcreteProxy(ctx, x)
+  }
+
+  def visitAbstractPup(ctx: UnparseContext, numImpls: Int): String = {
+    ctx.numTabs += 1
+    val body =
+      s"$n${ctx.t}p | handle;" +
+      (0 until numImpls).map(x =>
+        s"$n${ctx.t}p | p$x;"
+      ).mkString("")
+    ctx.numTabs -= 1
+    s"$n${ctx.t}void pup(PUP::er &p) {" + body + s"$n${ctx.t}}"
+  }
+
+  def visitAbstractEntry(ctx: UnparseContext, f: EirFunction, numImpls: Int): String = {
+    val args = dropSelf(f)
+    val name = nameFor(ctx, f)
+    val fArgs = args.map(visit(ctx, _)).mkString(", ")
+    val nArgs = args.map(nameFor(ctx, _)).mkString(", ")
+    // TODO support non-void returns
+    s"$n${ctx.t}void $name($fArgs) {" + {
+      s"$n${ctx.t}switch (handle) {" +
+        (0 until numImpls).map(x => s"$n${ctx.t}case $x: { p$x.$name($nArgs); break; }").mkString("") +
+        s"$n${ctx.t}default: { CkAssert(-1); break; }" +
+      s"$n${ctx.t}}"
+    } + s"$n${ctx.t}}"
+  }
+
+  def visitAbstractProxy(ctx: UnparseContext, x: EirProxy): String = {
+    val name = nameFor(ctx, x)
+    val impls = x.derived.map(nameFor(ctx, _))
+    s"struct $name {" + {
+      ctx.numTabs += 1
+      val res = s"$n${ctx.t}int handle;" +
+        impls.zipWithIndex.map({
+          case (derived, idx) => {
+            s"$n${ctx.t}$derived p$idx;" +
+              s"$n${ctx.t}$name($derived x) : handle($idx), p$idx(x) {};"
+          }
+        }).mkString("") + {
+        s"$n${ctx.t}$name() : handle(-1) {};"
+        } + visitAbstractPup(ctx, impls.length) +
+        x.members.map(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member), impls.length)).mkString("")
+      ctx.numTabs -= 1
+      res
+    } + s"$n${ctx.t}};"
+  }
+
+  def visitConcreteProxy(ctx: UnparseContext, x: EirProxy): String = {
+    val base = nameFor(ctx, x.base)
+    val name = s"${base}_${x.collective.getOrElse("")}"
+    // TODO add destructor
+    s"struct $name: public CBase_$name {" + {
+      ctx.numTabs += 1
+      val res = x.members.map(x => s"$n${ctx.t}${visitProxyMember(ctx, x)}").mkString("") +
+        s"$n${ctx.t}$base *impl_;"
+      ctx.numTabs -= 1
+      res
+    } + s"$n${ctx.t}};$n"
+  }
+
+  def visitProxyMember(ctx: UnparseContext, x: EirMember): String = {
+    val proxy = x.parent.to[EirProxy]
+    val isConstructor = x.isConstructor
+    val isCollective = proxy.exists(_.collective.isDefined)
+    val index = Option.when(isCollective)("[thisIndex]").getOrElse("")
+    val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
+    val f = assertValid[EirFunction](x.member)
+    visit(ctx, f).init + s"{$n" + {
+      ctx.numTabs += 1
+      val res = s"${ctx.t}" + {
+        if (isConstructor) s"this->impl_ = new $base(thisProxy$index, ${f.functionArgs.tail.tail.map(nameFor(ctx, _)).mkString(", ")});"
+        // TODO support non-void returns
+        else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.tail.map(nameFor(ctx, _)).mkString(", ")});"
+      }
+      ctx.numTabs -= 1
+      res
+    } +s"$n${ctx.t}}$n"
   }
 }

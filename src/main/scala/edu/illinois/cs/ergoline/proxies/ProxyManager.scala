@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
 object ProxyManager {
-  private var _proxies: Map[EirClassLike, EirProxy] = Map()
+  private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
 
   def proxies: Iterable[EirProxy] = _proxies.values
 
@@ -16,13 +16,20 @@ object ProxyManager {
   }
 
   def proxyFor(t: EirProxyType): EirProxy = {
+    val ctve = t.collective.getOrElse("")
     val base = assertValid[EirClassLike](Find.uniqueResolution(t.base))
-    _proxies.get(base) match {
+    _proxies.get((ctve, base)) match {
       case Some(p) => p
       case _ =>
         val proxy = checkProxyable(base, t.collective)
-        _proxies += (base -> proxy)
+        _proxies += ((ctve, base) -> proxy)
         proxy
     }
+  }
+
+  def proxiesFor(c: EirClassLike): Iterable[EirProxy] = {
+    _proxies.collect({
+      case ((_, o), v) if o == c => v
+    })
   }
 }

@@ -5,6 +5,11 @@ import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String]) extends EirClassLike {
 
+  isAbstract = base.isAbstract
+
+  override def derived: List[EirClassLike] =
+    base.derived.flatMap(ProxyManager.proxiesFor)
+
   // replace "self" with "selfProxy"
   // TODO use clone
   private def correctSelf(m : EirMember): EirMember = {
@@ -14,7 +19,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs =
-      EirFunctionArgument(Some(ours), "self", this, isFinal = true, isSelfAssigning = false) +: theirs.functionArgs.tail
+      EirFunctionArgument(Some(ours), "self", this, isFinal = false, isSelfAssigning = false) +: theirs.functionArgs.tail
     newMember
   }
 

@@ -101,7 +101,7 @@ case object EirGlobalNamespace extends EirNode with EirScope {
 
   override def parent_=(option: Option[EirNode]): Unit = ()
 
-  override def children: Iterable[EirNode] = modules.values
+  override def children: Iterable[EirNamespace] = modules.values
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (oldNode, newNode) match {
@@ -169,7 +169,10 @@ trait EirSpecialization extends EirNode {
 
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
   var isAbstract: Boolean = false
-  var derived: List[EirClassLike] = Nil
+  private var _derived: List[EirClassLike] = Nil
+
+  def derived: List[EirClassLike] = _derived
+  def derived_=(x : List[EirClassLike]): Unit = _derived = x
 
   var members: List[EirMember]
   var extendsThis: Option[EirResolvable[EirType]]
@@ -257,6 +260,15 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   def isStatic: Boolean = member match {
     case f : EirFunction =>
       !f.functionArgs.headOption.exists(_.name == "self")
+    case _ => false
+  }
+
+  def isVirtual: Boolean = member match {
+    case f : EirFunction =>
+      (parent.exists({
+        case c: EirClassLike => c.isAbstract
+        case _ => false
+      }) || isOverride) && !annotations.exists(_.name == "system")
     case _ => false
   }
 

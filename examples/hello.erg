@@ -5,12 +5,12 @@ import ergoline::_;
 @main class hello with acceptor {
     val selfProxy: hello@;
 
-    @entry def hello(var self: hello, =selfProxy: hello@, args: array<string>): unit {
+    @entry def hello(var self: hello, =selfProxy: hello@): unit {
         val n: int = 16;
         new fib@(selfProxy, n);
     }
 
-    @entry override def accept(self: hello, x: int): unit {
+    @entry override def accept(var self: hello, x: int): unit {
         println("result = " + x.toString());
     }
 }
@@ -40,5 +40,5 @@ class fib with acceptor {
 }
 
 trait acceptor {
-    @entry def accept(self: acceptor, x: int): unit;
+    @entry def accept(var self: acceptor, x: int): unit;
 }

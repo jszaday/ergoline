@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace, EirNode}
+import edu.illinois.cs.ergoline.proxies.ProxyManager
 import edu.illinois.cs.ergoline.resolution.Find
 
 object Processes {
@@ -11,6 +12,7 @@ object Processes {
   }
 
   def generateCpp(): Iterable[String] = {
-    EirGlobalNamespace.children.map(GenerateCpp.visit)
+    EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit) ++
+      ProxyManager.proxies.map(GenerateCpp.visit)
   }
 }

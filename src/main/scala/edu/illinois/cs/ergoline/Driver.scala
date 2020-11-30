@@ -2,9 +2,9 @@ package edu.illinois.cs.ergoline
 
 import java.nio.file.Paths
 
-import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode, EirScope}
-import edu.illinois.cs.ergoline.passes.{FullyResolve, Processes}
-import edu.illinois.cs.ergoline.resolution.Modules.{load, parserFromPath}
+import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
+import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.resolution.Modules.load
 
 object Driver extends App {
   // get the options from the command-line args

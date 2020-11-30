@@ -29,7 +29,7 @@ object CheckClasses {
 
     checkImplements(node, traits)
 
-    traits.foreach(asClassLike(_).derived +:= node)
+    traits.foreach(asClassLike(_).derived ++= List(node))
 
     checked +:= node
   }
@@ -74,7 +74,7 @@ object CheckClasses {
 
   def visitClass(node : EirClass): List[EirType] = {
     val base: Option[EirType] = node.extendsThis.map(Find.uniqueResolution[EirType])
-    base.foreach(asClassLike(_).derived +:= node)
+    base.foreach(asClassLike(_).derived ++= List(node))
     val traits: List[EirType] = Find.uniqueResolution(node.implementsThese).toList
     traits
   }
