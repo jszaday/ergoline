@@ -8,6 +8,8 @@ import edu.illinois.cs.ergoline.resolution.Find.withName
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode = EirLiteral(parent, EirLiteralTypes.Unit, "()")
 
+  var strict: Boolean = false
+
   def clearGlobals(): Unit = {
     EirGlobalNamespace.clear()
     Modules.loadedFiles.clear()

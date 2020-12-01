@@ -443,26 +443,23 @@ object EirLiteralTypes extends Enumeration {
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
-  private var _resolved : Option[List[T]] = None
+  private var _resolved : Option[Seq[T]] = None
 
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
-  override def resolve(): List[T] = {
+  override def resolve(): Seq[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Some(
-        Find.fromSymbol[T](this).toList)
+      _resolved = Some(Find.fromSymbol[T](this))
     }
     _resolved match {
-      case Some(x) if x.nonEmpty =>
-        if (x.length == x.distinct.length) x
-        else throw new RuntimeException(s"repeated elements detected when attempting to resolve $this")
+      case Some(x) if x.nonEmpty => x
       case _ => throw new RuntimeException(s"could not resolve $this!")
     }
   }
 
-  def candidates: List[T] = _resolved.getOrElse(Nil)
+  def candidates: Seq[T] = _resolved.getOrElse(Nil)
 
   override def resolved: Boolean = _resolved.isDefined
 }

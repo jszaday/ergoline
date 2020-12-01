@@ -23,8 +23,7 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def error(ctx: UnparseContext, node : EirNode): String = {
-    println(s"silently ignoring my failure to process $node")
-    ""
+    s"/* skipped $node */"
   }
 
   override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
@@ -33,8 +32,6 @@ object GenerateCpp extends UnparseAst {
     // TODO handle self applications :3
     s"${visit(ctx, x.target)}.${x.field}"
   }
-
-  override def visitTernaryOperator(ctx: UnparseContext, x: EirTernaryOperator): String = ???
 
   override def visitLambdaType(ctx: UnparseContext, x: types.EirLambdaType): String = "auto"
 

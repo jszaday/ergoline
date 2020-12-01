@@ -7,6 +7,8 @@ import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirImportTests extends FunSuite {
+  globals.strict = true
+
   test("built-in types are resolvable") {
     EirGlobalNamespace.clear()
     val module = Modules.load("""

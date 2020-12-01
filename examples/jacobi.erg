@@ -1,0 +1,11 @@
+package examples;
+
+import ergoline::_;
+
+@main class jacobi {
+    var selfProxy: jacobi[@]array1d;
+
+    @entry def jacobi(var self: jacobi, =selfProxy: jacobi[@]array1d): unit { }
+
+    @entry def jacobi(var self: jacobi, selfProxy: jacobi@): unit { }
+}

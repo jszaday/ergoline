@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
@@ -157,16 +158,23 @@ object Find {
   }
 
   def singleReference[T <: EirNode](resolvable: EirResolvable[T]): Option[T] = {
-    val found = resolvable.resolve()
-    Option.when(found.length == 1)(found.head)
+    if (globals.strict) {
+      val found = resolvable.resolve()
+      assert(found.length == found.distinct.length)
+      Option.when(found.length == 1)(found.head)
+    } else {
+      Some(uniqueResolution(resolvable))
+    }
   }
 
   def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
     val found = x.resolve()
+    assert(!globals.strict || found.length == found.distinct.length)
     found match {
-      case head :: Nil => head
-      case head :: _ =>
-        println(s"WARNING: found $found when resolving $x")
+      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
+      case head :: rest =>
+        // this is only necessary for strict mode
+        if (globals.strict && rest.nonEmpty) println(s"warning, $head may be hiding $rest")
         head
       case _ => throw new RuntimeException(s"unable to uniquely resolve $x")
     }

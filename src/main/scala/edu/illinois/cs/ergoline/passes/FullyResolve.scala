@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirImport, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object FullyResolve {
@@ -24,6 +24,7 @@ object FullyResolve {
 
   def seekOthers(node : EirNode): Unit = {
     node.children.foreach({
+      case _: EirFileSymbol if node.isInstanceOf[EirNamespace] =>
       case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
       case child => seekOthers(child)
     })
