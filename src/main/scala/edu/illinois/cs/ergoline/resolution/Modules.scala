@@ -5,6 +5,7 @@ import java.io.File.{pathSeparator, separator}
 import java.nio.file.{Files, Path, Paths}
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.AstManipulation
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
@@ -68,13 +69,13 @@ object Modules {
       val children = file.listFiles().map(_.getCanonicalFile)
       val pkg: EirNamespace = retrieve(name, scope)
       loadedFiles(file) = pkg
-      children.find(_.getName == packageFile).foreach(load(_, scope))
       for (child <- children.filter(x =>
         (x.isDirectory || x.getName.endsWith(".erg")) && (x.getName != packageFile))) {
         val symbol = EirFileSymbol(Some(pkg), child)
         pkg.children +:= symbol
         loadedFiles(child) = symbol
       }
+      children.find(_.getName == packageFile).foreach(load(_, scope))
       Some(pkg)
     } else if (file.isFile) {
       Some(load(file, scope))
@@ -99,6 +100,7 @@ object Modules {
     result match {
       case Right(value) =>
         loadedFiles(file) = value
+        Processes.onLoad(value)
         value
       case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getCanonicalPath}")
     }

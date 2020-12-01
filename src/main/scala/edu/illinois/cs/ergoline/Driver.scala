@@ -17,7 +17,7 @@ object Driver extends App {
   val modules: Iterable[EirNode] =
     files.map(Paths.get(_)).map(x => load(x.toFile, EirGlobalNamespace))
   // resolve all the symbols :)
-  modules.foreach(x => Processes.onLoad(x.scope.get))
+//  modules.foreach(x => Processes.onLoad(x.scope.get))
   // visit each file
 //  modules.foreach(x => println(x.unparse))
 

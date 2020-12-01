@@ -17,8 +17,6 @@ class TypeCheckContext {
     stack.push(n)
   }
 
-
-
   def shouldCheck(s: EirSpecializable): Boolean = {
     if (s.templateArgs.isEmpty) {
       if (_checked.contains(s)) false

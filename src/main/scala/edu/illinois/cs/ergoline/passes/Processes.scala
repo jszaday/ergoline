@@ -1,19 +1,21 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirGlobalNamespace, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirGlobalNamespace, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.proxies.ProxyManager
 import edu.illinois.cs.ergoline.resolution.Find
 
 import scala.util.Properties.{lineSeparator => n}
 
 object Processes {
+  private val ctx = new TypeCheckContext
+
   def onLoad(x : EirNode): Unit = {
     FullyResolve.visit(x)
     Find.all[EirClassLike](x).foreach(CheckClasses.visit)
-    CheckTypes.visit(new TypeCheckContext, x.children.filter({
-      case fs : EirFileSymbol => fs.resolved
-      case _ => true
-    }))
+    x match {
+      case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
+      case _ => CheckTypes.visit(ctx, x)
+    }
   }
 
   def generateCpp(): Iterable[String] = {

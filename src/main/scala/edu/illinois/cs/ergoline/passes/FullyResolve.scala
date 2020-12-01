@@ -24,15 +24,16 @@ object FullyResolve {
 
   def seekOthers(node : EirNode): Unit = {
     node.children.foreach({
-      case _: EirFileSymbol if node.isInstanceOf[EirNamespace] =>
+      case _: EirFileSymbol =>
       case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
       case child => seekOthers(child)
     })
   }
 
   def visit(node : EirNode): Unit = {
-    // Resolve imports first
-    seekImports(node)
+    // Resolve imports first (including those within the scope)
+    // TODO this should be changed to "seek all accessible imports"
+    seekImports(node.scope.getOrElse(node))
     // Then process everything else :)
     seekOthers(node)
   }
