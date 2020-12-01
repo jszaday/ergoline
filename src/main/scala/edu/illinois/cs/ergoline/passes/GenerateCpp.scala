@@ -1,14 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirType}
+import edu.illinois.cs.ergoline.ast.types.EirProxyType
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.assertValid
 
 import scala.util.Properties.{lineSeparator => n}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.assertValid
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object GenerateCpp extends UnparseAst {
   var visited : List[EirNode] = Nil

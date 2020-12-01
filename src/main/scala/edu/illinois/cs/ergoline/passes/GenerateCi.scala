@@ -1,10 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
-import scala.util.Properties.{lineSeparator => n}
-import UnparseAst.UnparseContext
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirMember, EirNamespace}
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 
+import scala.util.Properties.{lineSeparator => n}
 import scala.util.matching.Regex
 
 object GenerateCi {

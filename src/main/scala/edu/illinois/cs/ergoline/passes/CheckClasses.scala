@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.resolution.Find
 
 import scala.annotation.tailrec
@@ -20,9 +20,9 @@ object CheckClasses {
    * - ensure traits do not have constructors or declarations
    */
   def visit(node: EirClassLike): Unit = {
-    CheckConstructors.checkConstructors(node)
-
     if (checked.contains(node)) return
+
+    CheckConstructors.checkConstructors(node)
 
     val traits = node match {
       case c : EirClass => visitClass(c)
