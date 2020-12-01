@@ -22,6 +22,9 @@ abstract class EirNode {
   var parent: Option[EirNode]
   var annotations: List[EirAnnotation] = Nil
 
+  def annotation(name : String): Option[EirAnnotation] =
+    annotations.find(_.name == name)
+
   def scope: Option[EirScope] =
     parent flatMap {
       case x: EirScope => Some(x)
@@ -330,10 +333,13 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
   override def resolved: Boolean = _resolved.nonEmpty
 }
 
-case class EirAnnotation(var parent: Option[EirNode], var name: String) extends EirNode {
-  override def children: Iterable[EirNode] = Nil
+case class EirAnnotation(var name: String, var opts: Map[String, EirLiteral]) extends EirNode with EirEncloseExempt {
+
+  def apply(name: String): Option[EirLiteral] = opts.get(name)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+  override var parent: Option[EirNode] = None
+  override def children: Iterable[EirNode] = Nil
 }
 
 case class EirBinaryExpression(var parent: Option[EirNode], var lhs: EirExpressionNode, var op: String, var rhs: EirExpressionNode)
@@ -427,6 +433,15 @@ case class EirTernaryOperator(var parent: Option[EirNode], var test: EirExpressi
 
 case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.Value, var value: String)
   extends EirExpressionNode {
+
+  def stripped: String = {
+    `type` match {
+      case EirLiteralTypes.String if value.matches("^\"[:a-zA-Z0-9_]+\"$") =>
+        value.substring(1, value.length - 1)
+      case _ => throw new RuntimeException(s"cannot strip $this")
+    }
+  }
+
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false

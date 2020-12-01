@@ -41,10 +41,14 @@ object GenerateCi {
   }
 
   def visit(ctx: UnparseContext, proxy: EirProxy, f: EirMember): String = {
-    val body =
-      GenerateCpp.visit(ctx, f.member)
-        .replaceFirst(proxy.name, proxy.baseName)
-    s"${ctx.t} entry $body$n"
+    if (proxy.isMain && f.isConstructor) {
+      s"${ctx.t} entry [nokeep] ${proxy.baseName}(CkArgMsg* msg);$n"
+    } else {
+      val body =
+        GenerateCpp.visit(ctx, f.member)
+          .replaceFirst(proxy.name, proxy.baseName)
+      s"${ctx.t} entry $body$n"
+    }
   }
 
   def visitChareType(isMain: Boolean, o: Option[String]): String = {

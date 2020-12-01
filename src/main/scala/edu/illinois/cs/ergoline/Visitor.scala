@@ -158,8 +158,19 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
     annotations.asScala.map(this.visitAnnotation)
 
-  override def visitAnnotation(ctx: AnnotationContext): EirAnnotation =
-    EirAnnotation(parent, ctx.Identifier().getText)
+  override def visitAnnotationOption(ctx: AnnotationOptionContext): (String, EirLiteral) = {
+    (ctx.Identifier().getText, visitConstant(ctx.constant()))
+  }
+
+  override def visitAnnotationOptions(ctx: AnnotationOptionsContext): Map[String, EirLiteral] = {
+    ctx.mapOrEmpty(_.annotationOption(), visitAnnotationOption).toMap
+  }
+
+  override def visitAnnotation(ctx: AnnotationContext): EirAnnotation = {
+    val name = ctx.Identifier().getText
+    val opts = visitAnnotationOptions(ctx.annotationOptions())
+    EirAnnotation(name, opts)
+  }
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, null), (f: EirFunction) => {
@@ -452,7 +463,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
-  override def visitConstant(ctx: ConstantContext): EirExpressionNode = {
+  override def visitConstant(ctx: ConstantContext): EirLiteral = {
     if (ctx.IntegerConstant() != null) {
       EirLiteral(parent, EirLiteralTypes.Integer, ctx.IntegerConstant().getText)
     } else if (ctx.FloatingConstant() != null) {

@@ -27,7 +27,7 @@ object GenerateCpp extends UnparseAst {
     s"/* skipped $node */"
   }
 
-  override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
+//  override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
 
   override def visitFieldAccessor(ctx: UnparseContext, x: EirFieldAccessor): String = {
     // TODO handle self applications :3
@@ -115,11 +115,7 @@ object GenerateCpp extends UnparseAst {
   override def visitLiteral(ctx: UnparseContext, x: EirLiteral): String = x.value
 
   override def visitSymbol[A <: EirNamedNode](ctx: UnparseContext, x: EirSymbol[A]): String = {
-    try {
-      nameFor(ctx, Find.uniqueResolution(x))
-    } catch {
-      case _: Throwable => x.qualifiedName.mkString("::")
-    }
+    nameFor(ctx, Find.uniqueResolution(x))
   }
 
   override def visitDeclaration(ctx: UnparseContext, x: EirDeclaration): String = {
@@ -219,8 +215,11 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def nameFor(ctx: UnparseContext, x : EirNode): String = {
+    val alias =
+      x.annotation("system").flatMap(_("alias")).map(_.stripped)
     x match {
-      case n : EirNamedNode if n.name == "unit" => "void"
+      case _ if alias.isDefined => alias.get
+//      case n : EirNamedNode if n.name == "unit" => "void"
 //      case n : EirNamedNode if n.name == "selfProxy" => "thisProxy"
       case n : EirNamedNode if n.name == "self" => "this"
       case p : EirProxy => {
@@ -327,6 +326,12 @@ object GenerateCpp extends UnparseAst {
     } + s"$n${ctx.t}};"
   }
 
+  def makeArgsVector(ctx: UnparseContext, name: String): String = {
+    s"${ctx.t}std::vector<std::string> $name(msg->argc);$n" +
+    s"${ctx.t}std::transform(msg->argv, msg->argv + msg->argc, $name.begin(),$n" +
+    s"${ctx.t}${ctx.t}[](const char* x) -> std::string { return std::string(x); });$n"
+  }
+
   def visitProxyMember(ctx: UnparseContext, x: EirMember): String = {
     val proxy = x.parent.to[EirProxy]
     val isConstructor = x.isConstructor
@@ -334,19 +339,23 @@ object GenerateCpp extends UnparseAst {
     val index = Option.when(isCollective)("[thisIndex]").getOrElse("")
     val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
     val f = assertValid[EirFunction](x.member)
+    val isMain = proxy.exists(_.isMain)
     val vf = if (isConstructor) {
       // TODO this is hacky, better means of name fetching is necessary
       val name = s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
-      if (proxy.exists(_.isMain)) {
+      if (isMain) {
         name + "(CkArgMsg* msg) "
       } else {
         visit(ctx, f).init.replaceFirst(base, name)
       }
     } else visit(ctx, f).init
     vf + s"{$n" + {
+      val args = f.functionArgs.tail.tail
       ctx.numTabs += 1
-      val res = s"${ctx.t}" + {
-        if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ f.functionArgs.tail.tail.map(nameFor(ctx, _))).mkString(", ")});"
+      val res = {
+        if (isMain) makeArgsVector(ctx, args.head.name) else ""
+      } + s"${ctx.t}" + {
+        if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ")});"
         // TODO support non-void returns
         else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.tail.map(nameFor(ctx, _)).mkString(", ")});"
       }

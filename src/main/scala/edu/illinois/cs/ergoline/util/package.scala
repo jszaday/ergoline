@@ -15,7 +15,7 @@ package object util {
                          args: List[EirResolvable[EirType]],
                          retTy: EirResolvable[EirType], isConst: Boolean): EirMember = {
     val m = EirMember(Some(parent), null, EirAccessibility.Public)
-    m.annotations +:= EirAnnotation(Some(m), "system")
+    m.annotations +:= EirAnnotation("system", Map())
     m.member = EirFunction(Some(m), None, name, Nil, Nil, retTy)
     m.member.asInstanceOf[EirFunction].functionArgs = (parent +: args).zipWithIndex.map({
       case (value, 0) => EirFunctionArgument(Some(m.member), "self", value, isFinal = isConst, isSelfAssigning = false)

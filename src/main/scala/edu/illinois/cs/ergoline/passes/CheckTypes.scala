@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirT
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -13,7 +13,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   // TODO this should consider the current substitutions, and check each unique substitution!
   var classCache: List[EirClass] = Nil
 
-  override def visitArrayReference(ctx: TypeCheckContext, x: EirArrayReference): EirType = ???
+  override def visitArrayReference(ctx: TypeCheckContext, x: EirArrayReference): EirType = {
+    val assignment = x.parent.to[EirAssignment]
+    if (assignment.exists(_.lval == x)) {
+      ???
+    } else {
+      val f = EirFunctionCall(Some(x), null, x.args, Nil)
+      f.target = EirFieldAccessor(Some(f), x.target, "get")
+      x.disambiguation = Some(f)
+      visit(ctx, f)
+    }
+  }
 
   def autoApply(ctx: TypeCheckContext, target: EirExpressionNode, args: List[EirResolvable[EirType]]): Boolean = {
     (args.length == 1) && visit(ctx, target).canAssignTo(visit(ctx, args.head))
@@ -63,7 +73,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           } else {
             null
           }
-        case x if ours.isEmpty => (candidate, x)
+        case x if (ours.isEmpty || (expectsSelf && ours.length == 1)) => (candidate, x)
         case _ => null
       }
       innerSpec.foreach(ctx.leave)

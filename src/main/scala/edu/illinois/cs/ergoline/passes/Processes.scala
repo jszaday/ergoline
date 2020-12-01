@@ -26,7 +26,10 @@ object Processes {
       x._1 + n + x._2.map(y => y.substring(x._1.length + 1, y.length - 1)).mkString("") + n + "}"
     })
     a.map(GenerateCpp.forwardDecl(_)) ++
-      Seq("#include \"generate.decl.h\"") ++
+      Seq("#include <algorithm>",
+          "#include <string>",
+          "#include <vector>",
+          "#include \"generate.decl.h\"") ++
       gathered ++ Seq(n + "#include \"generate.def.h\"")
   }
 }

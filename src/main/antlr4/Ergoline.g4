@@ -292,7 +292,15 @@ type
     ;
 
 annotation
-    :   Atpersand Identifier
+    :   Atpersand Identifier annotationOptions?
+    ;
+
+annotationOption
+    :   Identifier Equals constant
+    ;
+
+annotationOptions
+    :   '(' (annotationOption ',')* annotationOption ')'
     ;
 
 Atpersand
