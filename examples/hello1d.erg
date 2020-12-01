@@ -2,19 +2,19 @@ package examples;
 
 import ergoline::_;
 
-@main class jacobi {
-    var selfProxy: jacobi[@]array1d;
+@main class hello1d {
+    var selfProxy: hello1d[@]array1d;
     val n: int;
 
-    @entry def jacobi(var self: jacobi, =selfProxy: jacobi[@]array1d, =n: int): unit { }
+    @entry def hello1d(var self: hello1d, =selfProxy: hello1d[@]array1d, =n: int): unit { }
 
-    @entry def jacobi(var self: jacobi, selfProxy: jacobi@, args: array<string>): unit {
+    @entry def hello1d(var self: hello1d, selfProxy: hello1d@, args: array<string>): unit {
         n = args.size() > 1 ? args[1].toInt() : 16;
-        val arrProxy: jacobi@array1d = new jacobi@array1d(n, n);
+        val arrProxy: hello1d@array1d = new hello1d@array1d(n, n);
         arrProxy[0].sayHi();
     }
 
-    @entry def sayHi(var self: jacobi): unit {
+    @entry def sayHi(var self: hello1d): unit {
         val next: int = selfProxy.index() + 1;
         println("hello #" + next.toString());
         if (next < n) {
