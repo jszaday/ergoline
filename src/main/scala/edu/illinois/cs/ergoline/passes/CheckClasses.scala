@@ -20,6 +20,8 @@ object CheckClasses {
    * - ensure traits do not have constructors or declarations
    */
   def visit(node: EirClassLike): Unit = {
+    CheckConstructors.checkConstructors(node)
+
     if (checked.contains(node)) return
 
     val traits = node match {

@@ -272,8 +272,13 @@ specialization
     :   '<' typeList '>'
     ;
 
+proxySuffix
+    :   Atpersand
+    |   (Atpersand | Element) CollectiveKeyword
+    ;
+
 basicType
-    :   fqn specialization? (Atpersand CollectiveKeyword?)?
+    :   fqn specialization? proxySuffix?
     ;
 
 lambdaType
@@ -292,6 +297,10 @@ annotation
 
 Atpersand
     :   '@'
+    ;
+
+Element
+    :   '[@]'
     ;
 
 CollectiveKeyword

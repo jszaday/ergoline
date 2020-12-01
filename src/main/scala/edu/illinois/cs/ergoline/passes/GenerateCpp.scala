@@ -38,9 +38,8 @@ object GenerateCpp extends UnparseAst {
 
   override def visitLambdaType(ctx: UnparseContext, x: types.EirLambdaType): String = "auto"
 
-  override def visitProxyType(ctx: UnparseContext, x: types.EirProxyType): String = {
-    "CProxy_" + visit(ctx, x.base) + s"_${x.collective.getOrElse("")}"
-  }
+  override def visitProxyType(ctx: UnparseContext, x: types.EirProxyType): String =
+    nameFor(ctx, Find.uniqueResolution(x))
 
   override def visitImport(ctx: UnparseContext, x: EirImport): String = ""
 
@@ -226,9 +225,9 @@ object GenerateCpp extends UnparseAst {
 //      case n : EirNamedNode if n.name == "selfProxy" => "thisProxy"
       case n : EirNamedNode if n.name == "self" => "this"
       case p : EirProxy => {
-        "CProxy_" + super.nameFor(ctx, p.base) + "_" + {
-          p.collective.map(_ + "_").getOrElse("")
-        }
+        val prefix =
+          if (p.isElement) "CProxyElement_" else "CProxy_"
+        prefix + p.baseName
       }
       case _ => super.nameFor(ctx, x)
     }

@@ -69,7 +69,8 @@ object Modules {
       val pkg: EirNamespace = retrieve(name, scope)
       loadedFiles(file) = pkg
       children.find(_.getName == packageFile).foreach(load(_, scope))
-      for (child <- children.filterNot(_.getName == packageFile)) {
+      for (child <- children.filter(x =>
+        (x.isDirectory || x.getName.endsWith(".erg")) && (x.getName != packageFile))) {
         val symbol = EirFileSymbol(Some(pkg), child)
         pkg.children +:= symbol
         loadedFiles(child) = symbol

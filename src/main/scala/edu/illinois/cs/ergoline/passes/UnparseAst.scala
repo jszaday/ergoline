@@ -181,7 +181,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitProxyType(ctx: UnparseContext, x: EirProxyType): String = {
-    visit(ctx, x.base) + "@" + x.collective.getOrElse("")
+    visit(ctx, x.base) +
+      (if (x.isElement) "[@]" else "@") +
+      x.collective.getOrElse("")
   }
 
   def nameFor(ctx : UnparseContext, node : EirNode): String = {
@@ -236,5 +238,5 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitProxy(ctx: UnparseContext, x: EirProxy): String =
-    visitProxyType(ctx, EirProxyType(x.parent, x.base, x.collective))
+    visitProxyType(ctx, EirProxyType(x.parent, x.base, x.collective, isElement = x.isElement))
 }

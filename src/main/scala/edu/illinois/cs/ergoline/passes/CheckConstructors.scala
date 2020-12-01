@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckConstructors {
 
@@ -12,16 +13,32 @@ object CheckConstructors {
     var numChecked = 0
     val pairs = constructorsByClassIn(module)
     for ((cls, constructors) <- pairs) {
-      val needsInitialization = cls.needsInitialization
-      assert(constructors.nonEmpty || needsInitialization.isEmpty)
-      for (constructor <- constructors) {
-        assert(fulfillsSuperConstructor(constructor))
-        assert(selfAssignmentsOk(cls, constructor))
-        assert(fulfillsMandatoryAssignments(needsInitialization, constructor))
-      }
-      numChecked += Math.max(1, constructors.length)
+      numChecked += Math.max(1, checkConstructors(cls, constructors))
     }
     numChecked
+  }
+
+  def checkConstructors(cls: EirClassLike): Int = {
+    checkConstructors(cls, cls.members.filter(_.isConstructor))
+  }
+
+  def checkConstructors(cls: EirClassLike, constructors: List[EirMember]): Int = {
+    val needsInitialization = cls.needsInitialization
+    if (constructors.isEmpty && needsInitialization.nonEmpty) {
+      throw new RuntimeException(s"$cls does not fulfill all mandatory assignments")
+    }
+    for (constructor <- constructors) {
+      if (!fulfillsSuperConstructor(constructor)) {
+        throw new RuntimeException(s"$constructor does not fulfill all super constructors")
+      }
+      if (!selfAssignmentsOk(cls, constructor)) {
+        throw new RuntimeException(s"$constructor contains an invalid self-assignment")
+      }
+      if (!fulfillsMandatoryAssignments(needsInitialization, constructor)) {
+        throw new RuntimeException(s"$constructor does not fulfill all mandatory assignments")
+      }
+    }
+    constructors.length
   }
 
   def constructorsByClassIn(scope: EirScope): Iterable[(EirClassLike, List[EirMember])] =
@@ -46,8 +63,13 @@ object CheckConstructors {
     })
   }
 
+  private def canAssignHelper(x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
+    Find.singleReference(x).exists(x => x.canAssignTo(Find.uniqueResolution(y)))
+  }
+
   def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
-    !decl.isFinal || decl.initialValue.isEmpty
+    (!decl.isFinal || decl.initialValue.isEmpty) &&
+      canAssignHelper(declaredType, decl.declaredType)
   }
 
   def fulfillsMandatoryAssignments(needsInitialization: List[EirMember], member: EirMember): Boolean = {

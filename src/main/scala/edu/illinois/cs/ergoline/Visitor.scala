@@ -279,8 +279,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       base.parent = Some(templatedType)
       base = templatedType
     }
-    if (ctx.Atpersand() != null) {
-      val proxyType = EirProxyType(parent, base, Option(ctx.CollectiveKeyword()).map(_.getText))
+    if (ctx.proxySuffix() != null) {
+      val isElement = Option(ctx.proxySuffix().Element()).isDefined
+      val proxyType = EirProxyType(parent, base, Option(ctx.proxySuffix().CollectiveKeyword()).map(_.getText), isElement)
       base.parent = Some(proxyType)
       base = proxyType
     }

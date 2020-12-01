@@ -64,7 +64,7 @@ package object types {
     override def specialization: List[EirResolvable[EirType]] = args
   }
 
-  case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String]) extends EirType {
+  case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String], var isElement: Boolean) extends EirType {
     override def children: Iterable[EirResolvable[EirType]] = Seq(base)
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {

@@ -13,9 +13,9 @@ class EirConstructorTests extends FunSuite {
     Modules.load(
       """package foo;
         |class bar {
-        |  def bar(self : bar, =baz : unit) : unit { }
+        |  def bar(self : bar, =baz : bar) : unit { }
         |  def bar(self : bar) : unit { baz = (); }
-        |  val baz : unit;
+        |  val baz : bar;
         |}
         |""".stripMargin
     )
@@ -34,12 +34,12 @@ class EirConstructorTests extends FunSuite {
     val module = Modules.load(
       """package foo;
         |class bar {
-        |  val baz : unit = ();
-        |  def bar(self : bar, =baz : unit) : unit { }
+        |  val baz : bar = ();
+        |  def bar(self : bar, =baz : bar) : unit { }
         |}
         |""".stripMargin
     )
-    assertThrows[java.lang.AssertionError](
+    assertThrows[java.lang.RuntimeException](
       CheckConstructors.checkConstructorsWithin(module))
   }
 
@@ -52,7 +52,7 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     )
-    assertThrows[java.lang.AssertionError](
+    assertThrows[java.lang.RuntimeException](
       CheckConstructors.checkConstructorsWithin(module))
   }
 }

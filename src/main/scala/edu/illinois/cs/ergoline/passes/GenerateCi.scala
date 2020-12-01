@@ -8,13 +8,13 @@ import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import scala.util.matching.Regex
 
 object GenerateCi {
-  val arrayPtn: Regex = raw"array(\d+)".r
+  val arrayPtn: Regex = raw"array(\d+)d".r
 
   def visitAll(): String = {
     val ctx = new UnparseContext
     ctx.numTabs += 1
     val body = ProxyManager.proxies
-      .filterNot(_.base.isAbstract)
+      .filterNot(x => x.base.isAbstract || x.isElement)
       .map(x => (x.namespaces.toList, x))
       .groupBy(_._1)
       .map({
@@ -32,7 +32,7 @@ object GenerateCi {
 
   def visit(ctx: UnparseContext, proxy: EirProxy): String = {
     val template: String = GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
-    val name = s"${proxy.name}_"
+    val name = proxy.baseName
     val header =
       template + ctx.t + visitChareType(proxy.isMain, proxy.collective) + s" $name {$n"
     ctx.numTabs += 1
@@ -44,7 +44,7 @@ object GenerateCi {
   def visit(ctx: UnparseContext, proxy: EirProxy, f: EirMember): String = {
     val body =
       GenerateCpp.visit(ctx, f.member)
-        .replace(proxy.name, s"${proxy.name}_")
+        .replaceFirst(proxy.name, proxy.baseName)
     s"${ctx.t} entry $body$n"
   }
 

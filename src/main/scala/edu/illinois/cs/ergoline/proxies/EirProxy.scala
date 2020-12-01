@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.proxies
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
-case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String]) extends EirClassLike {
+case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String], var isElement: Boolean) extends EirClassLike {
 
   isAbstract = base.isAbstract
 
@@ -23,17 +23,26 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val newMember = EirMember(Some(this), null, m.accessibility)
     val theirs = m.member.asInstanceOf[EirFunction]
     val ours = EirFunction(Some(newMember), None, theirs.name, theirs.templateArgs, null, theirs.returnType)
+    val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs =
-      EirFunctionArgument(Some(ours), "self", this, isFinal = false, isSelfAssigning = false) +: theirs.functionArgs.tail
+      EirFunctionArgument(Some(ours), "self", declType, isFinal = false, isSelfAssigning = false) +: theirs.functionArgs.tail
     newMember
   }
 
+  private def validConstructor(m : EirMember): Boolean = {
+    val args = m.member.asInstanceOf[EirFunction].functionArgs
+    val checkArg = Option.when(args.length >= 2)(args(1))
+    val checkDeclTy = checkArg.map(x => Find.uniqueResolution(x.declaredType))
+    val element = ProxyManager.elementFor(this).getOrElse(this)
+    checkDeclTy.contains(element)
+  }
+
   override def members: List[EirMember] = {
-    base.members.collect({
-      case m if m.isEntry => m
-    }).map(correctSelf)
+    base.members
+      .filter(x => x.isEntry && (!x.isConstructor || validConstructor(x)))
+      .map(correctSelf)
   }
 
   override def members_=(lst: List[EirMember]): Unit = ???
@@ -44,7 +53,10 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
 
   override def isDescendantOf(other: EirClassLike): Boolean = {
     other match {
-      case proxy: EirProxy => base.isDescendantOf(proxy.base)
+      case proxy: EirProxy =>
+        (proxy.isElement == this.isElement) &&
+          (proxy.collective == this.collective) &&
+          base.isDescendantOf(proxy.base)
       case _ => false
     }
   }
@@ -52,4 +64,6 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   // TODO this may have to be changed eventually
   //     (if it's inaccessible it's not a problem)
   override def name: String = base.name
+
+  def baseName: String = base.name + collective.map("_" + _ + "_").getOrElse("_")
 }
