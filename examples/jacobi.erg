@@ -9,8 +9,7 @@ import ergoline::_;
     @entry def jacobi(var self: jacobi, =selfProxy: jacobi[@]array1d, =n: int): unit { }
 
     @entry def jacobi(var self: jacobi, selfProxy: jacobi@, args: array<string>): unit {
-        val s: string = args.size() > 1 ? args[1] : "16";
-        n = s.toInt();
+        n = args.size() > 1 ? args[1].toInt() : 16;
         val arrProxy: jacobi@array1d = new jacobi@array1d(n, n);
         arrProxy[0].sayHi();
     }
