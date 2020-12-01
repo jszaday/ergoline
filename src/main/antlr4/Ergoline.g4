@@ -324,6 +324,8 @@ OverrideKwd : 'override';
 ClassKwd : 'class';
 TraitKwd : 'trait';
 FunctionKwd : 'def';
+TrueKwd : 'true' ;
+FalseKwd : 'false' ;
 
 Equals : '=' ;
 PlusAssign: '+=';
@@ -347,11 +349,16 @@ Identifier
         )*
     ;
 
+boolLiteral
+    :    TrueKwd | FalseKwd
+    ;
+
 constant
     :   IntegerConstant
     |   FloatingConstant
     |   CharacterConstant
     |   StringLiteral+
+    |   boolLiteral
     ;
 
 fragment NonDigit

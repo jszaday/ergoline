@@ -7,5 +7,7 @@ package ergoline;
     @system def rem(self: int, other: int): int;
     @system def equals(self: int, other: int): bool;
     @system def compareTo(self: int, other: int): int;
-    @system def toString(self: int): string;
+
+    @system(alias = "std::to_string", static = true)
+    def toString(self: int): string;
 }

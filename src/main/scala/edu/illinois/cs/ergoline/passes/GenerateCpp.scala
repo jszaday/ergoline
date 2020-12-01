@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirProxyType
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
-import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.assertValid
@@ -23,9 +23,11 @@ object GenerateCpp extends UnparseAst {
     } ++ ns.map(_ => "}")).mkString(n)
   }
 
-  override def error(ctx: UnparseContext, node : EirNode): String = {
-    s"/* skipped $node */"
+  def error(ctx: UnparseContext, node : EirNode, msg: String): String = {
+    s"/* skipped $node : $msg */"
   }
+
+  override def error(ctx: UnparseContext, node : EirNode): String = error(ctx, node, "")
 
 //  override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
 
@@ -76,12 +78,29 @@ object GenerateCpp extends UnparseAst {
       case f: EirFieldAccessor => f.target
       case _ => target
     }
+    val proxy = disambiguated.parent.to[EirProxy]
+    val system = disambiguated.annotation("system").get
+    val name = system("alias").map(_.stripped).getOrElse(nameFor(ctx, disambiguated))
+    val static = system("static").exists(_.value.toBoolean)
     disambiguated.asInstanceOf[EirNamedNode] match {
-      case m : EirMember if m.name == "toString" =>
-        s"std::to_string(${visit(ctx, base)})"
-      case f : EirFunction if f.name == "exit" => s"CkExit(${args.mkString(", ")})"
+      case _ : EirMember if proxy.isDefined =>
+        name match {
+          case "index" =>
+            proxy.flatMap(_.collective) match {
+              case Some(ProxyManager.arrayPtn(dim)) =>
+                val idx = s"${visit(ctx, base)}.ckGetIndex().data()"
+                // TODO cast to tuple
+                if (dim == "1") s"($idx[0])" else ???
+              case Some("nodegroup" | "group") => s"(${visit(ctx, base)}.ckGetGroupPe())"
+              case _ => error(ctx, target, "no generation method defined")
+            }
+          case "parent" => s"(CProxy_${proxy.get.baseName}(${visit(ctx, base)}.ckGetArrayID()))"
+          case _ => error(ctx, target, "no generation method defined")
+        }
+      case _ : EirMember if static => s"$name(${(visit(ctx, base) +: args).mkString(", ")})"
+      case _ : EirMember => s"${visit(ctx, base)}.$name(${args.mkString(", ")})"
       case f : EirFunction if f.name == "println" => "CkPrintf(\"%s\\n\", " + s"${args.map(x => x + ".c_str()").mkString(", ")})"
-      case _ => error(ctx, target)
+      case _ => s"($name(${args.mkString(", ")}))"
     }
   }
 
@@ -340,6 +359,7 @@ object GenerateCpp extends UnparseAst {
     val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
     val f = assertValid[EirFunction](x.member)
     val isMain = proxy.exists(_.isMain)
+    val isSingleton = proxy.exists(_.singleton)
     val vf = if (isConstructor) {
       // TODO this is hacky, better means of name fetching is necessary
       val name = s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
@@ -350,10 +370,12 @@ object GenerateCpp extends UnparseAst {
       }
     } else visit(ctx, f).init
     vf + s"{$n" + {
-      val args = f.functionArgs.tail.tail
+      val dropCount = if (isConstructor) 2 else 1
+      val args = f.functionArgs.drop(dropCount)
       ctx.numTabs += 1
       val res = {
-        if (isMain) makeArgsVector(ctx, args.head.name) else ""
+        Option.when(isConstructor && isMain)(
+          args.headOption.map(x => makeArgsVector(ctx, x.name))).flatten.getOrElse("")
       } + s"${ctx.t}" + {
         if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ")});"
         // TODO support non-void returns

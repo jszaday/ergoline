@@ -463,6 +463,10 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
+  override def visitBoolLiteral(ctx: BoolLiteralContext): EirLiteral =
+    EirLiteral(parent, EirLiteralTypes.Boolean,
+      Option(ctx.FalseKwd()).getOrElse(ctx.TrueKwd()).getText)
+
   override def visitConstant(ctx: ConstantContext): EirLiteral = {
     if (ctx.IntegerConstant() != null) {
       EirLiteral(parent, EirLiteralTypes.Integer, ctx.IntegerConstant().getText)
@@ -470,6 +474,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       EirLiteral(parent, EirLiteralTypes.Float, ctx.FloatingConstant().getText)
     } else if (Option(ctx.StringLiteral()).exists(_.size() >= 1)) {
       EirLiteral(parent, EirLiteralTypes.String, ctx.StringLiteral().asScala.map(_.getText).reduce(_ + _))
+    } else if (ctx.boolLiteral() != null) {
+      visitBoolLiteral(ctx.boolLiteral())
     } else {
       assert(ctx.CharacterConstant() != null)
       EirLiteral(parent, EirLiteralTypes.Character, ctx.CharacterConstant().getText)

@@ -10,8 +10,18 @@ import ergoline::_;
 
     @entry def jacobi(var self: jacobi, selfProxy: jacobi@, args: array<string>): unit {
         val s: string = args.size() > 1 ? args[1] : "16";
-        println(s);
-        n = 16;
+        n = s.toInt();
         val arrProxy: jacobi@array1d = new jacobi@array1d(n, n);
+        arrProxy[0].sayHi();
+    }
+
+    @entry def sayHi(var self: jacobi): unit {
+        val next: int = selfProxy.index() + 1;
+        println("hello #" + next.toString());
+        if (next < n) {
+            selfProxy.parent()[next].sayHi();
+        } else {
+            exit();
+        }
     }
 }
