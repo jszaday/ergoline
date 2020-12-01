@@ -345,6 +345,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
+  private def dropCountFor(c : EirClassLike): Int = {
+    c match {
+      case p: EirProxy if p.singleton => 2
+      case _ => 1
+    }
+  }
+
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
     val target = visit(ctx, x.target) match {
       case c : EirClassLike if !c.isAbstract => c
@@ -357,7 +364,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       val f = m.member.asInstanceOf[EirFunction]
       val theirs =
         // proxy-related args are provided by the runtime
-        f.functionArgs.drop(if (target.isInstanceOf[EirProxy]) 2 else 1).map(visit(ctx, _))
+        f.functionArgs.drop(dropCountFor(target)).map(visit(ctx, _))
       argumentsMatch(ours, theirs)
     })
     if (x.disambiguation.isDefined) target

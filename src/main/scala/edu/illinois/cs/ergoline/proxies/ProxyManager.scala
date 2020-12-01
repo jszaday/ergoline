@@ -5,7 +5,19 @@ import edu.illinois.cs.ergoline.ast.types.EirProxyType
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
+import scala.util.matching.Regex
+
 object ProxyManager {
+  val arrayPtn: Regex = raw"array(\d+)d".r
+
+  def dimensionality(s: String): Int = {
+    s match {
+      case arrayPtn(dim) => dim.toInt
+      case "nodegroup" | "group" => 1
+      case _ => throw new RuntimeException(s"unsure how to match $s")
+    }
+  }
+
   private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
   private var _elements: Map[EirProxy, EirProxy] = Map()
 
@@ -24,6 +36,9 @@ object ProxyManager {
       _elements(t)
     })
   }
+
+  def collectiveFor(t: EirProxy): Option[EirProxy] =
+    Option.when(t.isElement)(_proxies.get((t.collective.get, t.base))).flatten
 
   def proxyFor(t: EirProxyType): EirProxy = {
     val ctve = t.collective.getOrElse("")

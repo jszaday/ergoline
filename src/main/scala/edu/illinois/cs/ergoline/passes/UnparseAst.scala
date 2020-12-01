@@ -181,7 +181,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitProxyType(ctx: UnparseContext, x: EirProxyType): String = {
-    visit(ctx, x.base) +
+    nameFor(ctx, x.base) +
       (if (x.isElement) "[@]" else "@") +
       x.collective.getOrElse("")
   }

@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirProxyType
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -171,6 +172,7 @@ object GenerateCpp extends UnparseAst {
 
   override def visitFunction(ctx: UnparseContext, x: EirFunction): String = {
     if (visited.contains(x)) return ""
+    else if (x.parent.exists(_.annotations.exists(_.name == "system"))) return error(ctx, x)
     visited +:= x
     val virtual =
       Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual ").getOrElse("")
@@ -188,7 +190,7 @@ object GenerateCpp extends UnparseAst {
       val tmp = dropSelf(x).map(visit(ctx, _))
       // NOTE kludgy solution to detect if we need to drop selfProxy
       if (cons && x.parent.flatMap(_.parent).to[EirProxy].isDefined) {
-        tmp.tail
+        if (tmp.isEmpty && !globals.strict) tmp else tmp.tail
       } else {
         tmp
       }
@@ -317,7 +319,8 @@ object GenerateCpp extends UnparseAst {
     // TODO add destructor and pupper
     s"struct $name: public CBase_$name {" + {
       ctx.numTabs += 1
-      val res = x.members.map(x => s"$n${ctx.t}${visitProxyMember(ctx, x)}").mkString("") +
+      val res = x.membersToGen
+        .map(x => s"$n${ctx.t}${visitProxyMember(ctx, x)}").mkString("") +
         s"$n${ctx.t}$base *impl_;"
       ctx.numTabs -= 1
       res

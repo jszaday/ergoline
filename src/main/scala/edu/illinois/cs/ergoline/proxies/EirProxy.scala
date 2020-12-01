@@ -1,7 +1,10 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.{globals, util}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 
 case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String], var isElement: Boolean) extends EirClassLike {
 
@@ -39,10 +42,51 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     checkDeclTy.contains(element)
   }
 
-  override def members: List[EirMember] = {
+  private def indices: Option[List[EirType]] = {
+    val n = collective.map(ProxyManager.dimensionality)
+    val i = globals.typeFor(EirLiteralTypes.Integer)
+    n.map(List.fill(_)(i))
+  }
+
+  private def indexType: Option[EirType] = {
+    indices.map(_.toTupleType(Some(this))).to[EirType]
+  }
+
+  private def genElementMembers(): List[EirMember] = {
+    val idx = indexType.get
+    val parent = ProxyManager.collectiveFor(this).get
+    List(util.makeMemberFunction(this, "parent", Nil, parent, isConst = true),
+      util.makeMemberFunction(this, "index", Nil, idx, isConst = true))
+  }
+
+  private def genCollectiveMembers(): List[EirMember] = {
+    val idx = indices.get
+    val u = globals.typeFor(EirLiteralTypes.Unit)
+    val eleTy = ProxyManager.elementFor(this).get
     base.members
-      .filter(x => x.isEntry && (!x.isConstructor || validConstructor(x)))
+      .filter(x => x.isEntry && x.isConstructor && validConstructor(x))
+      .map(m => {
+        val args = m.member.asInstanceOf[EirFunction].functionArgs.drop(2).map(_.declaredType)
+        util.makeMemberFunction(this, baseName, idx ++ args, u, isConst = false)
+      }) ++ List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false),
+      util.makeMemberFunction(this, "get", idx, eleTy, isConst = true))
+  }
+
+  override def members: List[EirMember] = {
+    val fromKind =
+      if (isElement) genElementMembers()
+      else if (collective.isDefined) genCollectiveMembers()
+      else Nil
+    fromKind ++ base.members
+      .filter(x => x.isEntry && (!x.isConstructor || (singleton && validConstructor(x))))
       .map(correctSelf)
+  }
+
+  def singleton: Boolean = isElement || collective.isEmpty
+
+  def membersToGen: List[EirMember] = {
+    members.filterNot(_.annotations.exists(_.name == "system")) ++
+      base.members.filter(x => !singleton && x.isEntry && (x.isConstructor && validConstructor(x))).map(correctSelf)
   }
 
   override def members_=(lst: List[EirMember]): Unit = ???

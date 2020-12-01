@@ -4,6 +4,7 @@ import java.io.File
 
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.AstManipulation
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
@@ -234,9 +235,10 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   extends EirNamedNode {
   var isOverride: Boolean = false
 
-  def isConstructorOf(other: EirClass): Boolean = parent.contains(other) && isConstructor
-
-  def isConstructor: Boolean = member.isInstanceOf[EirFunction] && parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name)
+  def isConstructor: Boolean =
+    member.isInstanceOf[EirFunction] &&
+      (parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name) ||
+        parent.to[EirProxy].exists(_.baseName == name))
 
   // TODO ensure first argument is "self"
   // TODO also ensure return type is "unit" unless a/sync or local

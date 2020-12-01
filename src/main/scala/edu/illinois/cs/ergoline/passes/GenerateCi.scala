@@ -3,12 +3,11 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 
 import scala.util.Properties.{lineSeparator => n}
-import scala.util.matching.Regex
 
 object GenerateCi {
-  val arrayPtn: Regex = raw"array(\d+)d".r
 
   def visitAll(): String = {
     val ctx = new UnparseContext
@@ -36,7 +35,7 @@ object GenerateCi {
     val header =
       template + ctx.t + visitChareType(proxy.isMain, proxy.collective) + s" $name {$n"
     ctx.numTabs += 1
-    val body = proxy.members.map(visit(ctx, proxy, _)).mkString(n)
+    val body = proxy.membersToGen.map(visit(ctx, proxy, _)).mkString(n)
     ctx.numTabs -= 1
     header + body + s"${ctx.t}};$n"
   }

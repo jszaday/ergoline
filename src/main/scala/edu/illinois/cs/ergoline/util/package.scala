@@ -11,6 +11,19 @@ package object util {
 
   import EirUtilitySyntax.RichEirNode
 
+  def makeMemberFunction(parent: EirClassLike, name: String,
+                         args: List[EirResolvable[EirType]],
+                         retTy: EirResolvable[EirType], isConst: Boolean): EirMember = {
+    val m = EirMember(Some(parent), null, EirAccessibility.Public)
+    m.annotations +:= EirAnnotation(Some(m), "system")
+    m.member = EirFunction(Some(m), None, name, Nil, Nil, retTy)
+    m.member.asInstanceOf[EirFunction].functionArgs = (parent +: args).zipWithIndex.map({
+      case (value, 0) => EirFunctionArgument(Some(m.member), "self", value, isFinal = isConst, isSelfAssigning = false)
+      case (value, i) => EirFunctionArgument(Some(m.member), s"x$i", value, isFinal = false, isSelfAssigning = false)
+    })
+    m
+  }
+
   def assertValid[T: Manifest](value: Any): T = {
     Option(value) match {
       case Some(x: T) => x
