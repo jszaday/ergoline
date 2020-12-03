@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
+import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
@@ -20,6 +21,8 @@ class EirParseTest extends FunSuite {
       }
     }
   }
+
+  Errors.exitAction = () => throw new RuntimeException("")
 
   import ParseTestSyntax.RichIterable
 
@@ -87,8 +90,8 @@ class EirParseTest extends FunSuite {
     val c = v.visitExpression(parserFromString("1 < 2 ? \"potato\" : 2").expression())
     CheckTypes.visit(t, a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
     // cannot use non-boolean as test
-    assertThrows[TypeCheckException](CheckTypes.visit(t, b))
+    assertThrows[RuntimeException](CheckTypes.visit(t, b))
     // must be able to unify expressions' types
-    assertThrows[TypeCheckException](CheckTypes.visit(t, c))
+    assertThrows[RuntimeException](CheckTypes.visit(t, c))
   }
 }

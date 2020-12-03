@@ -6,11 +6,13 @@ import edu.illinois.cs.ergoline.passes.FullyResolve
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern};
 
 class EirUtilityTests extends FunSuite {
   EirGlobalNamespace.clear()
+  Errors.exitAction = () => throw new RuntimeException("")
 
   test("block position and contains") {
     EirGlobalNamespace.clear()

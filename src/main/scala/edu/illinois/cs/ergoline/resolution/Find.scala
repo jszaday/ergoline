@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
+import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 import scala.collection.mutable
@@ -179,9 +180,9 @@ object Find {
       case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
       case head :: rest =>
         // this is only necessary for strict mode
-        if (globals.strict && rest.nonEmpty) println(s"warning, $head may be hiding $rest")
+        if (globals.strict && rest.nonEmpty) Errors.warn(s"$head may be hiding $rest")
         head
-      case _ => throw new RuntimeException(s"unable to uniquely resolve $x")
+      case _ => Errors.unableToResolve(x)
     }
   }
 

@@ -6,6 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -84,17 +85,21 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x.disambiguation = Some(results.head._1)
       return results.head._2
     }
-    error(ctx, x, s"attempting to access field ${x.field} of $base")
+    Errors.missingField(x, base, x.field)
   }
 
   override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = {
-    if (visit(ctx, x.test).canAssignTo(globals.typeFor(EirLiteralTypes.Boolean))) {
-      Find.unionType(visit(ctx, x.ifTrue), visit(ctx, x.ifFalse)) match {
+    val testTy = visit(ctx, x.test)
+    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
+    if (testTy.canAssignTo(boolean)) {
+      val tty = visit(ctx, x.ifTrue)
+      val fty = visit(ctx, x.ifFalse)
+      Find.unionType(tty, fty) match {
         case Some(found) => found
-        case None => error(ctx, x, s"could not unify type of ${x.ifTrue} and ${x.ifFalse}")
+        case None => Errors.unableToUnify(x, tty, fty)
       }
     } else {
-      error(ctx, x, s"${x.test} is an unsuitable test")
+      Errors.cannotCast(x, testTy, boolean)
     }
   }
 
@@ -150,8 +155,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case EirCStyleHeader(decl, test, incr) => {
         visit(ctx, decl)
         val ttype = test.map(visit(ctx, _))
-        if (!ttype.exists(_.canAssignTo(globals.typeFor(EirLiteralTypes.Boolean)))) {
-          error(ctx, loop, s"expected a boolean-like value, instead got $ttype")
+        val boolean = globals.typeFor(EirLiteralTypes.Boolean)
+        if (!ttype.exists(_.canAssignTo(boolean))) {
+          Errors.cannotCast(loop, ttype.get, boolean)
         }
         visit(ctx, incr)
       }
@@ -180,7 +186,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (retTys.isEmpty) null
     else Find.unionType(retTys) match {
       case Some(x) => x
-      case None => throw TypeCheckException(s"could not find union of return types $retTys")
+      case None => Errors.unableToUnify(node, retTys)
     }
   }
 
@@ -193,7 +199,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val lval = visit(ctx, node.declaredType)
     val rval = node.initialValue.map(visit(ctx, _))
     if (!rval.forall(_.canAssignTo(lval))) {
-      error(ctx, node, s"$rval cannot be assigned to $lval")
+      Errors.cannotCast(node, rval.get, lval)
     } else {
       lval
     }
@@ -207,7 +213,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def error(ctx: TypeCheckContext, node: EirNode, message: String): EirType = {
-    throw TypeCheckException(s"error in $ctx on ${node.location.map(_.toString).getOrElse(node.toString)}: $message")
+    throw TypeCheckException(s"${node.location.map(_.toString).getOrElse(node.toString)}: $message")
   }
 
 
@@ -264,10 +270,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     node.disambiguation = Some(f)
     val retTy = visit(ctx, f)
     if (func == "compareTo") {
-      if (retTy.canAssignTo(globals.typeFor(EirLiteralTypes.Integer))) {
+      val integer = globals.typeFor(EirLiteralTypes.Integer)
+      if (retTy.canAssignTo(integer)) {
         globals.typeFor(EirLiteralTypes.Boolean)
       } else {
-        error(ctx, node, s"expected $retTy to compatible with integer")
+        Errors.cannotCast(node, retTy, integer)
       }
     } else {
       retTy
@@ -306,7 +313,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val lval = visit(ctx, node.rval)
     val rval = visit(ctx, node.lval)
     if (!rval.canAssignTo(lval)) {
-      error(ctx, node, s"$rval cannot be assigned to $lval")
+      Errors.cannotCast(node, lval, rval)
     } else if (isFinalDecl(node.lval)) {
       error(ctx, node, s"$rval cannot be assigned to final ${node.lval}")
     } else {
@@ -349,8 +356,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitIfElse(ctx: TypeCheckContext, x: EirIfElse): EirType = {
     val retTy = visit(ctx, x.test)
-    if (!retTy.canAssignTo(globals.typeFor(EirLiteralTypes.Boolean))) {
-      error(ctx, x.test, s"expected $x to be a boolean")
+    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
+    if (!retTy.canAssignTo(boolean)) {
+      Errors.cannotCast(x, retTy, boolean)
     }
     x.ifTrue.foreach(visit(ctx, _))
     x.ifFalse.foreach(visit(ctx, _))

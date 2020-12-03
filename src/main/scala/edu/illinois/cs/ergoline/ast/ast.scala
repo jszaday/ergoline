@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
-import edu.illinois.cs.ergoline.util.AstManipulation
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 import edu.illinois.cs.ergoline.{globals, util}
 
@@ -158,7 +158,7 @@ case class EirFileSymbol(var parent : Option[EirNode], var file : File)
     }
     _resolved match {
       case Some(x) => List(x)
-      case _ => throw new RuntimeException(s"could not resolve $file!")
+      case _ => Errors.unableToResolve(this)
     }
   }
 
@@ -336,7 +336,7 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
     }
     _resolved match {
       case Some(x) => List(x)
-      case _ => throw new RuntimeException("could not resolve import!")
+      case _ => Errors.unableToResolve(this)
     }
   }
 
@@ -482,7 +482,7 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
     }
     _resolved match {
       case Some(x) if x.nonEmpty => x
-      case _ => throw new RuntimeException(s"could not resolve $this!")
+      case _ => Errors.unableToResolve(this)
     }
   }
 
