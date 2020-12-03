@@ -300,9 +300,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def isFinalDecl(lval : EirExpressionNode): Boolean = {
     lval match {
-      case s : EirSymbol[_] => Find.singleReference(s) match {
-        case Some(d : EirDeclaration) => d.isFinal
-        case Some(a : EirFunctionArgument) => a.isFinal
+      case s : EirSymbol[_] => Find.uniqueResolution(s) match {
+        case d : EirDeclaration => d.isFinal
+        case a : EirFunctionArgument => a.isFinal
         case _ => false
       }
       case _ => ???

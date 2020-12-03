@@ -163,16 +163,6 @@ object Find {
     }
   }
 
-  def singleReference[T <: EirNode](resolvable: EirResolvable[T]): Option[T] = {
-    if (globals.strict) {
-      val found = resolvable.resolve()
-      assert(found.length == found.distinct.length)
-      Option.when(found.length == 1)(found.head)
-    } else {
-      Some(uniqueResolution(resolvable))
-    }
-  }
-
   def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
     val found = x.resolve()
     assert(!globals.strict || found.length == found.distinct.length)
@@ -180,7 +170,10 @@ object Find {
       case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
       case head :: rest =>
         // this is only necessary for strict mode
-        if (globals.strict && rest.nonEmpty) Errors.warn(s"$head may be hiding $rest")
+        if (globals.strict) {
+          if (rest.contains(head) || rest.length != rest.distinct.length) Errors.warn(s"repeated resolutions of $x")
+          if (rest.nonEmpty) Errors.warn(s"$head may be hiding $rest")
+        }
         head
       case _ => Errors.unableToResolve(x)
     }

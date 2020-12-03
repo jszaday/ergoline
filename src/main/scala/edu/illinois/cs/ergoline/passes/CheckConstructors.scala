@@ -64,7 +64,7 @@ object CheckConstructors {
   }
 
   private def canAssignHelper(x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
-    Find.singleReference(x).exists(x => x.canAssignTo(Find.uniqueResolution(y)))
+    Find.uniqueResolution(x).canAssignTo(Find.uniqueResolution(y))
   }
 
   def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
