@@ -18,9 +18,19 @@ object EirAccessibility extends Enumeration {
   val Public, Private, Protected = Value
 }
 
+class EirSourceInfo(sourceName: String, line: Int, start: Int, text: String) {
+  override def toString: String = s"$sourceName:$line:$start"
+}
+
 abstract class EirNode {
   var parent: Option[EirNode]
   var annotations: List[EirAnnotation] = Nil
+  var _location: Option[EirSourceInfo] = None
+
+  def location: Option[EirSourceInfo] =
+    _location.orElse(parent.flatMap(_.location))
+
+  def location_=(location: Option[EirSourceInfo]): Unit = _location = location
 
   def annotation(name : String): Option[EirAnnotation] =
     annotations.find(_.name == name)

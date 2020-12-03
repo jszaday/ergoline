@@ -42,7 +42,7 @@ object CheckConstructors {
   }
 
   def constructorsByClassIn(scope: EirScope): Iterable[(EirClassLike, List[EirMember])] =
-    Find.all[EirClassLike](scope).map(c => {
+    Find.classes(scope).map(c => {
       (c, c.findWithin[EirMember](_.isConstructor).toList)
     })
 

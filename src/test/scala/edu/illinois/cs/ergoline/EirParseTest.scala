@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirTupleType
 import edu.illinois.cs.ergoline.passes.CheckTypes.TypeCheckException
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -30,7 +31,9 @@ class EirParseTest extends FunSuite {
   }
 
   test("tuple with one element same type as base type") {
-    val types = (new Visitor).visitTypeList(parserFromString("(unit), unit").typeList())
+    val t = (new Visitor).visitTupleType(parserFromString("((unit), unit)").tupleType())
+    t.isInstanceOf[EirTupleType] shouldBe true
+    val types = t.asInstanceOf[EirTupleType].children
     types.length shouldBe 2
     types.head.toString shouldEqual types.last.toString
   }

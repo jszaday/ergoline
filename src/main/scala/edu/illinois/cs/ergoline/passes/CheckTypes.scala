@@ -193,9 +193,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val lval = visit(ctx, node.declaredType)
     val rval = node.initialValue.map(visit(ctx, _))
     if (!rval.forall(_.canAssignTo(lval))) {
-      throw TypeCheckException(s"$rval cannot be assigned to $lval")
+      error(ctx, node, s"$rval cannot be assigned to $lval")
+    } else {
+      lval
     }
-    lval
   }
 
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
@@ -206,12 +207,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def error(ctx: TypeCheckContext, node: EirNode, message: String): EirType = {
-    throw TypeCheckException(s"error in $ctx on $node: $message")
+    throw TypeCheckException(s"error in $ctx on ${node.location.map(_.toString).getOrElse(node.toString)}: $message")
   }
 
 
   def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
     if (ctx.shouldCheck(node)) {
+//      CheckClasses.visit(node)
       node.members.foreach(visitMember(ctx, _))
     }
     node

@@ -15,7 +15,7 @@ class EirUtilityTests extends FunSuite {
   test("block position and contains") {
     EirGlobalNamespace.clear()
     val b = new Visitor().visitBlock(
-      parserFromString("{ val x : int = 42; val y : int = 16; }").block()).get
+      parserFromString("{ val x : int = 42; val y : int = 16; }").block())
     // test a fairly elaborate query
     b.findWithin[EirLiteral](_.value == "16")
       .flatMap(b.findPositionOf(_)) shouldEqual List(1)

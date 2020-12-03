@@ -108,11 +108,6 @@ package object util {
         }
     }
 
-    implicit class RichParserRuleContext[T <: ParserRuleContext](t: T) {
-      def mapOrEmpty[A, B](f: T => java.util.List[A], g: A => B): List[B] =
-        Option(t).map(f).map(_.asScala).getOrElse(Nil).map(g).toList
-    }
-
     implicit class RichBoolean(boolean: Boolean) {
       def ifTrue[T](t: Iterable[T]): Iterable[T] = if (boolean) t else None
 

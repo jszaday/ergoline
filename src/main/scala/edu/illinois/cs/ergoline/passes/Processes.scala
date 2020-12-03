@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirGlobalNamespace, EirNamespace, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirGlobalNamespace, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.proxies.ProxyManager
 import edu.illinois.cs.ergoline.resolution.Find
 
@@ -11,7 +11,8 @@ object Processes {
 
   def onLoad(x : EirNode): Unit = {
     FullyResolve.visit(x)
-    Find.all[EirClassLike](x).foreach(CheckClasses.visit)
+    Find.classes(x.scope.getOrElse(x)).foreach(CheckClasses.visit)
+
     x match {
       case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
       case _ => CheckTypes.visit(ctx, x)
