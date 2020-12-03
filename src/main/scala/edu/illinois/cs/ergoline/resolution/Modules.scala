@@ -6,11 +6,11 @@ import java.nio.file.{Files, Path, Paths}
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.Processes
-import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.AstManipulation
+import edu.illinois.cs.ergoline.resolution.Find.{parentOf, withName}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
-import org.antlr.v4.runtime.{CharStream, CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.{BailErrorStrategy, CharStream, CharStreams, CommonTokenStream, ConsoleErrorListener, RecognitionException, Recognizer}
 
 import scala.collection.mutable
 import scala.util.Properties
@@ -29,6 +29,13 @@ object Modules {
 
   val loadedFiles : mutable.Map[File, EirNamedNode] = mutable.Map()
 
+  private object ErgolineErrorListener extends ConsoleErrorListener {
+    override def syntaxError(recognizer: Recognizer[_, _], offendingSymbol: Any, line: Int, charPositionInLine: Int, msg: String, e: RecognitionException): Unit = {
+      super.syntaxError(recognizer, offendingSymbol, line, charPositionInLine, msg, e)
+      Errors.exitAction()
+    }
+  }
+
   def load(body: String, scope: EirScope = EirGlobalNamespace): EirScope = {
     new Visitor(scope).visitProgram(parserFromString(body).program())
   }
@@ -39,7 +46,10 @@ object Modules {
   def parserFromCharStream(cs: CharStream): ErgolineParser = {
     val lexer = new ErgolineLexer(cs)
     val tokens = new CommonTokenStream(lexer)
-    new ErgolineParser(tokens)
+    val parser = new ErgolineParser(tokens)
+    parser.removeErrorListeners()
+    parser.addErrorListener(ErgolineErrorListener)
+    parser
   }
 
   def retrieve(qualified: List[String], scope: EirScope): EirNamespace = {
@@ -93,14 +103,23 @@ object Modules {
       })
   }
 
+  private def memoryUsageMb: Long = {
+    (Runtime.getRuntime.totalMemory -  Runtime.getRuntime.freeMemory) / (1024 * 1024)
+  }
+
+  private def currTimeMs: Long = System.currentTimeMillis()
+
   def load(f: File, scope: EirScope): EirNamedNode = {
     val file = f.getCanonicalFile
+    val (startMb, startMs) = (memoryUsageMb, currTimeMs)
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
       case Right(value) =>
         loadedFiles(file) = value
         Processes.onLoad(value)
+        val (endMs, endMb) = (currTimeMs, memoryUsageMb)
+        Errors.log(s"loaded ${file.getName} in ${endMs - startMs} ms (final mem usage ${Math.max(endMb - startMb, 0)} MB)")
         value
       case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getCanonicalPath}")
     }

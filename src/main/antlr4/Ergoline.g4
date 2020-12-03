@@ -1,7 +1,7 @@
 grammar Ergoline;
 
 program
-    : packageStatement? annotatedTopLevelStatement*
+    : packageStatement? annotatedTopLevelStatement+ EOF
     ;
 
 annotatedTopLevelStatement

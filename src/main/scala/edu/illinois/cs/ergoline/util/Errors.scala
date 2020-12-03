@@ -2,8 +2,11 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNamedNode, EirNode}
 import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.EirResolvable
+import org.antlr.v4.runtime.ParserRuleContext
+import org.antlr.v4.runtime.tree.ErrorNode
 
 object Errors {
 
@@ -19,6 +22,7 @@ object Errors {
 
   var exitAction: () => Nothing = () => sys.exit(errorCode)
 
+  def log(msg: String): Unit = if (globals.verbose) println(msg)
   def warn(msg: String): Unit = Console.err.println(s"warning: $msg")
 
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {

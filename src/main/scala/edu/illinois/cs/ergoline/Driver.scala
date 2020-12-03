@@ -13,6 +13,7 @@ object Driver extends App {
   // get the options from the command-line args
   val (options, files) = args.partition(x => x startsWith "-")
   globals.strict = options.contains("-Wall")
+  globals.verbose = options.contains("--verbose")
   // open each specified file
   val modules: Iterable[EirNode] =
     files.map(Paths.get(_)).map(x => load(x.toFile, EirGlobalNamespace))

@@ -6,9 +6,9 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
-import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
+import org.antlr.v4.runtime.tree.{ErrorNode, ParseTree, TerminalNode}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -86,9 +86,6 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def visitProgram(ctx : ProgramContext, file : Option[File]): Either[EirScope, EirNamedNode] = {
-    file.map(_.getCanonicalPath).foreach(path => {
-      println(s"loading file: $path")
-    })
     val expectation = file.map(Modules.expectation)
     val topLevel : EirScope =
       Option(ctx.packageStatement())
@@ -487,7 +484,4 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       EirLiteral(parent, EirLiteralTypes.Character, ctx.CharacterConstant().getText)
     }
   }
-
-  //  override def visitChildren(ruleNode: RuleNode): Any = ???
-  //  override def visitErrorNode(errorNode: ErrorNode): Any = ???
 }

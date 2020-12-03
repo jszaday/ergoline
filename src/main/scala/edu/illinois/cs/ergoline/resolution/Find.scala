@@ -168,12 +168,12 @@ object Find {
     assert(!globals.strict || found.length == found.distinct.length)
     found match {
       case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
-      case head :: rest =>
-        // this is only necessary for strict mode
-        if (globals.strict) {
-          if (rest.contains(head) || rest.length != rest.distinct.length) Errors.warn(s"repeated resolutions of $x")
-          if (rest.nonEmpty) Errors.warn(s"$head may be hiding $rest")
-        }
+      case head :: _ if !globals.strict => head
+      // check to ensure unique resolution
+      case head :: rest if globals.strict =>
+        val all: List[T] = head +: rest
+        if (all.length != all.distinct.length) Errors.warn(s"repeated resolutions of $x")
+        if (all.length > 1) Errors.warn(s"potential ambiguity, selected $head from $all")
         head
       case _ => Errors.unableToResolve(x)
     }

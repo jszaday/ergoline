@@ -9,6 +9,7 @@ package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode = EirLiteral(parent, EirLiteralTypes.Unit, "()")
 
   var strict: Boolean = false
+  var verbose: Boolean = false
 
   def clearGlobals(): Unit = {
     EirGlobalNamespace.clear()
