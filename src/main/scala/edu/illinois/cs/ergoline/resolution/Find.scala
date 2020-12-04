@@ -55,7 +55,7 @@ object Find {
     Find.child[T](node, predicate) ++ node.children.flatMap(within[T](_, predicate))
   }
 
-  def matchesPredicate[T](predicate: T => Boolean)(x : Any): Boolean = {
+  private def matchesPredicate[T](predicate: T => Boolean)(x : Any): Boolean = {
     try {
       predicate(x.asInstanceOf[T])
     } catch {

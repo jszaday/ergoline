@@ -4,13 +4,21 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
+import edu.illinois.cs.ergoline.resolution.Find
 
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCi {
 
-  def visitAll(): String = {
-    val ctx = new UnparseContext
+  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends UnparseContext("ci") {
+    val puppables: Iterable[EirSpecializable] = checked.keys.filter({
+      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract)
+      case _ => false
+    })
+  }
+
+  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
+    val ctx = new CiUnparseContext(checked)
     ctx.numTabs += 1
     val body = ProxyManager.proxies
       .filterNot(x => x.base.isAbstract || x.isElement)
@@ -23,8 +31,11 @@ object GenerateCi {
     s"mainmodule generate {$n$body}$n"
   }
 
-  def visitNamespaces(ctx: UnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
-    namespaces.map(ns => s"${n}namespace ${ns.name} {").mkString("") + n + {
+  def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
+    namespaces.map(ns => {
+      s"${n}namespace ${ns.name} {" ++
+      ctx.puppables.filter(x => ns.children.contains(x)).map(x => s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};").mkString("")
+    }).mkString("") + n + {
       proxies.map(visit(ctx, _)).mkString("")
     } + "}" + n
   }

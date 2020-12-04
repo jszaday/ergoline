@@ -1,12 +1,9 @@
 package edu.illinois.cs.ergoline.util
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNamedNode, EirNode}
+import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.UnparseAst
+import edu.illinois.cs.ergoline.ast.{EirNamedNode, EirNode}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
-import org.antlr.v4.runtime.ParserRuleContext
-import org.antlr.v4.runtime.tree.ErrorNode
 
 object Errors {
 
@@ -44,6 +41,16 @@ object Errors {
 
   def unableToResolve(resolvable: EirResolvable[_]): Nothing = {
     Console.err.println(s"${contextualize(resolvable)}: unable to resolve $resolvable")
+    exitAction()
+  }
+
+  def missingType(node: EirNode): Nothing = {
+    Console.err.println(s"${contextualize(node)}: could not find the type of $node")
+    exitAction()
+  }
+
+  def missingNamespace(node: EirNode): Nothing = {
+    Console.err.println(s"${contextualize(node)}: could not find the namespace of $node")
     exitAction()
   }
 }

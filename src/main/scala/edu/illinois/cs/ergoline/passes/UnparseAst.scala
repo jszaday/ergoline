@@ -10,15 +10,17 @@ import scala.util.Properties.{lineSeparator => n}
 object UnparseAst {
   val tab = "  "
 
-  class UnparseContext {
+  class UnparseContext(val lang: String) {
     var numTabs = 0
     /* (n : Int = numTabs) */
     def t: String = List.fill(numTabs)(tab).mkString("")
+
+    override def toString: String = lang
   }
 
   private val _instance = new UnparseAst
 
-  def visit(node: EirNode): String = _instance.visit(new UnparseContext, node)
+  def visit(node: EirNode): String = _instance.visit(new UnparseContext("ergoline"), node)
 }
 
 class UnparseAst extends EirVisitor[UnparseContext, String] {

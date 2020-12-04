@@ -380,6 +380,10 @@ case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (oldNode == declaredType) && util.applyOrFalse[EirResolvable[EirType]](declaredType = _, newNode)
   }
+
+  def cloneWith(other: Option[EirNode]): EirFunctionArgument = {
+    EirFunctionArgument(other, name, declaredType, isFinal, isSelfAssigning)
+  }
 }
 
 case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNode, var op: String, var rval: EirExpressionNode) extends EirNode {

@@ -1,22 +1,95 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirProxyType
+import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCpp extends UnparseAst {
   var visited : List[EirNode] = Nil
 
-  def visit(node: EirNode): String = visit(new UnparseContext, node)
+  object GenCppSyntax {
+    implicit class RichEirType(eirType : EirType) {
+      def isPointer: Boolean = eirType match {
+        case x : EirTemplatedType =>
+          Find.uniqueResolution[EirType](x.base).isPointer
+        case x if x.annotation("system").isDefined => false
+        case x : EirClassLike => !x.isInstanceOf[EirProxy]
+        case _ => false
+      }
+    }
+  }
 
-  def forwardDecl(x: EirProxy, ctx: UnparseContext = new UnparseContext): String = {
+  def typeFor(ctx: UnparseContext, x: EirResolvable[EirType], isEntryArgument: Boolean = false): String =
+    typeFor(ctx, Find.uniqueResolution[EirType](x), isEntryArgument)
+
+  def typeFor(ctx: UnparseContext, x: EirType, isEntryArgument: Boolean): String = {
+    val name = nameFor(ctx, x)
+    if (x.isPointer) {
+      if (isEntryArgument) {
+        x match {
+          case c: EirClassLike if c.isAbstract => {
+            if (ctx.lang == "ci") {
+              "CkPointer<PUP::able>"
+            } else {
+              "PUP::able*"
+            }
+          }
+          case _ => name + "*"
+        }
+      }
+      else s"std::shared_ptr<$name>"
+    }
+    else name
+  }
+
+  def forwardDecl(ctx: UnparseContext, x: EirClassLike): String = {
+    s"struct ${nameFor(ctx, x)};"
+  }
+
+//  override def visitNamespace(ctx: UnparseContext, node: EirNamespace): String = {
+//    val parted = node.children.partition(_.isInstanceOf[EirClassLike])
+//    node.children = parted._1.map(_.asInstanceOf[EirClassLike]).sorted ++ parted._2
+//    super.visitNamespace(ctx, node)
+//  }
+
+  // TODO this will need to support templates
+  def makeFromPuppable(ctx: UnparseContext, t: EirTrait): String = {
+    def getDerived(t: EirTrait): Seq[EirClassLike] = {
+      t.derived.partition(_.isInstanceOf[EirTrait]) match {
+        case (traits, classes) => traits.map(_.asInstanceOf[EirTrait]).flatMap(getDerived) ++ classes
+      }
+    }
+    val name = nameFor(ctx, t)
+    val children = getDerived(t).toSet.map((c: EirClassLike) => {
+      val otherName = nameFor(ctx, c)
+      s"if (p->get_PUP_ID() == $otherName::my_PUP_ID) return ($otherName*) p;"
+    }).toList :+ s"return nullptr;$n"
+    s"$name* $name::fromPuppable(PUP::able *p) {" + {
+      ctx.numTabs += 1
+      val res = s"$n${ctx.t}" + children.mkString(s"$n${ctx.t}else ")
+      ctx.numTabs -= 1
+      res
+    } + "}"
+  }
+
+//  def forwardDefn(ctx: UnparseContext, x: EirClassLike): String = {
+//    s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + "{" + {
+//      ctx.numTabs += 1
+//      val res = ""
+//      ctx.numTabs -= 1
+//      res
+//    } + s"$n};"
+//  }
+
+  def forwardDecl(ctx: UnparseContext, x: EirProxy): String = {
     val ns = x.namespaces.toList
     (ns.map(ns => s"${n}namespace ${nameFor(ctx, ns)} {") ++ {
       Seq(s"struct ${nameFor(ctx, x)};")
@@ -33,7 +106,8 @@ object GenerateCpp extends UnparseAst {
 
   override def visitFieldAccessor(ctx: UnparseContext, x: EirFieldAccessor): String = {
     // TODO handle self applications :3
-    s"${visit(ctx, x.target)}.${x.field}"
+    val targetTy: EirType = x.target.foundType.getOrElse(Errors.missingType(x.target))
+    s"${visit(ctx, x.target)}${if (targetTy.isPointer) "->" else "."}${x.field}"
   }
 
   override def visitLambdaType(ctx: UnparseContext, x: types.EirLambdaType): String = "auto"
@@ -50,11 +124,18 @@ object GenerateCpp extends UnparseAst {
     })
   }
 
+  def isEntryArgument(f: EirFunctionArgument): Boolean = {
+    f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
+  }
+
   def visitCallArgument(ctx: UnparseContext)(t: (EirExpressionNode, EirFunctionArgument)): String = {
     val theirs = t._2.declaredType.resolve().headOption
     (t._1.foundType, theirs) match {
-      case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) => {
+      case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
+      case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>{
+        val templ = c.extendsThis.map(nameFor(ctx, _)).getOrElse("PUP::able")
+        s"CkPointer<$templ>(${visit(ctx, t._1)}.get())"
       }
       case _ => visit(ctx, t._1)
     }
@@ -131,14 +212,17 @@ object GenerateCpp extends UnparseAst {
     }
   }
 
-  override def visitLiteral(ctx: UnparseContext, x: EirLiteral): String = x.value
+  override def visitLiteral(ctx: UnparseContext, x: EirLiteral): String = {
+    if (x.`type` == EirLiteralTypes.String) s"std::string(${x.value})"
+    else x.value
+  }
 
   override def visitSymbol[A <: EirNamedNode](ctx: UnparseContext, x: EirSymbol[A]): String = {
     nameFor(ctx, Find.uniqueResolution(x))
   }
 
   override def visitDeclaration(ctx: UnparseContext, x: EirDeclaration): String = {
-    s"${visit(ctx, x.declaredType)} ${nameFor(ctx, x)}" + {
+    s"${typeFor(ctx, x.declaredType)} ${nameFor(ctx, x)}" + {
       x.initialValue.map(x => s" = ${visit(ctx, x)}").getOrElse("")
     } + ";"
   }
@@ -149,13 +233,27 @@ object GenerateCpp extends UnparseAst {
 
   def visitInherits(ctx: UnparseContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
-    if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") + " "
+    if (parents.nonEmpty) {
+      ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public PUP::able")
+    } else if (!x.isInstanceOf[EirTrait]) ": public PUP::able"
     else ""
   }
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
     // if (x.annotations.exists(_.name == "system")) "" else
-    visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)} " + visitInherits(ctx, x) + visitChildren(ctx, x.members) + s";"
+    visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + {
+      ctx.numTabs += 1
+      val res =if (x.isInstanceOf[EirTrait]) {
+        s" {$n${ctx.t}static ${nameFor(ctx, x)}* fromPuppable(PUP::able *p);"
+      } else {
+        // TODO PUPable_decl_base_template
+        s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});" +
+          s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : PUP::able(m) { }" +
+          x.implementsThese.map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
+      }
+      ctx.numTabs -= 1
+      res
+    } + visitChildren(ctx, x.members).tail + s";"
   }
 
   override def visitMember(ctx: UnparseContext, x: EirMember): String = {
@@ -191,6 +289,7 @@ object GenerateCpp extends UnparseAst {
     visited +:= x
     val virtual =
       Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual ").getOrElse("")
+    val isEntry = x.scope.exists(_.isInstanceOf[EirProxy])
     val body = x.body.map(visit(ctx, _)).map(s => {
       s"{" + generateAssignments(ctx, x) + s.tail
     }).getOrElse({
@@ -202,7 +301,7 @@ object GenerateCpp extends UnparseAst {
       case _ => false
     })
     val args = {
-      val tmp = dropSelf(x).map(visit(ctx, _))
+      val tmp = dropSelf(x).map(visitFunctionArgument(ctx, _, isEntry))
       // NOTE kludgy solution to detect if we need to drop selfProxy
       if (cons && x.parent.flatMap(_.parent).to[EirProxy].isDefined) {
         if (tmp.isEmpty && !globals.strict) tmp else tmp.tail
@@ -250,10 +349,14 @@ object GenerateCpp extends UnparseAst {
     }
   }
 
-  override def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument): String = {
-    val argTy = visit(ctx, x.declaredType)
+  override def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument): String =
+    visitFunctionArgument(ctx, x, isProxyArgument = false)
+
+  def visitFunctionArgument(ctx: UnparseContext, x: EirFunctionArgument, isProxyArgument: Boolean): String = {
+    val declTy = Find.uniqueResolution(x.declaredType)
+    val argTy = typeFor(ctx, declTy, isProxyArgument)
       // { if (x.isFinal) s"const " else "" } + visit(ctx, x.declaredType) + "&"
-    s"$argTy ${nameFor(ctx, x)}"
+    s"$argTy ${nameFor(ctx, x)}${if (isProxyArgument && declTy.isPointer) "_" else ""}"
   }
 
   override def visitTupleExpression(ctx: UnparseContext, x: EirTupleExpression): String = {
@@ -271,9 +374,11 @@ object GenerateCpp extends UnparseAst {
 
   override def visitNew(ctx: UnparseContext, x: EirNew): String = {
     val args: List[String] = visitArguments(ctx)(x.disambiguation, x.args)
-    x.target match {
-      case t: EirProxyType =>
-        visit(ctx, t) + s"::ckNew(${args mkString ", "})"
+    val objTy: EirType = Find.uniqueResolution(x.target)
+    objTy match {
+      case _: EirProxyType | _: EirProxy =>
+        nameFor(ctx, objTy) + s"::ckNew(${args mkString ", "})"
+      case t: EirType if t.isPointer => s"std::make_shared<${nameFor(ctx, t)}>(${args mkString ", "})"
       case _ => super.visitNew(ctx, x)
     }
   }
@@ -346,9 +451,22 @@ object GenerateCpp extends UnparseAst {
   }
 
   def makeArgsVector(ctx: UnparseContext, name: String): String = {
-    s"${ctx.t}std::vector<std::string> $name(msg->argc);$n" +
+    s"$n${ctx.t}std::vector<std::string> $name(msg->argc);$n" +
     s"${ctx.t}std::transform(msg->argv, msg->argv + msg->argc, $name.begin(),$n" +
     s"${ctx.t}${ctx.t}[](const char* x) -> std::string { return std::string(x); });$n"
+  }
+
+  def makeSmartPointer(ctx: UnparseContext)(x: EirFunctionArgument): String = {
+    val ty: EirType = Find.uniqueResolution(x.declaredType)
+    val asStr = typeFor(ctx, ty)
+    if (ty.isPointer) {
+      val cast = ty match {
+        case _: EirTrait => s"${nameFor(ctx, ty)}::fromPuppable(${x.name}_)"
+        case _ => s"(${nameFor(ctx, ty)}*)${x.name}_"
+      }
+      s"$n${ctx.t}$asStr ${x.name}($cast);"
+    }
+    else ""
   }
 
   def visitProxyMember(ctx: UnparseContext, x: EirMember): String = {
@@ -369,14 +487,14 @@ object GenerateCpp extends UnparseAst {
         visit(ctx, f).init.replaceFirst(base, name)
       }
     } else visit(ctx, f).init
-    vf + s"{$n" + {
+    vf + s"{" + {
       val dropCount = if (isConstructor) 2 else 1
       val args = f.functionArgs.drop(dropCount)
       ctx.numTabs += 1
       val res = {
         Option.when(isConstructor && isMain)(
           args.headOption.map(x => makeArgsVector(ctx, x.name))).flatten.getOrElse("")
-      } + s"${ctx.t}" + {
+      } + args.map(makeSmartPointer(ctx)).mkString("") + s"$n${ctx.t}" + {
         if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ")});"
         // TODO support non-void returns
         else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.tail.map(nameFor(ctx, _)).mkString(", ")});"

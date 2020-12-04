@@ -30,7 +30,8 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs =
-      EirFunctionArgument(Some(ours), "self", declType, isFinal = false, isSelfAssigning = false) +: theirs.functionArgs.tail
+      EirFunctionArgument(Some(ours), "self", declType, isFinal = false, isSelfAssigning = false) +:
+        theirs.functionArgs.tail.map(_.cloneWith(Some(ours)))
     newMember
   }
 
