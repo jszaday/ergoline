@@ -1,5 +1,5 @@
 package ergoline;
 
 @system(alias = "void") class unit {
-    @system def toString(self : unit): string;
+    @system def toString(): string;
 }

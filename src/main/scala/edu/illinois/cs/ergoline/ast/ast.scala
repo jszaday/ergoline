@@ -253,7 +253,6 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
       (parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name) ||
         parent.to[EirProxy].exists(_.baseName == name))
 
-  // TODO ensure first argument is "self"
   // TODO also ensure return type is "unit" unless a/sync or local
   def isEntry: Boolean = member match {
     case _: EirFunction => annotations.exists(_.name == "entry")
@@ -266,17 +265,13 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   }
 
   // TODO these checks should be more robust
-  def isConst: Boolean = member match {
-    case f : EirFunction =>
-      f.functionArgs.headOption.filter(arg => arg.name == "self").exists(_.isFinal)
-    case _ => false
-  }
+//  def isConst: Boolean = member match {
+//    case f : EirFunction =>
+//      f.functionArgs.headOption.filter(arg => arg.name == "self").exists(_.isFinal)
+//    case _ => false
+//  }
 
-  def isStatic: Boolean = member match {
-    case f : EirFunction =>
-      !f.functionArgs.headOption.exists(_.name == "self")
-    case _ => false
-  }
+  def isStatic: Boolean = false
 
   def isVirtual: Boolean = member match {
     case f : EirFunction =>

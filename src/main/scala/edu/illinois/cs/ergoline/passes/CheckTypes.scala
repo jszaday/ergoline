@@ -56,10 +56,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     val prevFc: Option[EirFunctionCall] = ctx.cameVia[EirFunctionCall]
     val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
-    val ours = {
-      Option.when(expectsSelf)(base) ++
-        (if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil)
-    }.toList
+    val ours =
+      if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
     // find the candidates ^_^
     val candidates = Find.accessibleMember(base, x)
     val results = candidates.map(candidate => {
@@ -69,12 +67,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case t : EirLambdaType =>
           val theirs = t.from.map(visit(ctx, _))
           if (argumentsMatch(ours, theirs)) {
-            val args = if (cameViaFuncCall && expectsSelf) theirs.tail else theirs
-            (candidate, EirLambdaType(t.parent, args, visit(ctx, t.to)))
+            (candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to)))
           } else {
             null
           }
-        case x if (ours.isEmpty || (expectsSelf && ours.length == 1)) => (candidate, x)
+        case x if ours.isEmpty || (expectsSelf && ours.length == 1) => (candidate, x)
         case _ => null
       }
       innerSpec.foreach(ctx.leave)
@@ -176,7 +173,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
-    visit(ctx, Find.uniqueResolution(value))
+    val ours = value.parent match {
+      case Some(f : EirFunctionCall) if f.target == value => f.args.map(visit(ctx, _))
+      case _ => Nil
+    }
+    val candidates = value.resolve()
+    val found = candidates.find({
+      case f: EirFunction => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
+      case EirMember(_, f: EirFunction, _) => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
+      case _ => ours.isEmpty
+    })
+    found.map(visit(ctx, _)).getOrElse(Errors.unableToResolve(value))
   }
 
   override def visitBlock(ctx: TypeCheckContext, node: EirBlock): EirType = {
@@ -371,8 +378,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   private def constructorDropCount(c : EirClassLike): Int = {
     c match {
-      case p: EirProxy if p.collective.isEmpty && !p.isElement => 2
-      case _ => 1
+      case p: EirProxy if p.collective.isEmpty && !p.isElement => 1
+      case _ => 0
     }
   }
 

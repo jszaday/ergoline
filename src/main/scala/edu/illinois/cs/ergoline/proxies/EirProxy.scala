@@ -29,15 +29,13 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.annotations = m.annotations
     newMember.member = ours
-    ours.functionArgs =
-      EirFunctionArgument(Some(ours), "self", declType, isFinal = false, isSelfAssigning = false) +:
-        theirs.functionArgs.tail.map(_.cloneWith(Some(ours)))
+    ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))
     newMember
   }
 
   private def validConstructor(m : EirMember): Boolean = {
     val args = m.member.asInstanceOf[EirFunction].functionArgs
-    val checkArg = Option.when(args.length >= 2)(args(1))
+    val checkArg = args.headOption
     val checkDeclTy = checkArg.map(x => Find.uniqueResolution(x.declaredType))
     val element = ProxyManager.elementFor(this).getOrElse(this)
     checkDeclTy.contains(element)
@@ -67,7 +65,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     base.members
       .filter(x => x.isEntry && x.isConstructor && validConstructor(x))
       .map(m => {
-        val args = m.member.asInstanceOf[EirFunction].functionArgs.drop(2).map(_.declaredType)
+        val args = m.member.asInstanceOf[EirFunction].functionArgs.drop(1).map(_.declaredType)
         util.makeMemberFunction(this, baseName, idx ++ args, u, isConst = false)
       }) ++ List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false),
       util.makeMemberFunction(this, "get", idx, eleTy, isConst = true))

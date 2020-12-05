@@ -31,7 +31,7 @@ class EirUtilityTests extends FunSuite {
   }
 
   test("symbol resolution") {
-    val foo = Modules.load("package foo ; class bar { val self : bar ; }")
+    val foo = Modules.load("package foo ; class bar { val other : bar ; }")
     val symbol = Find.all[EirSymbol[EirNamedType]](foo).headOption
     symbol.flatMap(_.resolve().headOption) should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>

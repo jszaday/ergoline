@@ -31,12 +31,12 @@ class EirImportTests extends FunSuite {
       |package foo;
       |import ergoline::_;
       |class bar {
-      |  def baz(self: bar): (int => int) {
+      |  def baz(): (int => int) {
       |    val f: (int => int) = (x : int) => x * 2;
       |    return f;
       |  }
-      |  def qux(self: bar): int {
-      |    return self.baz()(4);
+      |  def qux(): int {
+      |    return baz()(4);
       |  }
       |}
       |""".stripMargin)
@@ -64,13 +64,14 @@ class EirImportTests extends FunSuite {
 
   test("check sophisticated and chained templates") {
     EirGlobalNamespace.clear()
+    // TODO restore this to string::tryParse<...> and auto-generate lambda
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
       |@main def hello(args : array<string>): unit {
       |    val n : int =
       |        args.getOrNone(1) // -> option[string]
-      |            .flatMap<int>(string::tryParse<int>) // -> option[int]
+      |            .flatMap<int>((s: string) => s.tryParse<int>()) // -> option[int]
       |            .getOrElse(16); // -> int
       |    for (var i : int = 0; i < n; i = i + 1) {
       |        if (i % 2 == 0) {

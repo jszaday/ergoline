@@ -5,29 +5,29 @@ import ergoline::_;
 @main class activator {
     val selfProxy: activator@;
 
-    @entry def activator (var self: activator, =selfProxy: activator@): unit {
+    @entry def activator (=selfProxy: activator@): unit {
         val mm: megaman = new megaman();
         selfProxy.activate(mm);
     }
 
-    @entry def activate(var self: activator, nn: netNavi): unit {
+    @entry def activate(nn: netNavi): unit {
         nn.jackIn();
         exit();
     }
 }
 
 class megaman with netNavi {
-    def megaman(var self : megaman): unit { }
+    def megaman(): unit { }
 
-    override def name(var self : megaman): string {
+    override def name(): string {
         return "Megaman";
     }
 }
 
 trait netNavi {
-    def name(var self : netNavi): string;
+    def name(): string;
 
-    def jackIn(var self : netNavi): unit {
-        println("jack in, " + self.name() + ", execute!");
+    def jackIn(): unit {
+        println("jack in, " + name() + ", execute!");
     }
 }

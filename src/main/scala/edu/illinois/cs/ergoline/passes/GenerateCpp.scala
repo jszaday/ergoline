@@ -146,7 +146,7 @@ object GenerateCpp extends UnparseAst {
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>
           if (m.isStatic) f.functionArgs
-          else f.functionArgs.drop(if (m.isConstructor && m.isEntry) 2 else 1)
+          else f.functionArgs.drop(if (m.isConstructor && m.isEntry) 1 else 0)
         case Some(f: EirFunction) => f.functionArgs
         case _ => Nil
       }
@@ -265,14 +265,6 @@ object GenerateCpp extends UnparseAst {
     else s"template<${args.map(visit(ctx, _)) mkString ", "}>$n${ctx.t}"
   }
 
-  def dropSelf(x : EirFunction): List[EirFunctionArgument] = {
-    if (x.functionArgs.isEmpty) x.functionArgs
-    else x.parent match {
-      case Some(_ : EirMember) if x.functionArgs.head.name == "self" =>  x.functionArgs.tail
-      case _ => x.functionArgs
-    }
-  }
-
   def generateAssignments(ctx: UnparseContext, x: EirFunction): String = {
     // TODO generate constructor assignments (i.e. vals with expressions)
     ctx.numTabs += 1
@@ -301,7 +293,7 @@ object GenerateCpp extends UnparseAst {
       case _ => false
     })
     val args = {
-      val tmp = dropSelf(x).map(visitFunctionArgument(ctx, _, isEntry))
+      val tmp = x.functionArgs.map(visitFunctionArgument(ctx, _, isEntry))
       // NOTE kludgy solution to detect if we need to drop selfProxy
       if (cons && x.parent.flatMap(_.parent).to[EirProxy].isDefined) {
         if (tmp.isEmpty && !globals.strict) tmp else tmp.tail
@@ -313,14 +305,14 @@ object GenerateCpp extends UnparseAst {
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
     }).getOrElse("")
-    val const = x.parent.collect({
-      case m : EirMember if m.isConst => " const"
-    }).getOrElse("")
+//    val const = x.parent.collect({
+//      case m : EirMember if m.isConst => " const"
+//    }).getOrElse("")
     val over = x.parent.collect({
       case m : EirMember if m.isOverride => " override"
     }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$const$over $body"
+    s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$over $body"
   }
 
   override def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
@@ -339,7 +331,6 @@ object GenerateCpp extends UnparseAst {
       case _ if alias.isDefined => alias.get
 //      case n : EirNamedNode if n.name == "unit" => "void"
 //      case n : EirNamedNode if n.name == "selfProxy" => "thisProxy"
-      case n : EirNamedNode if n.name == "self" => "this"
       case p : EirProxy => {
         val prefix =
           if (p.isElement) "CProxyElement_" else "CProxy_"
@@ -403,7 +394,7 @@ object GenerateCpp extends UnparseAst {
   }
 
   def visitAbstractEntry(ctx: UnparseContext, f: EirFunction, numImpls: Int): String = {
-    val args = dropSelf(f)
+    val args = f.functionArgs
     val name = nameFor(ctx, f)
     val fArgs = args.map(visit(ctx, _)).mkString(", ")
     val nArgs = args.map(nameFor(ctx, _)).mkString(", ")
@@ -488,7 +479,7 @@ object GenerateCpp extends UnparseAst {
       }
     } else visit(ctx, f).init
     vf + s"{" + {
-      val dropCount = if (isConstructor) 2 else 1
+      val dropCount = if (isConstructor) 1 else 0
       val args = f.functionArgs.drop(dropCount)
       ctx.numTabs += 1
       val res = {
@@ -497,7 +488,7 @@ object GenerateCpp extends UnparseAst {
       } + args.map(makeSmartPointer(ctx)).mkString("") + s"$n${ctx.t}" + {
         if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ")});"
         // TODO support non-void returns
-        else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.tail.map(nameFor(ctx, _)).mkString(", ")});"
+        else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")});"
       }
       ctx.numTabs -= 1
       res

@@ -1,8 +1,8 @@
 package ergoline;
 
 @system(alias = "std::vector") class array<A> {
-    def get(self: array<A>, idx: int): A;
-    def getOrNone(self: array<A>, idx: int): option<A>;
-    def set(var self: array<A>, idx: int, value: A): unit;
-    def size(self: array<A>): int;
+    def get(idx: int): A;
+    def getOrNone(idx: int): option<A>;
+    def set(idx: int, value: A): unit;
+    def size(): int;
 }

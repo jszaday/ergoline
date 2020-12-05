@@ -3,9 +3,9 @@ package ergoline;
 @system class option<A> {
     @system def apply(t : A): option<A>;
     @system def apply(): option<A>;
-    @system def isEmpty(self : option<A>): bool;
-    @system def nonEmpty(self : option<A>): bool;
-    @system def get(self : option<A>): A;
-    @system def getOrElse(self : option<A>, t: A): A;
-    @system def flatMap<B>(self: option<A>, f: (A => option<B>)): option<B>;
+    @system def isEmpty(): bool;
+    @system def nonEmpty(): bool;
+    @system def get(): A;
+    @system def getOrElse(t: A): A;
+    @system def flatMap<B>(f: (A => option<B>)): option<B>;
 }

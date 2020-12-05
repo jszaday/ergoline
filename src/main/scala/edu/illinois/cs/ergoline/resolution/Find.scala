@@ -122,6 +122,10 @@ object Find {
     case _ => false
   }
 
+  // NOTE when trying to resolve members this seems to return
+  //      both the EirMember itself and its .member
+  //      e.g. EirMember("foo"...), EirFunction("foo"...)
+  //      need to figure out a way around this?
   def anywhereAccessible(ctx : EirNode, name : String): Seq[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
