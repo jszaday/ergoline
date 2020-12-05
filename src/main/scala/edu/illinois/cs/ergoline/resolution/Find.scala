@@ -112,6 +112,8 @@ object Find {
   import FindSyntax.RichPredicate
 
   def isTopLevel(x : EirNode): Boolean = x match {
+    // TODO can this simplify to?
+    //      case _ : EirScope => true
     case _ : EirBlock => true
     case _ : EirForLoop => true
     case _ : EirLambdaExpression => true
@@ -119,6 +121,7 @@ object Find {
     case _ : EirClassLike => true
     case _ : EirNamespace => true
     case _ : EirImport => true
+    case _ : EirMatchCase => true
     case _ => false
   }
 

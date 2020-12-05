@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -408,5 +408,26 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = {
     visit(ctx, x.base)
     x
+  }
+
+  override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
+    val top = visit(ctx, x.expression)
+    val cases = x.cases.map(matchCase => {
+      val child = matchCase._declaration.map(_._2).map(Find.uniqueResolution[EirType])
+      if (!child.forall(x => x.canAssignTo(top))) {
+        Errors.cannotCast(matchCase, child.get, top)
+      }
+      visit(ctx, matchCase)
+    })
+    Find.unionType(cases).getOrElse(Errors.unableToUnify(x, cases))
+  }
+
+  override def visitMatchCase(ctx: TypeCheckContext, x: EirMatchCase): EirType = {
+    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
+    val condTy = x.condition.map(visit(ctx, _))
+    if (!condTy.forall(_.canAssignTo(boolean))) {
+      Errors.cannotCast(x.condition.get, condTy.get, boolean)
+    }
+    visit(ctx, x.body)
   }
 }

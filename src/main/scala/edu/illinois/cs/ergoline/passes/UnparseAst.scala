@@ -241,4 +241,21 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitProxy(ctx: UnparseContext, x: EirProxy): String =
     visitProxyType(ctx, EirProxyType(x.parent, x.base, x.collective, isElement = x.isElement))
+
+  override def visitMatch(ctx: UnparseContext, x: EirMatch): String = {
+    s"${n}match (${visit(ctx, x.expression)}) {" + {
+      ctx.numTabs += 1
+      val res = visit(ctx, x.cases).mkString("")
+      ctx.numTabs -= 1
+      res
+    } + s"$n}"
+  }
+
+  override def visitMatchCase(ctx: UnparseContext, x: EirMatchCase): String = {
+    val ifCond = x.condition.map(y => s"if ${visit(ctx, y)} ").getOrElse("")
+    val declaration = x._declaration.map({
+      case (name, ty) => name + ": " + visit(ctx, ty)
+    }).getOrElse("_")
+    s"$n${ctx.t}case $declaration $ifCond=> ${visit(ctx, x.body)}"
+  }
 }

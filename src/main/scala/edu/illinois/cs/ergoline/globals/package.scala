@@ -20,6 +20,8 @@ package object globals {
     "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals", ">=" -> "compareTo", ">" -> "compareTo", "<" -> "compareTo", "%" -> "rem"
   )
 
+  def objectType: EirType = ???
+
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
 
   def operatorToFunction(op : String): Option[String] = {

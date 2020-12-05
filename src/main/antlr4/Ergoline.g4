@@ -28,10 +28,24 @@ statement
     |   forLoop
     |   function
     |   ifThenElse
+    |   matchStatement
     |   expression ';'
     |   returnStatement
     |   classDeclaration
     |   topLevelDeclaration
+    ;
+
+pattern
+    :   Identifier ':' type
+    |   wildcard='*'
+    ;
+
+caseStatement
+    :   'case' pattern ('if' condition=expression)? LambdaArrow ( block | (bodyExpression=expression ';') )
+    ;
+
+matchStatement
+    :   'match' '(' expression ')' '{' caseStatement+ '}'
     ;
 
 ifThenElse
@@ -162,8 +176,12 @@ tupleExpression
     :   '(' expressionList? ')'
     ;
 
+LambdaArrow
+    :   '=>'
+    ;
+
 lambdaExpression
-    :   '(' functionArgumentList ')' '=>' (block | expression)
+    :   '(' functionArgumentList ')' LambdaArrow (block | expression)
     ;
 
 postfixExpression
@@ -257,7 +275,8 @@ conditionalExpression
     ;
 
 expression
-    :   conditionalExpression
+    :   matchStatement
+    |   conditionalExpression
     ;
 
 typeList

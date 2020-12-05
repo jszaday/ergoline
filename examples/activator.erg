@@ -4,6 +4,7 @@ import ergoline::_;
 
 @main class activator {
     val selfProxy: activator@;
+    var count: int;
 
     @entry def activator (=selfProxy: activator@): unit {
         val mm: megaman = new megaman();
@@ -12,12 +13,41 @@ import ergoline::_;
 
     @entry def activate(nn: netNavi): unit {
         nn.jackIn();
-        exit();
+
+        val ability: string = match(nn) {
+            case x: metalman => x.metalGear();
+            case x: megaman => x.blaster();
+        };
+
+        println(ability);
+
+        if (count == 0) {
+            count += 1;
+            selfProxy.activate(new metalman());
+        } else {
+            exit();
+        }
+    }
+}
+
+class metalman with netNavi {
+    def metalman(): unit { }
+
+    def metalGear(): string {
+        return name() + " launches a gear at you!";
+    }
+
+    override def name(): string {
+        return "Metalman";
     }
 }
 
 class megaman with netNavi {
     def megaman(): unit { }
+
+    def blaster(): string {
+        return name() + " goes pew pew";
+    }
 
     override def name(): string {
         return "Megaman";

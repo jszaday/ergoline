@@ -1,19 +1,20 @@
 package edu.illinois.cs.ergoline
 
+import java.io.File
+import java.nio.file.Files
+
 import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
+import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
-import org.antlr.v4.runtime.tree.{ErrorNode, ParseTree, TerminalNode}
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import java.io.File
-import java.nio.file.Files
 
 class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor[EirNode] {
 
@@ -45,7 +46,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
-  import VisitorSyntax.{RichTerminalNodeList, RichParserRuleContext, RichTypeListContext}
+  import VisitorSyntax.{RichParserRuleContext, RichTerminalNodeList, RichTypeListContext}
 
   override def visit(tree: ParseTree): EirNode = {
     val res = super.visit(tree)
@@ -300,6 +301,24 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       base = proxyType
     }
     base
+  }
+
+  override def visitCaseStatement(ctx: CaseStatementContext): EirMatchCase = {
+    enter(EirMatchCase(parent, null, null, null), (m: EirMatchCase) => {
+      m._declaration = Option.when(ctx.pattern().wildcard == null)({
+        (ctx.pattern().Identifier().getText,visitAs[EirResolvable[EirType]](ctx.pattern().`type`()))
+      })
+      m.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
+      m.body = Option(ctx.block()).map(visitBlock)
+        .getOrElse(AstManipulation.encloseNodes(visitAs[EirExpressionNode](ctx.bodyExpression))(addReturn = true))
+    })
+  }
+
+  override def visitMatchStatement(ctx: MatchStatementContext): EirMatch = {
+    enter(EirMatch(parent, null, null), (m: EirMatch) => {
+      m.expression = visitAs[EirExpressionNode](ctx.expression())
+      m.cases = ctx.caseStatement().asScala.map(visitAs[EirMatchCase]).toList
+    })
   }
 
   def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
