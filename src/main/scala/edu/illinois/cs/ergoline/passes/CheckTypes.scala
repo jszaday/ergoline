@@ -3,10 +3,10 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -118,7 +118,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = x.resolve().head
+  override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = {
+    val res = ProxyManager.proxyFor(x)
+    visit(ctx, res.base)
+    res
+  }
 
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
 
@@ -365,9 +369,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
-  private def dropCountFor(c : EirClassLike): Int = {
+  private def constructorDropCount(c : EirClassLike): Int = {
     c match {
-      case p: EirProxy if p.singleton => 2
+      case p: EirProxy if p.collective.isEmpty && !p.isElement => 2
       case _ => 1
     }
   }
@@ -384,12 +388,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       val f = m.member.asInstanceOf[EirFunction]
       val theirs =
         // proxy-related args are provided by the runtime
-        f.functionArgs.drop(dropCountFor(target)).map(visit(ctx, _))
-      argumentsMatch(ours, theirs)
+        f.functionArgs.drop(constructorDropCount(target)).map(visit(ctx, _))
+      val matches = argumentsMatch(ours, theirs)
+      matches
     })
-    if (x.disambiguation.isDefined) target
-    else error(ctx, x, "could not find a suitable constructor")
+    x.disambiguation match {
+      case Some(_) => target
+      case _ => error(ctx, x, "could not find a suitable constructor")
+    }
   }
 
-  override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = x
+  override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = {
+    visit(ctx, x.base)
+    x
+  }
 }
