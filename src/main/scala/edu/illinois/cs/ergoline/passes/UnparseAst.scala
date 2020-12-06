@@ -54,8 +54,17 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     if (trimmed.endsWith("}") || trimmed.endsWith(";") || trimmed.isEmpty) trimmed else s"$trimmed;"
   }
 
+  def split(ctx: UnparseContext, lines: String, maxLength : Int = 120): String = {
+    def splitter(x: String): String = {
+      val idx = if (x.length > maxLength) x.substring(0, maxLength).lastIndexOf(' ') else -1
+      if (idx >= 0) s"${x.substring(0, idx)}$n${ctx.t}${ctx.t}${x.substring(idx + 1)}"
+      else x
+    }
+    lines.split(n).map(splitter).mkString(n)
+  }
+
   def visitStatements(ctx: UnparseContext, lst: Iterable[EirNode]): String = {
-    val x = visit(ctx, lst).map(addSemi).filter(_.nonEmpty).map(x => s"$n${ctx.t}$x").mkString
+    val x = visit(ctx, lst).map(addSemi).map(split(ctx, _)).filter(_.nonEmpty).map(x => s"$n${ctx.t}$x").mkString
     if (x.nonEmpty) s"$x$n" else " "
   }
 
@@ -88,7 +97,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     ctx.numTabs += 1
     val body = visitStatements(ctx, children)
     ctx.numTabs -= 1
-    "{" + body + s"${ctx.t}}"
+    "{" + body + s"$n${ctx.t}}"
   }
 
   def visitClassLike(ctx: UnparseContext, node: EirClassLike): String = {

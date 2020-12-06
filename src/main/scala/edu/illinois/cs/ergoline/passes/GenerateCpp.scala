@@ -27,6 +27,19 @@ object GenerateCpp extends UnparseAst {
     }
   }
 
+  def systemClasses(): String = {
+    """#ifndef __ERGOLINE_OBJECT__
+      |#define __ERGOLINE_OBJECT__
+      |namespace ergoline {
+      |  struct object {
+      |    virtual PUP::able* toPuppable() = 0;
+      |    /* virtual std::string toString() = 0; */
+      |    /* virtual std::size_t hashCode() = 0; */
+      |  };
+      |}
+      |#endif /* __ERGOLINE_OBJECT__ */""".stripMargin
+  }
+
   def typeFor(ctx: UnparseContext, x: EirResolvable[EirType], isEntryArgument: Boolean = false): String =
     typeFor(ctx, Find.uniqueResolution[EirType](x), isEntryArgument)
 
@@ -134,8 +147,9 @@ object GenerateCpp extends UnparseAst {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
       case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>{
-        val templ = c.extendsThis.map(nameFor(ctx, _)).getOrElse("PUP::able")
-        s"CkPointer<$templ>(${visit(ctx, t._1)}.get())"
+        val puppable = "PUP::able"
+        val templ = c.extendsThis.map(nameFor(ctx, _))
+        s"CkPointer<${templ.getOrElse(puppable)}>(${visit(ctx, t._1)}${templ.map(_ => ".get").getOrElse("->toPuppable")}())"
       }
       case _ => visit(ctx, t._1)
     }
@@ -234,9 +248,9 @@ object GenerateCpp extends UnparseAst {
   def visitInherits(ctx: UnparseContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
-      if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ""
+      if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {
-      if (parents.isEmpty) ": public PUP::able"
+      if (parents.isEmpty) ": public PUP::able, public ergoline::object"
       else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public PUP::able")
     }
   }
@@ -251,6 +265,7 @@ object GenerateCpp extends UnparseAst {
         // TODO PUPable_decl_base_template
         s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});" +
           s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : PUP::able(m) { }" +
+          s"$n${ctx.t}virtual PUP::able* toPuppable() override { return this; }" +
           Find.traits(x).map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
       }
       ctx.numTabs -= 1

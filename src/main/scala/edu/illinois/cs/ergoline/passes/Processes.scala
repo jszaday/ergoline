@@ -58,6 +58,7 @@ object Processes {
           "#include <string>",
           "#include <vector>",
           "#include \"generate.decl.h\"") ++
-      gathered ++ wrapup ++ Seq(n + "#include \"generate.def.h\"")
+      Seq(n + GenerateCpp.systemClasses() + n) ++ gathered ++
+      wrapup ++ Seq(n + "#include \"generate.def.h\"")
   }
 }
