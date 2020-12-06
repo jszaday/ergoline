@@ -515,16 +515,15 @@ object GenerateCpp extends UnparseAst {
   def temporary(ctx: UnparseContext) = "_"
 
   override def visitMatch(ctx: UnparseContext, x: EirMatch): String = {
-    if (x.foundType.contains(globals.typeFor(EirLiteralTypes.Unit))) {
-      ???
-    } else if (!x.expression.foundType.exists(_.isPointer)) {
+    val isUnit = x.foundType.contains(globals.typeFor(EirLiteralTypes.Unit))
+    if (!x.expression.foundType.exists(_.isPointer)) {
       Errors.cannotCast(x, x.expression.foundType.get, globals.objectType)
     } else {
       val argTy = typeFor(ctx, x.expression.foundType.get)
       val retTy = typeFor(ctx, x.foundType.get)
       s"([&]($argTy ${temporary(ctx)}) -> $retTy {" + {
         ctx.numTabs += 1
-        val res = x.cases.map(visitMatchCase(ctx, _, isUnit = false)).mkString("") + s"$n${ctx.t}" +
+        val res = x.cases.map(visitMatchCase(ctx, _, isUnit)).mkString("") + s"$n${ctx.t}" +
           "throw \"match not found\";"
         ctx.numTabs -= 1
         res
@@ -541,10 +540,7 @@ object GenerateCpp extends UnparseAst {
         val cond = condition.map(" && " + _).getOrElse("")
         " " + visit(ctx, d).init + s" = std::dynamic_pointer_cast<$ty>(${temporary(ctx)}); if ($name$cond)"
     }).getOrElse(condition.map(" if (" + _ + ")").getOrElse(""))
-    s"$n${ctx.t}{$declaration return ${x.body.map(visit(ctx, _)).getOrElse("")}; }"
-//    val declaration = x._declaration.map({
-//      case (name, ty) => name + ": " + visit(ctx, ty)
-//    }).getOrElse("_")
-//    s"$n${ctx.t}case $declaration $ifCond=> ${visit(ctx, x.body)}"
+    val (primary, secondary) = (if (!isUnit) " return" else "", if (isUnit) " return;" else "")
+    s"$n${ctx.t}{$declaration$primary ${x.body.map(visit(ctx, _)).getOrElse("")};$secondary }"
   }
 }

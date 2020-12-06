@@ -56,8 +56,15 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   def split(ctx: UnparseContext, lines: String, maxLength : Int = 120): String = {
     def splitter(x: String): String = {
-      val idx = if (x.length > maxLength) x.substring(0, maxLength).lastIndexOf(' ') else -1
-      if (idx >= 0) s"${x.substring(0, idx)}$n${ctx.t}${ctx.t}${x.substring(idx + 1)}"
+      var idx = if (x.length > maxLength) x.substring(0, maxLength).lastIndexOf(' ') else -1
+      if (idx >= 0) {
+        if (x.substring(0, idx).count(_ == '\"') % 2 == 1) {
+          idx = x.substring(0, idx).lastIndexOf('"') - 1
+          idx = if (x.charAt(idx) == '(') idx + 1 else idx
+        }
+        val c = if (x.charAt(idx).isWhitespace) "" else x.charAt(idx)
+        s"${x.substring(0, idx)}$n${ctx.t}${ctx.t}$c${x.substring(idx + 1)}"
+      }
       else x
     }
     lines.split(n).map(splitter).mkString(n)
