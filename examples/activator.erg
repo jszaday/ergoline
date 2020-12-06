@@ -7,57 +7,42 @@ import ergoline::_;
     var count: int;
 
     @entry def activator (=selfProxy: activator@): unit {
-        val mm: megaman = new megaman();
-        selfProxy.activate(mm);
+        selfProxy.activate(new lion());
     }
 
-    @entry def activate(nn: netNavi): unit {
-        nn.jackIn();
-
-        val ability: string = match(nn) {
-            case x: metalman => x.metalGear();
-            case x: megaman => x.blaster();
+    @entry def activate(a: animal): unit {
+        val canFly: bool = match(a) {
+            case b: bird => true;
+            case * => false;
         };
 
-        println(ability);
+        println("A " + a.species() + " " + a.vocalization() +
+            (canFly ? " and can fly." : " but cannot fly"));
 
         if (count == 0) {
             count += 1;
-            selfProxy.activate(new metalman());
+            selfProxy.activate(new duck());
         } else {
             exit();
         }
     }
 }
 
-class metalman with netNavi {
-    def metalman(): unit { }
-
-    def metalGear(): string {
-        return name() + " launches a gear at you!";
-    }
-
-    override def name(): string {
-        return "Metalman";
-    }
+class lion with animal {
+    def lion(): unit { }
+    def vocalization(): string { return "roars"; }
+    def species(): string { return "lion"; }
 }
 
-class megaman with netNavi {
-    def megaman(): unit { }
-
-    def blaster(): string {
-        return name() + " goes pew pew";
-    }
-
-    override def name(): string {
-        return "Megaman";
-    }
+class duck with bird {
+    def duck(): unit { }
+    def vocalization(): string { return "quacks"; }
+    def species(): string { return "duck"; }
 }
 
-trait netNavi {
-    def name(): string;
+trait bird with animal { }
 
-    def jackIn(): unit {
-        println("jack in, " + name() + ", execute!");
-    }
+trait animal {
+    def vocalization(): string;
+    def species(): string;
 }

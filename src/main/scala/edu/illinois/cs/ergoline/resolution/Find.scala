@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 import scala.collection.mutable
@@ -108,6 +108,15 @@ object Find {
 
   def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))
+
+  private def _traits(x: EirClassLike): Iterable[EirTrait] = {
+    x.extendsThis.to[EirTrait] ++ x.implementsThese.flatMap(x => {
+      val cls = assertValid[EirClassLike](uniqueResolution(x))
+      _traits(cls) ++ Option(cls).to[EirTrait]
+    })
+  }
+
+  def traits(x: EirClassLike): Set[EirTrait] = _traits(x).toSet
 
   import FindSyntax.RichPredicate
 

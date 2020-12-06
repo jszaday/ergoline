@@ -40,6 +40,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  // TODO fix behavior for static field members
   override def visitFieldAccessor(ctx: TypeCheckContext, x: EirFieldAccessor): EirType = {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
@@ -227,7 +228,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     throw TypeCheckException(s"${node.location.map(_.toString).getOrElse(node.toString)}: $message")
   }
 
-
+  // TODO need to check parent classes/traits too
+  //      since they may not be reached otherwise
   def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
     if (ctx.shouldCheck(node)) {
 //      CheckClasses.visit(node)
@@ -413,7 +415,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
     val top = visit(ctx, x.expression)
     val cases = x.cases.map(matchCase => {
-      val child = matchCase._declaration.map(_._2).map(Find.uniqueResolution[EirType])
+      val child = matchCase._declaration.map(_._2).map(visit(ctx, _))
       if (!child.forall(x => x.canAssignTo(top))) {
         Errors.cannotCast(matchCase, child.get, top)
       }

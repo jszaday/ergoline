@@ -233,10 +233,12 @@ object GenerateCpp extends UnparseAst {
 
   def visitInherits(ctx: UnparseContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(visit(ctx, _))
-    if (parents.nonEmpty) {
-      ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public PUP::able")
-    } else if (!x.isInstanceOf[EirTrait]) ": public PUP::able"
-    else ""
+    if (x.isInstanceOf[EirTrait]) {
+      if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ""
+    } else {
+      if (parents.isEmpty) ": public PUP::able"
+      else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public PUP::able")
+    }
   }
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
@@ -249,7 +251,7 @@ object GenerateCpp extends UnparseAst {
         // TODO PUPable_decl_base_template
         s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});" +
           s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : PUP::able(m) { }" +
-          x.implementsThese.map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
+          Find.traits(x).map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
       }
       ctx.numTabs -= 1
       res
