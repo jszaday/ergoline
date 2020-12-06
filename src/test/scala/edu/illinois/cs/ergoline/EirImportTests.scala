@@ -25,6 +25,22 @@ class EirImportTests extends FunSuite {
     FullyResolve.verify(module) shouldBe true
   }
 
+  test("tuple types work as expected") {
+    EirGlobalNamespace.clear()
+    val module = Modules.load("""
+        |package foo;
+        |import ergoline::_;
+        |def bar(): unit {
+        |  val x : (int, int, bool) = (42, 42, true);
+        |  val y : int = x[0];
+        |  val z : int = x[1];
+        |  val b : bool = x[2];
+        |}
+        |""".stripMargin)
+    Processes.onLoad(module)
+    FullyResolve.verify(module) shouldBe true
+  }
+
   test("can resolve lambdas type-check") {
     EirGlobalNamespace.clear()
     val module = Modules.load("""

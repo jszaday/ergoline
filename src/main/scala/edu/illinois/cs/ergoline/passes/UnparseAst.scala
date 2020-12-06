@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
 
@@ -37,8 +38,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   import UnparseSyntax.RichOption
 
-  override def error(ctx: UnparseContext, node: EirNode): String = {
-    throw new RuntimeException(s"could not unparse node of type ${node.getClass.getSimpleName}")
+  override def error(ctx: UnparseContext, node: EirNode): String = error(ctx, node, "unknown")
+
+  def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String = {
+    throw new RuntimeException(s"error in $ctx on type ${node.getClass.getSimpleName} ${if (msg.nonEmpty) s"($msg)" else ""}")
   }
 
   def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
@@ -63,7 +66,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
           idx = if (x.charAt(idx) == '(') idx + 1 else idx
         }
         val c = if (x.charAt(idx).isWhitespace) "" else x.charAt(idx)
-        s"${x.substring(0, idx)}$n${ctx.t}${ctx.t}$c${x.substring(idx + 1)}"
+        s"${x.substring(0, idx)}$n${ctx.t}${ctx.t}$c${splitter(x.substring(idx + 1))}"
       }
       else x
     }
@@ -271,5 +274,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     val ifCond = x.condition.map(y => s"if ${visit(ctx, y)} ").getOrElse("")
     val declaration = x.name + x.declType.map(": " + visit(ctx, _)).getOrElse("")
     s"$n${ctx.t}case $declaration $ifCond=> ${visit(ctx, x.body)}"
+  }
+
+  override def visitTupleType(ctx: UnparseContext, x: EirTupleType): String = {
+    s"(${x.children.map(visit(ctx, _)) mkString ", "})"
   }
 }

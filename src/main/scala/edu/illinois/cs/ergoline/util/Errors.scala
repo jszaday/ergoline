@@ -49,6 +49,11 @@ object Errors {
     exitAction()
   }
 
+  def invalidTupleIndices(nodes: Iterable[EirNode]): Nothing = {
+    Console.err.println(s"${contextualize(nodes.head)}: (${nodes mkString ", "}) are not proper tuple indices.")
+    exitAction()
+  }
+
   def missingNamespace(node: EirNode): Nothing = {
     Console.err.println(s"${contextualize(node)}: could not find the namespace of $node")
     exitAction()

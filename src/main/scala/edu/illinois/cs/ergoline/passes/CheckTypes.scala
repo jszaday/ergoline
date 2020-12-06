@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -16,8 +16,21 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitArrayReference(ctx: TypeCheckContext, x: EirArrayReference): EirType = {
     val assignment = x.parent.to[EirAssignment]
+    val targetType = visit(ctx, x.target)
     if (assignment.exists(_.lval == x)) {
       ???
+    } else if (targetType.isInstanceOf[EirTupleType]) {
+      val argType = Option.when(x.args.length == 1)(visit(ctx, x.args.head))
+      val integer = globals.typeFor(EirLiteralTypes.Integer)
+      if (!argType.exists(_.canAssignTo(integer))) {
+        Errors.invalidTupleIndices(x.args)
+      } else {
+        val targetTypes = targetType.asInstanceOf[EirTupleType].children.map(visit(ctx, _))
+        x.args.head match {
+          case l: EirLiteral => targetTypes(l.toInt)
+          case _ => Find.unionType(targetTypes).getOrElse(Errors.unableToUnify(x, targetTypes))
+        }
+      }
     } else {
       val f = EirFunctionCall(Some(x), null, x.args, Nil)
       f.target = EirFieldAccessor(Some(f), x.target, "get")
@@ -335,7 +348,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  override def visitTupleExpression(ctx: TypeCheckContext, node: EirTupleExpression): EirType = ???
+  override def visitTupleExpression(ctx: TypeCheckContext, node: EirTupleExpression): EirType = {
+    EirTupleType(Some(node), visit(ctx, node.children).toList)
+  }
 
   override def visitLambdaExpression(ctx: TypeCheckContext, node: EirLambdaExpression): EirType = {
     val retTy = visit(ctx, node.body)
@@ -438,5 +453,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       Errors.cannotCast(x.condition.get, condTy.get, boolean)
     }
     x.body.map(visit(ctx, _)).getOrElse(globals.typeFor(EirLiteralTypes.Unit))
+  }
+
+  override def visitTupleType(ctx: TypeCheckContext, x: types.EirTupleType): EirType = {
+    x.children = x.children.map(visit(ctx, _))
+    x
   }
 }

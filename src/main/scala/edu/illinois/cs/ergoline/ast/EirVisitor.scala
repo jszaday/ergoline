@@ -34,6 +34,7 @@ trait EirVisitor[Context, Value] {
       case x: EirForLoop => visitForLoop(ctx, x)
       case x: EirFunctionCall => visitFunctionCall(ctx, x)
       case x: EirImport => visitImport(ctx, x)
+      case x: EirTupleType => visitTupleType(ctx, x)
       case x: EirProxyType => visitProxyType(ctx, x)
       case x: EirTemplatedType => visitTemplatedType(ctx, x)
       case x: EirLambdaType => visitLambdaType(ctx, x)
@@ -55,6 +56,8 @@ trait EirVisitor[Context, Value] {
       case x => error(ctx, x)
     }
   }
+
+  def visitTupleType(ctx: Context, x: EirTupleType): Value
 
   def visitMatch(ctx: Context, x: EirMatch): Value
 

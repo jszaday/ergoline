@@ -37,6 +37,7 @@ statement
 
 pattern
     :   Identifier (':' type)?
+    |   constant
     ;
 
 caseStatement
@@ -330,7 +331,7 @@ Element
     ;
 
 CollectiveKeyword
-    :   'array1d'
+    :   'array' [1-6] 'd'
     |   'nodegroup'
     |   'group'
     ;

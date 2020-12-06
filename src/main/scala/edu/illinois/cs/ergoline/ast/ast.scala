@@ -451,6 +451,8 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
     }
   }
 
+  def toInt: Int = value.toInt
+
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false

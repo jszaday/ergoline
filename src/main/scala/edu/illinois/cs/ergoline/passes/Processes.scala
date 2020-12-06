@@ -56,6 +56,8 @@ object Processes {
       Seq("#include <algorithm>",
           "#include <memory>",
           "#include <string>",
+          "#include <tuple>",
+          "#include <utility>",
           "#include <vector>",
           "#include \"generate.decl.h\"") ++
       Seq(n + GenerateCpp.systemClasses() + n) ++ gathered ++

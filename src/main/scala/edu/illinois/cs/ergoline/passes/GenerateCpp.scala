@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
@@ -109,11 +109,13 @@ object GenerateCpp extends UnparseAst {
     } ++ ns.map(_ => "}")).mkString(n)
   }
 
-  def error(ctx: UnparseContext, node : EirNode, msg: String): String = {
-    s"/* skipped $node : $msg */"
+  override def error(ctx: UnparseContext, node : EirNode, msg: String): String = {
+    try {
+      super.error(ctx, node, msg)
+    } catch {
+      case x: Throwable => "/*" + x.toString + "*/"
+    }
   }
-
-  override def error(ctx: UnparseContext, node : EirNode): String = error(ctx, node, "")
 
 //  override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = ???
 
@@ -184,8 +186,12 @@ object GenerateCpp extends UnparseAst {
             proxy.flatMap(_.collective) match {
               case Some(ProxyManager.arrayPtn(dim)) =>
                 val idx = s"${visit(ctx, base)}.ckGetIndex().data()"
+                val tup = s"tuple<${List.fill(dim.toInt)("int") mkString ", "}>"
                 // TODO cast to tuple
-                if (dim == "1") s"($idx[0])" else ???
+                if (dim == "1") s"($idx[0])" else {
+                  s"([&](int *idx) -> std::$tup { return std::make_$tup(${
+                    (0 until dim.toInt).indices.map("std::forward<int>(idx[" + _ + "])") mkString ", "});})(const_cast<int*>($idx))"
+                }
               case Some("nodegroup" | "group") => s"(${visit(ctx, base)}.ckGetGroupPe())"
               case _ => error(ctx, target, "no generation method defined")
             }
@@ -256,7 +262,7 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
-    // if (x.annotations.exists(_.name == "system")) "" else
+   if (x.annotations.exists(_.name == "system")) "" else
     visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + {
       ctx.numTabs += 1
       val res =if (x.isInstanceOf[EirTrait]) {
@@ -294,7 +300,7 @@ object GenerateCpp extends UnparseAst {
 
   override def visitFunction(ctx: UnparseContext, x: EirFunction): String = {
     if (visited.contains(x)) return ""
-    else if (x.parent.exists(_.annotations.exists(_.name == "system"))) return error(ctx, x)
+    else if (x.parent.exists(_.annotations.exists(_.name == "system"))) return ""
     visited +:= x
     val virtual =
       Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual ").getOrElse("")
@@ -542,5 +548,25 @@ object GenerateCpp extends UnparseAst {
     }).getOrElse(condition.map(" if (" + _ + ")").getOrElse(""))
     val (primary, secondary) = (if (!isUnit) " return" else "", if (isUnit) " return;" else "")
     s"$n${ctx.t}{$declaration$primary ${x.body.map(visit(ctx, _)).getOrElse("")};$secondary }"
+  }
+
+  override def visitTupleType(ctx: UnparseContext, x: types.EirTupleType): String = {
+    s"std::tuple<${x.children.map(typeFor(ctx, _)) mkString ", "}>"
+  }
+
+  override def visitArrayReference(ctx: UnparseContext, arrayRef: EirArrayReference): String = {
+    arrayRef.target.foundType match {
+      case Some(_ : EirTupleType) => {
+        val args = arrayRef.args
+        if (args.length != 1 && !args.head.isInstanceOf[EirLiteral]) {
+          Errors.invalidTupleIndices(args)
+        } else {
+          s"std::get<${visit(ctx, args.head)}>(${visit(ctx, arrayRef.target)})"
+        }
+      }
+      case Some(t) if !t.isPointer =>
+        super.visitArrayReference(ctx, arrayRef)
+      case _ => Errors.missingType(arrayRef.target)
+    }
   }
 }
