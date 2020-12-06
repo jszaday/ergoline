@@ -603,17 +603,10 @@ case class EirMatch(var parent: Option[EirNode], var expression: EirExpressionNo
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirMatchCase(var parent: Option[EirNode], var _declaration: Option[(String, EirResolvable[EirType])],
+case class EirMatchCase(var parent: Option[EirNode], var name: String, var declType: Option[EirResolvable[EirType]],
                         var condition: Option[EirExpressionNode], var body: Option[EirExpressionNode]) extends EirNode with EirScope {
-  def declaration: Option[EirDeclaration] = _declaration.map({
-    case (name: String, declType: EirResolvable[EirType]) =>
-      EirDeclaration(Some(this), isFinal = true, name, declType, None)
-  })
-
+  def declaration: Option[EirDeclaration] = declType.map(EirDeclaration(Some(this), isFinal = true, name, _, None))
   override def children: Iterable[EirNode] = declaration ++ condition ++ body
-
-  def isWildcard: Boolean = _declaration.isEmpty
-
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 

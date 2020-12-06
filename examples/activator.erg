@@ -6,14 +6,14 @@ import ergoline::_;
     val selfProxy: activator@;
     var count: int;
 
-    @entry def activator (=selfProxy: activator@): unit {
+    @entry def activator(=selfProxy: activator@): unit {
         selfProxy.activate(new lion());
     }
 
     @entry def activate(a: animal): unit {
         val canFly: bool = match(a) {
             case b: bird => true;
-            case * => false;
+            case _ => false;
         };
 
         println("A " + a.species() + " " + a.vocalization() +

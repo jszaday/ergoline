@@ -304,9 +304,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitCaseStatement(ctx: CaseStatementContext): EirMatchCase = {
-    enter(EirMatchCase(parent, null, null, null), (m: EirMatchCase) => {
-      m._declaration = Option.when(ctx.pattern().wildcard == null)({
-        (ctx.pattern().Identifier().getText,visitAs[EirResolvable[EirType]](ctx.pattern().`type`()))
+    enter(EirMatchCase(parent, ctx.pattern().Identifier().getText, null, null, null), (m: EirMatchCase) => {
+      m.declType = Option.when(ctx.pattern().`type` != null)({
+        visitAs[EirResolvable[EirType]](ctx.pattern().`type`())
       })
       m.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
       m.body = Option(ctx.bodyExpression).map(visitAs[EirExpressionNode])

@@ -253,9 +253,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitMatchCase(ctx: UnparseContext, x: EirMatchCase): String = {
     val ifCond = x.condition.map(y => s"if ${visit(ctx, y)} ").getOrElse("")
-    val declaration = x._declaration.map({
-      case (name, ty) => name + ": " + visit(ctx, ty)
-    }).getOrElse("_")
+    val declaration = x.name + x.declType.map(": " + visit(ctx, _)).getOrElse("")
     s"$n${ctx.t}case $declaration $ifCond=> ${visit(ctx, x.body)}"
   }
 }

@@ -36,8 +36,7 @@ statement
     ;
 
 pattern
-    :   Identifier ':' type
-    |   wildcard='*'
+    :   Identifier (':' type)?
     ;
 
 caseStatement

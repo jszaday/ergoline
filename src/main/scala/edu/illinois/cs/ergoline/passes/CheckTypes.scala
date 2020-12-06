@@ -416,9 +416,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
     val top = visit(ctx, x.expression)
     val cases = x.cases.map(matchCase => {
-      val child = matchCase._declaration.map(_._2).map(visit(ctx, _))
-      if (!child.forall(x => x.canAssignTo(top))) {
-        Errors.cannotCast(matchCase, child.get, top)
+      matchCase.declType match {
+        case Some(t) => {
+          val child = visit(ctx, t)
+          if (!child.canAssignTo(top)) {
+            Errors.cannotCast(matchCase, child, top)
+          }
+        }
+        case None =>
+          matchCase.declType = Some(top)
       }
       visit(ctx, matchCase)
     })
