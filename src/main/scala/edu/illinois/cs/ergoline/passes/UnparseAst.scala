@@ -212,7 +212,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitTernaryOperator(ctx: UnparseContext, x: EirTernaryOperator): String = {
-    s"(${visit(ctx, x.test)} ? ${visit(ctx, x.ifTrue)} : ${x.ifFalse})"
+    s"(${visit(ctx, x.test)} ? ${visit(ctx, x.ifTrue)} : ${visit(ctx, x.ifFalse)})"
   }
 
   override def visitFieldAccessor(ctx: UnparseContext, x: EirFieldAccessor): String = {

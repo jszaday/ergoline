@@ -309,8 +309,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         (ctx.pattern().Identifier().getText,visitAs[EirResolvable[EirType]](ctx.pattern().`type`()))
       })
       m.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-      m.body = Option(ctx.block()).map(visitBlock)
-        .getOrElse(AstManipulation.encloseNodes(visitAs[EirExpressionNode](ctx.bodyExpression))(addReturn = true))
+      m.body = Option(ctx.bodyExpression).map(visitAs[EirExpressionNode])
     })
   }
 

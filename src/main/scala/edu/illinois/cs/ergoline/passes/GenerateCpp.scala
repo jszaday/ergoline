@@ -524,7 +524,7 @@ object GenerateCpp extends UnparseAst {
       }
       case _ => x.condition.map(y => " if (" + visit(ctx, y) + ")").getOrElse("")
     }
-    s"$n${ctx.t}{$declaration ${visit(ctx, x.body)}}"
+    s"$n${ctx.t}{$declaration return ${x.body.map(visit(ctx, _)).getOrElse("")}; }"
 //    val declaration = x._declaration.map({
 //      case (name, ty) => name + ": " + visit(ctx, ty)
 //    }).getOrElse("_")

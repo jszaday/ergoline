@@ -187,6 +187,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     found.map(visit(ctx, _)).getOrElse(Errors.unableToResolve(value))
   }
 
+  // TODO when the last statement in a block is an expression, put a "return" there
   override def visitBlock(ctx: TypeCheckContext, node: EirBlock): EirType = {
     node.children.foreach(visit(ctx, _))
     val retTys: List[EirType] = Find.descendant(node, {
@@ -430,6 +431,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (!condTy.forall(_.canAssignTo(boolean))) {
       Errors.cannotCast(x.condition.get, condTy.get, boolean)
     }
-    visit(ctx, x.body)
+    x.body.map(visit(ctx, _)).getOrElse(globals.typeFor(EirLiteralTypes.Unit))
   }
 }

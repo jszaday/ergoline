@@ -604,13 +604,13 @@ case class EirMatch(var parent: Option[EirNode], var expression: EirExpressionNo
 }
 
 case class EirMatchCase(var parent: Option[EirNode], var _declaration: Option[(String, EirResolvable[EirType])],
-                        var condition: Option[EirExpressionNode], var body: EirBlock) extends EirNode with EirScope {
+                        var condition: Option[EirExpressionNode], var body: Option[EirExpressionNode]) extends EirNode with EirScope {
   def declaration: Option[EirDeclaration] = _declaration.map({
     case (name: String, declType: EirResolvable[EirType]) =>
       EirDeclaration(Some(this), isFinal = true, name, declType, None)
   })
 
-  override def children: Iterable[EirNode] = declaration ++ condition ++ body.children
+  override def children: Iterable[EirNode] = declaration ++ condition ++ body
 
   def isWildcard: Boolean = _declaration.isEmpty
 

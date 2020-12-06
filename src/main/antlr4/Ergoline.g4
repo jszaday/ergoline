@@ -41,7 +41,7 @@ pattern
     ;
 
 caseStatement
-    :   'case' pattern ('if' condition=expression)? LambdaArrow ( block | (bodyExpression=expression ';') )
+    :   'case' pattern ('if' condition=expression)? LambdaArrow bodyExpression=expression? ';'
     ;
 
 matchStatement
