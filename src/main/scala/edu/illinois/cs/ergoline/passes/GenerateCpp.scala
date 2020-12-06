@@ -564,6 +564,9 @@ object GenerateCpp extends UnparseAst {
           s"std::get<${visit(ctx, args.head)}>(${visit(ctx, arrayRef.target)})"
         }
       }
+      case Some(t) if t.isInstanceOf[EirProxy] => {
+        s"${visit(ctx, arrayRef.target)}(${arrayRef.args.map(visit(ctx, _)) mkString ", "})"
+      }
       case Some(t) if !t.isPointer =>
         super.visitArrayReference(ctx, arrayRef)
       case _ => Errors.missingType(arrayRef.target)

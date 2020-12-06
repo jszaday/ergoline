@@ -1,0 +1,27 @@
+package examples;
+
+import ergoline::_;
+
+@main class hello2d {
+    var selfProxy: hello2d[@]array2d;
+
+    @entry def hello2d(=selfProxy: hello2d[@]array2d): unit { }
+
+    @entry def hello2d(selfProxy: hello2d@, args: array<string>): unit {
+        val n: int = args.size() > 1 ? args[1].toInt() : 4;
+        val arrProxy: hello2d@array2d = new hello2d@array2d(n, n);
+        arrProxy[n - 1, n - 1].sayHi();
+    }
+
+    @entry def sayHi(): unit {
+        val idx: (int, int) = selfProxy.index();
+        println("i am [" + idx[0].toString() + ", " + idx[1].toString() + "]");
+        if (idx[0] > 0) {
+            selfProxy.parent()[idx[0] - 1, idx[1]].sayHi();
+        } else if (idx[1] > 0) {
+            selfProxy.parent()[idx[0], idx[1] - 1].sayHi();
+        } else {
+            exit();
+        }
+    }
+}
