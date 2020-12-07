@@ -522,32 +522,62 @@ object GenerateCpp extends UnparseAst {
 
   override def visitMatch(ctx: UnparseContext, x: EirMatch): String = {
     val isUnit = x.foundType.contains(globals.typeFor(EirLiteralTypes.Unit))
-    if (!x.expression.foundType.exists(_.isPointer)) {
-      Errors.cannotCast(x, x.expression.foundType.get, globals.objectType)
-    } else {
-      val argTy = typeFor(ctx, x.expression.foundType.get)
-      val retTy = typeFor(ctx, x.foundType.get)
-      s"([&]($argTy ${temporary(ctx)}) -> $retTy {" + {
-        ctx.numTabs += 1
-        val res = x.cases.map(visitMatchCase(ctx, _, isUnit)).mkString("") + s"$n${ctx.t}" +
-          "throw \"match not found\";"
-        ctx.numTabs -= 1
-        res
-      } + s"$n${ctx.t}})(${visit(ctx, x.expression)})"
+    val argTy = typeFor(ctx, x.expression.foundType.get)
+    val retTy = typeFor(ctx, x.foundType.get)
+    s"([&]($argTy ${temporary(ctx)}) -> $retTy {" + {
+      ctx.numTabs += 1
+      val res = x.cases.map(visitMatchCase(ctx, _, isUnit)).mkString("") + s"$n${ctx.t}" +
+        "throw \"match not found\";"
+      ctx.numTabs -= 1
+      res
+    } + s"$n${ctx.t}})(${visit(ctx, x.expression)})"
+  }
+
+  def visitPatternDecl(ctx: UnparseContext, x: EirPattern, current: String): String = {
+    x match {
+      case EirPatternList(_, ps) => ps match {
+        case p :: Nil => visitPatternDecl(ctx, p, current)
+        case patterns =>
+          patterns.zipWithIndex.map({
+            case (p, idx) => visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
+          }).mkString("")
+      }
+      case i@EirIdentifierPattern(_, n, Some(t)) if n != "_" => {
+        val ty = Find.uniqueResolution(t)
+        if (ty.isPointer) " " + visit(ctx, i.declarations.head).init + s" = std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current);"
+        else " " + visit(ctx, i.declarations.head).init + s" = $current;"
+      }
+      case i: EirIdentifierPattern =>
+        if (i.name != "_") Errors.missingType(x) else ""
+      case _: EirExpressionPattern => ""
+      case _ => ???
+    }
+  }
+
+  def visitPatternCond(ctx: UnparseContext, x: EirPattern, current: String): List[String] = {
+    x match {
+      case EirPatternList(_, ps) => ps match {
+        case p :: Nil => visitPatternCond(ctx, p, current)
+        case patterns =>
+          patterns.zipWithIndex.flatMap {
+            case (p, idx) => visitPatternCond(ctx, p, s"std::get<$idx>($current)")
+          }
+      }
+      case EirIdentifierPattern(_, "_", _) => Nil
+      case EirIdentifierPattern(_, n, Some(t)) =>
+        Option.when(Find.uniqueResolution(t).isPointer)(n).toList
+      case e: EirExpressionPattern =>
+        List(s"$current == ${visit(ctx, e.expression)}")
     }
   }
 
   def visitMatchCase(ctx: UnparseContext, x: EirMatchCase, isUnit: Boolean): String = {
     val condition = x.condition.map(y => visit(ctx, y))
-    val declaration = x.declaration.collect({
-      case d: EirDeclaration if d.name != "_" =>
-        val ty = nameFor(ctx, d.declaredType)
-        val name = nameFor(ctx, d)
-        val cond = condition.map(" && " + _).getOrElse("")
-        " " + visit(ctx, d).init + s" = std::dynamic_pointer_cast<$ty>(${temporary(ctx)}); if ($name$cond)"
-    }).getOrElse(condition.map(" if (" + _ + ")").getOrElse(""))
+    val declarations = visitPatternDecl(ctx, x.patterns, temporary(ctx))
+    val conditions = (condition ++ visitPatternCond(ctx, x.patterns, temporary(ctx))).mkString(" && ")
+    val ifStmt = if (conditions.isEmpty) "" else s" if ($conditions)"
     val (primary, secondary) = (if (!isUnit) " return" else "", if (isUnit) " return;" else "")
-    s"$n${ctx.t}{$declaration$primary ${x.body.map(visit(ctx, _)).getOrElse("")};$secondary }"
+    s"$n${ctx.t}{$declarations$ifStmt {$primary ${x.body.map(visit(ctx, _)).getOrElse("")};$secondary } }"
   }
 
   override def visitTupleType(ctx: UnparseContext, x: types.EirTupleType): String = {

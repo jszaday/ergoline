@@ -5,7 +5,7 @@ import java.io.File
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 import edu.illinois.cs.ergoline.{globals, util}
@@ -605,10 +605,41 @@ case class EirMatch(var parent: Option[EirNode], var expression: EirExpressionNo
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirMatchCase(var parent: Option[EirNode], var name: String, var declType: Option[EirResolvable[EirType]],
+case class EirMatchCase(var parent: Option[EirNode], var patterns: EirPatternList,
                         var condition: Option[EirExpressionNode], var body: Option[EirExpressionNode]) extends EirNode with EirScope {
-  def declaration: Option[EirDeclaration] = declType.map(EirDeclaration(Some(this), isFinal = true, name, _, None))
-  override def children: Iterable[EirNode] = declaration ++ condition ++ body
+  def declarations: List[EirDeclaration] = patterns.declarations
+  override def children: Iterable[EirNode] = declarations ++ condition ++ body
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+trait EirPattern extends EirNode {
+  def declarations: List[EirDeclaration]
+  def conditions: List[EirExpressionNode]
+  override def children: Iterable[EirNode] = declarations ++ conditions
+  def position: Int = parent.to[EirPatternList].map(_.patterns.indexOf(this)).getOrElse(-1)
+}
+
+case class EirPatternList(var parent: Option[EirNode], var patterns: List[EirPattern]) extends EirPattern {
+  override def declarations: List[EirDeclaration] = patterns.flatMap(_.declarations)
+  override def conditions: List[EirExpressionNode] = patterns.flatMap(_.conditions)
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+case class EirExpressionPattern(var parent: Option[EirNode], var expression: EirExpressionNode) extends EirPattern {
+  override def declarations: List[EirDeclaration] = Nil
+  override def conditions: List[EirExpressionNode] = List(expression)
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, private var _ty: Option[EirResolvable[EirType]]) extends EirPattern {
+  private val declaration = EirDeclaration(Some(this),isFinal = true, name, null, None)
+  def ty: Option[EirResolvable[EirType]] = _ty
+  def ty_=(ty: Option[EirResolvable[EirType]]): Unit = {
+    _ty = ty
+    declaration.declaredType = _ty.getOrElse(EirPlaceholder[EirType]())
+  }
+  override def declarations: List[EirDeclaration] = Option.when(name != "_")(declaration).toList
+  override def conditions: List[EirExpressionNode] = Nil
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 

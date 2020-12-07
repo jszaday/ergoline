@@ -35,13 +35,18 @@ statement
     |   topLevelDeclaration
     ;
 
+patternList
+    :   (pattern ',')* pattern
+    ;
+
 pattern
-    :   Identifier (':' type)?
+    :   Identifier (':' (tupleType | basicType)?)?
     |   constant
+    |   '(' patternList ')'
     ;
 
 caseStatement
-    :   'case' pattern ('if' condition=expression)? LambdaArrow bodyExpression=expression? ';'
+    :   'case' patternList ('if' condition=expression)? LambdaArrow bodyExpression=expression? ';'
     ;
 
 matchStatement

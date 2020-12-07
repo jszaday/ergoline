@@ -13,6 +13,8 @@ class TypeCheckContext {
   private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
   private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
 
+  val goal: mutable.Stack[EirType] = new mutable.Stack
+
   def checked: Map[EirSpecializable, List[EirSpecialization]] = _checked
 
   def enterNode(n: EirNode): Unit = {

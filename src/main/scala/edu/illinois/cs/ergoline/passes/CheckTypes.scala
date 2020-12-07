@@ -429,34 +429,54 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
-    val top = visit(ctx, x.expression)
-    val cases = x.cases.map(matchCase => {
-      matchCase.declType match {
-        case Some(t) => {
-          val child = visit(ctx, t)
-          if (!child.canAssignTo(top)) {
-            Errors.cannotCast(matchCase, child, top)
-          }
-        }
-        case None =>
-          matchCase.declType = Some(top)
-      }
-      visit(ctx, matchCase)
-    })
+    visit(ctx, x.expression)
+    val cases = x.cases.map(visit(ctx, _))
     Find.unionType(cases).getOrElse(Errors.unableToUnify(x, cases))
   }
 
   override def visitMatchCase(ctx: TypeCheckContext, x: EirMatchCase): EirType = {
+    ctx.goal.push(x.parent.to[EirMatch].flatMap(_.expression.foundType).getOrElse(Errors.missingType(x)))
     val boolean = globals.typeFor(EirLiteralTypes.Boolean)
     val condTy = x.condition.map(visit(ctx, _))
     if (!condTy.forall(_.canAssignTo(boolean))) {
       Errors.cannotCast(x.condition.get, condTy.get, boolean)
     }
+    visit(ctx, x.patterns)
     x.body.map(visit(ctx, _)).getOrElse(globals.typeFor(EirLiteralTypes.Unit))
+  }
+
+  override def visitPatternList(ctx: TypeCheckContext, x: EirPatternList): EirType = {
+    val goal = ctx.goal.pop()
+    val theirs = goal match {
+      case EirTupleType(_, progeny) => progeny.map(visit(ctx, _))
+      case _ => List(goal)
+    }
+    ctx.goal.pushAll(theirs.reverse)
+    val ours = x.patterns.map(visit(ctx, _))
+    if (ours.length != theirs.length) Errors.invalidTupleIndices(theirs)
+    else null
   }
 
   override def visitTupleType(ctx: TypeCheckContext, x: types.EirTupleType): EirType = {
     x.children = x.children.map(visit(ctx, _))
     x
+  }
+
+  override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
+    val goal = ctx.goal.pop()
+    x.ty match {
+      case None => {
+        x.ty = Some(goal)
+      }
+      case _ =>
+    }
+    null
+  }
+
+  override def visitExpressionPattern(ctx: TypeCheckContext, x: EirExpressionPattern): EirType = {
+    val goal = ctx.goal.pop()
+    val ours = visit(ctx, x.conditions.head)
+    if (ours.canAssignTo(goal)) null
+    else Errors.cannotCast(x, ours, goal)
   }
 }

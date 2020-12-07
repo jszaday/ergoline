@@ -3,11 +3,13 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
 import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirImportTests extends FunSuite {
   globals.strict = true
+  Errors.exitAction = () => throw new RuntimeException("")
 
   test("built-in types are resolvable") {
     EirGlobalNamespace.clear()
@@ -31,10 +33,12 @@ class EirImportTests extends FunSuite {
         |package foo;
         |import ergoline::_;
         |def bar(): unit {
-        |  val x : (int, int, bool) = (42, 42, true);
-        |  val y : int = x[0];
-        |  val z : int = x[1];
-        |  val b : bool = x[2];
+        |  val t: (int, string, bool) = (42, "42", true);
+        |
+        |  val z: string = match (t) {
+        |    case x, y, true => x.toString() + y;
+        |    case _, y, false => y;
+        |  };
         |}
         |""".stripMargin)
     Processes.onLoad(module)

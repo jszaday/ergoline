@@ -46,6 +46,9 @@ trait EirVisitor[Context, Value] {
       case x: EirProxy => visitProxy(ctx, x)
       case x: EirMatch => visitMatch(ctx, x)
       case x: EirMatchCase => visitMatchCase(ctx, x)
+      case x: EirPatternList => visitPatternList(ctx, x)
+      case x: EirIdentifierPattern => visitIdentifierPattern(ctx, x)
+      case x: EirExpressionPattern => visitExpressionPattern(ctx, x)
       case x: EirResolvable[_] if x.resolved => {
         val found = Find.uniqueResolution(x)
         if (found == x) error(ctx, found)
@@ -62,6 +65,10 @@ trait EirVisitor[Context, Value] {
   def visitMatch(ctx: Context, x: EirMatch): Value
 
   def visitMatchCase(ctx: Context, x: EirMatchCase): Value
+
+  def visitPatternList(ctx: Context, x: EirPatternList): Value
+  def visitIdentifierPattern(ctx: Context, x: EirIdentifierPattern): Value
+  def visitExpressionPattern(ctx: Context, x: EirExpressionPattern): Value
 
   def visitNew(ctx: Context, x: EirNew): Value
 

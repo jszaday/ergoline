@@ -303,11 +303,29 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     base
   }
 
-  override def visitCaseStatement(ctx: CaseStatementContext): EirMatchCase = {
-    enter(EirMatchCase(parent, ctx.pattern().Identifier().getText, null, null, null), (m: EirMatchCase) => {
-      m.declType = Option.when(ctx.pattern().`type` != null)({
-        visitAs[EirResolvable[EirType]](ctx.pattern().`type`())
+  override def visitPattern(ctx: PatternContext): EirNode = {
+    if (ctx.Identifier() != null) {
+      enter(EirIdentifierPattern(parent, ctx.Identifier().getText, null), (i: EirIdentifierPattern) => {
+        i.ty = Option(ctx.basicType()).orElse(Option(ctx.tupleType())).map(visitAs[EirResolvable[EirType]])
       })
+    } else if (ctx.constant() != null) {
+      enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {
+        e.expression = visitAs[EirExpressionNode](ctx.constant())
+      })
+    } else {
+      super.visit(ctx)
+    }
+  }
+
+  override def visitPatternList(ctx: PatternListContext): EirPatternList = {
+    enter(EirPatternList(parent, null), (p : EirPatternList) => {
+      p.patterns = ctx.pattern().asScala.map(visitAs[EirPattern]).toList
+    })
+  }
+
+  override def visitCaseStatement(ctx: CaseStatementContext): EirMatchCase = {
+    enter(EirMatchCase(parent, null, null, null), (m: EirMatchCase) => {
+      m.patterns = visitAs[EirPatternList](ctx.patternList())
       m.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
       m.body = Option(ctx.bodyExpression).map(visitAs[EirExpressionNode])
     })

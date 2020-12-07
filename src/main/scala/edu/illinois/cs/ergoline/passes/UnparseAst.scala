@@ -272,8 +272,18 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitMatchCase(ctx: UnparseContext, x: EirMatchCase): String = {
     val ifCond = x.condition.map(y => s"if ${visit(ctx, y)} ").getOrElse("")
-    val declaration = x.name + x.declType.map(": " + visit(ctx, _)).getOrElse("")
-    s"$n${ctx.t}case $declaration $ifCond=> ${visit(ctx, x.body)}"
+    val pattern = visit(ctx, x.patterns).init.tail
+    s"$n${ctx.t}case $pattern $ifCond=> ${visit(ctx, x.body)}"
+  }
+
+  override def visitPatternList(ctx: UnparseContext, x: EirPatternList): String = {
+    s"(${x.patterns.map(visit(ctx, _)) mkString ", "})"
+  }
+
+  override def visitExpressionPattern(ctx: UnparseContext, x: EirExpressionPattern): String = visit(ctx, x.expression)
+
+  override def visitIdentifierPattern(ctx: UnparseContext, x: EirIdentifierPattern): String = {
+    x.name + x.ty.map(visit(ctx, _)).map(": " + _).getOrElse("")
   }
 
   override def visitTupleType(ctx: UnparseContext, x: EirTupleType): String = {
