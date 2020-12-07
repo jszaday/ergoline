@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
@@ -222,12 +222,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitDeclaration(ctx: TypeCheckContext, node: EirDeclaration): EirType = {
-    val lval = visit(ctx, node.declaredType)
+    val lval =
+      Option.when(!node.declaredType.isInstanceOf[EirPlaceholder[_]])(visit(ctx, node.declaredType))
     val rval = node.initialValue.map(visit(ctx, _))
-    if (!rval.forall(_.canAssignTo(lval))) {
-      Errors.cannotCast(node, rval.get, lval)
-    } else {
-      lval
+    (lval, rval) match {
+      case (None, None) => Errors.missingType(node)
+      case (Some(a), None) => a
+      case (None, Some(b)) => {
+        node.declaredType = b
+        b
+      }
+      case (Some(a), Some(b)) => {
+        if (b.canAssignTo(a)) a
+        else Errors.cannotCast(node, b, a)
+      }
     }
   }
 
@@ -469,13 +477,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
     val goal = ctx.goal.pop()
-    x.ty match {
-      case None => {
-        x.ty = Some(goal)
-      }
-      case _ =>
+    val ours = x.ty
+    Find.unionResolvable(goal, ours) match {
+      case Some(union) =>
+        x.ty = union
+        union
+      case None => Errors.unableToUnify(x, ours.resolve() :+ goal)
     }
-    null
+
   }
 
   override def visitExpressionPattern(ctx: TypeCheckContext, x: EirExpressionPattern): EirType = {

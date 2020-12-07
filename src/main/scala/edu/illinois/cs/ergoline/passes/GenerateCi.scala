@@ -57,9 +57,8 @@ object GenerateCi {
     if (proxy.isMain && f.isConstructor) {
       s"${ctx.t} entry [nokeep] ${proxy.baseName}(CkArgMsg* msg);$n"
     } else {
-      val body =
-        GenerateCpp.visit(ctx, f.member)
-          .replaceFirst(proxy.name, proxy.baseName)
+      var body = GenerateCpp.visit(ctx, f.member)
+      if (f.isConstructor) body = body.replaceFirst(proxy.name, proxy.baseName)
       s"${ctx.t} entry $body$n"
     }
   }

@@ -283,7 +283,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitExpressionPattern(ctx: UnparseContext, x: EirExpressionPattern): String = visit(ctx, x.expression)
 
   override def visitIdentifierPattern(ctx: UnparseContext, x: EirIdentifierPattern): String = {
-    x.name + x.ty.map(visit(ctx, _)).map(": " + _).getOrElse("")
+    x.name + ": " + visit(ctx, x.ty)
   }
 
   override def visitTupleType(ctx: UnparseContext, x: EirTupleType): String = {

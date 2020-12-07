@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNamespace, EirNode}
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 
 object FullyResolve {
 
@@ -13,18 +13,21 @@ object FullyResolve {
   }
 
   private def fullyResolve(x : EirResolvable[_ <: EirNode]): Unit = {
-    var curr : Option[EirResolvable[_]] = Some(x);
+    var curr : Option[EirResolvable[_]] = Some(x)
+    var prev : Option[EirResolvable[_]] = None
     do {
+      prev = curr
       curr = curr.flatMap(_.resolve() match {
         case x: EirResolvable[_] if !x.resolved => Some(x)
         case _ => None
       })
-    } while (curr.exists(!_.resolved))
+      // Prevents infinite loops when a node cannot be resolved
+    } while (curr.exists(!_.resolved) && curr != prev)
   }
 
   def seekOthers(node : EirNode): Unit = {
     node.children.foreach({
-      case _: EirFileSymbol =>
+      case _: EirFileSymbol | _: EirPlaceholder[_] =>
       case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
       case child => seekOthers(child)
     })
