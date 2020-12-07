@@ -32,9 +32,3 @@ jobs:
       env:
         ERG_HOME: ${{ github.workspace }}
         CHARM_HOME: ${{ github.workspace }}/charm
-
-    - name: Collect generated C++ files
-      uses: actions/upload-artifact@v2
-      with:
-        name: generated-cpp-files
-        path: *.cc
