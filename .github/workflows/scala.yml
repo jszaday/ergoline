@@ -32,3 +32,8 @@ jobs:
       env:
         ERG_HOME: ${{ github.workspace }}
         CHARM_HOME: ${{ github.workspace }}/charm
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: cpp-sources
+        path: ${{ github.workspace }}/*.cc
