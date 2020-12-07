@@ -31,10 +31,14 @@ object GenerateCpp extends UnparseAst {
     """#ifndef __ERGOLINE_OBJECT__
       |#define __ERGOLINE_OBJECT__
       |namespace ergoline {
+      |  struct puppable: public PUP::able {
+      |    puppable() {}
+      |    virtual ~puppable() { }
+      |    puppable(CkMigrateMessage *m) : PUP::able(m) { }
+      |  };
+      |
       |  struct object {
-      |    virtual PUP::able* toPuppable() = 0;
-      |    /* virtual std::string toString() = 0; */
-      |    /* virtual std::size_t hashCode() = 0; */
+      |    virtual puppable* toPuppable() = 0;
       |  };
       |}
       |#endif /* __ERGOLINE_OBJECT__ */""".stripMargin
@@ -50,9 +54,9 @@ object GenerateCpp extends UnparseAst {
         x match {
           case c: EirClassLike if c.isAbstract => {
             if (ctx.lang == "ci") {
-              "CkPointer<PUP::able>"
+              "CkPointer<ergoline::puppable>"
             } else {
-              "PUP::able*"
+              "ergoline::puppable*"
             }
           }
           case _ => name + "*"
@@ -85,7 +89,7 @@ object GenerateCpp extends UnparseAst {
       val otherName = nameFor(ctx, c)
       s"if (p->get_PUP_ID() == $otherName::my_PUP_ID) return ($otherName*) p;"
     }).toList :+ s"return nullptr;$n"
-    s"$name* $name::fromPuppable(PUP::able *p) {" + {
+    s"$name* $name::fromPuppable(ergoline::puppable *p) {" + {
       ctx.numTabs += 1
       val res = s"$n${ctx.t}" + children.mkString(s"$n${ctx.t}else ")
       ctx.numTabs -= 1
@@ -149,7 +153,7 @@ object GenerateCpp extends UnparseAst {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
       case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>{
-        val puppable = "PUP::able"
+        val puppable = "ergoline::puppable"
         val templ = c.extendsThis.map(nameFor(ctx, _))
         s"CkPointer<${templ.getOrElse(puppable)}>(${visit(ctx, t._1)}${templ.map(_ => ".get").getOrElse("->toPuppable")}())"
       }
@@ -256,8 +260,8 @@ object GenerateCpp extends UnparseAst {
     if (x.isInstanceOf[EirTrait]) {
       if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {
-      if (parents.isEmpty) ": public PUP::able, public ergoline::object"
-      else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public PUP::able")
+      if (parents.isEmpty) ": public ergoline::puppable, public ergoline::object"
+      else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public ergoline::puppable")
     }
   }
 
@@ -266,12 +270,12 @@ object GenerateCpp extends UnparseAst {
     visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + {
       ctx.numTabs += 1
       val res =if (x.isInstanceOf[EirTrait]) {
-        s" {$n${ctx.t}static ${nameFor(ctx, x)}* fromPuppable(PUP::able *p);"
+        s" {$n${ctx.t}static ${nameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);"
       } else {
         // TODO PUPable_decl_base_template
         s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});" +
-          s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : PUP::able(m) { }" +
-          s"$n${ctx.t}virtual PUP::able* toPuppable() override { return this; }" +
+          s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }" +
+          s"$n${ctx.t}virtual ergoline::puppable* toPuppable() override { return this; }" +
           Find.traits(x).map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
       }
       ctx.numTabs -= 1
