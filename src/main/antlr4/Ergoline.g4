@@ -137,7 +137,7 @@ fieldDeclaration
     ;
 
 function
-    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' ':' type (';' | block)
+    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' (':' type)? (';' | block)
     ;
 
 functionArgument

@@ -209,7 +209,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _: EirReturn => Some(true)
       case _ => Some(false)
     }).map(visit(ctx, _)).toList
-    if (retTys.isEmpty) null
+    if (retTys.isEmpty) globals.typeFor(EirLiteralTypes.Unit)
     else Find.unionType(retTys) match {
       case Some(x) => x
       case None => Errors.unableToUnify(node, retTys)
@@ -274,7 +274,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _ =>
 //    }
     if (ctx.shouldCheck(node)) {
-      node.body.foreach(visit(ctx, _))
+      val bodyType = node.body.map(visit(ctx, _))
+      val retTy = visit(ctx, node.returnType)
+      if (!bodyType.forall(_.canAssignTo(retTy))) {
+        Errors.unableToUnify(node, bodyType.get, retTy)
+      }
     }
     EirLambdaType(Some(node), node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
   }

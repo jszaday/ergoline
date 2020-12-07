@@ -200,7 +200,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, null), (f: EirFunction) => {
       f.templateArgs = ctx.templateDecl().mapOrEmpty(_.templateDeclArg, visitTemplateDeclArg)
       f.functionArgs = ctx.functionArgumentList.mapOrEmpty(_.functionArgument, visitFunctionArgument)
-      f.returnType = visitAs[EirResolvable[EirType]](ctx.`type`())
+      f.returnType = Option(ctx.`type`())
+        .map(visitAs[EirResolvable[EirType]](_))
+        .getOrElse(globals.typeFor(EirLiteralTypes.Unit))
       f.body = Option(ctx.block()).map(visitAs[EirBlock])
     })
   }
