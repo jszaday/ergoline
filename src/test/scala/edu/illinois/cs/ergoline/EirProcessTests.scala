@@ -16,9 +16,11 @@ class EirProcessTests extends FunSuite {
     Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile)
 
   def test(f: File): Unit = {
+    val wd = os.pwd
     os.proc("sbt", "run " + "\"" + f.getCanonicalPath + "\"").call()
     charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "generate.ci").call())
-    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "generate.cc", "-o", "a.out").call())
+    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "-language", "charm++", "generate.cc", "-o", "a.out").call())
+    os.move(wd / "generate.cc", wd / f.getName.replace("erg", "cc"))
     val output = charmc.map(_ => os.proc("charmrun", "a.out", "+setcpuaffinity", "++local", "++quiet").call().out.text())
     output.foreach(println(_))
   }
