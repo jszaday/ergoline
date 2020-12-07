@@ -16,7 +16,7 @@ import ck;
         return 1.0 / (numSteps.toDouble());
     }
 
-    @entry def pi(selfProxy: pi@, args: array<string>): unit {
+    @entry def pi(selfProxy: pi@, args: array<string>) {
         numSteps = args.size() > 1 ? args[1].toInt() : 16;
         val numPes: int = ck::numPes();
         if (numSteps < (numPes * 4)) {
@@ -31,7 +31,7 @@ import ck;
         val piProxy: pi@array1d = new pi@array1d(numPes, selfProxy, stepsPerPe);
     }
 
-    @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int): unit {
+    @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int) {
         numSteps = stepsPerPe * ck::numPes();
 
         val idx: int = selfProxy.index();
@@ -48,7 +48,7 @@ import ck;
         mainProxy.checkIn(sum);
     }
 
-    @entry def checkIn(partialSum : double): unit {
+    @entry def checkIn(partialSum : double) {
         checkIns += 1;
         runningSum += partialSum;
 
