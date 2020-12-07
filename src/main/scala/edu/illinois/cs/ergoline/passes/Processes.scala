@@ -53,14 +53,16 @@ object Processes {
           classes.collect({ case t: EirTrait => t }).map(GenerateCpp.makeFromPuppable(ctx, _)).mkString(n) + s"$n}$n"
     })
     fwdDecls ++ a.map(GenerateCpp.forwardDecl(ctx, _)) ++
+      Seq("#include \"pup.h\"") ++
+      Seq(n + GenerateCpp.systemClasses() + n) ++
       Seq("#include <algorithm>",
           "#include <memory>",
           "#include <string>",
           "#include <tuple>",
           "#include <utility>",
           "#include <vector>",
-          "#include \"generate.decl.h\"") ++
-      Seq(n + GenerateCpp.systemClasses() + n) ++ gathered ++
-      wrapup ++ Seq(n + "#include \"generate.def.h\"")
+          "#include \"generate.decl.h\"", "") ++
+      gathered ++
+      wrapup ++ Seq("#include \"generate.def.h\"")
   }
 }

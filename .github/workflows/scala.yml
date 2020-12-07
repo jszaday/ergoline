@@ -13,11 +13,27 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    # Build Charm++
+    - name: build-charm++
+      run: |
+        git clone https://github.com/UIUC-PPL/charm.git
+        cd charm
+        git checkout v6.10.1
+        ./build charm++ netlrts-linux-x86_64 smp -g -j4 --with-production --enable-error-checking
+
     - name: Set up JDK 1.8
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
+
     - name: Run tests
       run: sbt test
       env:
         ERG_HOME: ${{ github.workspace }}
+        CHARM_HOME: ${{ github.workspace }}/charm
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: cpp-sources
+        path: ${{ github.workspace }}/*.cc
