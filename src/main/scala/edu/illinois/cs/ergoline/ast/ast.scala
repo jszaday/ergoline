@@ -5,6 +5,7 @@ import java.io.File
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
@@ -319,18 +320,22 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
   def wildcard: Boolean = qualified.last == "_"
 
   override def children: Iterable[EirNode] = {
-    if (wildcard) _resolved.toIterable.flatMap(_.children)
-    else _resolved
+    if (_resolved.isEmpty) Nil
+    else resolve()
   }
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
   override def resolve(): List[EirNode] = {
+    val name = Option.when(qualified.length > 1)(qualified.init).getOrElse(qualified)
+    val last = Option.when(!wildcard && qualified.length > 1)(qualified.last)
     if (_resolved.isEmpty) {
-      _resolved = Modules(if (wildcard) qualified.init else qualified, EirGlobalNamespace).to[EirScope]
+      _resolved = Modules(name, EirGlobalNamespace).to[EirScope]
     }
     _resolved match {
-      case Some(x) => List(x)
+      case Some(x) =>
+        last.map(n => Find.child(x, withName(n))).map(_.toList)
+          .getOrElse(if (wildcard) x.children.toList else List(x))
       case _ => Errors.unableToResolve(this)
     }
   }

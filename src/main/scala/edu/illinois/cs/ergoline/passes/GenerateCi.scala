@@ -36,7 +36,9 @@ object GenerateCi {
       s"${n}namespace ${ns.name} {" ++
       ctx.puppables.filter(x => ns.children.contains(x)).map(x => s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};").mkString("")
     }).mkString("") + n + {
-      proxies.map(visit(ctx, _)).mkString("")
+      proxies
+        .sortBy(!_.isMain)
+        .map(visit(ctx, _)).mkString("")
     } + "}" + n
   }
 

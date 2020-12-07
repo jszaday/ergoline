@@ -291,7 +291,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     error(ctx, node, "annotations are type-less")
 
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
-    val func = globals.operatorToFunction(node.op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
+    val op = if (node.op == "!=") "==" else node.op
+    val func = globals.operatorToFunction(op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
     val f = EirFunctionCall(Some(node), null, List(node.rhs), Nil)
     f.target = EirFieldAccessor(Some(f), node.lhs, func)
     node.disambiguation = Some(f)

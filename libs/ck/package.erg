@@ -1,0 +1,39 @@
+package ck;
+
+import ergoline::int;
+import ergoline::double;
+
+/* Returns the elapsed wall time since the start of execution. */
+@system(alias="CkWallTimer") def wallTime(): double;
+
+/* Charm++ recognizes two logical machine entities: “node” and PE (processing element).
+ * The following functions provide basic information about such logical machine that a Charm++ program runs on.
+ * PE and “node” are numbered starting from zero. */
+
+/* Returns the total number of PEs across all nodes. */
+@system(alias="CkNumPes") def numPes(): int;
+
+/* Returns the index of the PE on which the call was made. */
+@system(alias="CkMyPe") def myPe(): int;
+
+/* Returns the total number of logical Charm++ nodes. */
+@system(alias="CkNumNodes") def numNodes(): int;
+
+/* Returns the index of the “node” on which the call was made. */
+@system(alias="CkMyNode") def myNode(): int;
+
+/* Returns the rank number of the PE on a “node” on which the call was made.
+ * PEs within a “node” are also ranked starting from zero. */
+@system(alias="CkMyRank") def myRank(): int;
+
+/* Returns the index of the first PE on the logical node nd. */
+@system(alias="CkNodeFirst") def nodeFirst(nd: int): int;
+
+/* Returns the number of PEs on the logical node nd on which the call was made. */
+@system(alias="CkNodeSize") def nodeSize(nd: int): int;
+
+/* Returns the “node” number that PE pe belongs to. */
+@system(alias="CkNodeOf") def nodeOf(pe: int): int;
+
+/* Returns the rank of the given PE within its node. */
+@system(alias="CkRankOf") def rankOf(pe: int): int;

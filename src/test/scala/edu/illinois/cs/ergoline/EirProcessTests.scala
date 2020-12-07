@@ -28,7 +28,7 @@ class EirProcessTests extends FunSuite {
     os.move.over(wd / "generate.cc", wd / f.getName.replace("erg", "cc"))
     println("current contents: " + (os.list(tmp) mkString ", "))
     println("starting process...")
-    val output = charmc.map(_ => os.proc(tmp / "a.out", "4", "+p1", "++local").call(cwd = wd).out.text())
+    val output = charmc.map(_ => os.proc(tmp / "a.out", "16", "+p1", "++local").call(cwd = wd).out.text())
     output.foreach(println(_))
   }
 

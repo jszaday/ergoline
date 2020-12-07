@@ -17,7 +17,9 @@ package object globals {
   }
 
   val operators: Map[String, String] = Map(
-    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals", ">=" -> "compareTo", ">" -> "compareTo", "<" -> "compareTo", "%" -> "rem"
+    "+" -> "plus", "-" -> "minus", "*" -> "times", "==" -> "equals",
+    ">=" -> "compareTo", ">" -> "compareTo", "<" -> "compareTo", "%" -> "rem",
+    "/" -> "div"
   )
 
   def objectType: EirType = ???
@@ -29,7 +31,7 @@ package object globals {
   }
 
   def typeFor(litTy: EirLiteralTypes.Value): EirType = {
-    val name : String = litTy.toString.toLowerCase
+    val name : String = if (litTy == EirLiteralTypes.Float) "double" else litTy.toString.toLowerCase
     this.ergolineModule.flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
       .collect({
         case f: EirFileSymbol => f.resolve().head.asInstanceOf[EirClass]

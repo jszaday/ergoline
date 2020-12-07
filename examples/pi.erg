@@ -1,0 +1,60 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+/* Written with insights from:
+ * https://www.appentra.com/parallel-computation-pi/ */
+
+@main class pi {
+    val stepsPerPe: int;
+    val numSteps: int;
+    var checkIns: int;
+    var runningSum: double;
+
+    def step(): double {
+        return 1.0 / (numSteps.toDouble());
+    }
+
+    @entry def pi(selfProxy: pi@, args: array<string>): unit {
+        numSteps = args.size() > 1 ? args[1].toInt() : 16;
+        val numPes: int = ck::numPes();
+        if (numSteps < (numPes * 4)) {
+            numSteps = numPes * 4;
+        }
+        if (numSteps % numPes != 0) {
+            println("expected an evenly divisible number of steps.");
+            exit();
+        }
+        println("running " + numSteps.toString() + " steps of pi computation on " + numPes.toString() + " PEs");
+        stepsPerPe = numSteps / numPes;
+        val piProxy: pi@array1d = new pi@array1d(numPes, selfProxy, stepsPerPe);
+    }
+
+    @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int): unit {
+        numSteps = stepsPerPe * ck::numPes();
+
+        val idx: int = selfProxy.index();
+        val start: int = idx * stepsPerPe;
+        val end: int = (idx + 1) * stepsPerPe;
+        val s: double = step();
+
+        var sum: double = 0.0;
+        for (var i: int = start; i < end; i += 1) {
+            val x: double = (i.toDouble() + 0.5) * s;
+            sum += 4.0 / (1.0 + x * x);
+        }
+
+        mainProxy.checkIn(sum);
+    }
+
+    @entry def checkIn(partialSum : double): unit {
+        checkIns += 1;
+        runningSum += partialSum;
+
+        if (checkIns >= ck::numPes()) {
+            println("result = " + (runningSum * step()).toString());
+            exit();
+        }
+    }
+}

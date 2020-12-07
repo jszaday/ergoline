@@ -183,6 +183,7 @@ object GenerateCpp extends UnparseAst {
     val system = disambiguated.annotation("system").get
     val name = system("alias").map(_.stripped).getOrElse(nameFor(ctx, disambiguated))
     val static = system("static").exists(_.value.toBoolean)
+    val cast = system("cast").exists(_.value.toBoolean)
     disambiguated.asInstanceOf[EirNamedNode] match {
       case _ : EirMember if proxy.isDefined =>
         name match {
@@ -203,6 +204,8 @@ object GenerateCpp extends UnparseAst {
           case _ => error(ctx, target, "no generation method defined")
         }
       case _ : EirMember if static => s"$name(${(visit(ctx, base) +: args).mkString(", ")})"
+      case EirMember(_, f: EirFunction, _) if cast =>
+        s"((${typeFor(ctx, f.returnType)})${visit(ctx, base)})"
       case _ : EirMember => s"${visit(ctx, base)}.$name(${args.mkString(", ")})"
       case f : EirFunction if f.name == "println" => "CkPrintf(\"%s\\n\", " + s"${args.map(x => x + ".c_str()").mkString(", ")})"
       case _ => s"($name(${args.mkString(", ")}))"
@@ -304,7 +307,8 @@ object GenerateCpp extends UnparseAst {
 
   override def visitFunction(ctx: UnparseContext, x: EirFunction): String = {
     if (visited.contains(x)) return ""
-    else if (x.parent.exists(_.annotations.exists(_.name == "system"))) return ""
+    else if (x.annotation("system").isDefined ||
+      x.parent.exists(_.annotations.exists(_.name == "system"))) return ""
     visited +:= x
     val virtual =
       Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual ").getOrElse("")
@@ -391,8 +395,16 @@ object GenerateCpp extends UnparseAst {
   }
 
   override def visitNew(ctx: UnparseContext, x: EirNew): String = {
-    val args: List[String] = visitArguments(ctx)(x.disambiguation, x.args)
     val objTy: EirType = Find.uniqueResolution(x.target)
+    val moveHeadToLast: Boolean = (objTy match {
+      case t: EirProxy => t.collective
+      case t: EirProxyType => t.collective
+      case _ => None
+    }).exists(_.startsWith("array"))
+    val args: List[String] = {
+      val t: List[String] = visitArguments(ctx)(x.disambiguation, x.args)
+      if (moveHeadToLast && t.nonEmpty) t.tail :+ t.head else t
+    }
     objTy match {
       case _: EirProxyType | _: EirProxy =>
         nameFor(ctx, objTy) + s"::ckNew(${args mkString ", "})"
