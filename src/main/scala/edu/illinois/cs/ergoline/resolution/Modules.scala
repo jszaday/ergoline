@@ -70,22 +70,27 @@ object Modules {
     searchPath.map(_.resolve(name).toFile).find(_.exists()).flatMap(provisional(_, scope))
   }
 
+  def discoverSources(f: File): (Option[File], Iterable[File]) = {
+    val children = f.listFiles().map(_.getCanonicalFile)
+    (children.find(x => !x.isDirectory && x.getName == packageFile),
+      children.filter(x => (x.isDirectory || x.getName.endsWith(".erg")) && (x.getName != packageFile)))
+  }
+
   def provisional(f: File, scope: EirScope): Option[EirNamedNode] = {
     val file = f.getCanonicalFile
     if (loadedFiles.contains(file)) {
       Some(loadedFiles(file))
     } else if (file.isDirectory) {
       val name = file.getName
-      val children = file.listFiles().map(_.getCanonicalFile)
+      val (pkgFile, children) = discoverSources(file)
       val pkg: EirNamespace = retrieve(name, scope)
       loadedFiles(file) = pkg
-      for (child <- children.filter(x =>
-        (x.isDirectory || x.getName.endsWith(".erg")) && (x.getName != packageFile))) {
+      for (child <- children) {
         val symbol = EirFileSymbol(Some(pkg), child)
         pkg.children +:= symbol
         loadedFiles(child) = symbol
       }
-      children.find(_.getName == packageFile).foreach(load(_, scope))
+      pkgFile.foreach(load(_, scope))
       Some(pkg)
     } else if (file.isFile) {
       Some(load(file, scope))

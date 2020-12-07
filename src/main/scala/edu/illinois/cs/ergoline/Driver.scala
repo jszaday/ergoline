@@ -1,12 +1,11 @@
 package edu.illinois.cs.ergoline
 
+import java.io.{File, PrintWriter}
 import java.nio.file.Paths
 
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
-import edu.illinois.cs.ergoline.passes.{GenerateCi, Processes}
+import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Modules.load
-import java.io.{File, PrintWriter}
-
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
