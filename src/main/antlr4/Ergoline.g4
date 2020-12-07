@@ -115,7 +115,7 @@ fqn
     ;
 
 valueDeclaration
-    :   ValueKeyword Identifier ':' type Equals expression ';'
+    :   ValueKeyword Identifier (':' type)? Equals expression ';'
     ;
 
 variableDeclaration

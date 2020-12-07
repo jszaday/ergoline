@@ -34,10 +34,10 @@ import ck;
     @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int) {
         numSteps = stepsPerPe * ck::numPes();
 
-        val idx: int = selfProxy.index();
-        val start: int = idx * stepsPerPe;
-        val end: int = (idx + 1) * stepsPerPe;
-        val s: double = step();
+        val idx = selfProxy.index();
+        val start = idx * stepsPerPe;
+        val end = (idx + 1) * stepsPerPe;
+        val s = step();
 
         var sum: double = 0.0;
         for (var i: int = start; i < end; i += 1) {

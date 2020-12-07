@@ -315,8 +315,8 @@ object GenerateCpp extends UnparseAst {
     val isEntry = x.scope.exists(_.isInstanceOf[EirProxy])
     val body = x.body.map(visit(ctx, _)).map(s => {
       s"{" + generateAssignments(ctx, x) + s.tail
-    }).getOrElse({
-      if (virtual.nonEmpty) "= 0;"
+    }).map(" " + _).getOrElse({
+      if (virtual.nonEmpty) " = 0;"
       else ";"
     })
     val cons = x.parent.exists({
@@ -332,7 +332,7 @@ object GenerateCpp extends UnparseAst {
         tmp
       }
     }
-    val retTy = if (cons) "" else { visit(ctx, x.returnType) + " " }
+    val retTy = Option.when(cons)("").getOrElse(typeFor(ctx, x.returnType) + " ")
     val static = x.parent.collect({
       case m : EirMember if m.isStatic => "static "
     }).getOrElse("")
@@ -343,7 +343,7 @@ object GenerateCpp extends UnparseAst {
       case m : EirMember if m.isOverride => " override"
     }).getOrElse("")
     visitTemplateArgs(ctx, x.templateArgs) +
-    s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$over $body"
+    s"$static$virtual$retTy${nameFor(ctx, x)}(${args mkString ", "})$over$body"
   }
 
   override def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
@@ -512,12 +512,12 @@ object GenerateCpp extends UnparseAst {
       // TODO this is hacky, better means of name fetching is necessary
       val name = s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
       if (isMain) {
-        name + "(CkArgMsg* msg) "
+        name + "(CkArgMsg* msg)"
       } else {
         visit(ctx, f).init.replaceFirst(base, name)
       }
     } else visit(ctx, f).init
-    vf + s"{" + {
+    vf + s" {" + {
       val dropCount = if (isConstructor) 1 else 0
       val args = f.functionArgs.drop(dropCount)
       ctx.numTabs += 1
@@ -558,11 +558,10 @@ object GenerateCpp extends UnparseAst {
             case (p, idx) => visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
           }).mkString("")
       }
-      case i@EirIdentifierPattern(_, n, Some(t)) if n != "_" => {
+      case i@EirIdentifierPattern(_, n, t) if n != "_" =>
         val ty = Find.uniqueResolution(t)
         if (ty.isPointer) " " + visit(ctx, i.declarations.head).init + s" = std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current);"
         else " " + visit(ctx, i.declarations.head).init + s" = $current;"
-      }
       case i: EirIdentifierPattern =>
         if (i.name != "_") Errors.missingType(x) else ""
       case _: EirExpressionPattern => ""
@@ -580,7 +579,7 @@ object GenerateCpp extends UnparseAst {
           }
       }
       case EirIdentifierPattern(_, "_", _) => Nil
-      case EirIdentifierPattern(_, n, Some(t)) =>
+      case EirIdentifierPattern(_, n, t) =>
         Option.when(Find.uniqueResolution(t).isPointer)(n).toList
       case e: EirExpressionPattern =>
         List(s"$current == ${visit(ctx, e.expression)}")

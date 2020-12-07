@@ -89,6 +89,14 @@ object Find {
 //    owner.findWithin[T]((t : T) => parentOf[C](t).contains(owner))
 //  }
 
+  def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {
+    val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.uniqueResolution(rY))
+    oY.map(unionType(x, _)) match {
+      case Some(x) => x
+      case None => Some(x)
+    }
+  }
+
   def unionType(x: EirType, y: EirType): Option[EirType] = {
     if (x == y) Some(x)
     else if (x.canAssignTo(y)) Some(y)

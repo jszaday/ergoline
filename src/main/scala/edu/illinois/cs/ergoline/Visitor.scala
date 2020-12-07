@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
@@ -247,7 +247,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   def visitDeclaration(name: TerminalNode, declaredType: TypeContext, expressionContext: ExpressionContext, isFinal: Boolean): EirDeclaration = {
     enter(EirDeclaration(parent, isFinal, name.getText, null, None), (d: EirDeclaration) => {
-      d.declaredType = visitAs[EirResolvable[EirType]](declaredType)
+      d.declaredType = Option(declaredType).map(visitAs[EirResolvable[EirType]](_)).getOrElse(EirPlaceholder(Some(d)))
       d.initialValue = Option(expressionContext).map(visitAs[EirExpressionNode])
     })
   }
@@ -308,7 +308,10 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitPattern(ctx: PatternContext): EirNode = {
     if (ctx.Identifier() != null) {
       enter(EirIdentifierPattern(parent, ctx.Identifier().getText, null), (i: EirIdentifierPattern) => {
-        i.ty = Option(ctx.basicType()).orElse(Option(ctx.tupleType())).map(visitAs[EirResolvable[EirType]])
+        i.ty =
+          Option(ctx.basicType()).orElse(Option(ctx.tupleType()))
+            .map(visitAs[EirResolvable[EirType]])
+            .getOrElse(EirPlaceholder(i.declarations.headOption))
       })
     } else if (ctx.constant() != null) {
       enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {

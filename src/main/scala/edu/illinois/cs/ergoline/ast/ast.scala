@@ -7,8 +7,8 @@ import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{globals, util}
 
 import scala.collection.mutable
@@ -636,16 +636,22 @@ case class EirExpressionPattern(var parent: Option[EirNode], var expression: Eir
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, private var _ty: Option[EirResolvable[EirType]]) extends EirPattern {
-  private val declaration = EirDeclaration(Some(this),isFinal = true, name, null, None)
-  def ty: Option[EirResolvable[EirType]] = _ty
-  def ty_=(ty: Option[EirResolvable[EirType]]): Unit = {
+case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, private var _ty: EirResolvable[EirType]) extends EirPattern {
+  private val declaration = EirDeclaration(Some(this),isFinal = true, name, _ty, None)
+  if (_ty != null) _ty.parent = Some(declaration)
+
+  def ty: EirResolvable[EirType] = _ty
+  def ty_=(ty: EirResolvable[EirType]): Unit = {
+    declaration.declaredType = ty
     _ty = ty
-    declaration.declaredType = _ty.getOrElse(EirPlaceholder[EirType]())
+    _ty.parent = Some(declaration)
   }
+
   override def declarations: List[EirDeclaration] = Option.when(name != "_")(declaration).toList
   override def conditions: List[EirExpressionNode] = Nil
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    (ty == oldNode) && util.applyOrFalse[EirResolvable[EirType]](ty = _, newNode)
+  }
 }
 
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {

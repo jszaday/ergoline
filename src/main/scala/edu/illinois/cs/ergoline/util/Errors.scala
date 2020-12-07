@@ -35,6 +35,7 @@ object Errors {
   def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing = unableToUnify(ctx, Seq(a, b))
 
   def unableToUnify(ctx: EirNode, it : Iterable[EirType]): Nothing = {
+    if (it.isEmpty) missingType(ctx)
     Console.err.println(s"${contextualize(ctx)}: could not unify types: ${it.init.map(nameFor) mkString ", "} and ${nameFor(it.last)}")
     exitAction()
   }
