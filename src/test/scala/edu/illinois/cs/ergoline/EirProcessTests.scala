@@ -15,18 +15,20 @@ class EirProcessTests extends FunSuite {
   def files(path: String = "examples"): Iterable[File] =
     Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile)
 
+  private val wd = os.pwd
+  private val tmp = os.temp.dir()
+
   def test(f: File): Unit = {
-    val wd = os.pwd
     os.proc("sbt", "run " + "\"" + f.getCanonicalPath + "\"").call()
     println("running charmc on generate.ci")
     charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "generate.ci").call(cwd = wd))
     println("running charmc on generate.cc")
-    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "-language", "charm++", "generate.cc", "-o", "a.out").call(cwd = wd))
+    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "-language", "charm++", "generate.cc", "-o", tmp / "a.out").call(cwd = wd))
     println("moving .cc file")
     os.move.over(wd / "generate.cc", wd / f.getName.replace("erg", "cc"))
-    println("current contents: " + (os.list(wd) mkString ", "))
+    println("current contents: " + (os.list(tmp) mkString ", "))
     println("starting process...")
-    val output = charmc.map(_ => os.proc("charmrun", "a.out", "+setcpuaffinity", "++local", "++quiet").call(cwd = wd).out.text())
+    val output = charmc.map(_ => os.proc(tmp / "a.out", "4", "+p1", "++local").call(cwd = wd).out.text())
     output.foreach(println(_))
   }
 
