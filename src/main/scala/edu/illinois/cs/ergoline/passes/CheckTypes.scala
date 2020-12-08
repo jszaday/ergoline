@@ -478,13 +478,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
     val goal = ctx.goal.pop()
     val ours = x.ty
-    Find.unionResolvable(goal, ours) match {
-      case Some(union) =>
-        x.ty = union
-        union
-      case None => Errors.unableToUnify(x, ours.resolve() :+ goal)
-    }
-
+    val found = x.ty match {
+      case _: EirPlaceholder[_] => goal
+      // TODO add type-checking to verify:
+      //      both goal/theirs and ours are pointer types
+      // -or- ours can assign to theirs
+      case t => Find.uniqueResolution(t)
+     }
+    x.ty = found
+    found
   }
 
   override def visitExpressionPattern(ctx: TypeCheckContext, x: EirExpressionPattern): EirType = {

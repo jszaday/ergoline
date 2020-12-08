@@ -53,4 +53,13 @@ class EirUtilityTests extends FunSuite {
       symbol.get.resolve()
     })
   }
+
+  test("should not access inaccessible scope") {
+    EirGlobalNamespace.clear()
+    val foo = Modules.load("package foo ; def bar(): unit { { val baz : unit = (); } baz; }")
+    val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
+    assertThrows[java.lang.RuntimeException]({
+      symbol.map(Find.uniqueResolution(_))
+    })
+  }
 }
