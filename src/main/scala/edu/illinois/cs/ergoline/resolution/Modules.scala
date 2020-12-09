@@ -27,7 +27,8 @@ object Modules {
     Properties.envOrNone(searchPathEnv).toIterable
       .flatMap(_.split(pathSeparator)).map(Paths.get(_))).filter(Files.exists(_))
 
-  val loadedFiles : mutable.Map[File, EirNamedNode] = mutable.Map()
+  val loadedFiles: mutable.Map[File, EirNamedNode] = mutable.Map()
+  val fileSiblings: mutable.Map[EirNode, List[EirNode]] = mutable.Map()
 
   private object ErgolineErrorListener extends ConsoleErrorListener {
     override def syntaxError(recognizer: Recognizer[_, _], offendingSymbol: Any, line: Int, charPositionInLine: Int, msg: String, e: RecognitionException): Unit = {
@@ -120,7 +121,8 @@ object Modules {
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
-      case Right(value) =>
+      case (value: EirNamedNode, sibilings) if value.hasName(Modules.expectation(f)) =>
+        fileSiblings(value) = sibilings
         loadedFiles(file) = value
         Processes.onLoad(value)
         val (endMs, endMb) = (currTimeMs, memoryUsageMb)
@@ -133,11 +135,13 @@ object Modules {
   def parserFromPath(path: Path): ErgolineParser =
     parserFromCharStream(CharStreams.fromPath(path))
 
+  def isPackageFile(file: File): Boolean = { file.getName == packageFile }
+
   def expectation(file: File): String = {
-    val name = file.getName
-    if (name == packageFile)
+    if (isPackageFile(file))
       file.getCanonicalFile.getParentFile.getName
     else {
+      val name = file.getName
       val idx = name.indexOf('.')
       if (idx >= 0) name.substring(0, idx)
       else name

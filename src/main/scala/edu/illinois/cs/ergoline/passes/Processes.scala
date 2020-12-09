@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirGlobalNamespace, EirNamespace, EirNode, EirSpecializable, EirSpecialization, EirTrait}
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
@@ -11,15 +11,29 @@ import scala.util.Properties.{lineSeparator => n}
 object Processes {
   private val ctx = new TypeCheckContext
 
+  var cppIncludes: Set[String] = Set(
+    "algorithm",
+    "memory",
+    "string",
+    "tuple",
+    "utility",
+    "vector",
+    "#include \"generate.decl.h\""
+  )
+
   def checked: Map[EirSpecializable, List[EirSpecialization]] = ctx.checked
 
-  def onLoad(x : EirNode): Unit = {
-    FullyResolve.visit(x)
-    Find.classes(x.scope.getOrElse(x)).foreach(CheckClasses.visit)
+  def onLoad(node : EirNode): Unit = {
+    val all = node +: Modules.fileSiblings.getOrElse(node, Nil)
 
-    x match {
-      case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
-      case _ => CheckTypes.visit(ctx, x)
+    for (x <- all) {
+      FullyResolve.visit(x)
+      Find.classes(x.scope.getOrElse(x)).foreach(CheckClasses.visit)
+
+      x match {
+        case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
+        case _ => CheckTypes.visit(ctx, x)
+      }
     }
   }
 
@@ -55,14 +69,12 @@ object Processes {
     fwdDecls ++ a.map(GenerateCpp.forwardDecl(ctx, _)) ++
       Seq("#include \"pup.h\"") ++
       Seq(n + GenerateCpp.systemClasses() + n) ++
-      Seq("#include <algorithm>",
-          "#include <memory>",
-          "#include <string>",
-          "#include <tuple>",
-          "#include <utility>",
-          "#include <vector>",
-          "#include \"generate.decl.h\"", "") ++
-      gathered ++
-      wrapup ++ Seq("#include \"generate.def.h\"")
+      cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x>") ++
+      gathered ++ wrapup ++ Seq(
+        "#define CK_TEMPLATES_ONLY",
+        "#include \"generate.def.h\"",
+        "#undef CK_TEMPLATES_ONLY",
+        "#include \"generate.def.h\""
+      )
   }
 }

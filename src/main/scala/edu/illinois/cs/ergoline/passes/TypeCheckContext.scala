@@ -22,7 +22,9 @@ class TypeCheckContext {
   }
 
   def shouldCheck(s: EirSpecializable): Boolean = {
-    if (s.templateArgs.isEmpty) {
+    if (s.annotation("system").isDefined) {
+      false
+    } else if (s.templateArgs.isEmpty) {
       if (_checked.contains(s)) false
       else { _checked += (s -> Nil); true }
     } else {

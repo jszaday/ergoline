@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirT
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
@@ -47,7 +47,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     x match {
       case x : EirTemplatedType =>
         val base = visit(ctx, x.base)
-        Some(ctx.specialize(base.asInstanceOf[EirSpecializable], x))
+        val specialization = ctx.specialize(base.asInstanceOf[EirSpecializable], x)
+        visit(ctx, x.base)
+        Some(specialization)
       case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
       case _ => None
     }
@@ -407,7 +409,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
-  private def constructorDropCount(c : EirClassLike): Int = {
+  private def constructorDropCount(c : EirType): Int = {
     c match {
       case p: EirProxy if p.collective.isEmpty && !p.isElement => 1
       case _ => 0
@@ -415,23 +417,21 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
-    val target = visit(ctx, x.target) match {
-      case c : EirClassLike if !c.isAbstract => c
-      case c => throw TypeCheckException(s"cannot instantiate $c")
-    }
-    val candidates =
-      target.members.filter(m => m.isConstructor && x.canAccess(m))
+    val base = visit(ctx, x.target)
+    val spec = handleSpecialization(ctx, base)
+    val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
     val ours = visit(ctx, x.args).toList
     x.disambiguation = candidates.find((m : EirMember) => {
       val f = m.member.asInstanceOf[EirFunction]
       val theirs =
         // proxy-related args are provided by the runtime
-        f.functionArgs.drop(constructorDropCount(target)).map(visit(ctx, _))
+        f.functionArgs.drop(constructorDropCount(base)).map(visit(ctx, _))
       val matches = argumentsMatch(ours, theirs)
       matches
     })
+    spec.foreach(ctx.leave)
     x.disambiguation match {
-      case Some(_) => target
+      case Some(_) => base
       case _ => error(ctx, x, "could not find a suitable constructor")
     }
   }

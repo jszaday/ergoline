@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast.EirClassLike
-import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 object TypeCompatibility {
@@ -13,6 +13,8 @@ object TypeCompatibility {
           x.children.zip(y.children).forall({
             case (a, b) => a.canAssignTo(b)
           })
+      case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
+        Find.uniqueResolution(x.base).canAssignTo(y)
       case _ => false
     })
   }

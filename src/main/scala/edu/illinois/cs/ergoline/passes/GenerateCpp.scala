@@ -68,7 +68,7 @@ object GenerateCpp extends UnparseAst {
   }
 
   def forwardDecl(ctx: UnparseContext, x: EirClassLike): String = {
-    s"struct ${nameFor(ctx, x)};"
+    visitTemplateArgs(ctx, x.templateArgs) + s"struct ${nameFor(ctx, x)};"
   }
 
 //  override def visitNamespace(ctx: UnparseContext, node: EirNamespace): String = {
@@ -86,8 +86,11 @@ object GenerateCpp extends UnparseAst {
     }
     val name = nameFor(ctx, t)
     val children = getDerived(t).toSet.map((c: EirClassLike) => {
-      val otherName = nameFor(ctx, c)
-      s"if (p->get_PUP_ID() == $otherName::my_PUP_ID) return ($otherName*) p;"
+      val names =
+        if (c.templateArgs.isEmpty) List(nameFor(ctx, c))
+        else Processes.checked(c).map(x => templatedNameFor(ctx, c, Some(x)))
+      names.map(otherName =>
+        s"if (p->get_PUP_ID() == $otherName::my_PUP_ID) return ($otherName*) p;").mkString(n)
     }).toList :+ s"return nullptr;$n"
     s"$name* $name::fromPuppable(ergoline::puppable *p) {" + {
       ctx.numTabs += 1
@@ -147,16 +150,25 @@ object GenerateCpp extends UnparseAst {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
   }
 
+  def castToPuppable(ctx: UnparseContext)(ptrType: Option[String], expr: EirExpressionNode): String = {
+    val puppable = "ergoline::puppable"
+    s"CkPointer<${ptrType.getOrElse(puppable)}>(${visit(ctx, expr)}${ptrType.map(_ => ".get").getOrElse("->toPuppable")}())"
+  }
+
   def visitCallArgument(ctx: UnparseContext)(t: (EirExpressionNode, EirFunctionArgument)): String = {
     val theirs = t._2.declaredType.resolve().headOption
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
-      case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>{
-        val puppable = "ergoline::puppable"
-        val templ = c.extendsThis.map(nameFor(ctx, _))
-        s"CkPointer<${templ.getOrElse(puppable)}>(${visit(ctx, t._1)}${templ.map(_ => ".get").getOrElse("->toPuppable")}())"
+      case (Some(tty: EirTemplatedType), Some(_)) if isEntryArgument(t._2) => {
+        val base = assertValid[EirClassLike](Find.uniqueResolution(tty.base))
+        base.extendsThis match {
+          case None => castToPuppable(ctx)(None, t._1)
+          case _ => ???
+        }
       }
+      case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>
+        castToPuppable(ctx)(c.extendsThis.map(nameFor(ctx, _)), t._1)
       case _ => visit(ctx, t._1)
     }
   }
@@ -268,18 +280,51 @@ object GenerateCpp extends UnparseAst {
     }
   }
 
-  override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
-   if (x.annotations.exists(_.name == "system")) "" else
-    visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + {
+  def templatedNameFor(ctx: UnparseContext, x: EirSpecializable, specialization: Option[EirSpecialization] = None): String = {
+    nameFor(ctx, x) + (if (x.templateArgs.isEmpty) "" else specialization match {
+      case Some(x) => s"<${x.specialization.map(typeFor(ctx, _)).mkString(", ")}>"
+      case None => s"<${x.templateArgs.map(nameFor(ctx, _)).mkString(", ")}>"
+    })
+  }
+
+  def puppingParents(x: EirClassLike): List[EirType] = {
+    // TODO enable stateful traits?
+    // TODO be templating aware?
+    (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType])
+      .filterNot(_.isInstanceOf[EirTrait]).toList
+  }
+
+  def makePupper(ctx: UnparseContext, x: EirClassLike): String = {
+    // TODO check to ensure user does not override
+    s"$n${ctx.t}virtual void pup(PUP::er &p) override {" + {
       ctx.numTabs += 1
-      val res =if (x.isInstanceOf[EirTrait]) {
-        s" {$n${ctx.t}static ${nameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);"
+      val parents = puppingParents(x) match {
+        case Nil => List(s"$n${ctx.t}PUP::able::pup(p);")
+        case _ => ???
+      }
+      val values = x.members.collect({
+        case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
+      }).map(d => s"$n${ctx.t}p | ${nameFor(ctx, d)};")
+      ctx.numTabs -= 1
+      (parents ++ values).mkString("")
+    } + s"$n${ctx.t}}"
+  }
+
+  override def visitClassLike(ctx: UnparseContext, x: EirClassLike): String = {
+   if (x.annotations.exists(_.name == "system")) return ""
+   visitTemplateArgs(ctx, x.templateArgs) + s"${n}struct ${nameFor(ctx, x)}" + visitInherits(ctx, x) + {
+      ctx.numTabs += 1
+      val res = if (x.isInstanceOf[EirTrait]) {
+        visitTemplateArgs(ctx, x.templateArgs) +
+          s" {$n${ctx.t}static ${templatedNameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);"
       } else {
         // TODO PUPable_decl_base_template
-        s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});" +
+        (if (x.templateArgs.isEmpty) s" {$n${ctx.t}PUPable_decl_inside(${nameFor(ctx, x)});"
+         else s" {$n${ctx.t}PUPable_decl_inside_template(${templatedNameFor(ctx, x)});") + (
           s"$n${ctx.t}${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }" +
           s"$n${ctx.t}virtual ergoline::puppable* toPuppable() override { return this; }" +
-          Find.traits(x).map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString("")
+          makePupper(ctx, x) +
+          Find.traits(x).map(x => s"$n${ctx.t}friend class ${nameFor(ctx, x)};").mkString(""))
       }
       ctx.numTabs -= 1
       res

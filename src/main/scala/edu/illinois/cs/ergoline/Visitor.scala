@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.resolution.Modules.fileSiblings
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
@@ -86,7 +87,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
-  def visitProgram(ctx : ProgramContext, file : Option[File]): Either[EirScope, EirNamedNode] = {
+  def visitProgram(ctx : ProgramContext, file : Option[File]): (EirNode, List[EirNode]) = {
     val expectation = file.map(Modules.expectation)
     val topLevel : EirScope =
       Option(ctx.packageStatement())
@@ -100,17 +101,17 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     // namespaces are automatically placed into the top-level, and should not be replicated
     AstManipulation.placeNodes(topLevel, nodes.filterNot(_.isInstanceOf[EirNamespace]))
     parents.pop()
-    expectation match {
-      case Some(name) =>
-        (topLevel +: nodes).find(_.hasName(name))
-          .map(x => Right(x.asInstanceOf[EirNamedNode]))
-          .getOrElse(Left(topLevel))
-      case None => Left(topLevel)
-    }
+    expectation.map(name => {
+      if (file.exists(Modules.isPackageFile) && topLevel.hasName(name)) (topLevel, nodes)
+      else nodes.partition(_.hasName(name)) match {
+        case (head :: Nil, x) => (head, x)
+        case _ => throw new RuntimeException(s"could not locate $name in ${file.get.getName}")
+      }
+    }).getOrElse((topLevel, Nil))
   }
 
   override def visitProgram(ctx: ProgramContext): EirScope = {
-    visitProgram(ctx, None).left.getOrElse(throw new RuntimeException("unreachable"))
+    assertValid[EirScope](visitProgram(ctx, None)._1)
   }
 
   private def parent: Option[EirNode] =

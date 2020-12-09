@@ -1,0 +1,43 @@
+package examples;
+
+import ergoline::_;
+
+// example: how to import c/c++ functions
+@system(fromHeader="cstdlib",alias="std::rand")
+def rand(): int;
+@system(fromHeader="cstdlib",alias="std::srand")
+def seedRand(seed: int): unit;
+@system(fromHeader="ctime",alias="std::time")
+def time(value: int): int;
+
+@main class main {
+    @entry def main(selfProxy: main@) {
+        // seed the random number generator
+        seedRand(time(0));
+        // make an int and a double holder
+        val ih = new maxHolder<int>(0);
+        val dh = new maxHolder<double>(0.0);
+        // generate 10 random numbers (between 1-100) for each
+        for (var i: int = 0; i < 10; i += 1) {
+            ih.setValue(rand() % 100 + 1);
+            dh.setValue((rand() % 100 + 1).toDouble());
+        }
+        // call the entry method
+        selfProxy.printMaxima(ih, dh);
+    }
+
+    @entry def printMaxima(a: stringable, b: stringable) {
+        println(a.toString() + " " + b.toString());
+        exit();
+    }
+}
+
+class maxHolder<T> with stringable {
+    var value: T;
+    def maxHolder(=value: T) { }
+    def getValue(): T { return value; }
+    def setValue(t: T) { if (t > value) value = t; }
+    override def toString(): string { return value.toString(); }
+}
+
+trait stringable { def toString(): string; } 

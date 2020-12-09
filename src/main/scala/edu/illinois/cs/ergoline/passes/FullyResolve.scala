@@ -8,6 +8,12 @@ object FullyResolve {
   def seekImports(node : EirNode): Unit = {
     node.children.foreach({
       case x: EirImport if !x.resolved => x.resolve()
+      case x if x.annotation("system").isDefined => {
+        // TODO this PROBABLY should happen somewhere else.
+        Processes.cppIncludes ++= x.annotation("system")
+          .flatMap(_.opts.get("fromHeader").map(_.stripped))
+        x
+      }
       case child => seekImports(child)
     })
   }

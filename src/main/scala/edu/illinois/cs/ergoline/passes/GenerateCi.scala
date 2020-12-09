@@ -34,7 +34,10 @@ object GenerateCi {
   def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
     namespaces.map(ns => {
       s"${n}namespace ${ns.name} {" ++
-      ctx.puppables.filter(x => ns.children.contains(x)).map(x => s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};").mkString("")
+      ctx.puppables.filter(x => ns.children.contains(x)).map(x => {
+        if (x.templateArgs.isEmpty) s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};"
+        else ctx.checked(x).map(y => s"${n}PUPable ${GenerateCpp.templatedNameFor(ctx, x, Some(y))};").mkString("")
+      }).mkString("")
     }).mkString("") + n + {
       proxies
         .sortBy(!_.isMain)

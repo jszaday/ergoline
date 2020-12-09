@@ -207,14 +207,26 @@ object Find {
     iterable.map(uniqueResolution[T])
   }
 
-  def accessibleMember(base : EirNode, x : EirFieldAccessor): List[EirMember] = {
+  def accessibleMember(base : EirNode, name: String, ctx: EirNode): List[EirMember] = {
     val scope = base match {
+      case s : EirClassLike => s
+      case EirTemplatedType(_, s : EirClassLike, _) => s
+      case _ => throw new RuntimeException(s"unsure how to find members of $base")
+    }
+    // TODO check parent classes as well!
+    child[EirMember](scope, withName(name).and(ctx.canAccess(_))).toList
+  }
+
+  def accessibleMember(base : EirNode, x : EirFieldAccessor): List[EirMember] = accessibleMember(base, x.field, x)
+
+  def accessibleConstructor(base : EirNode, x : EirNew, mustBeConcrete: Boolean = false): List[EirMember] = {
+    val c = base match {
       case EirTemplatedType(_, s : EirClassLike, _) => s
       case s : EirClassLike => s
       case _ => throw new RuntimeException(s"unsure how to find members of $base")
     }
-    // TODO check parent classes as well!
-    child[EirMember](scope, withName(x.field).and(x.canAccess(_))).toList
+    if (c.isAbstract && mustBeConcrete) throw new RuntimeException(s"cannot instantiate ${c.name}")
+    child[EirMember](c, (y: EirMember) => y.isConstructor && x.canAccess(y)).toList
   }
 
   def callable(x : EirClassLike): List[EirMember] = {
