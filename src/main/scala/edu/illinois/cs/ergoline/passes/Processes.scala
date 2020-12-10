@@ -42,39 +42,43 @@ object Processes {
   }
 
   def generateCpp(): Iterable[String] = {
-    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
-    val ctx = new UnparseContext("cpp")
-    val body = a.map(GenerateCpp.visit(ctx, _)) ++
-      EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit(ctx, _)) ++
-      c.map(GenerateCpp.visit(ctx, _))
-    val grouped = body.map(_.trim).groupBy(x => x.substring(0, x.indexOf('{') + 1))
-    val gathered = grouped.map(x => {
-      x._1 + n + x._2.map(y => y.substring(x._1.length + 1, y.length - 1)).mkString("") + n + "}"
-    })
-    val toDecl = checked.keys.collect({
-      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
-    }).toList.groupBy(x => {
-      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
-    })
-    val fwdDecls = toDecl.map({
-      case (namespace, classes) =>
-        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
-          classes.map(GenerateCpp.forwardDecl(ctx, _)).mkString(n) + s"$n}$n"
-    })
-    val wrapup = toDecl.map({
-      case (namespace, classes) =>
-        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
-          classes.collect({ case t: EirTrait => t }).map(GenerateCpp.makeFromPuppable(ctx, _)).mkString(n) + s"$n}$n"
-    })
-    fwdDecls ++ a.map(GenerateCpp.forwardDecl(ctx, _)) ++
-      Seq("#include \"pup.h\"") ++
-      Seq(n + GenerateCpp.systemClasses() + n) ++
-      cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x>") ++
-      gathered ++ wrapup ++ Seq(
-        "#define CK_TEMPLATES_ONLY",
-        "#include \"generate.def.h\"",
-        "#undef CK_TEMPLATES_ONLY",
-        "#include \"generate.def.h\""
-      )
+    val ctx: CodeGenerationContext = new CodeGenerationContext
+    EirGlobalNamespace.children.filterNot(_.name == "ergoline").foreach(GenerateCpp.visit(ctx, _))
+    println(ctx.toString)
+    Nil
+//    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
+//    val ctx = new UnparseContext("cpp")
+//    val body = a.map(GenerateCpp.visit(ctx, _)) ++
+//      EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit(ctx, _)) ++
+//      c.map(GenerateCpp.visit(ctx, _))
+//    val grouped = body.map(_.trim).groupBy(x => x.substring(0, x.indexOf('{') + 1))
+//    val gathered = grouped.map(x => {
+//      x._1 + n + x._2.map(y => y.substring(x._1.length + 1, y.length - 1)).mkString("") + n + "}"
+//    })
+//    val toDecl = checked.keys.collect({
+//      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
+//    }).toList.groupBy(x => {
+//      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+//    })
+//    val fwdDecls = toDecl.map({
+//      case (namespace, classes) =>
+//        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
+//          classes.map(GenerateCpp.forwardDecl(ctx, _)).mkString(n) + s"$n}$n"
+//    })
+//    val wrapup = toDecl.map({
+//      case (namespace, classes) =>
+//        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
+//          classes.collect({ case t: EirTrait => t }).map(GenerateCpp.makeFromPuppable(ctx, _)).mkString(n) + s"$n}$n"
+//    })
+//    fwdDecls ++ a.map(GenerateCpp.forwardDecl(ctx, _)) ++
+//      Seq("#include \"pup.h\"") ++
+//      Seq(n + GenerateCpp.systemClasses() + n) ++
+//      cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x>") ++
+//      gathered ++ wrapup ++ Seq(
+//        "#define CK_TEMPLATES_ONLY",
+//        "#include \"generate.def.h\"",
+//        "#undef CK_TEMPLATES_ONLY",
+//        "#include \"generate.def.h\""
+//      )
   }
 }

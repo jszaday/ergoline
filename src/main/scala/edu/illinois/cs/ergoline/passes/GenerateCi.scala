@@ -32,21 +32,25 @@ object GenerateCi {
   }
 
   def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
-    namespaces.map(ns => {
-      s"${n}namespace ${ns.name} {" ++
-      ctx.puppables.filter(x => ns.children.contains(x)).map(x => {
-        if (x.templateArgs.isEmpty) s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};"
-        else ctx.checked(x).map(y => s"${n}PUPable ${GenerateCpp.templatedNameFor(ctx, x, Some(y))};").mkString("")
-      }).mkString("")
-    }).mkString("") + n + {
-      proxies
-        .sortBy(!_.isMain)
-        .map(visit(ctx, _)).mkString("")
-    } + "}" + n
+//TODO fixme
+    ""
+    //    namespaces.map(ns => {
+//      s"${n}namespace ${ns.name} {" ++
+//      ctx.puppables.filter(x => ns.children.contains(x)).map(x => {
+//        if (x.templateArgs.isEmpty) s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};"
+//        else ctx.checked(x).map(y => s"${n}PUPable ${GenerateCpp.templatedNameFor(ctx, x, Some(y))};").mkString("")
+//      }).mkString("")
+//    }).mkString("") + n + {
+//      proxies
+//        .sortBy(!_.isMain)
+//        .map(visit(ctx, _)).mkString("")
+//    } + "}" + n
   }
 
   def visit(ctx: UnparseContext, proxy: EirProxy): String = {
-    val template: String = GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
+    // TODO fixme
+//    val template: String = GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
+    val template = ""
     val name = proxy.baseName
     val header =
       template + ctx.t + visitChareType(proxy.isMain, proxy.collective) + s" $name {$n"
@@ -60,9 +64,11 @@ object GenerateCi {
     if (proxy.isMain && f.isConstructor) {
       s"${ctx.t} entry [nokeep] ${proxy.baseName}(CkArgMsg* msg);$n"
     } else {
-      var body = GenerateCpp.visit(ctx, f.member)
-      if (f.isConstructor) body = body.replaceFirst(proxy.name, proxy.baseName)
-      s"${ctx.t} entry $body$n"
+      // TODO fixme
+//      var body = GenerateCpp.visit(ctx, f.member)
+//      if (f.isConstructor) body = body.replaceFirst(proxy.name, proxy.baseName)
+//      s"${ctx.t} entry $body$n"
+      ""
     }
   }
 
