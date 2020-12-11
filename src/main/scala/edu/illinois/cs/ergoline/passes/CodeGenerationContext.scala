@@ -2,11 +2,17 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.EirNode
 import util.Properties.{lineSeparator => n}
+import UnparseAst.tab
+import scala.util.matching.Regex
 
 class CodeGenerationContext {
 
   var lines: List[String] = Nil
   val current: StringBuilder = new StringBuilder
+
+  def appendSemi(): Unit = {
+    if (current.nonEmpty && !current.endsWith(";")) this << ";"
+  }
 
   def <<(node: EirNode)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
     visitor(this, node)
@@ -44,7 +50,7 @@ class CodeGenerationContext {
   def <<(unit: Unit): CodeGenerationContext = this
 
   private def isControl(s: Char): Boolean = {
-    s == '(' || s == ')'
+    s == '(' || s == ')' || s == ':' || s == '.'
   }
 
   def <<(value: String): CodeGenerationContext = {
@@ -57,11 +63,14 @@ class CodeGenerationContext {
         lines +:= current.toString()
         current.clear()
       }
-      lines +:= value
+      if (value.nonEmpty) {
+        if (isControl(value.last)) current.append(value)
+        else lines +:= value
+      }
     } else if (value.endsWith(";")) {
       lines +:= current + value
       current.clear()
-    } else {
+    } else if (value.nonEmpty) {
       if (current.nonEmpty && !current.endsWith(" ") && !(isControl(value.head) || isControl(current.last))) current.append(" ")
       current.append(value)
     }
@@ -77,5 +86,21 @@ class CodeGenerationContext {
     this << (values mkString separator)
   }
 
-  override def toString: String = lines.reverse.mkString(n)
+  val maxLineWidth = 120
+
+  override def toString: String = {
+    val reversed = lines.reverse
+    val output = new StringBuilder
+    var numTabs = 0
+    def t: String = List.fill(numTabs)(tab).mkString("")
+    for (line <- reversed) {
+//      if ((line + t).length >= maxLineWidth) { }
+      if (!line.matches(raw".*?\{.*\}$$")) {
+        if (line.endsWith("}") || line.endsWith("};") || line.startsWith("}")) numTabs -= 1
+      }
+      output.append(t).append(line).append(n)
+      if (line.endsWith("{")) numTabs += 1
+    }
+    output.toString()
+  }
 }

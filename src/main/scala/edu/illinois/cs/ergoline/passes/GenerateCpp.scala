@@ -141,16 +141,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
   }
 
-  def castToPuppable(ctx: CodeGenerationContext)(ptrType: Option[String], expr: EirExpressionNode): String = {
+  def castToPuppable(ctx: CodeGenerationContext)(ptrType: Option[String], expr: EirExpressionNode): Unit = {
     val puppable = "ergoline::puppable"
-    s"CkPointer<${ptrType.getOrElse(puppable)}>(${visit(ctx, expr)}${ptrType.map(_ => ".get").getOrElse("->toPuppable")}())"
+    ctx << s"CkPointer<${ptrType.getOrElse(puppable)}>(" << expr << ptrType.map(_ => ".get").getOrElse("->toPuppable") << "())"
   }
 
-  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): String = {
+  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
     val theirs = t._2.declaredType.resolve().headOption
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
-        s"${nameFor(ctx, b)}(${visit(ctx, t._1)})"
+        ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
       case (Some(tty: EirTemplatedType), Some(_)) if isEntryArgument(t._2) => {
         val base = assertValid[EirClassLike](Find.uniqueResolution(tty.base))
         base.extendsThis match {
@@ -160,11 +160,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
       case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>
         castToPuppable(ctx)(c.extendsThis.map(nameFor(ctx, _)), t._1)
-      case _ => "" // TODO visit(ctx, t._1)
+      case _ => ctx << t._1
     }
   }
 
-  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): List[String] = {
+  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): Unit = {
     val theirs: List[EirFunctionArgument] =
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>
@@ -173,11 +173,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case Some(f: EirFunction) => f.functionArgs
         case _ => Nil
       }
-    if (theirs.length == args.length) args.zip(theirs).map(visitCallArgument(ctx))
-    else List("") // TODO args.map(visit(ctx, _))
+    if (theirs.length == args.length) {
+      val zipped = args.zip(theirs)
+      if (zipped.nonEmpty) {
+        zipped.init.foreach(pair => {
+          visitCallArgument(ctx)(pair)
+          ctx << ", "
+        })
+        visitCallArgument(ctx)(zipped.last)
+      }
+
+    }
+    else ??? // TODO args.map(visit(ctx, _))
   }
 
-  def visitSystemCall(ctx: CodeGenerationContext, target: EirExpressionNode, disambiguated: EirNode, args: List[String]): String = {
+  def visitSystemCall(ctx: CodeGenerationContext, target: EirExpressionNode,
+                      disambiguated: EirNode, args: List[EirExpressionNode]): String = {
 //    val base = target match {
 //      case f: EirFieldAccessor => f.target
 //      case _ => target
@@ -231,9 +242,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitFunctionCall(ctx: CodeGenerationContext, x: EirFunctionCall): Unit = {
     val disambiguated = disambiguate(x.target)
     val isSystem = disambiguated.annotations.exists(_.name == "system")
-    val args: List[String] = visitArguments(ctx)(Some(disambiguated), x.args)
-    if (isSystem) ctx << visitSystemCall(ctx, x.target, disambiguated, args)
-    else ctx << x.target << visitSpecialization(ctx, x) << "(" << (args, ", ") << ")"
+    if (isSystem) {
+      ctx << visitSystemCall(ctx, x.target, disambiguated, x.args)
+    }
+    else {
+      ctx << x.target << visitSpecialization(ctx, x) << "(" << {
+        visitArguments(ctx)(Some(disambiguated), x.args)
+      } << ")"
+    }
   }
 
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
@@ -255,7 +271,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << s"${typeFor(ctx, x.declaredType)} ${nameFor(ctx, x)}" << x.initialValue.map(_ => " = ") << x.initialValue << ";"
+    ctx << s"${typeFor(ctx, x.declaredType)} ${nameFor(ctx, x)}" << x.initialValue.map(_ => "= ") << x.initialValue << ";"
   }
 
   override def visitTemplateArgument(ctx: CodeGenerationContext, x: EirTemplateArgument): Unit = {
@@ -301,7 +317,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
-   if (x.annotations.exists(_.name == "system")) return ""
+   if (x.annotations.exists(_.name == "system")) return
    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
         List(s"static ${templatedNameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);")
@@ -309,10 +325,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
-             else s"PUPable_decl_inside_template(${templatedNameFor(ctx, x)});",
-            s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
-            "virtual ergoline::puppable* toPuppable() override { return this; }") ++
-        Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
+        else s"PUPable_decl_inside_template(${templatedNameFor(ctx, x)});",
+          s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
+          "virtual ergoline::puppable* toPuppable() override { return this; }") ++
+          Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
       }
     } << x.members << s"};"
   }
@@ -432,17 +448,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t: EirProxyType => t.collective
       case _ => None
     }).exists(_.startsWith("array"))
-    val args: List[String] = {
-      val t: List[String] = visitArguments(ctx)(x.disambiguation, x.args)
-      if (moveHeadToLast && t.nonEmpty) t.tail :+ t.head else t
+    val args = {
+      if (moveHeadToLast && x.args.nonEmpty) x.args.tail :+ x.args.head
+      else x.args
     }
     // TODO fixme
-//    objTy match {
-//      case _: EirProxyType | _: EirProxy =>
-//        nameFor(ctx, objTy) + s"::ckNew(${args mkString ", "})"
-//      case t: EirType if t.isPointer => s"std::make_shared<${nameFor(ctx, t)}>(${args mkString ", "})"
-//      case _ => visitNew(ctx, x)
-//    }
+    objTy match {
+      case _: EirProxyType | _: EirProxy =>
+        ctx << nameFor(ctx, objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, x.args) << ")"
+      case t: EirType if t.isPointer => ctx << s"std::make_shared<${nameFor(ctx, t)}>(" << visitArguments(ctx)(x.disambiguation, x.args) << ")"
+      case _ => ctx << "new" << typeFor(ctx, objTy) << "(" << visitArguments(ctx)(x.disambiguation, x.args) << ")"
+    }
   }
 
   override def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
@@ -557,9 +573,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isUnit = x.foundType.contains(globals.typeFor(EirLiteralTypes.Unit))
     val argTy = typeFor(ctx, x.expression.foundType.get)
     val retTy = typeFor(ctx, x.foundType.get)
-    ctx << s"([&]($argTy ${temporary(ctx)}) -> $retTy" << "{" << {
-      x.cases.map(visitMatchCase(ctx, _, isUnit))
-    } << s"})(" << x.expression << ")"
+    ctx << s"([&]($argTy ${temporary(ctx)}) -> $retTy" << "{" << x.cases << "})(" << x.expression << ")"
   }
 
   def visitPatternDecl(ctx: CodeGenerationContext, x: EirPattern, current: String): String = {
@@ -635,7 +649,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
-    ctx << visitMatchCase(ctx, x, false)
+//    ctx << visitMatchCase(ctx, x, false)
   }
 
   override def visitPatternList(ctx: CodeGenerationContext, x: EirPatternList): Unit = ???
@@ -655,7 +669,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTemplatedType(ctx: CodeGenerationContext, x: EirTemplatedType): Unit = ???
 
   override def visitBlock(ctx: CodeGenerationContext, x: EirBlock): Unit = {
-    ctx << "{" << /* (x.children, ";") << */ "}"
+    ctx << "{" << {
+      for (child <- x.children) {
+        ctx << child
+        ctx.appendSemi()
+      }
+    } << "}"
   }
 
   override def visitNamespace(ctx: CodeGenerationContext, x: EirNamespace): Unit = {
@@ -671,10 +690,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitAssignment(ctx: CodeGenerationContext, x: EirAssignment): Unit = {
-    ctx << x.lval << x.op << x.rval << ";"
+    ctx << x.lval << x.op << x.rval
   }
 
   override def visitReturn(ctx: CodeGenerationContext, x: EirReturn): Unit = {
-    ctx << "return " << x.expression << ";"
+    ctx << "return" << x.expression
   }
 }
