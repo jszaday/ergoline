@@ -30,14 +30,14 @@ import ergoline::_;
 
 class lion with animal {
     def lion(): unit { }
-    def vocalization(): string { return "roars"; }
-    def species(): string { return "lion"; }
+    override def vocalization(): string { return "roars"; }
+    override def species(): string { return "lion"; }
 }
 
 class duck with bird {
     def duck(): unit { }
-    def vocalization(): string { return "quacks"; }
-    def species(): string { return "duck"; }
+    override def vocalization(): string { return "quacks"; }
+    override def species(): string { return "duck"; }
 }
 
 trait bird with animal { }

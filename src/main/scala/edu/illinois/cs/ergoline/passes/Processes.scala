@@ -43,7 +43,9 @@ object Processes {
 
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext
-    EirGlobalNamespace.children.filterNot(_.name == "ergoline").foreach(GenerateCpp.visit(ctx, _))
+    val kids = EirGlobalNamespace.children.filterNot(_.name == "ergoline")
+//    kids.foreach(GenerateDecls.visit(ctx, _))
+    kids.foreach(GenerateCpp.visit(ctx, _))
     println(ctx.toString)
     Nil
 //    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)

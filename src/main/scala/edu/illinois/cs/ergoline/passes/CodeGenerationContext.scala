@@ -10,6 +10,10 @@ class CodeGenerationContext {
   var lines: List[String] = Nil
   val current: StringBuilder = new StringBuilder
 
+  def nameFor(node: EirNode): Unit = {
+    this << GenerateCpp.nameFor(this, node)
+  }
+
   def appendSemi(): Unit = {
     if (current.nonEmpty && !current.endsWith(";")) this << ";"
   }

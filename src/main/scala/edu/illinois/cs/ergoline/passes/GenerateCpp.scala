@@ -317,20 +317,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
-   if (x.annotations.exists(_.name == "system")) return
-   ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
-      if (x.isInstanceOf[EirTrait]) {
-        List(s"static ${templatedNameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);")
-      } else {
-        makePupper(ctx, x)
-        // TODO PUPable_decl_base_template
-        List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
-        else s"PUPable_decl_inside_template(${templatedNameFor(ctx, x)});",
-          s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
-          "virtual ergoline::puppable* toPuppable() override { return this; }") ++
-          Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
-      }
-    } << x.members << s"};"
+    if (x.templateArgs.isEmpty) {
+      ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
+    }
   }
 
   override def visitMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
@@ -348,11 +337,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     })
   }
 
+  def visitFunction(ctx: CodeGenerationContext, x: EirFunction, isMember: Boolean): Unit = {
+    val member = x.parent.to[EirMember]
+    val parent = member.flatMap(_.parent).to[EirClassLike]
+    val isConstructor = member.exists(_.isConstructor)
+    val retTy = Option.when(!isConstructor)(typeFor(ctx, x.returnType))
+    val name = (parent match {
+      case Some(classLike) if !isMember => nameFor(ctx, classLike) + "::"
+      case _ => ""
+    }) + nameFor(ctx, x)
+    val virtual = Option.when(member.exists(_.isVirtual))("virtual")
+    if (virtual.isDefined && x.body.isEmpty && !isMember) {
+      return
+    }
+    ctx << retTy << name << "(" << (x.functionArgs, ", ") << ")"
+    ctx << (x.body, if (virtual.isDefined) " = 0;" else ";")
+  }
+
   override def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit = {
-    val virtual =
-      Option.when(x.parent.to[EirMember].exists(_.isVirtual))("virtual")
-    ctx << virtual << typeFor(ctx, x.returnType) << nameFor(ctx, x) << "(" << (x.functionArgs, ", ") << ")" <<
-      (x.body, if (virtual.isDefined) " = 0;" else ";")
+      visitFunction(ctx, x, isMember = false)
 //    if (visited.contains(x)) return ""
 //    else if (x.annotation("system").isDefined ||
 //      x.parent.exists(_.annotations.exists(_.name == "system"))) return ""
