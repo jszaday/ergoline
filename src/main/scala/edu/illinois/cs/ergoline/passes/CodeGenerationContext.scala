@@ -1,17 +1,38 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.EirNode
-import util.Properties.{lineSeparator => n}
-import UnparseAst.tab
-import scala.util.matching.Regex
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
+import edu.illinois.cs.ergoline.passes.UnparseAst.tab
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+
+import scala.collection.mutable
+import scala.util.Properties.{lineSeparator => n}
 
 class CodeGenerationContext {
 
   var lines: List[String] = Nil
+  val ignores: mutable.Stack[String] = new mutable.Stack[String]
   val current: StringBuilder = new StringBuilder
+
+  def ignoreNext(s: String): Unit = ignores.push(s)
 
   def nameFor(node: EirNode): Unit = {
     this << GenerateCpp.nameFor(this, node)
+  }
+
+  def typeFor(x: EirResolvable[EirType])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
+    typeFor(Find.uniqueResolution(x))
+  }
+
+  def typeFor(x: EirType)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
+    if (x.isPointer) this << "std::shared_ptr<"
+    try {
+      nameFor(x)
+    } catch {
+      case _: MatchError => visitor(this, x)
+    }
+    if (x.isPointer) this << ">"
   }
 
   def appendSemi(): Unit = {
@@ -46,7 +67,6 @@ class CodeGenerationContext {
     this
   }
 
-
   def <<(option: Option[String]): CodeGenerationContext = {
     option.map(this << _).getOrElse(this)
   }
@@ -58,9 +78,13 @@ class CodeGenerationContext {
   }
 
   def <<(value: String): CodeGenerationContext = {
+    if (ignores.headOption.contains(value)) {
+      ignores.pop()
+      return this
+    }
     if (value.startsWith("{") || value.endsWith("{")) {
       val curr = current.toString()
-      lines +:= curr + (if (curr.endsWith(" ")) "" else " ") + value
+      lines +:= curr + (if (curr.isEmpty || curr.endsWith(" ")) "" else " ") + value
       current.clear()
     } else if (value.startsWith("}") || value.endsWith("}")) {
       if (current.nonEmpty) {
@@ -71,7 +95,7 @@ class CodeGenerationContext {
         if (isControl(value.last)) current.append(value)
         else lines +:= value
       }
-    } else if (value.endsWith(";")) {
+    } else if ((value.endsWith(";") || value.endsWith(n)) && !current.startsWith("for")) {
       lines +:= current + value
       current.clear()
     } else if (value.nonEmpty) {
@@ -100,7 +124,7 @@ class CodeGenerationContext {
     for (line <- reversed) {
 //      if ((line + t).length >= maxLineWidth) { }
       if (!line.matches(raw".*?\{.*\}$$")) {
-        if (line.endsWith("}") || line.endsWith("};") || line.startsWith("}")) numTabs -= 1
+        if (line.endsWith("}") || line.endsWith("};") || line.startsWith("}")) numTabs = Math.max(numTabs - 1, 0)
       }
       output.append(t).append(line).append(n)
       if (line.endsWith("{")) numTabs += 1

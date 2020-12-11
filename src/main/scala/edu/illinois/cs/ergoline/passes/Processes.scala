@@ -1,11 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirGlobalNamespace, EirNamespace, EirNode, EirSpecializable, EirSpecialization, EirTrait}
-import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
-
 import scala.util.Properties.{lineSeparator => n}
 
 object Processes {
@@ -18,7 +16,7 @@ object Processes {
     "tuple",
     "utility",
     "vector",
-    "#include \"generate.decl.h\""
+    "#include \"generate.decl.h\" // ;"
   )
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = ctx.checked
@@ -43,12 +41,28 @@ object Processes {
 
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext
+    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
     val kids = EirGlobalNamespace.children.filterNot(_.name == "ergoline")
-//    kids.foreach(GenerateDecls.visit(ctx, _))
+    val toDecl = checked.keys.collect({
+      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
+    }).toList.groupBy(x => {
+      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+    })
+    ctx << Seq("#include \"pup.h\" // ;") ++ (a.map(GenerateCpp.forwardDecl(ctx, _)) ++  Seq(n + GenerateCpp.systemClasses() + n))
+    toDecl.foreach({
+      case (namespace, classes) =>
+        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+          classes.foreach(GenerateCpp.forwardDecl(ctx, _))
+        } << "}"
+    })
+    ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+    a.foreach(GenerateProxies.visitProxy(ctx, _))
+    kids.foreach(GenerateDecls.visit(ctx, _))
     kids.foreach(GenerateCpp.visit(ctx, _))
-    println(ctx.toString)
+    c.foreach(GenerateProxies.visitProxy(ctx, _))
+    println()
     Nil
-//    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
+//
 //    val ctx = new UnparseContext("cpp")
 //    val body = a.map(GenerateCpp.visit(ctx, _)) ++
 //      EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit(ctx, _)) ++
@@ -72,15 +86,15 @@ object Processes {
 //        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
 //          classes.collect({ case t: EirTrait => t }).map(GenerateCpp.makeFromPuppable(ctx, _)).mkString(n) + s"$n}$n"
 //    })
-//    fwdDecls ++ a.map(GenerateCpp.forwardDecl(ctx, _)) ++
-//      Seq("#include \"pup.h\"") ++
-//      Seq(n + GenerateCpp.systemClasses() + n) ++
-//      cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x>") ++
-//      gathered ++ wrapup ++ Seq(
-//        "#define CK_TEMPLATES_ONLY",
-//        "#include \"generate.def.h\"",
-//        "#undef CK_TEMPLATES_ONLY",
-//        "#include \"generate.def.h\""
-//      )
+    ctx << List(
+      "#define CK_TEMPLATES_ONLY",
+      "#include \"generate.def.h\"",
+      "#undef CK_TEMPLATES_ONLY",
+      "#include \"generate.def.h\""
+    ).map(_ + "// ;")
+    List(ctx.toString)
+//    fwdDecls ++  ++
+//       ++
+//      gathered ++ wrapup ++
   }
 }

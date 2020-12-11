@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, templatedNameFor, typeFor, visitFunctionArgument, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, templatedNameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
@@ -22,7 +22,7 @@ object GenerateDecls {
   }
 
   def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << typeFor(ctx, x.declaredType) << nameFor(ctx, x) << ";"
+    ctx << ctx.typeFor(x.declaredType) << nameFor(ctx, x) << ";"
   }
 
   def visitNamespace(ctx: CodeGenerationContext, x: EirNamespace): Unit = {
@@ -33,7 +33,12 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
-        List(s"static ${templatedNameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);")
+        if (x.templateArgs.isEmpty) {
+          List(s"static ${nameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);")
+        } else {
+          // TODO fix to call makeFromPuppable
+          Nil
+        }
       } else {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template
@@ -48,12 +53,16 @@ object GenerateDecls {
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit = {
     val member = x.parent.to[EirMember]
+    if (member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined) {
+      return
+    }
     val parent = member.flatMap(_.parent).to[EirClassLike]
     val virtual = Option.when(member.exists(_.isVirtual))("virtual")
     val overrides = Option.when(member.exists(_.isOverride))(" override")
     val isConstructor = member.exists(_.isConstructor)
-    val retTy = Option.when(!isConstructor)(typeFor(ctx, x.returnType))
-    ctx << virtual << retTy << ctx.nameFor(x) << "(" << (x.functionArgs, ", ") << ")" << overrides
+    ctx << virtual << {
+      if (!isConstructor) ctx.typeFor(x.returnType)
+    } << ctx.nameFor(x) << "(" << (x.functionArgs, ", ") << ")" << overrides
     if ((parent.exists(_.templateArgs.nonEmpty) || x.templateArgs.nonEmpty) && x.body.isDefined) {
 //      GenerateCpp.visitFunction(ctx, x, isMember = true)
     } else {
