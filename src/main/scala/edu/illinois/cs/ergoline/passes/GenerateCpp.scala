@@ -184,13 +184,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case "index" =>
             proxy.flatMap(_.collective) match {
               case Some(ProxyManager.arrayPtn(dim)) =>
-                val idx = s"${visit(ctx, base)}.ckGetIndex().data()"
                 val tup = s"tuple<${List.fill(dim.toInt)("int") mkString ", "}>"
-                // TODO cast to tuple
-                if (dim == "1") s"($idx[0])" else {
-                  s"([&](int *idx) -> std::$tup { return std::make_$tup(${
-                    (0 until dim.toInt).indices.map("std::forward<int>(idx[" + _ + "])") mkString ", "});})(const_cast<int*>($idx))"
+                if (dim != "1") {
+                  ctx << s"([&](int *idx) -> std::$tup { return std::make_$tup(${
+                    (0 until dim.toInt).indices.map("std::forward<int>(idx[" + _ + "])") mkString ", "
+                  });})(const_cast<int*>"
                 }
+                ctx << "(" << base << ".ckGetIndex().data()" << (if (dim == "1") "[0])" else "))")
               case Some("nodegroup" | "group") => ctx << "(" << base << ".ckGetGroupPe())"
               case _ => error(ctx, target)
             }
@@ -499,7 +499,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitTupleType(ctx: CodeGenerationContext, x: types.EirTupleType): Unit = {
-    ctx << s"std::tuple<${x.children.map(ctx.typeFor(_) ) mkString ", "}>"
+    ctx << s"std::tuple<"
+    if (x.children.nonEmpty) {
+      for (t <- x.children.init) {
+        ctx << ctx.typeFor(t) << ","
+      }
+      ctx << ctx.typeFor(x.children.last)
+    }
+    ctx << ">"
   }
 
   override def visitArrayReference(ctx: CodeGenerationContext, arrayRef: EirArrayReference): Unit = {
