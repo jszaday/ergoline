@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirNamedNode, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirFunction, EirNamedNode, EirNode}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object Errors {
@@ -33,6 +33,11 @@ object Errors {
   }
 
   def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing = unableToUnify(ctx, Seq(a, b))
+
+  def missingBody(f: EirFunction): Nothing ={
+    Console.err.println(s"${contextualize(f)}: expected body for ${nameFor(f)}")
+    exitAction()
+  }
 
   def unableToUnify(ctx: EirNode, it : Iterable[EirType]): Nothing = {
     if (it.isEmpty) missingType(ctx)

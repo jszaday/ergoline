@@ -5,12 +5,13 @@ import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.util.assertValid
 
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCi {
 
-  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends UnparseContext("ci") {
+  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {
     val puppables: Iterable[EirSpecializable] = checked.keys.filter({
       case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract)
       case _ => false
@@ -19,50 +20,49 @@ object GenerateCi {
 
   def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
     val ctx = new CiUnparseContext(checked)
-    ctx.numTabs += 1
-    val body = ProxyManager.proxies
+    ctx << "mainmodule generate" << "{"
+    ProxyManager.proxies
       .filterNot(x => x.base.isAbstract || x.isElement)
       .map(x => (x.namespaces.toList, x))
       .groupBy(_._1)
-      .map({
+      .foreach({
         case (k, v) => visitNamespaces(ctx, k, v.map(_._2).toList)
-      }).mkString(n)
-    ctx.numTabs -= 1
-    s"mainmodule generate {$n$body}$n"
+      })
+    ctx << s"}"
+    ctx.toString
   }
 
-  def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): String = {
-    namespaces.map(ns => {
-      s"${n}namespace ${ns.name} {" ++
-      ctx.puppables.filter(x => ns.children.contains(x)).map(x => {
-        if (x.templateArgs.isEmpty) s"${n}PUPable ${GenerateCpp.nameFor(ctx, x)};"
-        else ctx.checked(x).map(y => s"${n}PUPable ${GenerateCpp.templatedNameFor(ctx, x, Some(y))};").mkString("")
-      }).mkString("")
-    }).mkString("") + n + {
-      proxies
-        .sortBy(!_.isMain)
-        .map(visit(ctx, _)).mkString("")
-    } + "}" + n
+  def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): Unit = {
+    namespaces.foreach(ns => {
+      ctx << s"namespace ${ns.name}" << "{"
+      ctx << ctx.puppables.filter(x => ns.children.contains(x)).flatMap(x => {
+        if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
+        else ctx.checked(x).map(y => s"PUPable ${
+          ctx.specialize(x, y)
+          val ret: String = GenerateCpp.nameFor(ctx, x)
+          ctx.leave(y)
+          ret
+        };")
+      })
+    })
+    proxies.sortBy(!_.isMain).foreach(visit(ctx, _))
+    namespaces.foreach(_ => ctx << "}")
   }
 
-  def visit(ctx: UnparseContext, proxy: EirProxy): String = {
-    val template: String = GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
-    val name = proxy.baseName
-    val header =
-      template + ctx.t + visitChareType(proxy.isMain, proxy.collective) + s" $name {$n"
-    ctx.numTabs += 1
-    val body = proxy.membersToGen.map(visit(ctx, proxy, _)).mkString(n)
-    ctx.numTabs -= 1
-    header + body + s"${ctx.t}};$n"
+  def visit(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
+    // TODO bring template args into consideration
+    // ctx << GenerateCpp.visitTemplateArgs(proxy.templateArgs)
+    ctx << visitChareType(proxy.isMain, proxy.collective) << proxy.baseName << "{" << {
+      proxy.membersToGen.foreach(visit(ctx, proxy, _))
+    } << "};"
   }
 
-  def visit(ctx: UnparseContext, proxy: EirProxy, f: EirMember): String = {
+  def visit(ctx: CiUnparseContext, proxy: EirProxy, f: EirMember): Unit = {
     if (proxy.isMain && f.isConstructor) {
-      s"${ctx.t} entry [nokeep] ${proxy.baseName}(CkArgMsg* msg);$n"
+      ctx << s"entry [nokeep]" << proxy.baseName << "(CkArgMsg* msg);"
     } else {
-      var body = GenerateCpp.visit(ctx, f.member)
-      if (f.isConstructor) body = body.replaceFirst(proxy.name, proxy.baseName)
-      s"${ctx.t} entry $body$n"
+      ctx << "entry"
+      GenerateCpp.visitFunction(ctx, assertValid[EirFunction](f.member), isMember = true)
     }
   }
 
