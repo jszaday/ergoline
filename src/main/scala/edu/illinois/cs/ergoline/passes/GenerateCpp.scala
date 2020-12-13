@@ -100,7 +100,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << x.target << (if (targetTy.isPointer) "->" else ".") << x.field
   }
 
-  override def visitLambdaType(ctx: CodeGenerationContext, x: types.EirLambdaType): Unit = "auto"
+  override def visitLambdaType(ctx: CodeGenerationContext, x: types.EirLambdaType): Unit = {
+    ctx << "auto"
+  }
 
   override def visitProxyType(ctx: CodeGenerationContext, x: types.EirProxyType): Unit =
     ctx << nameFor(ctx, Find.uniqueResolution(x))
@@ -238,7 +240,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) => {
-        ctx << s"for (" << (declaration, ";") << test << ";" << increment << ")" << x.body
+        ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
       }
       case _ => ???
     }
@@ -328,17 +330,30 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val parent = member.flatMap(_.parent).to[EirClassLike]
     val isConstructor = member.exists(_.isConstructor)
+    val overrides = Option.when(isMember && member.exists(_.isOverride))(" override")
+    if (!isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)) {
+      return
+    }
     val name = (parent match {
       case Some(classLike) if !isMember => nameFor(ctx, classLike) + "::"
       case _ => ""
     }) + nameFor(ctx, x)
-    val virtual = Option.when(member.exists(_.isVirtual))("virtual")
-    if (virtual.isDefined && x.body.isEmpty && !isMember) {
-      return
-    }
+    val virtual = Option.when(isMember && member.exists(_.isVirtual))("virtual")
+    ctx << virtual
     // TODO add templates when !isMember
     Option.when(!isConstructor)(ctx.typeFor(x.returnType))
-    ctx << name << "(" << (x.functionArgs, ", ") << ")"
+    ctx << name << "(" << (x.functionArgs, ", ") << ")" << overrides
+    if (isMember) {
+      if (virtual.nonEmpty && x.body.isEmpty) {
+        ctx << " = 0;"
+        return
+      } else if (!parent.exists(_.templateArgs.nonEmpty) && x.templateArgs.isEmpty) {
+        ctx << ";"
+        return
+      }
+    } else if (x.body.isEmpty) {
+      Errors.missingBody(x)
+    }
     ctx << {
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
       if (assignments.nonEmpty) {
@@ -349,7 +364,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val name = nameFor(ctx, arg)
         "this->" + name + "=" + name + ";"
       })
-    } << (x.body, if (virtual.isDefined) " = 0;" else ";")
+    } <||< (x.body, ";")
   }
 
   override def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit = visitFunction(ctx, x, isMember = false)
@@ -416,7 +431,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     objTy match {
       case _: EirProxyType | _: EirProxy =>
         ctx << nameFor(ctx, objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case t: EirType if t.isPointer => ctx << s"std::make_shared<${nameFor(ctx, t)}>(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << ctx.nameFor(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
       case _ => ctx << "new" << ctx.typeFor(objTy)  << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
     }
   }
@@ -428,53 +443,59 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << "})(" << x.expression << ")"
   }
 
-  def visitPatternDecl(ctx: CodeGenerationContext, x: EirPattern, current: String): String = {
+  def visitPatternDecl(x: EirPattern, current: String): String = {
+    val ctx = new CodeGenerationContext
     x match {
       case EirPatternList(_, ps) => ps match {
-        case p :: Nil => visitPatternDecl(ctx, p, current)
+        case p :: Nil => ctx << visitPatternDecl(p, current)
         case patterns =>
-          patterns.zipWithIndex.map({
-            case (p, idx) => visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
-          }).mkString("")
+          ctx << patterns.zipWithIndex.map({
+            case (p, idx) => visitPatternDecl(p, s"std::get<$idx>($current)")
+          })
       }
-      case i@EirIdentifierPattern(_, n, t) if n != "_" => ""
+      case i@EirIdentifierPattern(_, n, t) if n != "_" =>
       // TODO fixme
-//        val ty = Find.uniqueResolution(t)
-//        if (ty.isPointer) " " + visit(ctx, i.declarations.head).init + s" = std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current);"
-//        else " " + visit(ctx, i.declarations.head).init + s" = $current;"
+        val ty = Find.uniqueResolution(t)
+        ctx.ignoreNext(";")
+        if (ty.isPointer) ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current);"
+        else ctx << i.declarations.head << s" = $current;"
       case i: EirIdentifierPattern =>
-        if (i.name != "_") Errors.missingType(x) else ""
-      case _: EirExpressionPattern => ""
+        if (i.name != "_") Errors.missingType(x)
+      case _: EirExpressionPattern =>
       case _ => ???
+    }
+    ctx.toString
+  }
+
+  def visitPatternCond(x: EirPattern, current: String): List[String] = {
+    x match {
+      case EirPatternList(_, ps) => ps match {
+        case p :: Nil => visitPatternCond(p, current)
+        case patterns =>
+          patterns.zipWithIndex.flatMap {
+            case (p, idx) => visitPatternCond(p, s"std::get<$idx>($current)")
+          }
+      }
+      case EirIdentifierPattern(_, "_", _) => Nil
+      case EirIdentifierPattern(_, n, t) =>
+        Option.when(Find.uniqueResolution(t).isPointer)(n).toList
+      case e: EirExpressionPattern =>
+        val ctx = new CodeGenerationContext
+        (ctx << current << " == " << e.expression).toString.split(n).toList
     }
   }
 
-  def visitPatternCond(ctx: CodeGenerationContext, x: EirPattern, current: String): List[String] = {
-//    x match {
-//      case EirPatternList(_, ps) => ps match {
-//        case p :: Nil => visitPatternCond(ctx, p, current)
-//        case patterns =>
-//          patterns.zipWithIndex.flatMap {
-//            case (p, idx) => visitPatternCond(ctx, p, s"std::get<$idx>($current)")
-//          }
-//      }
-//      case EirIdentifierPattern(_, "_", _) => Nil
-//      case EirIdentifierPattern(_, n, t) =>
-//        Option.when(Find.uniqueResolution(t).isPointer)(n).toList
-//      case e: EirExpressionPattern =>
-//        List(s"$current == " << e.expression << ")")
-//    }
-    Nil
-  }
-
-  def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase, isUnit: Boolean): String = {
-//    val condition = x.condition.map(y => visit(ctx, y))
-//    val declarations = visitPatternDecl(ctx, x.patterns, temporary(ctx))
-//    val conditions = (condition ++ visitPatternCond(ctx, x.patterns, temporary(ctx))).mkString(" && ")
-//    val ifStmt = if (conditions.isEmpty) "" else s" if ($conditions)"
-//    val (primary, secondary) = (if (!isUnit) " return" else "", if (isUnit) " return;" else "")
-//    s"{$declarations$ifStmt {$primary ${x.body.map(visit(ctx, _)).getOrElse("")};$secondary } }"
-    ""
+  override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
+    val parent = x.parent.to[EirMatch]
+    val isUnit = parent.exists(_.foundType.contains(globals.typeFor(EirLiteralTypes.Unit)))
+    ctx << "{" << visitPatternDecl(x.patterns, temporary(ctx)).split(n)
+    val conditions = visitPatternCond(x.patterns, temporary(ctx)).mkString(" && ")
+    val needsIf = x.condition.nonEmpty || conditions.nonEmpty
+    if (needsIf) ctx << "if(" << x.condition << {
+      Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
+    } << conditions << ")" << "{"
+    val (primary, secondary) = (Option.when(!isUnit)(" return"), Option.when(isUnit)(" return;"))
+    ctx << primary << x.body << secondary << Option.when(needsIf)("}") << "}"
   }
 
   override def visitTupleType(ctx: CodeGenerationContext, x: types.EirTupleType): Unit = {
@@ -488,11 +509,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (args.length != 1 && !args.head.isInstanceOf[EirLiteral]) {
           Errors.invalidTupleIndices(args)
         } else {
-          ctx << s"std::get<${visit(ctx, args.head)}>(${visit(ctx, arrayRef.target)})"
+          ctx << s"std::get<" << args.head << ">(" << arrayRef.target << ")"
         }
       }
       case Some(t) if t.isInstanceOf[EirProxy] => {
-        ctx << s"${visit(ctx, arrayRef.target)}(${arrayRef.args.map(visit(ctx, _)) mkString ", "})"
+        ctx << arrayRef.target << "(" << (arrayRef.args, ",") << ")"
       }
       case Some(t) if !t.isPointer => // TODO fixme
       // super.visitArrayReference(ctx, arrayRef)
@@ -500,9 +521,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
-//    ctx << visitMatchCase(ctx, x, false)
-  }
 
   override def visitPatternList(ctx: CodeGenerationContext, x: EirPatternList): Unit = ???
 

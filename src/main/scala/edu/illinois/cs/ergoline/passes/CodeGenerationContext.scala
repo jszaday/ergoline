@@ -44,14 +44,15 @@ class CodeGenerationContext {
     this
   }
 
-  def <<(option: Option[EirNode], default: String)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
-    option match {
-      case Some(node) => this << node
-      case None => this << default
+  def <||<(t: (Option[EirNode], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+    t._1 match {
+      case Some(n) => this << n
+      case None => this << t._2
     }
   }
 
-  def <<(nodes: Iterable[EirNode], separator: String)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <<[T <: EirNode](t: (Iterable[T], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+    val (nodes: Iterable[EirNode], separator: String) = t
     if (nodes.nonEmpty) {
       for (node <- nodes.init) {
         visitor(this, node)
@@ -60,6 +61,12 @@ class CodeGenerationContext {
       visitor(this, nodes.last)
     }
     this
+  }
+
+
+  def << (t: (Iterable[String], String)): CodeGenerationContext = {
+    val (values: Iterable[String], separator: String) = t
+    this << (values mkString separator)
   }
 
   def <<(nodes: Iterable[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
@@ -110,13 +117,14 @@ class CodeGenerationContext {
     this
   }
 
-  def << (values: Iterable[String], separator: String): CodeGenerationContext = {
-    this << (values mkString separator)
-  }
 
   val maxLineWidth = 120
 
   override def toString: String = {
+    if (current.nonEmpty) {
+      lines +:= current.toString()
+      current.clear()
+    }
     val reversed = lines.reverse
     val output = new StringBuilder
     var numTabs = 0

@@ -3,7 +3,6 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, templatedNameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
@@ -51,22 +50,6 @@ object GenerateDecls {
     } << x.members << s"};"
   }
 
-  def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit = {
-    val member = x.parent.to[EirMember]
-    if (member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined) {
-      return
-    }
-    val parent = member.flatMap(_.parent).to[EirClassLike]
-    val virtual = Option.when(member.exists(_.isVirtual))("virtual")
-    val overrides = Option.when(member.exists(_.isOverride))(" override")
-    val isConstructor = member.exists(_.isConstructor)
-    ctx << virtual << {
-      if (!isConstructor) ctx.typeFor(x.returnType)
-    } << ctx.nameFor(x) << "(" << (x.functionArgs, ", ") << ")" << overrides
-    if ((parent.exists(_.templateArgs.nonEmpty) || x.templateArgs.nonEmpty) && x.body.isDefined) {
-//      GenerateCpp.visitFunction(ctx, x, isMember = true)
-    } else {
-      ctx << (x.body.map(_ => ";").orElse(virtual.map(_ => " = 0;")), ";")
-    }
-  }
+  def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =
+    GenerateCpp.visitFunction(ctx, x, isMember = true)
 }
