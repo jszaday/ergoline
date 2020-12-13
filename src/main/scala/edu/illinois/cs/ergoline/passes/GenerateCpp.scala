@@ -263,10 +263,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .filterNot(_.isInstanceOf[EirTrait]).toList
   }
 
-  def pupperFor(name: String, resolvable: EirResolvable[EirType]): String = {
+  def pupperFor(ctx: CodeGenerationContext, name: String, resolvable: EirResolvable[EirType]): String = {
     val ty = Find.uniqueResolution(resolvable)
-    "p | " + name +
-      (if (ty.isPointer) "->toPuppable();" else ";")
+    if (ty.isPointer) {
+      val typeName = nameFor(ctx, ty)
+      s"{ PUP::able* _ = (p.isUnpacking()) ? nullptr : $name->toPuppable(); p(&_); if (p.isUnpacking()) { $name.reset(dynamic_cast<$typeName*>(_)); } };"
+    }
+    else "p | " + name + ";"
   }
 
   def makePupper(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
@@ -279,7 +282,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
       }).map(d => {
-        pupperFor(nameFor(ctx, d), d.declaredType)
+        pupperFor(ctx, nameFor(ctx, d), d.declaredType)
       })
       parents ++ values
     } << s"}"
@@ -308,6 +311,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction, isMember: Boolean): Unit = {
     val member = x.parent.to[EirMember]
+    val langCi = ctx.language == "ci"
     if (member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined) {
       return
     }
@@ -317,15 +321,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (!isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)) {
       return
     }
-    val name = (parent match {
-      case Some(classLike) if !isMember => nameFor(ctx, classLike) + "::"
-      case _ => ""
-    }) + nameFor(ctx, x)
-    val virtual = Option.when(isMember && member.exists(_.isVirtual))("virtual")
+    val name = parent match {
+      case Some(p : EirProxy) if langCi && isConstructor => p.baseName
+      case Some(classLike) if !isMember => nameFor(ctx, classLike) + "::" + nameFor(ctx, x)
+      case _ => nameFor(ctx, x)
+    }
+    val virtual = Option.when(isMember && !langCi && member.exists(_.isVirtual))("virtual")
+    val dropCount = if (langCi && isConstructor) 1 else 0
     ctx << virtual
     // TODO add templates when !isMember
     Option.when(!isConstructor)(ctx.typeFor(x.returnType))
-    ctx << name << "(" << (x.functionArgs, ", ") << ")" << overrides
+    ctx << name << "(" << (x.functionArgs.drop(dropCount), ", ") << ")" << overrides
     if (isMember) {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
@@ -337,6 +343,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (x.body.isEmpty) {
       Errors.missingBody(x)
     }
+    val declarations = Option.when(isConstructor)(
+      parent.map(_.members).getOrElse(Nil).map(_.member).collect({
+        case d: EirDeclaration if d.initialValue.isDefined => d
+      })).toIterable.flatten
     ctx << {
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
       if (assignments.nonEmpty) {
@@ -346,6 +356,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       assignments.map(arg => {
         val name = nameFor(ctx, arg)
         "this->" + name + "=" + name + ";"
+      })
+    } << {
+      declarations.foreach(d => {
+        ctx << "this->" + nameFor(ctx, d) << "=" << d.initialValue << ";"
       })
     } <||< (x.body, ";")
   }
@@ -357,39 +371,47 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitBinaryExpression(ctx: CodeGenerationContext, x: EirBinaryExpression): Unit = {
-    ctx << x.lhs << x.op << x.rhs
+    ctx << "(" << x.lhs << x.op << x.rhs << ")"
   }
 
   def nameFor(ctx: CodeGenerationContext, x : EirNode): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
+    val dealiased = alias.orElse(x match {
+      case n: EirNamedNode => Some(n.name)
+      case _ => None
+    })
     x match {
       case x: EirTemplateArgument =>
         ctx.hasSubstitution(x) match {
           case Some(t) => nameFor(ctx, t)
-          case None => x.name
+          case None => dealiased.get
         }
       case x: EirTemplatedType => nameFor(ctx, Find.uniqueResolution(x.base)) + "<" + {
         x.args.map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _)).mkString(", ")
       } + ">"
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
-        x.name + (if (subst.forall(_.isDefined)) {
+        dealiased.get + (if (subst.forall(_.isDefined)) {
            "<" + subst.map(x => nameFor(ctx, x.get)).mkString(", ") + ">"
         } else "")
-      case _ if alias.isDefined => alias.get
       case p : EirProxy =>
         val prefix =
           if (p.isElement) "CProxyElement_" else "CProxy_"
         prefix + p.baseName
-      case n: EirNamedNode => n.name
+      case _: EirNamedNode => dealiased.get
     }
   }
 
   override def visitFunctionArgument(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
+    val langCi = ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
-    // { if (x.isFinal) s"const " else "" } + visit(ctx, x.declaredType) + "&"
-    ctx << ctx.typeFor(declTy) << ctx.nameFor(x)
+    if (langCi && declTy.isPointer) ctx << "CkPointer<" + {
+      if (declTy.isInstanceOf[EirTrait]) "ergoline::puppable"
+      else nameFor(ctx, declTy)
+    } + ">"
+    else ctx << ctx.typeFor(declTy)
+    ctx << ctx.nameFor(x)
   }
 
   override def visitTupleExpression(ctx: CodeGenerationContext, x: EirTupleExpression): Unit = {
@@ -483,7 +505,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
     val (primary, secondary) = (Option.when(!isUnit)(" return"), Option.when(isUnit)(" return;"))
-    ctx << primary << x.body << secondary << Option.when(needsIf)("}") << "}"
+    ctx << primary << x.body << ";" << secondary << Option.when(needsIf)("}") << "}"
   }
 
   override def visitTupleType(ctx: CodeGenerationContext, x: types.EirTupleType): Unit = {
@@ -529,7 +551,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitTernaryOperator(ctx: CodeGenerationContext, x: EirTernaryOperator): Unit = {
-    ctx << x.test << "?" << x.ifTrue << ":" << x.ifFalse
+    ctx << "(" << x.test << "?" << x.ifTrue << ":" << x.ifFalse << ")"
   }
 
   override def visitTemplatedType(ctx: CodeGenerationContext, x: EirTemplatedType): Unit = {

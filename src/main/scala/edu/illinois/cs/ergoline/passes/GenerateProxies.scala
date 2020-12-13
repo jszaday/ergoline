@@ -58,7 +58,7 @@ object GenerateProxies {
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     // TODO add destructor and pupper
     ctx << s"struct $name: public CBase_$name" << "{" << {
-      ctx << "void pup(PUP::er &p)" << "{" << pupperFor("impl_", x.base) << "}"; ()
+      ctx << "void pup(PUP::er &p)" << "{" << pupperFor(ctx, "impl_", x.base) << "}"; ()
     } << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))

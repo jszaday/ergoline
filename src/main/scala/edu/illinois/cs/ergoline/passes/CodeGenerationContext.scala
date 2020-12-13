@@ -9,7 +9,7 @@ import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
 
-class CodeGenerationContext {
+class CodeGenerationContext(val language: String = "cpp") {
 
   var lines: List[String] = Nil
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
