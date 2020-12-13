@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirMember, EirNode, EirTrait}
+import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTrait}
 import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.nameFor
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
@@ -57,9 +58,11 @@ object GenerateProxies {
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     // TODO add destructor and pupper
     ctx << s"struct $name: public CBase_$name" << "{" << {
+      ctx << "void pup(PUP::er &p)" << "{" << pupperFor("impl_", x.base) << "}"; ()
+    } << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))
-    } << s"$base *impl_;" << s"};"
+    } << ctx.typeFor(x.base) << s" impl_;" << s"};"
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
@@ -124,11 +127,18 @@ object GenerateProxies {
       } << ")" << "{" << {
         if (isConstructor && isMain) args.headOption.foreach(x => makeArgsVector(ctx, x.name))
         else args.foreach(makeSmartPointer(ctx))
-      } << {
-        if (isConstructor) s"this->impl_ = new $base(${(List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ")});"
+      }
+      if (isConstructor) {
+        ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
+          (List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+      } else {
         // TODO support non-void returns
-        else s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")});"
-      } << "}"
+        if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
+          ctx << "return "
+        }
+        ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")});"
+      }
+      ctx << "}"
   }
 
 }

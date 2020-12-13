@@ -60,32 +60,12 @@ object Processes {
     kids.foreach(GenerateDecls.visit(ctx, _))
     kids.foreach(GenerateCpp.visit(ctx, _))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
-    println()
-    Nil
-//
-//    val ctx = new UnparseContext("cpp")
-//    val body = a.map(GenerateCpp.visit(ctx, _)) ++
-//      EirGlobalNamespace.children.filterNot(_.name == "ergoline").map(GenerateCpp.visit(ctx, _)) ++
-//      c.map(GenerateCpp.visit(ctx, _))
-//    val grouped = body.map(_.trim).groupBy(x => x.substring(0, x.indexOf('{') + 1))
-//    val gathered = grouped.map(x => {
-//      x._1 + n + x._2.map(y => y.substring(x._1.length + 1, y.length - 1)).mkString("") + n + "}"
-//    })
-//    val toDecl = checked.keys.collect({
-//      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
-//    }).toList.groupBy(x => {
-//      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
-//    })
-//    val fwdDecls = toDecl.map({
-//      case (namespace, classes) =>
-//        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
-//          classes.map(GenerateCpp.forwardDecl(ctx, _)).mkString(n) + s"$n}$n"
-//    })
-//    val wrapup = toDecl.map({
-//      case (namespace, classes) =>
-//        s"namespace ${namespace.fullyQualifiedName.mkString("::")} {$n" +
-//          classes.collect({ case t: EirTrait => t }).map(GenerateCpp.makeFromPuppable(ctx, _)).mkString(n) + s"$n}$n"
-//    })
+    toDecl.foreach({
+    case (namespace, classes) =>
+      ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")} {" << {
+        classes.collect({ case t: EirTrait => t }).foreach(GenerateCpp.makeFromPuppable(ctx, _))
+      } << s"}"
+    })
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",
@@ -93,8 +73,5 @@ object Processes {
       "#include \"generate.def.h\""
     ).map(_ + "// ;")
     List(ctx.toString)
-//    fwdDecls ++  ++
-//       ++
-//      gathered ++ wrapup ++
   }
 }

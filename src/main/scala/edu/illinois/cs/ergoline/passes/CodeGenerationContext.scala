@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirNode
+import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
@@ -14,6 +14,26 @@ class CodeGenerationContext {
   var lines: List[String] = Nil
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
   val current: StringBuilder = new StringBuilder
+  private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
+
+  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
+    _substitutions += (s -> sp)
+    sp
+  }
+
+  def leave(ours: EirSpecialization): Unit = {
+    _substitutions = _substitutions.filterNot({
+      case (_, theirs) => ours == theirs
+    })
+  }
+
+  def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
+    _substitutions.flatMap({
+      case (sable, stion) => sable.templateArgs.zip(stion.specialization)
+    }).collectFirst({
+      case (arg, ty) if arg == t => Find.uniqueResolution(ty)
+    })
+  }
 
   def ignoreNext(s: String): Unit = ignores.push(s)
 
@@ -66,7 +86,13 @@ class CodeGenerationContext {
 
   def << (t: (Iterable[String], String)): CodeGenerationContext = {
     val (values: Iterable[String], separator: String) = t
-    this << (values mkString separator)
+    if (values.nonEmpty) {
+      for (value <- values.init) {
+        this << value << separator
+      }
+      this << values.last
+    }
+    this
   }
 
   def <<(nodes: Iterable[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
@@ -103,7 +129,7 @@ class CodeGenerationContext {
         else lines +:= value
       }
     } else if ((value.endsWith(";") || value.endsWith(n)) && !current.startsWith("for")) {
-      lines +:= current + value
+      lines +:= current.toString() + value
       current.clear()
     } else if (value.nonEmpty) {
       if (current.nonEmpty && !current.endsWith(" ") && !(isControl(value.head) || isControl(current.last))) current.append(" ")

@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, templatedNameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateDecls {
@@ -42,7 +42,7 @@ object GenerateDecls {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
-        else s"PUPable_decl_inside_template(${templatedNameFor(ctx, x)});",
+        else s"PUPable_decl_inside_template(${nameFor(ctx, x)});",
           s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
           "virtual ergoline::puppable* toPuppable() override { return this; }") ++
           Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
