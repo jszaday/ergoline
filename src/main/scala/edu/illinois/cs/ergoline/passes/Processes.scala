@@ -26,12 +26,13 @@ object Processes {
 
     for (x <- all) {
       FullyResolve.visit(x)
-      Find.classes(x.scope.getOrElse(x)).foreach(CheckClasses.visit)
 
       x match {
         case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
         case _ => CheckTypes.visit(ctx, x)
       }
+
+      all.collect{ case c: EirClassLike => c }.foreach(CheckClasses.visit)
     }
   }
 

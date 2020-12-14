@@ -1,0 +1,45 @@
+package examples;
+
+import ergoline::_;
+
+@main class main with acceptor {
+    val selfProxy: main@;
+
+    @entry def main(=selfProxy: main@, args: array<string>): unit {
+        val n: int = (args.size() > 1) ? args[1].toInt() : 0;
+        new fib@(selfProxy, (n > 16) ? n : 16);
+    }
+
+    @entry override def accept(x: int): unit {
+        println("result = " + x.toString());
+        exit();
+    }
+}
+
+class fib with acceptor {
+    var count: int = 0;
+    var value: int = 0;
+    val selfProxy: fib@;
+    val parent: acceptor@;
+
+    @entry def fib(=selfProxy: fib@, =parent: acceptor@, n: int): unit {
+        if (n > 1) {
+            new fib@(selfProxy, n - 1);
+            new fib@(selfProxy, n - 2);
+        } else {
+            parent.accept(n);
+        }
+    }
+
+    @entry override def accept(x: int): unit {
+        count += 1;
+        value += x;
+        if (count >= 2) {
+            parent.accept(value);
+        }
+    }
+}
+
+trait acceptor {
+    @entry def accept(x: int): unit;
+}

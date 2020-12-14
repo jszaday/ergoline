@@ -119,20 +119,15 @@ valueDeclaration
     ;
 
 variableDeclaration
-    :   VariableKeyword Identifier ':' type (Equals expression)? ';'
+    :   VariableKeyword Identifier (':' type)? (Equals expression)? ';'
     ;
 
-fieldValueDeclaration
-    :   ValueKeyword Identifier ':' type (Equals expression)? ';'
+fieldDeclaration
+    :   (ValueKeyword | VariableKeyword) Identifier ':' type (Equals expression)? ';'
     ;
 
 topLevelDeclaration
     :   valueDeclaration
-    |   variableDeclaration
-    ;
-
-fieldDeclaration
-    :   fieldValueDeclaration
     |   variableDeclaration
     ;
 

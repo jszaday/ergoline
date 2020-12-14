@@ -253,7 +253,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
-  override def visitFieldValueDeclaration(ctx: FieldValueDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
+  override def visitFieldDeclaration(ctx: FieldDeclarationContext): EirDeclaration =
+    visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = ctx.ValueKeyword() != null)
 
   override def visitVariableDeclaration(ctx: VariableDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = false)
 
