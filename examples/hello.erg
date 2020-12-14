@@ -23,13 +23,17 @@ class hello {
     @entry def main(selfProxy: main@, args: array<string>): unit {
        val n = (args.size() > 1) ? args[1].toInt() : 16;
        val first = ck::future<int>();
-       var curr: ck::future<int> = first;
+       var curr = first;
+       // chain n futures with first at the head
        for (var i: int = 0; i < n; i += 1) {
            val next = ck::future<int>();
+           // create a hello chare for each
            new hello@(curr, next);
            curr = next;
        }
+       // set the first future
        first.set(0);
+       // then we wait on the last
        selfProxy.wait(curr);
     }
 
