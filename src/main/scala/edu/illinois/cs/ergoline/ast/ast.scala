@@ -248,6 +248,7 @@ case class EirTrait(var parent: Option[EirNode], var members: List[EirMember],
 case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var accessibility: EirAccessibility.Value)
   extends EirNamedNode {
   var isOverride: Boolean = false
+  var isStatic: Boolean = false
 
   def isConstructor: Boolean =
     member.isInstanceOf[EirFunction] &&
@@ -271,8 +272,6 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 //      f.functionArgs.headOption.filter(arg => arg.name == "self").exists(_.isFinal)
 //    case _ => false
 //  }
-
-  def isStatic: Boolean = false
 
   def isVirtual: Boolean = member match {
     case f : EirFunction =>

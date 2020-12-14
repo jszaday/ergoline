@@ -2,12 +2,12 @@ package examples;
 
 import ergoline::_;
 
-@main class hello with acceptor {
-    val selfProxy: hello@;
+@main class main with acceptor {
+    val selfProxy: main@;
 
-    @entry def hello(=selfProxy: hello@): unit {
-        val n: int = 16;
-        new fib@(selfProxy, n);
+    @entry def main(=selfProxy: main@, args: array<string>): unit {
+        val n: int = (args.size() > 1) ? args[1].toInt() : 0;
+        new fib@(selfProxy, (n > 16) ? n : 16);
     }
 
     @entry override def accept(x: int): unit {

@@ -183,7 +183,10 @@ object Find {
         for (mid <- init.tail) {
           namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
         }
-        namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)))
+        namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)).map({
+          case fs : EirFileSymbol => fs.resolve().head.asInstanceOf[T]
+          case x => x
+        }))
     }
   }
 

@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckConstructors {
@@ -35,7 +36,7 @@ object CheckConstructors {
         throw new RuntimeException(s"$constructor does not fulfill all super constructors")
       }
       if (!selfAssignmentsOk(cls, constructor)) {
-        throw new RuntimeException(s"$constructor contains an invalid self-assignment")
+        throw new RuntimeException(s"${Errors.contextualize(constructor)} contains an invalid self-assignment")
       }
       if (!fulfillsMandatoryAssignments(needsInitialization, constructor)) {
         throw new RuntimeException(s"$constructor does not fulfill all mandatory assignments")

@@ -223,11 +223,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
+  // TODO fix to be context sensitive! Otherwise this gon' blow up!
+  var decls: Map[EirDeclaration, EirType] = Map()
+
   override def visitDeclaration(ctx: TypeCheckContext, node: EirDeclaration): EirType = {
+    if (decls.contains(node)) return decls(node)
     val lval =
       Option.when(!node.declaredType.isInstanceOf[EirPlaceholder[_]])(visit(ctx, node.declaredType))
     val rval = node.initialValue.map(visit(ctx, _))
-    (lval, rval) match {
+    val ty = (lval, rval) match {
       case (None, None) => Errors.missingType(node)
       case (Some(a), None) => a
       case (None, Some(b)) => {
@@ -239,6 +243,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         else Errors.cannotCast(node, b, a)
       }
     }
+    decls += (node -> ty)
+    ty
   }
 
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
@@ -381,21 +387,29 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   final case class MissingSpecializationException(message: String, node: EirSpecializable) extends Exception(message)
 
+  def visitSpecializedFunction(ctx: TypeCheckContext, f: EirFunction, x: EirSpecialization): EirType = {
+    if (f.templateArgs.length != x.specialization.length) {
+      error(ctx, x, "template length mismatch")
+    }
+    val enter = ctx.specialize(f, x)
+    val result = visitFunction(ctx, f)
+    result.from = result.from.map(visit(ctx, _))
+    result.to = visit(ctx, result.to)
+    result.templateArgs = Nil
+    ctx.leave(enter)
+    result
+  }
+
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
+    // TODO iterate through overloads
     val specializable = Find.uniqueResolution(x.symbol)
     specializable.asInstanceOf[Any] match {
       case c : EirClassLike if c.templateArgs.length == x.specialization.length => EirTemplatedType(Some(x), c, x.specialization)
       // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
-      case EirMember(_, f : EirFunction, _) if f.templateArgs.length == x.specialization.length =>
-        val enter = ctx.specialize(f, x)
-        val result = visitFunction(ctx, f)
-        result.from = result.from.map(visit(ctx, _))
-        result.to = visit(ctx, result.to)
-        result.templateArgs = Nil
-        ctx.leave(enter)
-        result
+      case EirMember(_, f : EirFunction, _) => visitSpecializedFunction(ctx, f, x)
+      case f: EirFunction => visitSpecializedFunction(ctx, f, x)
       case _ => error(ctx, x, "i'm still stupid")
-    }
+      }
   }
 
   override def visitIfElse(ctx: TypeCheckContext, x: EirIfElse): EirType = {
