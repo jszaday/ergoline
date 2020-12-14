@@ -75,10 +75,10 @@ object Find {
       }
   }
 
-  def classes(n : EirNode): Iterable[EirClassLike] = {
-    Option.when(n.isInstanceOf[EirClassLike])(n.asInstanceOf[EirClassLike]) ++
-      n.children.flatMap(classes)
-  }
+//  def classes(n : EirNode): Iterable[EirClassLike] = {
+//    Option.when(n.isInstanceOf[EirClassLike])(n.asInstanceOf[EirClassLike]) ++
+//      n.children.flatMap(classes)
+//  }
 
   def annotatedWith[T <: EirNode : Manifest](scope: EirScope, name: String): Iterable[T] = {
     Find.within[T](scope, _.annotations.exists(_.name == name))

@@ -178,7 +178,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               case Some("nodegroup" | "group") => ctx << "(" << base << ".ckGetGroupPe())"
               case _ => error(ctx, target)
             }
-          case "parent" => ctx << s"(CProxy_${proxy.get.baseName}(" << base << ".ckGetArrayID()))"
+          case "parent" => ctx << s"(CProxy_${proxy.get.baseName}(" << base << {
+            proxy.get.collective match {
+              case Some("group" | "nodegroup") => ".ckGetGroupID()))"
+              case Some(s) if s.startsWith("array") => ".ckGetArrayID()))"
+            }
+          }
           case _ => error(ctx, target)
         }
       case _ : EirMember if static => ctx << s"$name(" << {
@@ -349,7 +354,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       })).toIterable.flatten
     ctx << {
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
-      if (assignments.nonEmpty) {
+      if (assignments.nonEmpty || declarations.nonEmpty) {
         ctx << "{"
         ctx.ignoreNext("{")
       }
@@ -450,7 +455,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def temporary(ctx: CodeGenerationContext) = "_"
 
   override def visitMatch(ctx: CodeGenerationContext, x: EirMatch): Unit = {
-//    val isUnit = x.foundType.contains(globals.typeFor(EirLiteralTypes.Unit))
     ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << "})(" << x.expression << ")"
   }
 
@@ -477,16 +481,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx.toString
   }
 
-  def visitPatternCond(x: EirPattern, current: String): List[String] = {
+  def visitPatternCond(x: EirPattern, current: String, parentType: Option[EirType]): List[String] = {
     x match {
       case EirPatternList(_, ps) => ps match {
-        case p :: Nil => visitPatternCond(p, current)
+        case p :: Nil => visitPatternCond(p, current, parentType)
         case patterns =>
           patterns.zipWithIndex.flatMap {
-            case (p, idx) => visitPatternCond(p, s"std::get<$idx>($current)")
+            case (p, idx) => visitPatternCond(p, s"std::get<$idx>($current)", parentType)
           }
       }
-      case EirIdentifierPattern(_, "_", _) => Nil
+      case EirIdentifierPattern(_, "_", t) => {
+        if (parentType.contains(t)) Nil
+        else {
+          val ctx = new CodeGenerationContext
+          List(s"std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current)")
+        }
+      }
       case EirIdentifierPattern(_, n, t) =>
         Option.when(Find.uniqueResolution(t).isPointer)(n).toList
       case e: EirExpressionPattern =>
@@ -497,14 +507,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
     val parent = x.parent.to[EirMatch]
-    val isUnit = parent.exists(_.foundType.contains(globals.typeFor(EirLiteralTypes.Unit)))
+    val parentType = parent.flatMap(_.foundType)
+    val isUnit = parentType.contains(globals.typeFor(EirLiteralTypes.Unit))
     ctx << "{" << visitPatternDecl(x.patterns, temporary(ctx)).split(n)
-    val conditions = visitPatternCond(x.patterns, temporary(ctx)).mkString(" && ")
+    val conditions = visitPatternCond(x.patterns, temporary(ctx), parentType).mkString(" && ")
     val needsIf = x.condition.nonEmpty || conditions.nonEmpty
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
-    val (primary, secondary) = (Option.when(!isUnit)(" return"), Option.when(isUnit)(" return;"))
+    val (primary, secondary) = (Option.when(!isUnit)(" return"), Option.when(isUnit)("return;"))
     ctx << primary << x.body << ";" << secondary << Option.when(needsIf)("}") << "}"
   }
 
@@ -528,7 +539,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           ctx << s"std::get<" << args.head << ">(" << arrayRef.target << ")"
         }
-      case Some(t) if t.isInstanceOf[EirProxy] =>
+      case Some(t : EirProxy) if t.collective.exists(_.startsWith("array")) =>
         ctx << arrayRef.target << "(" << (arrayRef.args, ",") << ")"
       case Some(t) if !t.isPointer =>
         ctx << arrayRef.target

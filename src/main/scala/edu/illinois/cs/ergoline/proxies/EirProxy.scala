@@ -59,16 +59,19 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   }
 
   private def genCollectiveMembers(): List[EirMember] = {
-    val idx = indices.get
+    val idx: List[EirType] = indices.get
     val u = globals.typeFor(EirLiteralTypes.Unit)
     val eleTy = ProxyManager.elementFor(this).get
+    val needsIndex = collective.exists(_.startsWith("array"))
     base.members
       .filter(x => x.isEntry && x.isConstructor && validConstructor(x))
       .map(m => {
         val args = m.member.asInstanceOf[EirFunction].functionArgs.drop(1).map(_.declaredType)
-        util.makeMemberFunction(this, baseName, idx ++ args, u, isConst = false)
-      }) ++ List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false),
-      util.makeMemberFunction(this, "get", idx, eleTy, isConst = true))
+        util.makeMemberFunction(this, baseName, (if (needsIndex) idx else Nil) ++ args, u, isConst = false)
+      }) ++ {
+        if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false))
+        else Nil
+      } :+ util.makeMemberFunction(this, "get", idx, eleTy, isConst = true)
   }
 
   override def members: List[EirMember] = {

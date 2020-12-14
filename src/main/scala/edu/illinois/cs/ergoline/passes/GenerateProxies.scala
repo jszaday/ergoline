@@ -56,7 +56,6 @@ object GenerateProxies {
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val base = nameFor(ctx, x.base)
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
-    // TODO add destructor and pupper
     ctx << s"struct $name: public CBase_$name" << "{" << {
       ctx << "void pup(PUP::er &p)" << "{" << pupperFor(ctx, "impl_", x.base) << "}"; ()
     } << {
@@ -132,7 +131,6 @@ object GenerateProxies {
         ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
           (List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
       } else {
-        // TODO support non-void returns
         if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }

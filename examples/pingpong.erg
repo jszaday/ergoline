@@ -1,0 +1,69 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+class pong with message {
+    def pong() { }
+    override def action() {
+        println("pong on " + ck::myPe().toString());
+    }
+}
+
+class ping with message {
+    def ping() { }
+    override def action() {
+        println("ping on " + ck::myPe().toString());
+    }
+}
+
+class pingpong {
+    val selfProxy: pingpong[@]group;
+    val mainProxy: main@;
+    val pongCount: int = 0;
+
+    @entry def pingpong(=selfProxy: pingpong[@]group, =mainProxy: main@) {
+        // broadcast a ping to all members of the group
+        selfProxy.parent().receive(selfProxy.index(), new ping());
+    }
+
+    private def notePong() {
+        pongCount += 1;
+    }
+
+    private def sendPong(to: int) {
+        val peer = (selfProxy.parent())[to];
+        peer.receive(selfProxy.index(), new pong());
+    }
+
+    @entry def receive(from: int, msg: message) {
+        match (msg) {
+            case _: ping => sendPong(from);
+            case _: pong => notePong();
+        }
+
+        msg.action();
+
+        if (pongCount >= ck::numPes()) {
+            mainProxy.finished();
+        }
+    }
+}
+
+@main class main {
+    val count: int = 0;
+
+    @entry def main(selfProxy: main@, args: array<string>) {
+        new pingpong@group(selfProxy);
+    }
+
+    @entry def finished() {
+        count += 1;
+
+        if (count >= ck::numPes()) {
+            exit();
+        }
+    }
+}
+
+trait message { def action(); }

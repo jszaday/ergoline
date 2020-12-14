@@ -11,7 +11,10 @@ object CheckConstructors {
 
   def checkConstructorsWithin(module: EirScope): Int = {
     var numChecked = 0
-    val pairs = constructorsByClassIn(module)
+    val classes = Find.within[EirClassLike](module, _ => true)
+    val pairs = classes.map(c => {
+      (c, c.members.filter(_.isConstructor))
+    })
     for ((cls, constructors) <- pairs) {
       numChecked += Math.max(1, checkConstructors(cls, constructors))
     }
@@ -40,11 +43,6 @@ object CheckConstructors {
     }
     constructors.length
   }
-
-  def constructorsByClassIn(scope: EirScope): Iterable[(EirClassLike, List[EirMember])] =
-    Find.classes(scope).map(c => {
-      (c, c.findWithin[EirMember](_.isConstructor).toList)
-    })
 
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = {
     true
