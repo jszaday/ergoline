@@ -454,6 +454,13 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     null
   }
 
+  override def visitWhileLoop(ctx: WhileLoopContext): EirWhileLoop = {
+    enter(EirWhileLoop(parent, null, null), (l: EirWhileLoop) => {
+      l.condition = Option(ctx.expression()).map(visitAs[EirExpressionNode])
+      l.body = Option(ctx.block()).map(visitBlock).getOrElse(AstManipulation.encloseNodes(visitStatement(ctx.statement())))
+    })
+  }
+
   override def visitForLoop(ctx: ForLoopContext): EirForLoop = {
     enter(EirForLoop(parent, null, null), (f: EirForLoop) => {
       visitLoopHeader(ctx.loopHeader())

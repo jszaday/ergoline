@@ -563,6 +563,11 @@ case class EirForAllHeader(var parent: Option[EirNode], var identifiers: List[St
   }
 }
 
+case class EirWhileLoop(var parent: Option[EirNode], var condition: Option[EirExpressionNode], var body: EirBlock) extends EirNode {
+  override def children: Iterable[EirNode] = condition ++ List(body)
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader, var body: EirBlock) extends EirNode with EirScope {
   override def children: Iterable[EirNode] = header.children ++ List(body)
 

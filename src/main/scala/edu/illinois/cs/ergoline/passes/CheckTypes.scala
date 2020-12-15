@@ -423,6 +423,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
+  override def visitWhileLoop(ctx: TypeCheckContext, x: EirWhileLoop): EirType = {
+    val exprTy = x.condition.map(visit(ctx, _))
+    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
+    if (!exprTy.forall(_.canAssignTo(boolean))) {
+      Errors.cannotCast(x, exprTy.get, boolean)
+    }
+    visit(ctx, x.body)
+  }
+
   private def constructorDropCount(c : EirType): Int = {
     c match {
       case p: EirProxy if p.collective.isEmpty && !p.isElement => 1

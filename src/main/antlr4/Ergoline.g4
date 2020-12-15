@@ -26,6 +26,7 @@ statement
     :   assignment ';'
     |   block
     |   forLoop
+    |   whileLoop
     |   function
     |   ifThenElse
     |   matchStatement
@@ -64,6 +65,10 @@ identifierList
 loopHeader
     :   (identifierList | '(' identifierList ')') '<-' expression
     |   (variableDeclaration? | ';') test=expression? ';' assignment?
+    ;
+
+whileLoop
+    :   'while' '(' expression ')' (block | statement)
     ;
 
 forLoop

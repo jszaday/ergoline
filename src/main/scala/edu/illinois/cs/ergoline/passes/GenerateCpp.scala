@@ -160,6 +160,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val proxy = disambiguated.parent.to[EirProxy]
     val system = disambiguated.annotation("system").get
     val static = system("static").exists(_.value.toBoolean)
+    val invert = system("invert").exists(_.value.toBoolean)
+    val invOp = if (invert) "!" else ""
     val cast = system("cast").exists(_.value.toBoolean)
     val name = system("alias").map(_.stripped).getOrElse(nameFor(ctx, disambiguated))
     disambiguated.asInstanceOf[EirNamedNode] match {
@@ -195,7 +197,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (name == "apply") ctx << base << s"(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
         else {
           val fqnOrDot = if (m.isStatic) "::" else "."
-          ctx << base << s"$fqnOrDot$name(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
+          ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
         }
       case f : EirFunction if f.name == "println" =>
         ctx << "CkPrintf(\"%s\\n\", " << "(" << {
@@ -243,6 +245,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
       case _ => ???
     }
+  }
+
+  override def visitWhileLoop(ctx: CodeGenerationContext, x: EirWhileLoop): Unit = {
+    ctx << s"while (" << x.condition << ")" << x.body
   }
 
   override def visitLiteral(ctx: CodeGenerationContext, x: EirLiteral): Unit = {

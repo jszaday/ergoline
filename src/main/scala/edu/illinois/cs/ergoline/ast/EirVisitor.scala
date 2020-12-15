@@ -32,6 +32,7 @@ trait EirVisitor[Context, Value] {
       case x: EirSymbol[_] => visitSymbol(ctx, x)
       case x: EirLiteral => visitLiteral(ctx, x)
       case x: EirForLoop => visitForLoop(ctx, x)
+      case x: EirWhileLoop => visitWhileLoop(ctx, x)
       case x: EirFunctionCall => visitFunctionCall(ctx, x)
       case x: EirImport => visitImport(ctx, x)
       case x: EirTupleType => visitTupleType(ctx, x)
@@ -97,6 +98,7 @@ trait EirVisitor[Context, Value] {
 
   def visitFunctionCall(ctx: Context, x: EirFunctionCall): Value
 
+  def visitWhileLoop(ctx: Context, x: EirWhileLoop): Value
   def visitForLoop(ctx: Context, x: EirForLoop): Value
 
   def visitLiteral(ctx: Context, x: EirLiteral): Value

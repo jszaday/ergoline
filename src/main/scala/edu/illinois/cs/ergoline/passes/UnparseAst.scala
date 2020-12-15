@@ -182,6 +182,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitLiteral(ctx: UnparseContext, value: EirLiteral): String = value.value
 
+  override def visitWhileLoop(ctx: UnparseContext, loop: EirWhileLoop): String =
+    s"while (${loop.condition.map(visit(ctx, _)).getOrElse("")}) ${visit(ctx, loop.body)}"
+
   override def visitForLoop(ctx: UnparseContext, loop: EirForLoop): String = {
     val header: String = loop.header match {
       case EirCStyleHeader(declaration, test, increment) =>

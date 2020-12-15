@@ -1,0 +1,17 @@
+package ergoline;
+
+@system(alias="std::queue",fromHeader="queue")
+class queue<A> {
+    @system(alias="front")
+    def head(): A;
+    @system(alias="back")
+    def last(): A;
+    @system(alias="empty")
+    def isEmpty(): bool;
+    @system(alias="empty",invert=true)
+    def nonEmpty(): bool;
+    @system def push(a: A);
+    @system def pop();
+    @system def size(): int;
+    @system def apply(): queue<A>;
+}
