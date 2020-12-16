@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirNamedNode, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirNamedNode, EirNode, EirSpecializable}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object Errors {
@@ -62,6 +62,16 @@ object Errors {
 
   def missingNamespace(node: EirNode): Nothing = {
     Console.err.println(s"${contextualize(node)}: could not find the namespace of $node")
+    exitAction()
+  }
+
+  def invalidParentClass(a: EirClassLike, b: EirClassLike, hint: String = ""): Nothing = {
+    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} cannot be used as a parent class for ${nameFor(b)}${if (hint.nonEmpty) ", " + hint else "."}")
+    exitAction()
+  }
+
+  def missingSpecialization(a: EirSpecializable): Nothing = {
+    Console.err.println(s"${contextualize(a)}: missing specialization for ${nameFor(a)}.")
     exitAction()
   }
 }

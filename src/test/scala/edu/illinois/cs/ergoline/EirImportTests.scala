@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline
 
+import edu.illinois.cs.ergoline.EirImportTests.setupEnv
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
 import edu.illinois.cs.ergoline.resolution.Modules
@@ -7,12 +8,17 @@ import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
-class EirImportTests extends FunSuite {
-  globals.strict = true
-  Errors.exitAction = () => throw new RuntimeException("")
-
-  test("built-in types are resolvable") {
+object EirImportTests{
+  def setupEnv(): Unit = {
+    globals.strict = true
+    Errors.exitAction = () => throw new RuntimeException("")
     EirGlobalNamespace.clear()
+  }
+}
+
+class EirImportTests extends FunSuite {
+  test("built-in types are resolvable") {
+    setupEnv()
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
@@ -28,7 +34,7 @@ class EirImportTests extends FunSuite {
   }
 
   test("tuple types work as expected") {
-    EirGlobalNamespace.clear()
+    setupEnv()
     val module = Modules.load("""
         |package foo;
         |import ergoline::_;
@@ -46,7 +52,7 @@ class EirImportTests extends FunSuite {
   }
 
   test("can resolve lambdas type-check") {
-    EirGlobalNamespace.clear()
+    setupEnv()
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
@@ -65,7 +71,7 @@ class EirImportTests extends FunSuite {
   }
 
   test("can resolve template types") {
-    EirGlobalNamespace.clear()
+    setupEnv()
     val module = Modules.load("""
       |package foo;
       |import ergoline::_;
@@ -83,7 +89,7 @@ class EirImportTests extends FunSuite {
   }
 
   test("check sophisticated and chained templates") {
-    EirGlobalNamespace.clear()
+    setupEnv()
     // TODO restore this to string::tryParse<...> and auto-generate lambda
     val module = Modules.load("""
       |package foo;

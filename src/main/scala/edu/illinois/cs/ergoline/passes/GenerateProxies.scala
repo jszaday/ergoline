@@ -42,7 +42,7 @@ object GenerateProxies {
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = nameFor(ctx, x)
-    val impls = x.derived.map(nameFor(ctx, _))
+    val impls = x.derived.map(nameFor(ctx, _)).toList
     ctx << s"struct $name" << "{" << s"int handle;" << {
         impls.zipWithIndex.flatMap({
           case (derived, idx) =>

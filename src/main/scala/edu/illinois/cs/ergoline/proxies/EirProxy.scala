@@ -13,8 +13,8 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   def isMain: Boolean =
     base.annotations.exists(_.name == "main") && collective.isEmpty
 
-  override def derived: List[EirClassLike] =
-    base.derived.flatMap(ProxyManager.proxiesFor)
+  override def derived: Set[EirClassLike] =
+    base.derived.flatMap(ProxyManager.proxiesFor).toSet
 
   def namespaces: Seq[EirNamespace] = Find.ancestors(base).collect({
     case n : EirNamespace => n

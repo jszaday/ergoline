@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.CheckTypes.{MissingSpecializationException, error}
+import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
 
@@ -45,7 +45,7 @@ class TypeCheckContext {
   def specialize(s : EirSpecializable): EirSpecialization = {
     val sp = specialization
       .find(_.specialization.length == s.templateArgs.length)
-      .getOrElse(throw MissingSpecializationException(s"no specialization available for $s", s))
+      .getOrElse(Errors.missingSpecialization(s))
     _substitutions += (s -> sp)
     sp
   }
@@ -68,6 +68,9 @@ class TypeCheckContext {
       }) && x.specialization.nonEmpty => x
     }
   }
+
+
+  def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {
     _substitutions.flatMap({

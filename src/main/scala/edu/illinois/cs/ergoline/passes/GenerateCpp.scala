@@ -57,13 +57,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   // TODO this will need to support templates
   def makeFromPuppable(ctx: CodeGenerationContext, t: EirTrait): Unit = {
-    def getDerived(t: EirTrait): Seq[EirClassLike] = {
+    def getDerived(t: EirTrait): Set[EirClassLike] = {
       t.derived.partition(_.isInstanceOf[EirTrait]) match {
         case (traits, classes) => traits.map(_.asInstanceOf[EirTrait]).flatMap(getDerived) ++ classes
       }
     }
     val name = nameFor(ctx, t)
-    val children = getDerived(t).toSet.flatMap((c: EirClassLike) => {
+    val children = getDerived(t).flatMap((c: EirClassLike) => {
       val names =
         if (c.templateArgs.isEmpty) List(nameFor(ctx, c))
         else Processes.checked(c).map(x => {

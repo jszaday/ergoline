@@ -184,10 +184,12 @@ trait EirSpecialization extends EirNode {
 
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
   var isAbstract: Boolean = false
-  private var _derived: List[EirClassLike] = Nil
+  private var _derived: Set[EirClassLike] = Set()
 
-  def derived: List[EirClassLike] = _derived
-  def derived_=(x : List[EirClassLike]): Unit = _derived = x
+  def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
+
+  def derived: Set[EirClassLike] = _derived
+  def derived_=(x : Set[EirClassLike]): Unit = _derived = x
 
   var members: List[EirMember]
   var extendsThis: Option[EirResolvable[EirType]]

@@ -197,6 +197,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val found = candidates.find({
       case f: EirFunction => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
       case EirMember(_, f: EirFunction, _) => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
+      case s: EirSpecializable if s.templateArgs.nonEmpty && !ctx.hasSubstitution(s) && !value.parent.exists(_.isInstanceOf[EirTemplatedType]) =>
+        Errors.missingSpecialization(s)
       case _ => ours.isEmpty
     })
     found.map(visit(ctx, _)).getOrElse(Errors.unableToResolve(value))
@@ -262,8 +264,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   //      since they may not be reached otherwise
   def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
     if (ctx.shouldCheck(node)) {
-//      CheckClasses.visit(node)
+      CheckClasses.visit(node)
       node.members.foreach(visitMember(ctx, _))
+      node.inherited.foreach(visit(ctx, _))
     }
     node
   }
@@ -384,8 +387,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   final case class TypeCheckException(message: String) extends Exception(message)
-
-  final case class MissingSpecializationException(message: String, node: EirSpecializable) extends Exception(message)
 
   def visitSpecializedFunction(ctx: TypeCheckContext, f: EirFunction, x: EirSpecialization): EirType = {
     if (f.templateArgs.length != x.specialization.length) {

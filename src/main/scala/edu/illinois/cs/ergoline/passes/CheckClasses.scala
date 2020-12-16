@@ -2,7 +2,8 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.Errors
 
 import scala.annotation.tailrec
 
@@ -22,16 +23,12 @@ object CheckClasses {
   def visit(node: EirClassLike): Unit = {
     if (checked.contains(node)) return
 
-    CheckConstructors.checkConstructors(node)
-
-    val traits = node match {
+    node match {
       case c : EirClass => visitClass(c)
       case t : EirTrait => visitTrait(t)
     }
 
-    checkImplements(node, traits)
-
-    traits.foreach(asClassLike(_).derived ++= List(node))
+    node.inherited.foreach(checkParentClass(node, _))
 
     checked +:= node
   }
@@ -40,52 +37,52 @@ object CheckClasses {
     throw ClassCheckException(node, message)
   }
 
-  def checkImplements(node : EirClassLike, implements: List[EirType]): Unit = {
-    // ensure there are no repeated elements
-    if (implements.length != implements.distinct.length) {
-      error(node, "cannot have duplicate parent traits")
+  def addDerived(a: EirClassLike, b: EirClassLike): Unit = {
+    b.inherited.foreach(x => addDerived(a, asClassLike(x)))
+    b.derived = b.derived + a
+  }
+
+  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType]): Unit = {
+    val resolved = asClassLike(candidate)
+    node match {
+      case _: EirTrait if !resolved.isInstanceOf[EirTrait] =>
+        Errors.invalidParentClass(node, resolved, "traits can only extend/implement traits.")
+      case _: EirClass if node.extendsThis.contains(candidate) && !resolved.isInstanceOf[EirClass] =>
+        Errors.invalidParentClass(node, resolved, "classes cannot extend non-classes.")
+      case _ =>
     }
-    // ensure only traits are implemented
-    implements.foreach({
-      case t : EirTrait =>
-        if (t.templateArgs.nonEmpty)
-          error(node, s"$t expected specialization")
-      case t : EirTemplatedType =>
-        val base = Find.uniqueResolution(t.base)
-        base match {
-          case _ : EirTrait =>
-          case x => error(node, s"cannot extend/implement $x")
-        }
-      case x => error(node, s"cannot extend/implement $x")
-    })
+    if (resolved.isDescendantOf(node)) {
+      Errors.invalidParentClass(node, resolved, "circular relationship.")
+    }
+    val others = node.inherited.filterNot(_ == candidate).map(asClassLike(_))
+    val found = others.find(x => x == resolved || x.isDescendantOf(resolved))
+    if (found.isDefined) {
+      Errors.invalidParentClass(node, resolved, s"already implemented by ${found.get.name}.")
+    }
+    addDerived(node, resolved)
+    // NOTE typechecking is used to catch mismatches in our parents' template specialization
+    //      i.e. missing/wrong number of arguments
   }
 
-  def checkOverride(parent: EirMember, child: EirMember): Unit = {
-
-  }
-
-  def visitTrait(node : EirTrait): List[EirType] = {
+  def visitTrait(node : EirTrait): Unit = {
     node.members.foreach(x => {
       x.member match {
         case _ : EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
-        case x => error(node, s"cannot have member $x")
+        case x => error(node, s"invalid member $x")
       }
     })
-    Find.uniqueResolution(node.extendsThis ++ node.implementsThese).toList
   }
 
-  def visitClass(node : EirClass): List[EirType] = {
-    val base: Option[EirType] = node.extendsThis.map(Find.uniqueResolution[EirType])
-    base.foreach(asClassLike(_).derived ++= List(node))
-    val traits: List[EirType] = Find.uniqueResolution(node.implementsThese).toList
-    traits
+  def visitClass(node : EirClass): Unit = {
+    CheckConstructors.checkConstructors(node)
   }
 
   @tailrec
   def asClassLike(node : EirNode): EirClassLike = {
     node match {
-      case t: EirTemplatedType => asClassLike(Find.uniqueResolution(t.base))
       case c: EirClassLike => c
+      case t: EirTemplatedType => asClassLike(t.base)
+      case r: EirResolvable[_] => asClassLike(Find.uniqueResolution[EirNode](r))
       case _ => throw new RuntimeException(s"$node is not a class-like type")
     }
   }

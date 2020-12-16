@@ -31,8 +31,6 @@ object Processes {
         case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
         case _ => CheckTypes.visit(ctx, x)
       }
-
-      all.collect{ case c: EirClassLike => c }.foreach(CheckClasses.visit)
     }
   }
 
