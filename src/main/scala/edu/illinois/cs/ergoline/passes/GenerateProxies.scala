@@ -74,7 +74,7 @@ object GenerateProxies {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (ty.isPointer) {
       ctx << ctx.typeFor(ty) << nameFor(ctx, x) << "(" << (ty match {
-        case _: EirTrait => s"${nameFor(ctx, ty)}::fromPuppable(${x.name}_)"
+        case _ if ty.isTrait => s"${nameFor(ctx, ty)}::fromPuppable(${x.name}_)"
         case _ => s"(${nameFor(ctx, ty)}*)${x.name}_"
       }) << ");"
     }

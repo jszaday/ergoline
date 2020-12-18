@@ -117,14 +117,21 @@ object Find {
   def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))
 
-  private def _traits(x: EirClassLike): Iterable[EirTrait] = {
-    x.extendsThis.to[EirTrait] ++ x.implementsThese.flatMap(x => {
-      val cls = assertValid[EirClassLike](uniqueResolution(x))
-      _traits(cls) ++ Option(cls).to[EirTrait]
+  private def _traits(x: EirClassLike): Iterable[EirType] = {
+    x.inherited.flatMap(x => {
+      val res = uniqueResolution(x)
+      val base = res match {
+        case t: EirClassLike => t
+        case t: EirTemplatedType =>
+          val res = assertValid[EirClassLike](uniqueResolution(t.base))
+          if (res.inherited.nonEmpty) ???
+          res
+      }
+      _traits(base) ++ Option.when(base.isInstanceOf[EirTrait])(res)
     })
   }
 
-  def traits(x: EirClassLike): Set[EirTrait] = _traits(x).toSet
+  def traits(x: EirClassLike): Set[EirType] = _traits(x).toSet
 
   import FindSyntax.RichPredicate
 

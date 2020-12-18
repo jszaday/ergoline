@@ -3,17 +3,17 @@ package examples;
 import ergoline::_;
 import ck;
 
-class pong with message {
+class pong with message<string> {
     def pong() { }
-    override def action() {
-        println("pong on " + ck::myPe().toString());
+    override def value(): string {
+        return "pong on " + ck::myPe().toString();
     }
 }
 
-class ping with message {
+class ping with message<string> {
     def ping() { }
-    override def action() {
-        println("ping on " + ck::myPe().toString());
+    override def value(): string {
+        return "ping on " + ck::myPe().toString();
     }
 }
 
@@ -36,13 +36,13 @@ class pingpong {
         peer.receive(selfProxy.index(), new pong());
     }
 
-    @entry def receive(from: int, msg: message) {
+    @entry def receive(from: int, msg: message<string>) {
         match (msg) {
             case _: ping => sendPong(from);
             case _: pong => notePong();
         }
 
-        msg.action();
+        println(msg.value());
 
         if (pongCount >= ck::numPes()) {
             mainProxy.finished();
@@ -66,4 +66,6 @@ class pingpong {
     }
 }
 
-trait message { def action(); }
+trait message<T> {
+    def value(): T;
+}

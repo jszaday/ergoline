@@ -32,12 +32,7 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
-        if (x.templateArgs.isEmpty) {
-          List(s"static ${nameFor(ctx, x)}* fromPuppable(ergoline::puppable *p);")
-        } else {
-          // TODO fix to call makeFromPuppable
-          Nil
-        }
+        List(s"static ${nameFor(ctx, x, x.templateArgs.nonEmpty)}* fromPuppable(ergoline::puppable *p);")
       } else {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template

@@ -24,6 +24,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case x : EirClassLike => !x.isInstanceOf[EirProxy]
         case _ => false
       }
+
+      def isTrait: Boolean = eirType match {
+        case x : EirTemplatedType =>
+          Find.uniqueResolution[EirType](x.base).isTrait
+        case _ : EirTrait => true
+        case _ => false
+      }
     }
   }
 
@@ -57,24 +64,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   // TODO this will need to support templates
   def makeFromPuppable(ctx: CodeGenerationContext, t: EirTrait): Unit = {
-    def getDerived(t: EirTrait): Set[EirClassLike] = {
-      t.derived.partition(_.isInstanceOf[EirTrait]) match {
-        case (traits, classes) => traits.map(_.asInstanceOf[EirTrait]).flatMap(getDerived) ++ classes
-      }
-    }
-    val name = nameFor(ctx, t)
-    val children = getDerived(t).flatMap((c: EirClassLike) => {
-      val names =
-        if (c.templateArgs.isEmpty) List(nameFor(ctx, c))
-        else Processes.checked(c).map(x => {
-          ctx.specialize(c, x)
-          val ret = nameFor(ctx, c)
-          ctx.leave(x)
-          ret
-        })
-      names.map(otherName => s"if (p->get_PUP_ID() == $otherName::my_PUP_ID) return ($otherName*) p;")
-    }).toList :+ s"return nullptr;"
-    ctx << s"$name* $name::fromPuppable(ergoline::puppable *p)" << "{" << (children, "else ") << "}"
+    val name = nameFor(ctx, t, includeTemplates = true)
+    if (t.templateArgs.nonEmpty) visitTemplateArgs(ctx, t.templateArgs)
+    ctx << s"inline $name* $name::fromPuppable(ergoline::puppable *p)" << "{" <<
+      s"auto q = dynamic_cast<$name*>(p);" <<
+      "if (p && !q) CkAbort(\"unable to restore" << name << "!\");" <<
+      "return q;" << "}"
   }
 
   def forwardDecl(ctx: CodeGenerationContext, x: EirProxy): String = {
@@ -282,7 +277,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     // TODO enable stateful traits?
     // TODO be templating aware?
     (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType])
-      .filterNot(_.isInstanceOf[EirTrait]).toList
+      .filterNot(_.isTrait).toList
   }
 
   def pupperFor(ctx: CodeGenerationContext, name: String, resolvable: EirResolvable[EirType]): String = {
@@ -396,7 +391,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "(" << x.lhs << x.op << x.rhs << ")"
   }
 
-  def nameFor(ctx: CodeGenerationContext, x : EirNode): String = {
+  def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
     val dealiased = alias.orElse(x match {
@@ -414,8 +409,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       } + ">"
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
-        dealiased.get + (if (subst.forall(_.isDefined)) {
-           "<" + subst.map(x => nameFor(ctx, x.get)).mkString(", ") + ">"
+        val substDefined = subst.forall(_.isDefined)
+        dealiased.get + (if (includeTemplates || substDefined) {
+           "<" + {
+             if (substDefined) subst.map(x => nameFor(ctx, x.get))
+             else x.templateArgs.map(nameFor(ctx, _))
+           }.mkString(", ") + ">"
         } else "")
       case p : EirProxy =>
         val prefix =
@@ -429,7 +428,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val langCi = ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
     if (langCi && declTy.isPointer) ctx << "CkPointer<" + {
-      if (declTy.isInstanceOf[EirTrait]) "ergoline::puppable"
+      if (declTy.isTrait) "ergoline::puppable"
       else nameFor(ctx, declTy)
     } + ">"
     else ctx << ctx.typeFor(declTy)

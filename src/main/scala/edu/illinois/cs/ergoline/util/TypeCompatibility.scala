@@ -18,6 +18,8 @@ object TypeCompatibility {
           x.children.zip(y.children).forall({
             case (a, b) => a.canAssignTo(b)
           })
+      case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
+        x.inherited.exists(_.canAssignTo(y))
       case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
         Find.uniqueResolution(x.base).canAssignTo(y)
       case _ => false
