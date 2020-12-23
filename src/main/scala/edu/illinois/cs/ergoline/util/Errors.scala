@@ -50,6 +50,11 @@ object Errors {
     exitAction()
   }
 
+  def unableToResolve(s: String): Nothing = {
+    Console.err.println(s"unable to resolve $s")
+    exitAction()
+  }
+
   def missingType(node: EirNode): Nothing = {
     Console.err.println(s"${contextualize(node)}: could not find the type of $node")
     exitAction()

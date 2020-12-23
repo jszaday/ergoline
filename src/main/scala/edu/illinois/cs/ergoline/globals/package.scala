@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClass, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode}
-import edu.illinois.cs.ergoline.resolution.{Find, Modules}
+import edu.illinois.cs.ergoline.ast.{EirClass, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode, EirSymbol}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode = EirLiteral(parent, EirLiteralTypes.Unit, "()")
@@ -23,6 +24,15 @@ package object globals {
   )
 
   def objectType: EirType = ???
+
+  def futureType: EirType = {
+    Modules("ck", EirGlobalNamespace)
+      .flatMap(n => Find.child(n, withName("future")).headOption)
+      .collect({
+        case r: EirResolvable[_] => assertValid[EirType](Find.uniqueResolution(r))
+      })
+      .getOrElse(Errors.unableToResolve("ck::future"))
+  }
 
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
 

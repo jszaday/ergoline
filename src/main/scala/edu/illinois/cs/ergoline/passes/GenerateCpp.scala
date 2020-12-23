@@ -223,14 +223,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitFunctionCall(ctx: CodeGenerationContext, x: EirFunctionCall): Unit = {
     val disambiguated = disambiguate(x.target)
+    val isAsync = disambiguated.annotation("async").isDefined
     val isSystem = disambiguated.annotations.exists(_.name == "system")
     if (isSystem) {
       ctx << visitSystemCall(ctx, x.target, disambiguated, x.args)
-    }
-    else {
+    } else {
+      if (isAsync) {
+        val retTy = disambiguated match {
+          case EirMember(_, f: EirFunction, _) => Find.uniqueResolution(f.returnType)
+          case f: EirFunction => Find.uniqueResolution(f.returnType)
+          case _ => Errors.missingType(disambiguated)
+        }
+        ctx << "(([&](){ " << ctx.typeFor(retTy) << temporary(ctx) << ";"
+      }
       ctx << x.target << visitSpecialization(ctx, x) << "(" << {
+        if (isAsync) {
+          ctx << temporary(ctx)
+          if (x.args.nonEmpty) ctx << ","
+        }
         visitArguments(ctx)(Some(disambiguated), x.args)
       } << ")"
+      if (isAsync) {
+        ctx << "; return" << temporary(ctx) << "; })())"
+      }
     }
   }
 
@@ -332,6 +347,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined) {
       return
     }
+    val asyncCi = langCi && isMember && member.flatMap(_.annotation("async")).isDefined
     val parent = member.flatMap(_.parent).to[EirClassLike]
     val isConstructor = member.exists(_.isConstructor)
     val overrides = Option.when(isMember && member.exists(_.isOverride))(" override")
@@ -347,8 +363,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val dropCount = if (langCi && isConstructor) 1 else 0
     ctx << virtual
     // TODO add templates when !isMember
-    Option.when(!isConstructor)(ctx.typeFor(x.returnType))
-    ctx << name << "(" << (x.functionArgs.drop(dropCount), ", ") << ")" << overrides
+    if (asyncCi) {
+      ctx << "void"
+    } else {
+      Option.when(!isConstructor)(ctx.typeFor(x.returnType))
+    }
+    val args = x.functionArgs.drop(dropCount)
+    ctx << name << "("
+    if (asyncCi) {
+      ctx << ctx.typeFor(x.returnType)
+      if (args.nonEmpty) ctx << ","
+    }
+    ctx << (args, ", ") << ")" << overrides
     if (isMember) {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"

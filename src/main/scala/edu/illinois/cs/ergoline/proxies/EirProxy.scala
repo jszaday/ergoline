@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
@@ -23,10 +23,14 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   // replace "self" with "selfProxy"
   // TODO use clone
   private def correctSelf(m : EirMember): EirMember = {
-    val newMember = EirMember(Some(this), null, m.accessibility)
     val theirs = m.member.asInstanceOf[EirFunction]
-    val ours = EirFunction(Some(newMember), None, theirs.name, theirs.templateArgs, null, theirs.returnType)
-    val declType = ProxyManager.elementFor(this).getOrElse(this)
+    val isAsync = m.annotation("async").isDefined
+    val newMember = EirMember(Some(this), null, m.accessibility)
+    val ours = EirFunction(Some(newMember), None, theirs.name, theirs.templateArgs, null, null)
+    ours.returnType = if (isAsync) {
+      EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))
+    } else theirs.returnType
+//    val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))
