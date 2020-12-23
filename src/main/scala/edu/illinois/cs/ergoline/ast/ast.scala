@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.ast
 
 import java.io.File
 
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find.withName
@@ -186,6 +186,21 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
+  def asType: EirType = {
+    if (templateArgs.isEmpty) this
+    else EirTemplatedType(None, this, templateArgs)
+  }
+
+  def selfDeclaration: EirMember = {
+    val m = EirMember(Some(this), null, EirAccessibility.Public)
+    m.member = {
+      val d = EirDeclaration(Some(m), isFinal = true, "self", null, None)
+      d.declaredType = EirPlaceholder(Some(d), Some(asType))
+      d
+    }
+    m
+  }
+
   def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
 
   def derived: Set[EirClassLike] = _derived
@@ -196,19 +211,17 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var implementsThese: List[EirResolvable[EirType]]
 
   def isDescendantOf(other: EirClassLike): Boolean = {
-    def helper(resolvable: EirResolvable[EirType]): Boolean = {
-      Find.uniqueResolution(resolvable) match {
-        case x if x == other => true
-        case c : EirClassLike => c.isDescendantOf(other)
-        case _ => false
-      }
-    }
-    extendsThis.exists(helper) || implementsThese.exists(helper)
+    inherited.map({
+      case t: EirTemplatedType => Find.uniqueResolution(t.base)
+      case t => Find.uniqueResolution(t)
+    }).collect({
+      case c: EirClassLike => c
+    }).exists(x => { x == other || x.isDescendantOf(other)})
   }
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
-  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
+  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members :+ selfDeclaration
 
   def needsInitialization: List[EirMember] =
     members.collect {

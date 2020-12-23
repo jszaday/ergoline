@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
@@ -123,6 +123,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
+
     // visit our base
     visit(ctx, x.base) match {
       case c : EirClassLike if c.templateArgs.length == x.args.length =>
@@ -230,8 +231,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitDeclaration(ctx: TypeCheckContext, node: EirDeclaration): EirType = {
     if (decls.contains(node)) return decls(node)
-    val lval =
-      Option.when(!node.declaredType.isInstanceOf[EirPlaceholder[_]])(visit(ctx, node.declaredType))
+    val lval = {
+      node.declaredType match {
+        case p: EirPlaceholder[_] => {
+          p.expectation.map(visit(ctx, _))
+        }
+        case t => Some(visit(ctx, t))
+      }
+    }
     val rval = node.initialValue.map(visit(ctx, _))
     val ty = (lval, rval) match {
       case (None, None) => Errors.missingType(node)
