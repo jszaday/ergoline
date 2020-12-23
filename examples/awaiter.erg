@@ -1,0 +1,27 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class awaiter {
+    val selfProxy: awaiter@;
+
+    @entry def awaiter(=selfProxy: awaiter@) {
+        selfProxy.wait();
+    }
+
+    @threaded @entry def wait() {
+        val f1: ck::future<int> = selfProxy.expected();
+        val f2: ck::future<int> = selfProxy.expected(42);
+        assert(f1.get() == f2.get());
+        exit();
+    }
+
+    @async @entry def expected(): int {
+        return 42;
+    }
+
+    @async @entry def expected(n: int): int {
+        return n;
+    }
+}

@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLitera
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, temporary}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
@@ -109,12 +109,13 @@ object GenerateProxies {
       val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
       val f = assertValid[EirFunction](x.member)
       val isMain = proxy.exists(_.isMain)
+      val isAsync = x.annotation("async").isDefined
       val isSingleton = proxy.exists(_.singleton)
       val dropCount = if (isConstructor) 1 else 0
       val args = f.functionArgs.drop(dropCount)
+      if (isAsync) ctx << "void"
+      else if (!isConstructor) ctx.typeFor(f.returnType)
       ctx << {
-        if (!isConstructor) ctx.typeFor(f.returnType)
-      } << {
         if (isConstructor) {
           s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
         } else {
@@ -122,7 +123,14 @@ object GenerateProxies {
         }
       } << "(" << {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
-        else visitFunctionArguments(ctx, args)
+        else {
+          if (isAsync) {
+            ctx.typeFor(f.returnType)
+            ctx << temporary(ctx)
+            if (args.nonEmpty) ctx << ","
+          }
+          visitFunctionArguments(ctx, args)
+        }
       } << ")" << "{" << {
         if (isConstructor && isMain) args.headOption.foreach(x => makeArgsVector(ctx, x.name))
         else args.foreach(makeSmartPointer(ctx))
@@ -131,10 +139,14 @@ object GenerateProxies {
         ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
           (List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
       } else {
-        if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
+        if (isAsync) {
+          ctx << temporary(ctx) << ".set("
+        } else if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
-        ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")});"
+        ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+        if (isAsync) ctx << ");"
+        else ctx << ";"
       }
       ctx << "}"
   }
