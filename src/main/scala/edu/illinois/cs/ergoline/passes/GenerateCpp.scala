@@ -295,10 +295,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (x.isInstanceOf[EirTrait]) {
       if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {
-      val puppable =
-        if (!isTransient(x) && !x.extendsThis.exists(x => Find.uniqueResolution(x).isInstanceOf[EirClass])) ": public ergoline::puppable, " else ": "
-      puppable + {
+      ": " + {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
+      } + {
+        // NOTE for some reason this has to come last? otherwise it can cause failures? strange...
+        if (!isTransient(x) && !x.extendsThis.exists(x => Find.uniqueResolution(x).isInstanceOf[EirClass])) ", public ergoline::puppable" else ""
       } + {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
       }
