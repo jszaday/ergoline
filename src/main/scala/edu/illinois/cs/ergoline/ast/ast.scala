@@ -490,7 +490,7 @@ object EirLiteralTypes extends Enumeration {
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
-  private var _resolved : Option[Seq[T]] = None
+  private var _resolved : Seq[T] = Nil
 
   override def children: Iterable[EirNode] = Nil
 
@@ -498,17 +498,14 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
 
   override def resolve(): Seq[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Some(Find.fromSymbol[T](this))
+      _resolved = Find.fromSymbol[T](this)
     }
-    _resolved match {
-      case Some(x) if x.nonEmpty => x
-      case _ => Errors.unableToResolve(this)
-    }
+    _resolved
   }
 
-  def candidates: Seq[T] = _resolved.getOrElse(Nil)
+  def candidates: Seq[T] = resolve()
 
-  override def resolved: Boolean = _resolved.isDefined
+  override def resolved: Boolean = _resolved.isEmpty
 }
 
 trait EirPostfixExpression extends EirExpressionNode {
@@ -569,9 +566,17 @@ case class EirCStyleHeader(var declaration: Option[EirDeclaration], var test: Op
 }
 
 case class EirForAllHeader(var parent: Option[EirNode], var identifiers: List[String], var expression: EirExpressionNode) extends EirForLoopHeader {
-  override def children: Iterable[EirNode] = declarations
+  override def children: Iterable[EirNode] = declarations :+ expression
 
-  def declarations: List[EirDeclaration] = ???
+  var _declarations: List[EirDeclaration] = {
+    identifiers.map(x => {
+      val d = EirDeclaration(parent, isFinal = true, x, null, None)
+      d.declaredType = EirPlaceholder(Some(d))
+      d
+    })
+  }
+
+  def declarations: List[EirDeclaration] = _declarations
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util.applyOrFalse[EirExpressionNode](expression = _, newNode)

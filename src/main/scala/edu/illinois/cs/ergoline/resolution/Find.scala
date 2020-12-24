@@ -68,6 +68,22 @@ object Find {
     node.children.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
   }
 
+  def namedChildren[T <: EirNamedNode](node: EirNode, name: String)(implicit tag: ClassTag[T]): Iterable[T] = {
+    node.children.collect{
+      case n: EirNamedNode if n.name == name => n
+    }.map{
+      case r: EirResolvable[_] if !r.resolved => Find.uniqueResolution(r)
+      case n => n
+    }.collect{
+      case t: T => t
+    }
+  }
+
+  def firstNamedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
+    node.flatMap(namedChildren[T](_, name).headOption)
+      .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
+  }
+
   def all[T <: EirNode : Manifest](node: EirNode): Iterable[T] = {
     node.children.flatMap(all(_)) ++
       node.children.collect {
@@ -170,7 +186,9 @@ object Find {
     ancestors.flatMap(ancestor =>
       Find.descendant(ancestor, predicate).filter(x => {
         ancestor match {
-          case block: EirBlock => block.findPositionOf(ctx) > block.findPositionOf(x)
+          case block: EirBlock => {
+            block.findPositionOf(ctx) > block.findPositionOf(x)
+          }
           case _ => true
         }
       })

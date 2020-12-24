@@ -253,6 +253,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
         ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
+      case h: EirForAllHeader => {
+        // TODO find a better name than it_
+        ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_->hasNext()) {"
+        ctx.ignoreNext("{")
+        // TODO add declarations
+        ctx << x.body << "}"
+      }
       case _ => ???
     }
   }
