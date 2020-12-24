@@ -81,7 +81,7 @@ trait EirNamedNode extends EirNode {
   def name: String
 
   def fullyQualifiedName: List[String] = parent match {
-    case Some(x: EirNamedNode) => x.fullyQualifiedName ++ List(name)
+    case Some(x: EirNamespace) => x.fullyQualifiedName ++ List(name)
     case _ => List(name)
   }
 

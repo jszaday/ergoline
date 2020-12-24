@@ -1,5 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
+import java.io.File
+
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
@@ -94,7 +96,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitProxyType(ctx: CodeGenerationContext, x: types.EirProxyType): Unit =
     ctx << nameFor(ctx, Find.uniqueResolution(x))
 
-  override def visitImport(ctx: CodeGenerationContext, x: EirImport): Unit = ()
+  override def visitImport(ctx: CodeGenerationContext, x: EirImport): Unit = {
+//    if (x.wildcard || x.qualified.length == 1) ctx << s"using namespace ${(if (x.wildcard) x.qualified.init else x.qualified) mkString "::"};"
+//    else ctx << s"using ${x.qualified.last} = ${x.qualified mkString "::"};"
+  }
 
   def isEntryArgument(f: EirFunctionArgument): Boolean = {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
@@ -256,7 +261,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case h: EirForAllHeader => {
         // TODO find a better name than it_
         ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_->hasNext()) {"
-        ctx << "it_->next();"
+        if (h.identifiers.length == 1) {
+          val ident = h.identifiers.head
+          if (ident != "_") {
+            ctx << "auto" << ident << "= "
+          }
+          ctx << "it_->next();"
+        } else {
+          ???
+        }
         ctx.ignoreNext("{")
         // TODO add declarations
         ctx << x.body << "}"
@@ -435,6 +448,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "(" << x.lhs << x.op << x.rhs << ")"
   }
 
+  def qualifiedNameFor(ctx: CodeGenerationContext, usage: EirNode, includeTemplates: Boolean = false)(of: EirNode): String = {
+    val ours = Find.parentOf[EirNamespace](usage)
+    val theirs = Find.parentOf[EirNamespace](of match {
+      case t: EirTemplatedType => Find.uniqueResolution(t.base)
+      case n: EirNamedNode => n
+      case _ => ???
+    })
+    val qualifications: Seq[String] = if (ours != theirs) {
+      (theirs.get.name +: Find.ancestors(theirs.get).collect{
+        case n: EirNamespace => n.name
+      }).reverse
+    } else Nil
+    (qualifications :+ nameFor(ctx, of, includeTemplates)).mkString("::")
+  }
+
   def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
@@ -516,7 +544,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     objTy match {
       case _: EirProxyType | _: EirProxy =>
         ctx << nameFor(ctx, objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << ctx.nameFor(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << qualifiedNameFor(ctx, x)(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
       case _ => ctx << "new" << ctx.typeFor(objTy)  << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
     }
   }
@@ -525,7 +553,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMatch(ctx: CodeGenerationContext, x: EirMatch): Unit = {
     // TODO restore failure to match CmiAbort/throw!
-    ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << "})(" << x.expression << ")"
+    ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << {
+      val location = Errors.contextualize(x)
+      "CkAbort(\"no match found at " + location.substring(location.lastIndexOf(File.separator) + 1) + "\");"
+    }<< "})(" << x.expression << ")"
   }
 
   def visitPatternDecl(x: EirPattern, current: String): String = {
