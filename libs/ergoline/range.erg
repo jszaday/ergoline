@@ -11,21 +11,21 @@ class range<A> with iterable<A> {
         return new range_iterator<A>(self);
     }
 
-    class range_iterator<A> with iterator<A> {
-        val r: range<A>;
-        var current: A;
+    @transient class range_iterator<B> with iterator<B> {
+        val r: range<B>;
+        var current: B;
 
-        def range_iterator(=r: range<A>) {
+        def range_iterator(=r: range<B>) {
             current = r.start;
         }
 
         override def hasNext(): bool {
-            return current < (end - step);
+            return current < r.end;
         }
 
-        override def next(): A {
+        override def next(): B {
             val t = current;
-            current += step;
+            current += r.step;
             return t;
         }
     }

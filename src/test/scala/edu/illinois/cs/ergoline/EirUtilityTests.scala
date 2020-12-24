@@ -19,7 +19,7 @@ class EirUtilityTests extends FunSuite {
     val b = new Visitor().visitBlock(
       parserFromString("{ val x : int = 42; val y : int = 16; }").block())
     // test a fairly elaborate query
-    b.findWithin[EirLiteral](_.value == "16")
+    Find.within[EirLiteral](b, _.value == "16")
       .flatMap(b.findPositionOf(_)) shouldEqual List(1)
     b.children.zipWithIndex.foreach({
       case (n, i) => n.visitAll(x => {
@@ -49,9 +49,10 @@ class EirUtilityTests extends FunSuite {
     ancestor should matchPattern {
       case Some(_ : EirBlock) =>
     }
-    assertThrows[java.lang.RuntimeException]({
-      symbol.get.resolve()
-    })
+    symbol.get.resolve() shouldEqual Nil
+//    assertThrows[java.lang.RuntimeException]({
+//      symbol.get.resolve()
+//    })
   }
 
   test("should not access inaccessible scope") {

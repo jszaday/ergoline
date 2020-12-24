@@ -256,6 +256,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case h: EirForAllHeader => {
         // TODO find a better name than it_
         ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_->hasNext()) {"
+        ctx << "it_->next();"
         ctx.ignoreNext("{")
         // TODO add declarations
         ctx << x.body << "}"
@@ -285,13 +286,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"typename ${nameFor(ctx, x)}"
   }
 
+  def isTransient(x: EirClassLike): Boolean = {
+    x.parent.exists(_.isInstanceOf[EirMember]) || x.annotation("transient").isDefined
+  }
+
   def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
       if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {
-      if (parents.isEmpty) ": public ergoline::puppable, public ergoline::object"
-      else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public ergoline::puppable")
+      val puppable =
+        if (!isTransient(x) && !x.extendsThis.exists(x => Find.uniqueResolution(x).isInstanceOf[EirClass])) ": public ergoline::puppable, " else ": "
+      puppable + {
+        if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
+      } + {
+        ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
+      }
     }
   }
 
@@ -432,6 +442,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => None
     })
     x match {
+      case _ if dealiased.contains("self") => {
+        val ty = x match {
+          case e: EirExpressionNode if e.foundType.isDefined => e.foundType.get
+          case d: EirDeclaration => Find.uniqueResolution(d.declaredType)
+          case EirMember(_, d: EirDeclaration, _) => Find.uniqueResolution(d.declaredType)
+          case _ => Errors.missingType(x)
+        }
+        "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+      }
       case x: EirTemplateArgument =>
         ctx.hasSubstitution(x) match {
           case Some(t) => nameFor(ctx, t)

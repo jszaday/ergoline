@@ -79,7 +79,7 @@ object CheckConstructors {
         case EirFunctionArgument(_, n, t, _, true) =>
           n == decl.name && constructorAssignmentOk(decl, t)
         case _ => false
-      } || constructor.findWithin[EirAssignment](assignmentTargetsDeclaration(_, decl)).nonEmpty
+      } || Find.within[EirAssignment](constructor, assignmentTargetsDeclaration(_, decl)).nonEmpty
     })
   }
 

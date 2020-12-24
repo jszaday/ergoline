@@ -45,7 +45,9 @@ abstract class EirNode {
 
   def children: Iterable[EirNode]
 
-  def contains(other: EirNode): Boolean = (other == this) || this.findWithin(other == _).nonEmpty
+  def contains(other: EirNode): Boolean = {
+    (other == this) || Find.ancestors(other).contains(this)
+  }
 
   override def toString: String = unparse
 
@@ -96,9 +98,10 @@ trait EirSimpleContainer extends EirNode with EirScope {
 
 case class EirBlock(var parent: Option[EirNode], var children: List[EirNode]) extends EirSimpleContainer {
   def findPositionOf(node: EirNode): Option[Int] = {
-    children.zipWithIndex.collectFirst({
-      case (child, idx) if child.contains(node) => idx
-    })
+    val ancestors = Find.ancestors(node)
+    (node +: ancestors).sliding(2).collectFirst{
+      case prev :: curr :: _ if curr == this => children.indexOf(prev)
+    }
   }
 }
 
@@ -140,7 +143,10 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
-  override def children: Iterable[EirNode] = List(declaredType) ++ initialValue
+  // NOTE this _might_ infinitely recurse for self so we skip declType
+  override def children: Iterable[EirNode] = {
+    Option.when(name != "self")(declaredType) ++ initialValue
+  }
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
     (initialValue.contains(oldValue) && util.applyOrFalse[EirExpressionNode](x => initialValue = Some(x), newValue)) ||
@@ -186,19 +192,20 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
-  def asType: EirType = {
-    if (templateArgs.isEmpty) this
-    else EirTemplatedType(None, this, templateArgs)
+  def asType: EirResolvable[EirType] = {
+    EirPlaceholder[EirType](None, Some({
+      if (templateArgs.isEmpty) this
+      else EirTemplatedType(None, this, templateArgs)
+    }))
   }
 
-  def selfDeclaration: EirMember = {
-    val m = EirMember(Some(this), null, EirAccessibility.Public)
-    m.member = {
-      val d = EirDeclaration(Some(m), isFinal = true, "self", null, None)
-      d.declaredType = EirPlaceholder(Some(d), Some(asType))
-      d
-    }
-    m
+  // TODO eventually traits will need a self as well
+  def selfDeclaration: Option[EirMember] = {
+    Option.when(this.isInstanceOf[EirClass])({
+      val m = EirMember(Some(this), null, EirAccessibility.Public)
+      m.member = EirDeclaration(Some(m), isFinal = true, "self", asType, None)
+      m
+    })
   }
 
   def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
@@ -221,7 +228,7 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
-  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members :+ selfDeclaration
+  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members ++ selfDeclaration
 
   def needsInitialization: List[EirMember] =
     members.collect {
@@ -505,7 +512,7 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
 
   def candidates: Seq[T] = resolve()
 
-  override def resolved: Boolean = _resolved.isEmpty
+  override def resolved: Boolean = _resolved.nonEmpty
 }
 
 trait EirPostfixExpression extends EirExpressionNode {
