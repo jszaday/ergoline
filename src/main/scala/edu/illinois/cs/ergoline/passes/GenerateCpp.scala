@@ -1,5 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
+import java.io.File
+
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
@@ -84,7 +86,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitFieldAccessor(ctx: CodeGenerationContext, x: EirFieldAccessor): Unit = {
     // TODO handle self applications :3
     val targetTy: EirType = x.target.foundType.getOrElse(Errors.missingType(x.target))
-    ctx << x.target << (if (targetTy.isPointer) "->" else ".") << x.field
+    ctx << x.target << fieldAccessorFor(targetTy) << x.field
   }
 
   override def visitLambdaType(ctx: CodeGenerationContext, x: types.EirLambdaType): Unit = {
@@ -94,7 +96,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitProxyType(ctx: CodeGenerationContext, x: types.EirProxyType): Unit =
     ctx << nameFor(ctx, Find.uniqueResolution(x))
 
-  override def visitImport(ctx: CodeGenerationContext, x: EirImport): Unit = ()
+  override def visitImport(ctx: CodeGenerationContext, x: EirImport): Unit = {
+//    if (x.wildcard || x.qualified.length == 1) ctx << s"using namespace ${(if (x.wildcard) x.qualified.init else x.qualified) mkString "::"};"
+//    else ctx << s"using ${x.qualified.last} = ${x.qualified mkString "::"};"
+  }
 
   def isEntryArgument(f: EirFunctionArgument): Boolean = {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
@@ -249,10 +254,32 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def fieldAccessorFor(x: EirType): String = {
+    if (x.isPointer) "->"
+    else "."
+  }
+
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
         ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
+      case h: EirForAllHeader => {
+        val fieldAccessor = h.expression.foundType.map(fieldAccessorFor).getOrElse(Errors.missingType(h.expression))
+        // TODO find a better name than it_
+        ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
+        if (h.identifiers.length == 1) {
+          val ident = h.identifiers.head
+          if (ident != "_") {
+            ctx << "auto" << ident << "= "
+          }
+          ctx << "it_" << fieldAccessor << "next();"
+        } else {
+          ???
+        }
+        ctx.ignoreNext("{")
+        // TODO add declarations
+        ctx << x.body << "}"
+      }
       case _ => ???
     }
   }
@@ -278,13 +305,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"typename ${nameFor(ctx, x)}"
   }
 
+  def isTransient(x: EirClassLike): Boolean = {
+    x.parent.exists(_.isInstanceOf[EirMember]) || x.annotation("transient").isDefined
+  }
+
   def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): String = {
     val parents = (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
       if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {
-      if (parents.isEmpty) ": public ergoline::puppable, public ergoline::object"
-      else ": " + parents.map("public " + _).mkString(", ") + x.extendsThis.map(_ => "").getOrElse(", public ergoline::puppable")
+      ": " + {
+        if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
+      } + {
+        // NOTE for some reason this has to come last? otherwise it can cause failures? strange...
+        if (!isTransient(x) && !x.extendsThis.exists(x => Find.uniqueResolution(x).isInstanceOf[EirClass])) ", public ergoline::puppable" else ""
+      } + {
+        ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
+      }
     }
   }
 
@@ -417,6 +454,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "(" << x.lhs << x.op << x.rhs << ")"
   }
 
+  def qualifiedNameFor(ctx: CodeGenerationContext, usage: EirNode, includeTemplates: Boolean = false)(of: EirNode): String = {
+    val ours = Find.parentOf[EirNamespace](usage)
+    val theirs = Find.parentOf[EirNamespace](of match {
+      case t: EirTemplatedType => Find.uniqueResolution(t.base)
+      case n: EirNamedNode => n
+      case _ => ???
+    })
+    val qualifications: Seq[String] = if (ours != theirs) {
+      (theirs.get.name +: Find.ancestors(theirs.get).collect{
+        case n: EirNamespace => n.name
+      }).reverse
+    } else Nil
+    (qualifications :+ nameFor(ctx, of, includeTemplates)).mkString("::")
+  }
+
   def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
@@ -425,6 +477,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => None
     })
     x match {
+      case _ if dealiased.contains("self") => {
+        val ty = x match {
+          case e: EirExpressionNode if e.foundType.isDefined => e.foundType.get
+          case d: EirDeclaration => Find.uniqueResolution(d.declaredType)
+          case EirMember(_, d: EirDeclaration, _) => Find.uniqueResolution(d.declaredType)
+          case _ => Errors.missingType(x)
+        }
+        "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+      }
       case x: EirTemplateArgument =>
         ctx.hasSubstitution(x) match {
           case Some(t) => nameFor(ctx, t)
@@ -489,7 +550,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     objTy match {
       case _: EirProxyType | _: EirProxy =>
         ctx << nameFor(ctx, objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << ctx.nameFor(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << qualifiedNameFor(ctx, x)(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
       case _ => ctx << "new" << ctx.typeFor(objTy)  << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
     }
   }
@@ -498,7 +559,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMatch(ctx: CodeGenerationContext, x: EirMatch): Unit = {
     // TODO restore failure to match CmiAbort/throw!
-    ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << "})(" << x.expression << ")"
+    ctx << s"([&](" << ctx.typeFor(x.expression.foundType.get) << s"${temporary(ctx)}) ->" << ctx.typeFor(x.foundType.get) << "{" << x.cases << {
+      val location = Errors.contextualize(x)
+      "CkAbort(\"no match found at " + location.substring(location.lastIndexOf(File.separator) + 1) + "\");"
+    }<< "})(" << x.expression << ")"
   }
 
   def visitPatternDecl(x: EirPattern, current: String): String = {

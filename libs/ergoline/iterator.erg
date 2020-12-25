@@ -1,0 +1,6 @@
+package ergoline;
+
+@transient trait iterator<A> {
+    def next(): A;
+    def hasNext(): bool;
+}

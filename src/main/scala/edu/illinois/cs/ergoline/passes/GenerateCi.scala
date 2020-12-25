@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.GenerateCpp.isTransient
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
@@ -13,14 +14,35 @@ object GenerateCi {
 
   class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {
     val puppables: Iterable[EirSpecializable] = checked.keys.filter({
-      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract)
+      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || isTransient(x))
       case _ => false
+    })
+  }
+
+  def visitPuppables(ctx: CiUnparseContext): Unit = {
+    // TODO this is not nesting aware!
+    val grouped = ctx.puppables.groupBy(Find.parentOf[EirNamespace](_).getOrElse(???))
+    grouped.foreach({
+      case (ns, pupables) => {
+        ctx << s"namespace ${ns.name}" << "{"
+        ctx << pupables.flatMap(x => {
+          if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
+          else ctx.checked(x).map(y => s"PUPable ${
+            ctx.specialize(x, y)
+            val ret: String = GenerateCpp.nameFor(ctx, x)
+            ctx.leave(y)
+            ret
+          };")
+        })
+        ctx << "}"
+      }
     })
   }
 
   def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
     val ctx = new CiUnparseContext(checked)
     ctx << "mainmodule generate" << "{"
+    visitPuppables(ctx)
     ProxyManager.proxies
       .filterNot(x => x.base.isAbstract || x.isElement)
       .map(x => (x.namespaces.toList, x))
@@ -35,15 +57,6 @@ object GenerateCi {
   def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): Unit = {
     namespaces.foreach(ns => {
       ctx << s"namespace ${ns.name}" << "{"
-      ctx << ctx.puppables.filter(x => ns.children.contains(x)).flatMap(x => {
-        if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
-        else ctx.checked(x).map(y => s"PUPable ${
-          ctx.specialize(x, y)
-          val ret: String = GenerateCpp.nameFor(ctx, x)
-          ctx.leave(y)
-          ret
-        };")
-      })
     })
     proxies.sortBy(!_.isMain).foreach(visit(ctx, _))
     namespaces.foreach(_ => ctx << "}")

@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.ast
 
 import java.io.File
 
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find.withName
@@ -45,7 +45,9 @@ abstract class EirNode {
 
   def children: Iterable[EirNode]
 
-  def contains(other: EirNode): Boolean = (other == this) || this.findWithin(other == _).nonEmpty
+  def contains(other: EirNode): Boolean = {
+    (other == this) || Find.ancestors(other).contains(this)
+  }
 
   override def toString: String = unparse
 
@@ -79,7 +81,7 @@ trait EirNamedNode extends EirNode {
   def name: String
 
   def fullyQualifiedName: List[String] = parent match {
-    case Some(x: EirNamedNode) => x.fullyQualifiedName ++ List(name)
+    case Some(x: EirNamespace) => x.fullyQualifiedName ++ List(name)
     case _ => List(name)
   }
 
@@ -96,9 +98,10 @@ trait EirSimpleContainer extends EirNode with EirScope {
 
 case class EirBlock(var parent: Option[EirNode], var children: List[EirNode]) extends EirSimpleContainer {
   def findPositionOf(node: EirNode): Option[Int] = {
-    children.zipWithIndex.collectFirst({
-      case (child, idx) if child.contains(node) => idx
-    })
+    val ancestors = Find.ancestors(node)
+    (node +: ancestors).sliding(2).collectFirst{
+      case prev :: curr :: _ if curr == this => children.indexOf(prev)
+    }
   }
 }
 
@@ -140,7 +143,10 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
-  override def children: Iterable[EirNode] = List(declaredType) ++ initialValue
+  // NOTE this _might_ infinitely recurse for self so we skip declType
+  override def children: Iterable[EirNode] = {
+    Option.when(name != "self")(declaredType) ++ initialValue
+  }
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
     (initialValue.contains(oldValue) && util.applyOrFalse[EirExpressionNode](x => initialValue = Some(x), newValue)) ||
@@ -186,6 +192,22 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
+  def asType: EirResolvable[EirType] = {
+    EirPlaceholder[EirType](None, Some({
+      if (templateArgs.isEmpty) this
+      else EirTemplatedType(None, this, templateArgs)
+    }))
+  }
+
+  // TODO eventually traits will need a self as well
+  def selfDeclaration: Option[EirMember] = {
+    Option.when(this.isInstanceOf[EirClass])({
+      val m = EirMember(Some(this), null, EirAccessibility.Public)
+      m.member = EirDeclaration(Some(m), isFinal = true, "self", asType, None)
+      m
+    })
+  }
+
   def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
 
   def derived: Set[EirClassLike] = _derived
@@ -196,19 +218,17 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var implementsThese: List[EirResolvable[EirType]]
 
   def isDescendantOf(other: EirClassLike): Boolean = {
-    def helper(resolvable: EirResolvable[EirType]): Boolean = {
-      Find.uniqueResolution(resolvable) match {
-        case x if x == other => true
-        case c : EirClassLike => c.isDescendantOf(other)
-        case _ => false
-      }
-    }
-    extendsThis.exists(helper) || implementsThese.exists(helper)
+    inherited.map({
+      case t: EirTemplatedType => Find.uniqueResolution(t.base)
+      case t => Find.uniqueResolution(t)
+    }).collect({
+      case c: EirClassLike => c
+    }).exists(x => { x == other || x.isDescendantOf(other)})
   }
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
-  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
+  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members ++ selfDeclaration
 
   def needsInitialization: List[EirMember] =
     members.collect {
@@ -477,7 +497,7 @@ object EirLiteralTypes extends Enumeration {
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
-  private var _resolved : Option[Seq[T]] = None
+  private var _resolved : Seq[T] = Nil
 
   override def children: Iterable[EirNode] = Nil
 
@@ -485,17 +505,14 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
 
   override def resolve(): Seq[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Some(Find.fromSymbol[T](this))
+      _resolved = Find.fromSymbol[T](this)
     }
-    _resolved match {
-      case Some(x) if x.nonEmpty => x
-      case _ => Errors.unableToResolve(this)
-    }
+    _resolved
   }
 
-  def candidates: Seq[T] = _resolved.getOrElse(Nil)
+  def candidates: Seq[T] = resolve()
 
-  override def resolved: Boolean = _resolved.isDefined
+  override def resolved: Boolean = _resolved.nonEmpty
 }
 
 trait EirPostfixExpression extends EirExpressionNode {
@@ -556,9 +573,17 @@ case class EirCStyleHeader(var declaration: Option[EirDeclaration], var test: Op
 }
 
 case class EirForAllHeader(var parent: Option[EirNode], var identifiers: List[String], var expression: EirExpressionNode) extends EirForLoopHeader {
-  override def children: Iterable[EirNode] = declarations
+  override def children: Iterable[EirNode] = declarations :+ expression
 
-  def declarations: List[EirDeclaration] = ???
+  var _declarations: List[EirDeclaration] = {
+    identifiers.map(x => {
+      val d = EirDeclaration(parent, isFinal = true, x, null, None)
+      d.declaredType = EirPlaceholder(Some(d))
+      d
+    })
+  }
+
+  def declarations: List[EirDeclaration] = _declarations
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util.applyOrFalse[EirExpressionNode](expression = _, newNode)

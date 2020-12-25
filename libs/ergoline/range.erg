@@ -1,0 +1,32 @@
+package ergoline;
+
+class range<A> with iterable<A> {
+    val start: A;
+    val end: A;
+    val step: A;
+
+    def range(=start: A, =step: A, =end: A) { }
+
+    override def iter(): iterator<A> {
+        return new range_iterator<A>(self);
+    }
+
+    @transient class range_iterator<B> with iterator<B> {
+        val r: range<B>;
+        var current: B;
+
+        def range_iterator(=r: range<B>) {
+            current = r.start;
+        }
+
+        override def hasNext(): bool {
+            return current < r.end;
+        }
+
+        override def next(): B {
+            val t = current;
+            current += r.step;
+            return t;
+        }
+    }
+}

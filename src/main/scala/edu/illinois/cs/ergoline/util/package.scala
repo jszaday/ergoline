@@ -68,9 +68,6 @@ package object util {
       def findChild[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
         Find.child[T](node, predicate)
 
-      def findWithin[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
-        Find.within[T](node, predicate)
-
       def isValid[T : Manifest]: Option[T] = node match {
         case t : T => Some(t)
         case _ => None

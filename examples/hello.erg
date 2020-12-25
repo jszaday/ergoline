@@ -20,12 +20,14 @@ class hello {
 }
 
 @main class main {
+    val n: int;
+
     @entry def main(selfProxy: main@, args: array<string>): unit {
-       val n = (args.size() > 1) ? args[1].toInt() : 16;
+       n = (args.size() > 1) ? args[1].toInt() : 16;
        val first = ck::future<int>();
        var curr = first;
        // chain n futures with first at the head
-       for (var i: int = 0; i < n; i += 1) {
+       for (i <- (new range<int>(0, 1, n))) {
            val next = ck::future<int>();
            // create a hello chare for each
            new hello@(curr, next);
@@ -39,6 +41,7 @@ class hello {
 
     @threaded @entry def wait(f: ck::future<int>) {
         val i = f.get();
+        assert(i == n);
         println("hello #" + i.toString());
         exit();
     }

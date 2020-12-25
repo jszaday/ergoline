@@ -10,7 +10,7 @@ import scala.collection.mutable
 
 class TypeCheckContext {
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
-  private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
+  private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
   private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
@@ -28,7 +28,7 @@ class TypeCheckContext {
       if (_checked.contains(s)) false
       else { _checked += (s -> Nil); true }
     } else {
-      _substitutions.get(s) match {
+      _substitutions.find(_._1 == s).map(_._2) match {
         case Some(sp) => {
           val checked = _checked.getOrElse(s, Nil)
           if (checked.contains(sp)) false
@@ -46,19 +46,18 @@ class TypeCheckContext {
     val sp = specialization
       .find(_.specialization.length == s.templateArgs.length)
       .getOrElse(Errors.missingSpecialization(s))
-    _substitutions += (s -> sp)
+    _substitutions +:= (s -> sp)
     sp
   }
 
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    _substitutions += (s -> sp)
+    _substitutions +:= (s -> sp)
     sp
   }
 
   def leave(ours: EirSpecialization): Unit = {
-    _substitutions = _substitutions.filterNot({
-      case (_, theirs) => ours == theirs
-    })
+    val first = _substitutions.indexWhere(_._1 == ours)
+    _substitutions = _substitutions.patch(first, Nil, 1)
   }
 
   def specialization: Option[EirSpecialization] = {

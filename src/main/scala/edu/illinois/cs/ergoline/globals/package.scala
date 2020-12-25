@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClass, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode, EirSymbol}
+import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode, EirScope, EirSymbol}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -23,15 +23,20 @@ package object globals {
     "/" -> "div"
   )
 
-  def objectType: EirType = ???
+  def iterableType: EirType = {
+    Find.firstNamedChild[EirClassLike](ergolineModule, "iterable")
+  }
+
+  def iteratorType: EirType = {
+    Find.firstNamedChild[EirClassLike](ergolineModule, "iterator")
+  }
+
+  def objectType: EirType = {
+    Find.firstNamedChild[EirClassLike](ergolineModule, "object")
+  }
 
   def futureType: EirType = {
-    Modules("ck", EirGlobalNamespace)
-      .flatMap(n => Find.child(n, withName("future")).headOption)
-      .collect({
-        case r: EirResolvable[_] => assertValid[EirType](Find.uniqueResolution(r))
-      })
-      .getOrElse(Errors.unableToResolve("ck::future"))
+    Find.firstNamedChild[EirClassLike](Modules("ck", EirGlobalNamespace), "future")
   }
 
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)

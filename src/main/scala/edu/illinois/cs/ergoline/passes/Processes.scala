@@ -41,7 +41,7 @@ object Processes {
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
-    val kids = EirGlobalNamespace.children.filterNot(_.name == "ergoline")
+    val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
     val toDecl = checked.keys.collect({
       case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
     }).toList.groupBy(x => {

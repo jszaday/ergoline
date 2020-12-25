@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makePupper, nameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makePupper, nameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateDecls {
@@ -33,7 +33,7 @@ object GenerateDecls {
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
         List(s"static ${nameFor(ctx, x, x.templateArgs.nonEmpty)}* fromPuppable(ergoline::puppable *p);")
-      } else {
+      } else if (!isTransient(x)) {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
@@ -41,6 +41,8 @@ object GenerateDecls {
           s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
           "virtual ergoline::puppable* toPuppable() override { return this; }") ++
           Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
+      } else {
+        List("virtual ergoline::puppable* toPuppable() override { CkAbort(\"" + nameFor(ctx, x) + " is @transient and cannot be pup'd\"); return nullptr; }")
       }
     } << x.members << s"};"
   }
