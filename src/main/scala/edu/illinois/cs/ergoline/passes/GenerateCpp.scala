@@ -310,7 +310,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): String = {
-    val parents = (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
+    val parents = (x.implementsThese ++ x.extendsThis).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
       if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
     } else {

@@ -12,6 +12,13 @@ As we march towards a usable compiler, several things need to be addressed.
 * Generate Specialized Template Functions/Classes/Proxies.
 * Use heap-allocated memory only when necessary/use stack-allocated memory when possible.
     - May consider adding `@simple` annotation to denote when a type should always be stack-allocated.
+* Fix multiple inheritance of `std::enable_shared_from_this`:
+    - https://stackoverflow.com/questions/16082785/use-of-enable-shared-from-this-with-multiple-inheritance
+    - https://stackoverflow.com/questions/657155/how-to-enable-shared-from-this-of-both-parent-and-derived
+    - https://stackoverflow.com/questions/15549722/double-inheritance-of-enable-shared-from-this
+    - https://stackoverflow.com/questions/4491420/enable-shared-from-this-and-inheritance
+    - https://stackoverflow.com/questions/14939190/boost-shared-from-this-and-multiple-inheritance
+    - https://www.codeproject.com/Articles/286304/Solution-for-multiple-enable-shared-from-this-in-i
 
 ## Correctness Checking
 
@@ -36,4 +43,21 @@ As we march towards a usable compiler, several things need to be addressed.
     - Currently considering something like: `class foo<A>` ... `class foo<int!>`
 * Add support for templated proxy types.
 * Add support for custom array indices (e.g. `foo@array<int>`)
-* Add support for concepts? (i.e. high-level SFINAE)
+* Use pattern matching for `for` loops and as lval's for assignments:
+    - This will enable iterating with and assignment to multiple variables.
+    - Use `std::tie` and `std::pair` for the generated code for added niceness.
+* Make lambdas and functions pup'able!
+* Add a sophisticated containers/iterables layer (`foreach`, `filter`, etc.)
+
+## Things to Ruminate On
+
+* Should we add support for concepts? (i.e. high-level SFINAE)
+* Add support for lightweight/`@simple` classes?
+    - Generate struct and inline function calls?
+    - Enable array-of-structs vs. struct-of-arrays? 
+* Should we make blocks expressions a la Scala? And...
+    - Get rid of mandatory `;` at EOL?
+    - Add an implicit return for last statement of block?
+* Should we continue to have `@transient` types?
+* Should we get rid of `EirMember`?
+* Should we make assignments expressions, or statements?
