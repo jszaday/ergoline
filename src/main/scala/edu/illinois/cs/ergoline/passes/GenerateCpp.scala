@@ -86,7 +86,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitFieldAccessor(ctx: CodeGenerationContext, x: EirFieldAccessor): Unit = {
     // TODO handle self applications :3
     val targetTy: EirType = x.target.foundType.getOrElse(Errors.missingType(x.target))
-    ctx << x.target << (if (targetTy.isPointer) "->" else ".") << x.field
+    ctx << x.target << fieldAccessorFor(targetTy) << x.field
   }
 
   override def visitLambdaType(ctx: CodeGenerationContext, x: types.EirLambdaType): Unit = {
@@ -254,19 +254,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def fieldAccessorFor(x: EirType): String = {
+    if (x.isPointer) "->"
+    else "."
+  }
+
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
         ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
       case h: EirForAllHeader => {
+        val fieldAccessor = h.expression.foundType.map(fieldAccessorFor).getOrElse(Errors.missingType(h.expression))
         // TODO find a better name than it_
-        ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_->hasNext()) {"
+        ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
         if (h.identifiers.length == 1) {
           val ident = h.identifiers.head
           if (ident != "_") {
             ctx << "auto" << ident << "= "
           }
-          ctx << "it_->next();"
+          ctx << "it_" << fieldAccessor << "next();"
         } else {
           ???
         }
