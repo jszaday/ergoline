@@ -68,8 +68,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def makeFromPuppable(ctx: CodeGenerationContext, t: EirTrait): Unit = {
     val name = nameFor(ctx, t, includeTemplates = true)
     if (t.templateArgs.nonEmpty) visitTemplateArgs(ctx, t.templateArgs)
-    ctx << s"inline $name* $name::fromPuppable(ergoline::puppable *p)" << "{" <<
-      s"auto q = dynamic_cast<$name*>(p);" <<
+    ctx << s"inline std::shared_ptr<$name> $name::fromPuppable(ergoline::puppable *p)" << "{" <<
+      s"auto q = std::dynamic_pointer_cast<$name>(std::shared_ptr<ergoline::puppable>(p));" <<
       "if (p && !q) CkAbort(\"unable to restore" << name << "!\");" <<
       "return q;" << "}"
   }

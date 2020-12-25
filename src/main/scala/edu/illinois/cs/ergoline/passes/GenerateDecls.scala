@@ -32,7 +32,7 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
-        List(s"static ${nameFor(ctx, x, x.templateArgs.nonEmpty)}* fromPuppable(ergoline::puppable *p);")
+        List(s"static std::shared_ptr<${nameFor(ctx, x, x.templateArgs.nonEmpty)}> fromPuppable(ergoline::puppable *p);")
       } else if (!isTransient(x)) {
         makePupper(ctx, x)
         // TODO PUPable_decl_base_template
