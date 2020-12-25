@@ -4,6 +4,7 @@ As we march towards a usable compiler, several things need to be addressed.
 ## Usability
 
 * Improve User-facing Errors (e.g. Add Candidates to Cannot Resolve Error)
+* Test all the unary and binary ops
 
 ## Code Generation
 
@@ -22,6 +23,7 @@ As we march towards a usable compiler, several things need to be addressed.
 
 ## Correctness Checking
 
+* Check Overloads (compile to templated functions?)
 * Check Overrides Against Base Class
     - Fail When Member Not Marked as Override
     - Ensure Types Match
@@ -48,16 +50,22 @@ As we march towards a usable compiler, several things need to be addressed.
     - Use `std::tie` and `std::pair` for the generated code for added niceness.
 * Make lambdas and functions pup'able!
 * Add a sophisticated containers/iterables layer (`foreach`, `filter`, etc.)
+* Add support for wrapping native iterators.
+    - Transform map iterator's `first`/`second` to tuple elements.
+* Add support for optional values and variant types.
+    - Should we use C++17's `std::optional` or something like: https://github.com/TartanLlama/optional
 
 ## Things to Ruminate On
 
+* How should we support `null` pointers/uninitialized values?
 * Should we add support for concepts? (i.e. high-level SFINAE)
 * Add support for lightweight/`@simple` classes?
     - Generate struct and inline function calls?
     - Enable array-of-structs vs. struct-of-arrays? 
-* Should we make blocks expressions a la Scala? And...
+* Should we make blocks  and statements expressions a la Scala? And...
     - Get rid of mandatory `;` at EOL?
     - Add an implicit return for last statement of block?
+    - Get rid of the ternary operator.
 * Should we continue to have `@transient` types?
 * Should we get rid of `EirMember`?
 * Should we make assignments expressions, or statements?
