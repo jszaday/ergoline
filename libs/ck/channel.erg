@@ -1,0 +1,32 @@
+package ck;
+
+import ergoline::queue;
+
+class channel<A> {
+    private val values: queue<A>;
+    private val pending: queue< future<A> >;
+    private val selfProxy: channel<A>@;
+
+    @entry def channel(=selfProxy: channel<A>@) {
+        values = queue<A>();
+        pending = queue< future<A> >();
+    }
+
+    @entry def send(a: A) {
+        if (pending.isEmpty()) {
+            values.push(a);
+        } else {
+            pending.head().set(a);
+            pending.pop();
+        }
+    }
+
+    @entry def receive(f: future<A>) {
+        if (values.isEmpty()) {
+            pending.push(f);
+        } else {
+            f.set(values.head());
+            values.pop();
+        }
+    }
+}

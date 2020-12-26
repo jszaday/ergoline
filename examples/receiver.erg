@@ -1,0 +1,32 @@
+package examples;
+
+import ergoline::_;
+import ck::channel;
+import ck::future;
+
+class receiver {
+    val ch: channel<int>@;
+
+    @entry def receiver(selfProxy: receiver@) {
+        ch = new channel<int>@();
+        selfProxy.receive();
+        new sender@(ch);
+    }
+
+    @entry @threaded def receive() {
+        for (var i = 0; i < 16; i += 1) {
+            val f = future<int>();
+            ch.receive(f);
+            println("received value: " + f.get().toString());
+        }
+        exit();
+    }
+}
+
+class sender {
+    @entry def sender(selfProxy: sender@, ch: channel<int>@) {
+        for (var i = 0; i < 16; i += 1) {
+            ch.send(i);
+        }
+    }
+}

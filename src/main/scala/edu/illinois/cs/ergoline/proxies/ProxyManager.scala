@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast.EirClassLike
-import edu.illinois.cs.ergoline.ast.types.EirProxyType
+import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.resolution.Find
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.util.matching.Regex
 
@@ -40,9 +40,20 @@ object ProxyManager {
   def collectiveFor(t: EirProxy): Option[EirProxy] =
     Option.when(t.isElement)(_proxies.get((t.collective.get, t.base))).flatten
 
-  def proxyFor(t: EirProxyType): EirProxy = {
+  def proxyFor(t: EirProxyType): EirType = {
     val ctve = t.collective.getOrElse("")
-    val base = assertValid[EirClassLike](Find.uniqueResolution(t.base))
+    val resolved = Find.uniqueResolution(t.base)
+    val base = resolved match {
+      case t: EirTemplatedType =>
+        assertValid[EirClassLike](Find.uniqueResolution(t.base))
+      case c: EirClassLike => c
+      case _ => Errors.unableToResolve(t)
+    }
+    val templateArgs = resolved match {
+      case t: EirTemplatedType => t.args.map(Find.uniqueResolution[EirType])
+      case _ if base.templateArgs.isEmpty => Nil
+      case _ => Errors.missingSpecialization(base)
+    }
     val baseProxy = _proxies.get((ctve, base)) match {
       case Some(p) => p
       case _ =>
@@ -50,8 +61,9 @@ object ProxyManager {
         _proxies += ((ctve, base) -> proxy)
         proxy
     }
-    Option.when(t.isElement)(elementFor(baseProxy))
-      .flatten.getOrElse(baseProxy)
+    val proxy = Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy)
+    if (templateArgs.nonEmpty) EirTemplatedType(None, proxy, templateArgs)
+    else proxy
   }
 
   def proxiesFor(c: EirClassLike): Iterable[EirProxy] = {

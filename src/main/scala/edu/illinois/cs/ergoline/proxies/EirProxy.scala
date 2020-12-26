@@ -42,7 +42,12 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val checkArg = args.headOption
     val checkDeclTy = checkArg.map(x => Find.uniqueResolution(x.declaredType))
     val element = ProxyManager.elementFor(this).getOrElse(this)
-    checkDeclTy.contains(element)
+    // TODO, this will have to be made more robust going forward
+    checkDeclTy match {
+      case Some(EirTemplatedType(_, p: EirProxy, _)) => p == element
+      case Some(p: EirProxy) => p == element
+      case _ => false
+    }
   }
 
   private def indices: Option[List[EirType]] = {
@@ -100,6 +105,9 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   override var extendsThis: Option[EirResolvable[types.EirType]] = None
   override var implementsThese: List[EirResolvable[types.EirType]] = Nil
   override var templateArgs: List[EirTemplateArgument] = base.templateArgs
+
+//  override def templateArgs: List[EirTemplateArgument] = Nil
+//  override def templateArgs_=(x: List[EirTemplateArgument]): Unit = ()
 
   override def isDescendantOf(other: EirClassLike): Boolean = {
     other match {

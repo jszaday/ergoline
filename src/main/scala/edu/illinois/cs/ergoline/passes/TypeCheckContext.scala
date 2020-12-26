@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
@@ -46,18 +46,27 @@ class TypeCheckContext {
     val sp = specialization
       .find(_.specialization.length == s.templateArgs.length)
       .getOrElse(Errors.missingSpecialization(s))
-    _substitutions +:= (s -> sp)
-    sp
+    specialize(s, sp)
   }
 
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    _substitutions +:= (s -> sp)
-    sp
+    val ours = s.templateArgs.map(Find.uniqueResolution[EirType])
+    val theirs = sp.specialization.map(Find.uniqueResolution[EirType])
+    if (ours.length != theirs.length) {
+      Errors.missingSpecialization(s)
+    } else if (ours.zip(theirs).forall(t => t._1 == t._2)) {
+      null
+    } else {
+      _substitutions +:= (s -> sp)
+      sp
+    }
   }
 
   def leave(ours: EirSpecialization): Unit = {
-    val first = _substitutions.indexWhere(_._1 == ours)
-    _substitutions = _substitutions.patch(first, Nil, 1)
+    if (ours != null) {
+      val first = _substitutions.indexWhere(_._1 == ours)
+      _substitutions = _substitutions.patch(first, Nil, 1)
+    }
   }
 
   def specialization: Option[EirSpecialization] = {

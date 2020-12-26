@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirResolvable, RichEirType}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -123,18 +123,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
-
+    val base: EirSpecializable = assertValid[EirSpecializable](Find.uniqueResolution(x.base))
+    val spec = ctx.specialize(base, x)
+    visit(ctx, base)
+    ctx.leave(spec)
     // visit our base
-    visit(ctx, x.base) match {
-      case c : EirClassLike if c.templateArgs.length == x.args.length =>
-        EirTemplatedType(x.parent, c, x.args.map(visit(ctx, _)))
+    base match {
+      case c : EirClassLike => EirTemplatedType(x.parent, c, x.args.map(visit(ctx, _)))
       case _ => error(ctx, x, s"unsure how to specialize ${x.base}")
     }
   }
 
   override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = {
     val res = ProxyManager.proxyFor(x)
-    visit(ctx, res.base)
+    visit(ctx, x.base)
     res
   }
 
@@ -466,10 +468,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def constructorDropCount(c : EirType): Int = {
-    c match {
-      case p: EirProxy if p.collective.isEmpty && !p.isElement => 1
-      case _ => 0
+    val p = c match {
+      case EirTemplatedType(_, p: EirProxy, _) => Some(p)
+      case p: EirProxy => Some(p)
+      case _ => None
     }
+    p.map(x => x.collective.isEmpty && !x.isElement)
+      .map(if (_) 1 else 0).getOrElse(0)
   }
 
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
