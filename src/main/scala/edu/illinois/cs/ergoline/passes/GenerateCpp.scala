@@ -416,7 +416,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
         return
-      } else if (!parent.exists(_.templateArgs.nonEmpty) && x.templateArgs.isEmpty) {
+      } else if (langCi || (!parent.exists(_.templateArgs.nonEmpty) && x.templateArgs.isEmpty)) {
         ctx << ";"
         return
       }

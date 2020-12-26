@@ -20,6 +20,7 @@ object ProxyManager {
 
   private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
   private var _elements: Map[EirProxy, EirProxy] = Map()
+  private var _types: Map[(EirProxy, List[EirType]), EirType] = Map()
 
   def proxies: Iterable[EirProxy] = _proxies.values
 
@@ -39,6 +40,16 @@ object ProxyManager {
 
   def collectiveFor(t: EirProxy): Option[EirProxy] =
     Option.when(t.isElement)(_proxies.get((t.collective.get, t.base))).flatten
+
+  private def typeFor(p: EirProxy, args: List[EirType]): EirType = {
+    if (args.isEmpty) p
+    else if (_types.contains((p, args))) _types((p, args))
+    else {
+      val ty = EirTemplatedType(None, p, args)
+      _types += ((p, args) -> ty)
+      ty
+    }
+  }
 
   def proxyFor(t: EirProxyType): EirType = {
     val ctve = t.collective.getOrElse("")
@@ -62,8 +73,7 @@ object ProxyManager {
         proxy
     }
     val proxy = Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy)
-    if (templateArgs.nonEmpty) EirTemplatedType(None, proxy, templateArgs)
-    else proxy
+    typeFor(proxy, templateArgs)
   }
 
   def proxiesFor(c: EirClassLike): Iterable[EirProxy] = {

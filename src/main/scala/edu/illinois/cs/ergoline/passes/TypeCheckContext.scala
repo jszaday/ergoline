@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
 
@@ -33,6 +33,30 @@ class TypeCheckContext {
     stack.push(n)
   }
 
+  private var _templates: Map[(EirSpecializable, List[EirType]), EirTemplatedType] = Map()
+
+  def getTemplatedType(s: EirSpecializable, args: List[EirType]): EirTemplatedType = {
+    if (_templates.contains((s, args))) _templates((s, args))
+    else {
+      val ty = EirTemplatedType(None, assertValid[EirType](s), args)
+      _templates += ((s, args) -> ty)
+      ty
+    }
+  }
+
+  def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
+    getTemplatedType(
+      assertValid[EirSpecializable](Find.uniqueResolution(t.base)),
+      t.args.map(Find.uniqueResolution[EirType]))
+  }
+
+  def makeDistinct(s: EirSpecialization): EirSpecialization = {
+    s match {
+      case t: EirTemplatedType => getTemplatedType(t)
+      case _ => s
+    }
+  }
+
   def shouldCheck(s: EirSpecializable): Boolean = {
     if (s.annotation("system").isDefined) {
       false
@@ -40,7 +64,7 @@ class TypeCheckContext {
       if (_checked.contains(s)) false
       else { _checked += (s -> Nil); true }
     } else {
-      _substitutions.find(_._1 == s).map(_._2) match {
+      _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
         case Some(sp) => {
           val checked = _checked.getOrElse(s, Nil)
           if (checked.contains(sp)) false

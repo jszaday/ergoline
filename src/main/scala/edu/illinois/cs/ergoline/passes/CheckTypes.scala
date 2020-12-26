@@ -129,7 +129,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     ctx.leave(spec)
     // visit our base
     base match {
-      case c : EirClassLike => EirTemplatedType(x.parent, c, x.args.map(visit(ctx, _)))
+      case c : EirClassLike => ctx.getTemplatedType(c, x.args.map(visit(ctx, _)))
       case _ => error(ctx, x, s"unsure how to specialize ${x.base}")
     }
   }

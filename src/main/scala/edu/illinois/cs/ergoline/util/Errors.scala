@@ -79,4 +79,9 @@ object Errors {
     Console.err.println(s"${contextualize(a)}: missing specialization for ${nameFor(a)}.")
     exitAction()
   }
+
+  def incorrectType(a: EirNode, c: Class[_]): Nothing = {
+    Console.err.println(s"${contextualize(a)}: expected an ${c.getName}, got ${nameFor(a)}.")
+    exitAction()
+  }
 }
