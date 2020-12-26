@@ -1,9 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
-import edu.illinois.cs.ergoline.resolution.EirResolvable
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
 
@@ -15,10 +15,46 @@ class TypeCheckContext {
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
-  def checked: Map[EirSpecializable, List[EirSpecialization]] = _checked
+  // naively filters out partial specializations
+  def checked: Map[EirSpecializable, List[EirSpecialization]] = {
+    _checked.map{
+      case (s, sp) => (s, sp.filterNot(x => {
+        // TODO this may need to cross-check template
+        //      arguments that do not belong to us?
+        x.specialization.map(Find.uniqueResolution[EirType])
+          .exists(_.isInstanceOf[EirTemplateArgument])
+      }))
+    }.filter(t => {
+      t._1.templateArgs.isEmpty || t._2.nonEmpty
+    })
+  }
 
   def enterNode(n: EirNode): Unit = {
     stack.push(n)
+  }
+
+  private var _templates: Map[(EirSpecializable, List[EirType]), EirTemplatedType] = Map()
+
+  def getTemplatedType(s: EirSpecializable, args: List[EirType]): EirTemplatedType = {
+    if (_templates.contains((s, args))) _templates((s, args))
+    else {
+      val ty = EirTemplatedType(None, assertValid[EirType](s), args)
+      _templates += ((s, args) -> ty)
+      ty
+    }
+  }
+
+  def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
+    getTemplatedType(
+      assertValid[EirSpecializable](Find.uniqueResolution(t.base)),
+      t.args.map(Find.uniqueResolution[EirType]))
+  }
+
+  def makeDistinct(s: EirSpecialization): EirSpecialization = {
+    s match {
+      case t: EirTemplatedType => getTemplatedType(t)
+      case _ => s
+    }
   }
 
   def shouldCheck(s: EirSpecializable): Boolean = {
@@ -28,7 +64,7 @@ class TypeCheckContext {
       if (_checked.contains(s)) false
       else { _checked += (s -> Nil); true }
     } else {
-      _substitutions.find(_._1 == s).map(_._2) match {
+      _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
         case Some(sp) => {
           val checked = _checked.getOrElse(s, Nil)
           if (checked.contains(sp)) false
@@ -46,18 +82,29 @@ class TypeCheckContext {
     val sp = specialization
       .find(_.specialization.length == s.templateArgs.length)
       .getOrElse(Errors.missingSpecialization(s))
-    _substitutions +:= (s -> sp)
-    sp
+    specialize(s, sp)
   }
 
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    _substitutions +:= (s -> sp)
-    sp
+    val ours = s.templateArgs.map(Find.uniqueResolution[EirType])
+    val theirs = sp.specialization.map(Find.uniqueResolution[EirType])
+    if (ours.length != theirs.length) {
+      Errors.missingSpecialization(s)
+    } else if (ours.zip(theirs).forall(t => t._1 == t._2)) {
+      null
+    } else {
+      // TODO this needs to substitute template arguments with
+      //      whatever is currently in the context~!
+      _substitutions +:= (s -> sp)
+      sp
+    }
   }
 
   def leave(ours: EirSpecialization): Unit = {
-    val first = _substitutions.indexWhere(_._1 == ours)
-    _substitutions = _substitutions.patch(first, Nil, 1)
+    if (ours != null) {
+      val first = _substitutions.indexWhere(_._1 == ours)
+      _substitutions = _substitutions.patch(first, Nil, 1)
+    }
   }
 
   def specialization: Option[EirSpecialization] = {
@@ -72,7 +119,7 @@ class TypeCheckContext {
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {
-    _substitutions.flatMap({
+    _substitutions.reverse.flatMap({
       case (sable, stion) => sable.templateArgs.zip(stion.specialization)
     }).collectFirst({
       case (arg, ty) if arg == t => ty

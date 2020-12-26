@@ -71,7 +71,7 @@ package object types {
       (base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode)
     }
 
-    private var _resolved: Option[EirProxy] = None
+    private var _resolved: Option[EirType] = None
 
     override def resolved: Boolean = _resolved.isDefined
 

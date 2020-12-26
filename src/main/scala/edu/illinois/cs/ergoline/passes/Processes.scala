@@ -35,7 +35,7 @@ object Processes {
   }
 
   def generateCi(): String = {
-    GenerateCi.visitAll(ctx.checked)
+    GenerateCi.visitAll(checked)
   }
 
   def generateCpp(): Iterable[String] = {

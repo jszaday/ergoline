@@ -23,10 +23,10 @@ package object util {
     m
   }
 
-  def assertValid[T: Manifest](value: Any): T = {
+  def assertValid[T](value: EirNode)(implicit manifest: Manifest[T]): T = {
     Option(value) match {
       case Some(x: T) => x
-      case x => throw new RuntimeException(s"unexpected value $x")
+      case _ => Errors.incorrectType(value, manifest.getClass)
     }
   }
 

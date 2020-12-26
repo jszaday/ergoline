@@ -32,7 +32,7 @@ object GenerateProxies {
     val args = f.functionArgs
     val name = nameFor(ctx, f)
     val nArgs = args.map(nameFor(ctx, _)).mkString(", ")
-    // TODO support non-void returns
+    // TODO support non-void returns?
     ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
         (0 until numImpls).map(x => s"case $x: { p$x.$name($nArgs); break; }") ++
@@ -56,12 +56,14 @@ object GenerateProxies {
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val base = nameFor(ctx, x.base)
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
-    ctx << s"struct $name: public CBase_$name" << "{" << {
+    GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
+    val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs) else ""
+    ctx << s"struct $name: public CBase_$name$args" << "{" << {
       ctx << "void pup(PUP::er &p)" << "{" << pupperFor(ctx, "impl_", x.base) << "}"; ()
     } << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))
-    } << ctx.typeFor(x.base) << s" impl_;" << s"};"
+    } << "std::shared_ptr<" << nameFor(ctx, x.base, includeTemplates = true) << ">" << s" impl_;" << s"};"
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
@@ -75,7 +77,7 @@ object GenerateProxies {
     if (ty.isPointer) {
       ctx << ctx.typeFor(ty) << nameFor(ctx, x) << "(" << (ty match {
         case _ if ty.isTrait => s"${nameFor(ctx, ty)}::fromPuppable(${x.name}_)"
-        case _ => s"(${nameFor(ctx, ty)}*)${x.name}_"
+        case _ => s"(${nameFor(ctx, ty, includeTemplates = true)}*)${x.name}_"
       }) << ");"
     }
   }
@@ -87,7 +89,7 @@ object GenerateProxies {
       // ctx << "CkPointer<" << ctx.nameFor(ty) << ">" << (nameFor(ctx, arg) + "_")
       ctx << "ergoline::puppable*" << (nameFor(ctx, arg) + "_")
     } else {
-      ctx << ctx.typeFor(ty) << nameFor(ctx, arg)
+      ctx << ctx.typeFor(ty, Some(arg)) << nameFor(ctx, arg)
     }
   }
 
@@ -106,7 +108,7 @@ object GenerateProxies {
       val isConstructor = x.isConstructor
       val isCollective = proxy.exists(_.collective.isDefined)
       val index = Option.when(isCollective)("[thisIndex]").getOrElse("")
-      val base = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
+      val base = proxy.map(x => nameFor(ctx, x.base, includeTemplates = true)).getOrElse("")
       val f = assertValid[EirFunction](x.member)
       val isMain = proxy.exists(_.isMain)
       val isAsync = x.annotation("async").isDefined
@@ -117,7 +119,8 @@ object GenerateProxies {
       else if (!isConstructor) ctx.typeFor(f.returnType)
       ctx << {
         if (isConstructor) {
-          s"${base}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
+          val baseName = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
+          s"${baseName}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
         } else {
           nameFor(ctx, f)
         }
@@ -137,7 +140,7 @@ object GenerateProxies {
       }
       if (isConstructor) {
         ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
-          (List(s"thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+          (List(s"this->thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
       } else {
         if (isAsync) {
           ctx << temporary(ctx) << ".set("

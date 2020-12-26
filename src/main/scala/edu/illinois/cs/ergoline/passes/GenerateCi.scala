@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.isTransient
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -24,7 +25,7 @@ object GenerateCi {
     val grouped = ctx.puppables.groupBy(Find.parentOf[EirNamespace](_).getOrElse(???))
     grouped.foreach({
       case (ns, pupables) => {
-        ctx << s"namespace ${ns.name}" << "{"
+        ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
         ctx << pupables.flatMap(x => {
           if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
           else ctx.checked(x).map(y => s"PUPable ${
@@ -54,17 +55,34 @@ object GenerateCi {
     ctx.toString
   }
 
+  def makeChareSpecializations(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
+    val kind = visitChareType(proxy.isMain, proxy.collective)
+    val specializations = ctx.checked.getOrElse(proxy.base, Nil).map(
+      _.specialization.map(Find.uniqueResolution[EirType])
+    ) // NOTE we might want to consider putting .distinct here?
+      //      (but it shouldn't be necessary)
+    specializations.foreach(sp => {
+      ctx << kind << proxy.baseName << "<" << {
+        sp.init.foreach(x => {
+          ctx.typeFor(x)(GenerateCpp.visit)
+        })
+        ctx.typeFor(sp.last)(GenerateCpp.visit)
+      } << ">" << ";"
+    })
+  }
+
   def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): Unit = {
     namespaces.foreach(ns => {
       ctx << s"namespace ${ns.name}" << "{"
     })
     proxies.sortBy(!_.isMain).foreach(visit(ctx, _))
+    proxies.filter(_.templateArgs.nonEmpty).foreach(makeChareSpecializations(ctx, _))
     namespaces.foreach(_ => ctx << "}")
   }
 
   def visit(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     // TODO bring template args into consideration
-    // ctx << GenerateCpp.visitTemplateArgs(proxy.templateArgs)
+    GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
     ctx << visitChareType(proxy.isMain, proxy.collective) << proxy.baseName << "{" << {
       proxy.membersToGen.foreach(visit(ctx, proxy, _))
     } << "};"
