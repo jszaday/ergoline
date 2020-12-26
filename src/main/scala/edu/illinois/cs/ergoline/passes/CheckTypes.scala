@@ -286,7 +286,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
     ctx.hasSubstitution(node) match {
       case Some(x) => visit(ctx, x)
-      case _ => error(ctx, node, s"missing substitution for $node")
+      case _ => Errors.missingSpecialization(node)
     }
   }
 

@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirNamedNode, EirNode, EirSpecializable}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object Errors {
@@ -75,7 +75,7 @@ object Errors {
     exitAction()
   }
 
-  def missingSpecialization(a: EirSpecializable): Nothing = {
+  def missingSpecialization(a: EirNode): Nothing = {
     Console.err.println(s"${contextualize(a)}: missing specialization for ${nameFor(a)}.")
     exitAction()
   }

@@ -81,7 +81,7 @@ class TypeCheckContext {
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {
-    _substitutions.flatMap({
+    _substitutions.reverse.flatMap({
       case (sable, stion) => sable.templateArgs.zip(stion.specialization)
     }).collectFirst({
       case (arg, ty) if arg == t => ty
