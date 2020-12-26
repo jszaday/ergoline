@@ -468,12 +468,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def constructorDropCount(c : EirType): Int = {
-    val p = c match {
-      case EirTemplatedType(_, p: EirProxy, _) => Some(p)
-      case p: EirProxy => Some(p)
-      case _ => None
-    }
-    p.map(x => x.collective.isEmpty && !x.isElement)
+    ProxyManager.asProxy(c)
+      .map(x => x.collective.isEmpty && !x.isElement)
       .map(if (_) 1 else 0).getOrElse(0)
   }
 

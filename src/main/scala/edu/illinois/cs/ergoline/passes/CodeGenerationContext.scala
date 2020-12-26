@@ -41,14 +41,14 @@ class CodeGenerationContext(val language: String = "cpp") {
     this << GenerateCpp.nameFor(this, node)
   }
 
-  def typeFor(x: EirResolvable[EirType])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
-    typeFor(Find.uniqueResolution(x))
+  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
+    typeFor(Find.uniqueResolution(x), ctx)
   }
 
-  def typeFor(x: EirType)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
+  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
     if (x.isPointer) this << "std::shared_ptr<"
     try {
-      nameFor(x)
+      this << ctx.map(GenerateCpp.qualifiedNameFor(this, _)(x)).getOrElse(GenerateCpp.nameFor(this, x))
     } catch {
       case _: MatchError => visitor(this, x)
     }

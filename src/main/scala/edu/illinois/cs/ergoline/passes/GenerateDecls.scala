@@ -21,7 +21,7 @@ object GenerateDecls {
   }
 
   def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << ctx.typeFor(x.declaredType) << nameFor(ctx, x) << ";"
+    ctx << ctx.typeFor(x.declaredType, Some(x)) << nameFor(ctx, x) << ";"
   }
 
   def visitNamespace(ctx: CodeGenerationContext, x: EirNamespace): Unit = {

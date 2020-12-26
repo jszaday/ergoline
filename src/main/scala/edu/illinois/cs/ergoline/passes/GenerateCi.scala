@@ -25,7 +25,7 @@ object GenerateCi {
     val grouped = ctx.puppables.groupBy(Find.parentOf[EirNamespace](_).getOrElse(???))
     grouped.foreach({
       case (ns, pupables) => {
-        ctx << s"namespace ${ns.name}" << "{"
+        ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
         ctx << pupables.flatMap(x => {
           if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
           else ctx.checked(x).map(y => s"PUPable ${

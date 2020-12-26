@@ -43,11 +43,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val checkDeclTy = checkArg.map(x => Find.uniqueResolution(x.declaredType))
     val element = ProxyManager.elementFor(this).getOrElse(this)
     // TODO, this will have to be made more robust going forward
-    checkDeclTy match {
-      case Some(EirTemplatedType(_, p: EirProxy, _)) => p == element
-      case Some(p: EirProxy) => p == element
-      case _ => false
-    }
+    checkDeclTy.flatMap(ProxyManager.asProxy).contains(element)
   }
 
   private def indices: Option[List[EirType]] = {

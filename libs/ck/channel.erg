@@ -3,8 +3,10 @@ package ck;
 import ergoline::queue;
 
 class channel<A> {
-    private val values: queue<A>;
-    private val pending: queue< future<A> >;
+    // TODO add support for pup'ing std::queue!!
+    @transient private val values: queue<A>;
+    @transient private val pending: queue< future<A> >;
+
     private val selfProxy: channel<A>@;
 
     @entry def channel(=selfProxy: channel<A>@) {

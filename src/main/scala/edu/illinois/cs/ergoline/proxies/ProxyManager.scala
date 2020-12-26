@@ -22,6 +22,14 @@ object ProxyManager {
   private var _elements: Map[EirProxy, EirProxy] = Map()
   private var _types: Map[(EirProxy, List[EirType]), EirType] = Map()
 
+  def asProxy(t: EirType): Option[EirProxy] = {
+    t match {
+      case EirTemplatedType(_, p: EirProxy, _) => Some(p)
+      case p: EirProxy => Some(p)
+      case _ => None
+    }
+  }
+
   def proxies: Iterable[EirProxy] = _proxies.values
 
   def checkProxyable(base: EirClassLike, collective: Option[String], isElement: Boolean): EirProxy = {
