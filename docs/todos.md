@@ -54,6 +54,7 @@ As we march towards a usable compiler, several things need to be addressed.
     - Transform map iterator's `first`/`second` to tuple elements.
 * Add support for optional values and variant types.
     - Should we use C++17's `std::optional` or something like: https://github.com/TartanLlama/optional
+* Add support for chare placement operations (e.g. `on` for chares, `dmapped` for arrays)
 
 ## Things to Ruminate On
 

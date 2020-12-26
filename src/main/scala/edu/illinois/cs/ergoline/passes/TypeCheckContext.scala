@@ -15,7 +15,19 @@ class TypeCheckContext {
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
-  def checked: Map[EirSpecializable, List[EirSpecialization]] = _checked
+  // naively filters out partial specializations
+  def checked: Map[EirSpecializable, List[EirSpecialization]] = {
+    _checked.map{
+      case (s, sp) => (s, sp.filterNot(x => {
+        // TODO this may need to cross-check template
+        //      arguments that do not belong to us?
+        x.specialization.map(Find.uniqueResolution[EirType])
+          .exists(_.isInstanceOf[EirTemplateArgument])
+      }))
+    }.filter(t => {
+      t._1.templateArgs.isEmpty || t._2.nonEmpty
+    })
+  }
 
   def enterNode(n: EirNode): Unit = {
     stack.push(n)
@@ -57,6 +69,8 @@ class TypeCheckContext {
     } else if (ours.zip(theirs).forall(t => t._1 == t._2)) {
       null
     } else {
+      // TODO this needs to substitute template arguments with
+      //      whatever is currently in the context~!
       _substitutions +:= (s -> sp)
       sp
     }
