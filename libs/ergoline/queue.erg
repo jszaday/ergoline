@@ -1,6 +1,6 @@
 package ergoline;
 
-@system(alias="std::queue",fromHeader="queue")
+@system(alias="std::deque",fromHeader="deque")
 class queue<A> {
     @system(alias="front")
     def head(): A;
@@ -10,8 +10,10 @@ class queue<A> {
     def isEmpty(): bool;
     @system(alias="empty",invert=true)
     def nonEmpty(): bool;
-    @system def push(a: A);
-    @system def pop();
+    @system(alias="push_back")
+    def push(a: A);
+    @system(alias="pop_front")
+    def pop();
     @system def size(): int;
     @system def apply(): queue<A>;
 }
