@@ -36,23 +36,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def systemClasses(): String = {
-    """#ifndef __ERGOLINE_OBJECT__
-      |#define __ERGOLINE_OBJECT__
-      |namespace ergoline {
-      |  struct puppable: public PUP::able {
-      |    puppable() {}
-      |    virtual ~puppable() { }
-      |    puppable(CkMigrateMessage *m) : PUP::able(m) { }
-      |  };
-      |
-      |  struct object {
-      |    virtual puppable* toPuppable() = 0;
-      |  };
-      |}
-      |#endif /* __ERGOLINE_OBJECT__ */""".stripMargin
-  }
-
   def forwardDecl(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     visitTemplateArgs(ctx, x.templateArgs)
     ctx << s"struct ${nameFor(ctx, x)};"
@@ -364,6 +347,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       })
       parents ++ values
     } << s"}"
+  }
+
+  def makeHasher(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
+    ctx << s"virtual std::size_t hash() override" << "{"
+    ctx << "std::size_t seed = 0;"
+    // TODO combine with hash of parents
+    x.members.collect({
+      // TODO should we consider transient or nah?
+      case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
+    }).foreach(d => {
+      val ty = Find.uniqueResolution(d.declaredType)
+      val proxy = ProxyManager.asProxy(ty)
+      proxy match {
+        case Some(_) => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
+        case None => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)});"
+      }
+    })
+    ctx << "return seed;"
+    ctx << "}"
   }
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {

@@ -23,7 +23,7 @@ class EirProcessTests extends FunSuite {
     println("running charmc on generate.ci")
     charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "generate.ci").call(cwd = wd))
     println("running charmc on generate.cc")
-    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "-language", "charm++", "generate.cc", "-o", tmp / "a.out").call(cwd = wd))
+    charmc.foreach(x => os.proc(x.toAbsolutePath.toString, "-language", "charm++", "generate.cc", "-o", tmp / "a.out", "-Iinclude/").call(cwd = wd))
     println("moving .cc file")
     os.move.over(wd / "generate.cc", wd / f.getName.replace("erg", "cc"))
     println("current contents: " + (os.list(tmp) mkString ", "))

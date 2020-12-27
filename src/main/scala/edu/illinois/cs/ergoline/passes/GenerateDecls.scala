@@ -1,11 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makePupper, nameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makeHasher, makePupper, nameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
+
+  def hasHash(x: EirClassLike): Boolean = false
+  def hasPup(x: EirClassLike): Boolean = false
 
   def visit(ctx: CodeGenerationContext, node: EirNode): Unit = {
     node match {
@@ -34,7 +37,8 @@ object GenerateDecls {
       if (x.isInstanceOf[EirTrait]) {
         List(s"static std::shared_ptr<${nameFor(ctx, x, x.templateArgs.nonEmpty)}> fromPuppable(ergoline::puppable *p);")
       } else if (!isTransient(x)) {
-        makePupper(ctx, x)
+        if (!hasPup(x)) makePupper(ctx, x)
+        if (!hasHash(x)) makeHasher(ctx, x)
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
         else s"PUPable_decl_inside_template(${nameFor(ctx, x)});",
