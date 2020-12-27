@@ -83,6 +83,24 @@ struct hash<CkChareID> {
     return seed;
   }
 };
+
+template <>
+struct hash<CkGroupID> {
+  std::size_t operator()(const CkGroupID& t) const {
+    return std::hash<int>()(t.idx);
+  }
+};
+
+template <>
+struct hash<CkArrayIndex> {
+  std::size_t operator()(const CkArrayIndex& t) const {
+    std::size_t seed = 0;
+    for (auto i = 0; i < CK_ARRAYINDEX_MAXLEN; i++) {
+      hash_combine(seed, (t.data())[i]);
+    }
+    return 0;
+  }
+};
 }
 
 #endif

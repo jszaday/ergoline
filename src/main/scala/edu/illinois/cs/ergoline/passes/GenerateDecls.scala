@@ -46,6 +46,7 @@ object GenerateDecls {
           "virtual ergoline::puppable* toPuppable() override { return this; }") ++
           Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
       } else {
+        if (!hasHash(x)) makeHasher(ctx, x)
         List("virtual ergoline::puppable* toPuppable() override { CkAbort(\"" + nameFor(ctx, x) + " is @transient and cannot be pup'd\"); return nullptr; }")
       }
     } << x.members << s"};"

@@ -349,6 +349,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << s"}"
   }
 
+  def hasherFor(ctx: CodeGenerationContext, d: EirDeclaration): Unit = {
+    val ty = Find.uniqueResolution(d.declaredType)
+    val proxy = ProxyManager.asProxy(ty)
+    proxy match {
+      case Some(p) if p.isAbstract => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.hash());"
+      case Some(p) if p.collective.isEmpty => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
+      case Some(p) => {
+        val isArray = p.collective.exists(_.startsWith("array"))
+        val isElement = p.isElement
+        if (isArray) ctx << s"ergoline::hash_combine(seed, ((CkGroupID)${nameFor(ctx, d)}.ckGetArrayID()));"
+        else ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetGroupID());"
+        if (isElement) {
+          if (isArray) ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetIndex());"
+          else ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetGroupPe());"
+        }
+      }
+      case None => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)});"
+    }
+  }
+
   def makeHasher(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     ctx << s"virtual std::size_t hash() override" << "{"
     ctx << "std::size_t seed = 0;"
@@ -356,16 +376,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.members.collect({
       // TODO should we consider transient or nah?
       case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
-    }).foreach(d => {
-      val ty = Find.uniqueResolution(d.declaredType)
-      val proxy = ProxyManager.asProxy(ty)
-      proxy match {
-        case Some(p) if p.isAbstract => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.hash());"
-        case Some(p) if p.collective.isEmpty => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
-        case Some(_) => // TODO implement
-        case None => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)});"
-      }
-    })
+    }).foreach(hasherFor(ctx, _))
     ctx << "return seed;"
     ctx << "}"
   }
