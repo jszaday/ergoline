@@ -40,6 +40,12 @@ object GenerateProxies {
     }
   }
 
+  def makeHasher(ctx: CodeGenerationContext, numImpls: Int): Unit = {
+    ctx << "std::size_t hash() const" << "{"
+    ctx << "return 0;"
+    ctx << "}" 
+  }
+
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = nameFor(ctx, x)
     val impls = x.derived.map(nameFor(ctx, _)).toList
@@ -50,6 +56,8 @@ object GenerateProxies {
         }) ++ List(s"$name() : handle(-1) { }")
     } << visitAbstractPup(ctx, impls.length) << {
       x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member), impls.length))
+    } << {
+      makeHasher(ctx, impls.length)
     } << "};"
   }
 

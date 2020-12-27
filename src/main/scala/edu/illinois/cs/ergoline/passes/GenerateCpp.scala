@@ -360,7 +360,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val ty = Find.uniqueResolution(d.declaredType)
       val proxy = ProxyManager.asProxy(ty)
       proxy match {
-        case Some(_) => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
+        case Some(p) if p.isAbstract => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.hash());"
+        case Some(p) if p.collective.isEmpty => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
+        case Some(_) => // TODO implement
         case None => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)});"
       }
     })

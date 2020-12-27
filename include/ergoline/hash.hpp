@@ -39,7 +39,10 @@ struct hash<T*,
 };
 
 template <class T>
-struct hash<T, typename std::enable_if<std::is_integral<T>::value>::type> {
+struct hash<T,
+            typename std::enable_if<std::is_integral<T>::value ||
+                                    std::is_floating_point<T>::value ||
+                                    std::is_same<std::string, T>::value>::type> {
   std::size_t operator()(const T& t) const { return std::hash<T>()(t); }
 };
 
