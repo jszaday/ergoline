@@ -11,11 +11,9 @@
 #include "ckfutures.h"
 
 namespace ergoline {
+namespace hash_utils {
 template <class, typename Enable = void>
 struct hash;
-
-template <typename K, typename V>
-using hash_map = std::unordered_map<K, V, hash<K>>;
 
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v) {
@@ -39,32 +37,36 @@ struct hash<T*,
 };
 
 template <class T>
-struct hash<T,
-            typename std::enable_if<std::is_integral<T>::value ||
-                                    std::is_floating_point<T>::value ||
-                                    std::is_same<std::string, T>::value>::type> {
+struct hash<
+    T, typename std::enable_if<std::is_integral<T>::value ||
+                               std::is_floating_point<T>::value ||
+                               std::is_same<std::string, T>::value>::type> {
   std::size_t operator()(const T& t) const { return std::hash<T>()(t); }
 };
 
 template <class T>
-struct hash<std::shared_ptr<T> > {
+struct hash<std::shared_ptr<T>> {
   std::size_t operator()(const std::shared_ptr<T>& t) const {
     return hash<T*>()(t.get());
   }
 };
 
 template <class T>
-struct hash<std::vector<T> > {
-  std::size_t operator()(const std::vector<T>& t) const { return hash_iterable(t); }
+struct hash<std::vector<T>> {
+  std::size_t operator()(const std::vector<T>& t) const {
+    return hash_iterable(t);
+  }
 };
 
 template <class T>
-struct hash<std::deque<T> > {
-  std::size_t operator()(const std::deque<T>& t) const { return hash_iterable(t); }
+struct hash<std::deque<T>> {
+  std::size_t operator()(const std::deque<T>& t) const {
+    return hash_iterable(t);
+  }
 };
 
 template <class T>
-struct hash<ck::future<T> > {
+struct hash<ck::future<T>> {
   std::size_t operator()(const ck::future<T>& t) const {
     // ADD WHEN PR#3203 IS MERGED
     // auto handle = t.handle();
@@ -101,6 +103,38 @@ struct hash<CkArrayIndex> {
     return 0;
   }
 };
+}
+
+template <typename K, typename V>
+using hash_map = std::unordered_map<K, V, hash_utils::hash<K>>;
+
+struct hasher {
+  static const std::size_t default_seed = 0;
+
+  hasher(PUP::reconstruct) {}
+  hasher(size_t seed = default_seed) : hash_(seed) {}
+  hasher(const hasher& other) : hash_(other.hash_) {}
+
+  template <typename T>
+  inline void operator|(const T& t) {
+    hash_utils::hash_combine(hash_, hash_utils::hash<T>()(t));
+  }
+
+  inline std::size_t hash() const { return hash_; }
+  inline void reset(size_t seed = default_seed) { hash_ = seed; }
+  void pup(PUP::er& p) { p | hash_; }
+
+ private:
+  size_t hash_;
+};
+
+template <typename... T>
+std::size_t hash(const T&... args) {
+  using expander = int[];
+  hasher h;
+  (void)expander{0, (void(h | args), 0)...};
+  return h.hash();
+}
 }
 
 #endif

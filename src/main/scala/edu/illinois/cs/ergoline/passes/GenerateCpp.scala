@@ -349,35 +349,36 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << s"}"
   }
 
-  def hasherFor(ctx: CodeGenerationContext, d: EirDeclaration): Unit = {
+  def hasherFor(ctx: CodeGenerationContext, d: EirDeclaration, hasher: String): Unit = {
     val ty = Find.uniqueResolution(d.declaredType)
     val proxy = ProxyManager.asProxy(ty)
     proxy match {
-      case Some(p) if p.isAbstract => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.hash());"
-      case Some(p) if p.collective.isEmpty => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetChareID());"
+      case Some(p) if p.isAbstract => ctx << s"$hasher | ${nameFor(ctx, d)}.hash();"
+      case Some(p) if p.collective.isEmpty => ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetChareID();"
       case Some(p) => {
         val isArray = p.collective.exists(_.startsWith("array"))
         val isElement = p.isElement
-        if (isArray) ctx << s"ergoline::hash_combine(seed, ((CkGroupID)${nameFor(ctx, d)}.ckGetArrayID()));"
-        else ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetGroupID());"
+        if (isArray) ctx << s"$hasher | ((CkGroupID)${nameFor(ctx, d)}.ckGetArrayID());"
+        else ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetGroupID();"
         if (isElement) {
-          if (isArray) ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetIndex());"
-          else ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)}.ckGetGroupPe());"
+          if (isArray) ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetIndex();"
+          else ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetGroupPe();"
         }
       }
-      case None => ctx << s"ergoline::hash_combine(seed, ${nameFor(ctx, d)});"
+      case None => ctx << s"$hasher | ${nameFor(ctx, d)};"
     }
   }
 
   def makeHasher(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
+    val hasher = temporary(ctx)
     ctx << s"virtual std::size_t hash() override" << "{"
-    ctx << "std::size_t seed = 0;"
+    ctx << "ergoline::hasher" << hasher << ";"
     // TODO combine with hash of parents
     x.members.collect({
       // TODO should we consider transient or nah?
       case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
-    }).foreach(hasherFor(ctx, _))
-    ctx << "return seed;"
+    }).foreach(hasherFor(ctx, _, hasher))
+    ctx << s"return $hasher.hash();"
     ctx << "}"
   }
 
