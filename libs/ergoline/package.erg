@@ -3,3 +3,6 @@ package ergoline;
 @system def println(s : string): unit;
 @system(alias = "CkAssert") def assert(b : bool): unit;
 @system(alias = "CkExit") def exit(): unit;
+
+@system(alias = "ergoline::hash")
+def hash<A>(a: A): hashcode;

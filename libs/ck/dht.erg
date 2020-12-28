@@ -1,0 +1,69 @@
+package ck;
+
+import ergoline::_;
+
+class dht<K, V> {
+    private val proxy: dht_<V>@array1d;
+    private val n: int;
+
+    def dht(=n: int) {
+        proxy = new dht_<V>@array1d(n, n);
+    }
+
+    def get(k: K): future<V> {
+        val h = hash<K>(k);
+        val f = future<V>();
+        proxy[(h % n).toInt()].get(h, f);
+        return f;
+    }
+
+    def set(k: K, v: V) {
+        val h = hash<K>(k);
+        return proxy[(h % n).toInt()].set(h, v);
+    }
+}
+
+class dht_<A> {
+    private val selfProxy: dht_<A>[@]array1d;
+    private val data: map<hashcode, A>;
+    private val waiting: map< hashcode, queue< future<A> > >;
+    private val n: int;
+
+    @entry def dht_(=selfProxy: dht_<A>[@]array1d, =n: int) {
+        data = map<hashcode, A>();
+        waiting = map< hashcode, queue< future<A> > >();
+    }
+
+    private def enqueue(h: hashcode, f: future<A>) {
+        if (waiting.contains(h)) {
+            waiting[h].push(f);
+        } else {
+            waiting[h] = queue< future<A> >();
+            waiting[h].push(f);
+        }
+    }
+
+    @entry def get(h: hashcode, f: future<A>) {
+        val i = (h % n).toInt();
+        assert(i == selfProxy.index());
+        if (data.contains(h)) {
+            f.set(data[h]);
+        } else {
+            enqueue(h, f);
+        }
+    }
+
+    @entry def set(h: hashcode, a: A) {
+        val i = (h % n).toInt();
+        assert(i == selfProxy.index());
+        data[h] = a;
+        if (waiting.contains(h)) {
+            val q = waiting[h];
+            while (q.nonEmpty()) {
+                q.front().set(a);
+                q.pop();
+            }
+            waiting.remove(h);
+        }
+    }
+}
