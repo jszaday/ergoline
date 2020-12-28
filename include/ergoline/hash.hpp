@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include "object.hpp"
-#include "ckfutures.h"
+#include "charm++.h"
 
 namespace ergoline {
 namespace hash_utils {
@@ -100,7 +100,64 @@ struct hash<CkArrayIndex> {
     for (auto i = 0; i < CK_ARRAYINDEX_MAXLEN; i++) {
       hash_combine(seed, (t.data())[i]);
     }
-    return 0;
+    return seed;
+  }
+};
+
+template <typename T>
+struct hash<T, typename std::enable_if<std::is_base_of<
+                   CProxyElement_ArrayElement, T>::value>::type> {
+  std::size_t operator()(const T& t) const {
+    std::size_t seed = 0;
+    hash_combine(seed, (CkGroupID)t.ckGetArrayID());
+    hash_combine(seed, t.ckGetIndex());
+    return seed;
+  }
+};
+
+template <typename T>
+struct hash<T, typename std::enable_if<
+                   std::is_base_of<CProxy_ArrayElement, T>::value>::type> {
+  std::size_t operator()(const T& t) const {
+    std::size_t seed = 0;
+    hash_combine(seed, (CkGroupID)t.ckGetArrayID());
+    return seed;
+  }
+};
+
+template <typename T>
+struct hash<
+    T, typename std::enable_if<std::is_base_of<CProxy_Chare, T>::value>::type> {
+  std::size_t operator()(const T& t) const {
+    std::size_t seed = 0;
+    hash_combine(seed, t.ckGetChareID());
+    return seed;
+  }
+};
+
+template <typename T>
+struct hash<T, typename std::enable_if<
+                   std::is_base_of<CProxyElement_Group, T>::value ||
+                   std::is_base_of<CProxyElement_NodeGroup, T>::value>::type> {
+  std::size_t operator()(const T& t) const {
+    std::size_t seed = 0;
+    hash_combine(seed, t.ckGetGroupID());
+    hash_combine(seed, t.ckGetGroupPe());
+    return seed;
+  }
+};
+
+template <typename T>
+struct hash<T,
+            typename std::enable_if<
+                (std::is_base_of<CProxy_Group, T>::value ||
+                 std::is_base_of<CProxy_NodeGroup, T>::value) &&
+                !(std::is_base_of<CProxyElement_Group, T>::value ||
+                  std::is_base_of<CProxyElement_NodeGroup, T>::value)>::type> {
+  std::size_t operator()(const T& t) const {
+    std::size_t seed = 0;
+    hash_combine(seed, t.ckGetGroupID());
+    return seed;
   }
 };
 }
@@ -117,7 +174,7 @@ struct hasher {
 
   template <typename T>
   inline void operator|(const T& t) {
-    hash_utils::hash_combine(hash_, hash_utils::hash<T>()(t));
+    hash_utils::hash_combine(hash_, t);
   }
 
   inline std::size_t hash() const { return hash_; }

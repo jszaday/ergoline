@@ -354,18 +354,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val proxy = ProxyManager.asProxy(ty)
     proxy match {
       case Some(p) if p.isAbstract => ctx << s"$hasher | ${nameFor(ctx, d)}.hash();"
-      case Some(p) if p.collective.isEmpty => ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetChareID();"
-      case Some(p) => {
-        val isArray = p.collective.exists(_.startsWith("array"))
-        val isElement = p.isElement
-        if (isArray) ctx << s"$hasher | ((CkGroupID)${nameFor(ctx, d)}.ckGetArrayID());"
-        else ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetGroupID();"
-        if (isElement) {
-          if (isArray) ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetIndex();"
-          else ctx << s"$hasher | ${nameFor(ctx, d)}.ckGetGroupPe();"
-        }
-      }
-      case None => ctx << s"$hasher | ${nameFor(ctx, d)};"
+      case _ => ctx << s"$hasher | ${nameFor(ctx, d)};"
     }
   }
 
