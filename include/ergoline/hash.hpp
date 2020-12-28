@@ -12,6 +12,10 @@
 
 namespace ergoline {
 namespace hash_utils {
+
+template <bool B>
+using Requires = PUP::Requires<B>;
+
 template <class, typename Enable = void>
 struct hash;
 
@@ -157,6 +161,32 @@ struct hash<T,
   std::size_t operator()(const T& t) const {
     std::size_t seed = 0;
     hash_combine(seed, t.ckGetGroupID());
+    return seed;
+  }
+};
+
+template <size_t N = 0, typename... Args,
+          Requires<0 == sizeof...(Args)> = nullptr>
+void hash_tuple_impl(std::size_t& /* p */, const std::tuple<Args...>& /* t */) {}
+
+template <size_t N = 0, typename... Args,
+          Requires<(0 < sizeof...(Args) && 0 == N)> = nullptr>
+void hash_tuple_impl(std::size_t& p, const std::tuple<Args...>& t) {
+  hash_combine(p, std::get<N>(t));
+}
+
+template <size_t N, typename... Args,
+          Requires<(sizeof...(Args) > 0 && N > 0)> = nullptr>
+void hash_tuple_impl(std::size_t& p, const std::tuple<Args...>& t) {
+  hash_combine(p, std::get<N>(t));
+  hash_tuple_impl<N - 1>(p, t);
+}
+
+template <typename... Args>
+struct hash<std::tuple<Args...>> {
+  std::size_t operator()(const std::tuple<Args...>& t) const {
+    size_t seed = 0;
+    hash_tuple_impl<sizeof...(Args)-1>(seed, t);
     return seed;
   }
 };
