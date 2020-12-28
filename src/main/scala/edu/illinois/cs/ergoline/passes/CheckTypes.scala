@@ -18,7 +18,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val assignment = x.parent.to[EirAssignment]
     val targetType = visit(ctx, x.target)
     if (assignment.exists(_.lval == x)) {
-      ???
+      val f = EirFunctionCall(Some(x), null, x.args :+ assignment.get.rval, Nil)
+      f.target = EirFieldAccessor(Some(f), x.target, "set")
+      x.disambiguation = Some(f)
+      visit(ctx, assignment.get.rval)
     } else if (targetType.isInstanceOf[EirTupleType]) {
       val argType = Option.when(x.args.length == 1)(visit(ctx, x.args.head))
       val integer = globals.typeFor(EirLiteralTypes.Integer)
@@ -390,6 +393,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case a : EirFunctionArgument => a.isFinal
         case _ => false
       }
+      case _: EirArrayReference => false
       case _ => ???
     }
   }

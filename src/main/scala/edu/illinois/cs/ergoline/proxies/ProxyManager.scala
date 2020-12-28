@@ -59,6 +59,13 @@ object ProxyManager {
     }
   }
 
+  def elementType(p: EirProxy): EirType = {
+    elementFor(p) match {
+      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case None => ???
+    }
+  }
+
   def proxyFor(t: EirProxyType): EirType = {
     val ctve = t.collective.getOrElse("")
     val resolved = Find.uniqueResolution(t.base)
@@ -80,8 +87,7 @@ object ProxyManager {
         _proxies += ((ctve, base) -> proxy)
         proxy
     }
-    val proxy = Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy)
-    typeFor(proxy, templateArgs)
+    typeFor(Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy), templateArgs)
   }
 
   def proxiesFor(c: EirClassLike): Iterable[EirProxy] = {

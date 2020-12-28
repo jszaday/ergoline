@@ -360,7 +360,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     // TODO combine with hash of parents
     val members = x.members.collect({
       // TODO should we consider transient or nah?
-      case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
+      case m@EirMember(_, d: EirDeclaration, _) if m.annotation("hashExclude").isEmpty => d
     })
     if (members.nonEmpty) {
       members.foreach(hasherFor(ctx, _, hasher))

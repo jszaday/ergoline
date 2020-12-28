@@ -200,6 +200,22 @@ struct hash<std::tuple<Args...>> {
 template <typename K, typename V>
 using hash_map = std::unordered_map<K, V, hash_utils::hash<K>>;
 
+template <typename K, typename V>
+bool map_contains(const hash_map<K, V>& map, const K& k) {
+  return map.find(k) != map.end();
+}
+
+template <typename K, typename V>
+bool map_remove(hash_map<K, V>& map, const K& k) {
+  auto search = map.find(k);
+  if (search != map.end()) {
+    map.erase(search);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 struct hasher {
   static const std::size_t default_seed = 0;
 

@@ -2,10 +2,14 @@ package ergoline;
 
 @system(alias="ergoline::hash_map")
 class map<K, V> {
-    @system def contains(key: K): bool;
+    @system(alias="ergoline::map_contains", static=true)
+    def contains(key: K): bool;
+
+    @system(alias="ergoline::map_remove", static=true)
+    @system def remove(key: K): bool;
+
     @system def set(key: K, value: V);
     @system def get(key: K): V;
-    @system def remove(key: K);
     @system def size(): int;
     @system def apply(): map<K, V>;
 }

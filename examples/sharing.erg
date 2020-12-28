@@ -1,0 +1,38 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class sharing {
+    val mainProxy: sharing@;
+    val table: ck::dht<int, int>;
+    val count: int = 0;
+
+    @entry def sharing(selfProxy: sharing@) {
+        mainProxy = selfProxy;
+        table = new ck::dht<int, int>(ck::numPes());
+        new sharing@group(mainProxy, table);
+    }
+
+    @entry def sharing(selfProxy: sharing[@]group, =mainProxy: sharing@, =table: ck::dht<int, int>) {
+        selfProxy.share();
+    }
+
+    @threaded @entry def share() {
+        val mine = ck::myPe();
+        val neighbor = (mine + 1) % ck::numPes();
+        table.set(neighbor, mine);
+        val received = table.get(mine).get();
+        println(mine.toString() + " received value " + received.toString());
+        mainProxy.tally();
+    }
+
+    @entry def tally() {
+        count += 1;
+
+        if (count >= ck::numPes()) {
+            println("done");
+            exit();
+        }
+    }
+}

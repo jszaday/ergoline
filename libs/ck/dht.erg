@@ -25,8 +25,8 @@ class dht<K, V> {
 
 class dht_<A> {
     private val selfProxy: dht_<A>[@]array1d;
-    private val data: map<hashcode, A>;
-    private val waiting: map< hashcode, queue< future<A> > >;
+    @hashExclude private val data: map<hashcode, A>;
+    @hashExclude private val waiting: map< hashcode, queue< future<A> > >;
     private val n: int;
 
     @entry def dht_(=selfProxy: dht_<A>[@]array1d, =n: int) {
@@ -60,7 +60,7 @@ class dht_<A> {
         if (waiting.contains(h)) {
             val q = waiting[h];
             while (q.nonEmpty()) {
-                q.front().set(a);
+                q.head().set(a);
                 q.pop();
             }
             waiting.remove(h);

@@ -66,7 +66,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
     val u = globals.typeFor(EirLiteralTypes.Unit)
-    val eleTy = ProxyManager.elementFor(this).get
+    val eleTy = ProxyManager.elementType(this)
     val needsIndex = collective.exists(_.startsWith("array"))
     base.members
       .filter(x => x.isEntry && x.isConstructor && validConstructor(x))
