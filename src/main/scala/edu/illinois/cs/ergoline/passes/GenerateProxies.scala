@@ -36,20 +36,27 @@ object GenerateProxies {
     ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
         (0 until numImpls).map(x => s"case $x: { p$x.$name($nArgs); break; }") ++
-        List(s"default: { CkAssert(-1); break; }", "}", "}")
+        List("default: { CkAbort(\"abstract proxy unable to find match\"); }", "}", "}")
     }
   }
 
   def makeHasher(ctx: CodeGenerationContext, numImpls: Int): Unit = {
-    ctx << "std::size_t hash() const" << "{"
-    ctx << "return 0;"
+    ctx << "virtual std::size_t hash() override" << "{"
+    ctx << "ergoline::hasher _;"
+    ctx << "switch (handle)" << "{"
+    (0 until numImpls).foreach(x => {
+      ctx << s"case $x: { _ | p$x; break; }"
+    })
+    ctx << "default: { CkAbort(\"abstract proxy unable to find match\"); }"
+    ctx << "}"
+    ctx << "return _.hash();"
     ctx << "}" 
   }
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = nameFor(ctx, x)
     val impls = x.derived.map(nameFor(ctx, _)).toList
-    ctx << s"struct $name" << "{" << s"int handle;" << {
+    ctx << s"struct $name: public ergoline::hashable" << "{" << s"int handle;" << {
         impls.zipWithIndex.flatMap({
           case (derived, idx) =>
             List(s"$derived p$idx;", s"$name($derived x) : handle($idx), p$idx(x) { }")

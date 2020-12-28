@@ -350,12 +350,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def hasherFor(ctx: CodeGenerationContext, d: EirDeclaration, hasher: String): Unit = {
-    val ty = Find.uniqueResolution(d.declaredType)
-    val proxy = ProxyManager.asProxy(ty)
-    proxy match {
-      case Some(p) if p.isAbstract => ctx << s"$hasher | ${nameFor(ctx, d)}.hash();"
-      case _ => ctx << s"$hasher | ${nameFor(ctx, d)};"
-    }
+    ctx << s"$hasher | ${nameFor(ctx, d)};"
   }
 
   def makeHasher(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
@@ -363,10 +358,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"virtual std::size_t hash() override" << "{"
     ctx << "ergoline::hasher" << hasher << ";"
     // TODO combine with hash of parents
-    x.members.collect({
+    val members = x.members.collect({
       // TODO should we consider transient or nah?
       case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
-    }).foreach(hasherFor(ctx, _, hasher))
+    })
+    if (members.nonEmpty) {
+      members.foreach(hasherFor(ctx, _, hasher))
+    } else {
+      ctx << s"$hasher | typeid(this).hash_code();"
+    }
     ctx << s"return $hasher.hash();"
     ctx << "}"
   }

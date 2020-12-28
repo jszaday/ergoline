@@ -2,6 +2,7 @@
 #define __ERGOLINE_OBJECT_HPP__
 
 #include <memory>
+#include "hash.hpp"
 #include "pup.h"
 
 namespace ergoline {
@@ -11,9 +12,8 @@ struct puppable : public PUP::able {
   puppable(CkMigrateMessage *m) : PUP::able(m) {}
 };
 
-struct object {
+struct object: public hashable {
   virtual puppable *toPuppable() = 0;
-  virtual std::size_t hash() = 0;
   virtual bool equals(std::shared_ptr<object> other) {
     return this == other.get();
   }

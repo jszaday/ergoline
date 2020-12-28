@@ -7,10 +7,14 @@
 #include <functional>
 #include <type_traits>
 #include <unordered_map>
-#include "object.hpp"
 #include "charm++.h"
 
 namespace ergoline {
+
+struct hashable {
+  virtual std::size_t hash() = 0;
+};
+
 namespace hash_utils {
 
 template <bool B>
@@ -35,8 +39,14 @@ inline std::size_t hash_iterable(const T& t) {
 }
 
 template <class T>
+struct hash<T,
+            typename std::enable_if<std::is_base_of<hashable, T>::value>::type> {
+  std::size_t operator()(const T& t) const { return const_cast<T&>(t).hash(); }
+};
+
+template <class T>
 struct hash<T*,
-            typename std::enable_if<std::is_base_of<object, T>::value>::type> {
+            typename std::enable_if<std::is_base_of<hashable, T>::value>::type> {
   std::size_t operator()(const T* t) const { return const_cast<T*>(t)->hash(); }
 };
 
@@ -101,8 +111,9 @@ template <>
 struct hash<CkArrayIndex> {
   std::size_t operator()(const CkArrayIndex& t) const {
     std::size_t seed = 0;
+    const int *idx = t.data();
     for (auto i = 0; i < CK_ARRAYINDEX_MAXLEN; i++) {
-      hash_combine(seed, (t.data())[i]);
+      hash_combine(seed, idx[i]);
     }
     return seed;
   }
@@ -123,9 +134,7 @@ template <typename T>
 struct hash<T, typename std::enable_if<
                    std::is_base_of<CProxy_ArrayElement, T>::value>::type> {
   std::size_t operator()(const T& t) const {
-    std::size_t seed = 0;
-    hash_combine(seed, (CkGroupID)t.ckGetArrayID());
-    return seed;
+    return hash<CkGroupID>()((CkGroupID)t.ckGetArrayID());
   }
 };
 
@@ -133,9 +142,7 @@ template <typename T>
 struct hash<
     T, typename std::enable_if<std::is_base_of<CProxy_Chare, T>::value>::type> {
   std::size_t operator()(const T& t) const {
-    std::size_t seed = 0;
-    hash_combine(seed, t.ckGetChareID());
-    return seed;
+    return hash<CkChareID>()(t.ckGetChareID());
   }
 };
 
@@ -159,9 +166,7 @@ struct hash<T,
                 !(std::is_base_of<CProxyElement_Group, T>::value ||
                   std::is_base_of<CProxyElement_NodeGroup, T>::value)>::type> {
   std::size_t operator()(const T& t) const {
-    std::size_t seed = 0;
-    hash_combine(seed, t.ckGetGroupID());
-    return seed;
+    return hash<CkGroupID>()(t.ckGetGroupID());
   }
 };
 
