@@ -47,7 +47,8 @@ object Processes {
     }).toList.groupBy(x => {
       Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
     })
-    ctx << Seq("#include \"pup.h\" // ;") ++ (a.map(GenerateCpp.forwardDecl(ctx, _)) ++  Seq(n + GenerateCpp.systemClasses() + n))
+    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;")
+    ctx << a.map(GenerateCpp.forwardDecl(ctx, _))
     toDecl.foreach({
       case (namespace, classes) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
