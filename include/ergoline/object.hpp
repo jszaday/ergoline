@@ -6,14 +6,7 @@
 #include "pup.h"
 
 namespace ergoline {
-struct puppable : public PUP::able {
-  puppable() {}
-  virtual ~puppable() {}
-  puppable(CkMigrateMessage *m) : PUP::able(m) {}
-};
-
 struct object: public hashable {
-  virtual puppable *toPuppable() = 0;
   virtual bool equals(std::shared_ptr<object> other) {
     return this == other.get();
   }

@@ -1,7 +1,8 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makeHasher, makePupper, nameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makeHasher, makePupper, nameFor, qualifiedNameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateDecls {
@@ -35,22 +36,25 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
-        List(s"static std::shared_ptr<${nameFor(ctx, x, x.templateArgs.nonEmpty)}> fromPuppable(ergoline::puppable *p);")
+        Nil
       } else if (!isTransient(x)) {
         if (!hasPup(x)) {
-          if (x.templateArgs.isEmpty) ctx << "void pup(PUP::er &p) override;"
+          if (x.templateArgs.isEmpty) ctx << "virtual void pup(PUP::er&) override;"
           else makePupper(ctx, x, isMember = true)
         }
         if (!hasHash(x)) makeHasher(ctx, x)
+        val parent = x.extendsThis
+          .map(Find.uniqueResolution[EirType])
+          .map(qualifiedNameFor(ctx, x)(_))
+          .getOrElse("PUP::able")
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
         else s"PUPable_decl_inside_template(${nameFor(ctx, x)});",
-          s"${nameFor(ctx, x)}(CkMigrateMessage *m) : ergoline::puppable(m) { }",
-          "virtual ergoline::puppable* toPuppable() override { return this; }") ++
+          s"${nameFor(ctx, x)}(CkMigrateMessage *m) : $parent(m) { }") ++
           Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
       } else {
         if (!hasHash(x)) makeHasher(ctx, x)
-        List("virtual ergoline::puppable* toPuppable() override { CkAbort(\"" + nameFor(ctx, x) + " is @transient and cannot be pup'd\"); return nullptr; }")
+        Nil
       }
     } << x.members << s"};"
   }
