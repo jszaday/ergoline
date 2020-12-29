@@ -283,17 +283,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.parent.exists(_.isInstanceOf[EirMember]) || x.annotation("transient").isDefined
   }
 
-  def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): String = {
+  def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     val parents = (x.implementsThese ++ x.extendsThis).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
-      if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
+      ctx << {
+        if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(", ") else ": public ergoline::object"
+      }
     } else {
-      ": " + {
+      ctx << ": " << {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
-      } + {
-        // NOTE for some reason this has to come last? otherwise it can cause failures? strange...
-        if (!isTransient(x) && !x.extendsThis.exists(x => Find.uniqueResolution(x).isInstanceOf[EirClass])) ", public PUP::able" else ""
-      } + {
+      } << {
+        val hasPupableParent = x.extendsThis.map(Find.uniqueResolution[EirType]).exists(!_.isTrait)
+        Option.unless(isTransient(x) || hasPupableParent)(", public PUP::able")
+      } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
       }
     }
@@ -362,7 +364,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (x.templateArgs.isEmpty) {
       val isSystem = x.annotation("system").isDefined
       ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
-      if (!x.isInstanceOf[EirTrait] && !isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
+      if (!x.isTrait && !isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
         makePupper(ctx, x)
       }
     }
