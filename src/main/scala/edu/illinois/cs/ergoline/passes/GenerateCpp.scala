@@ -609,22 +609,33 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx.toString
   }
 
+  def typeAt(t: Option[EirType], idx: Int): Option[EirType] = {
+    t match {
+      case Some(t: EirTupleType) if idx < t.children.length =>
+        Some(Find.uniqueResolution[EirType](t.children(idx)))
+      case _ => None
+    }
+  }
+
   def visitPatternCond(x: EirPattern, current: String, parentType: Option[EirType]): List[String] = {
     x match {
       case EirPatternList(_, ps) => ps match {
         case p :: Nil => visitPatternCond(p, current, parentType)
         case patterns =>
           patterns.zipWithIndex.flatMap {
-            case (p, idx) => visitPatternCond(p, s"std::get<$idx>($current)", parentType)
+            case (p, idx) => visitPatternCond(p, s"std::get<$idx>($current)", typeAt(parentType, idx))
           }
       }
-      case EirIdentifierPattern(_, "_", t) => {
-        if (parentType.contains(t)) Nil
-        else {
-          val ctx = new CodeGenerationContext
-          List(s"std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current)")
+      case EirIdentifierPattern(_, "_", t) =>
+        parentType match {
+          case None => Errors.missingType(x)
+          case Some(u) if t == u => Nil
+          case _ =>
+            // TODO this needs to inherit substitutions
+            //      (when such things are added)
+            val ctx = new CodeGenerationContext
+            List(s"std::dynamic_pointer_cast<${nameFor(ctx, t)}>($current)")
         }
-      }
       case EirIdentifierPattern(_, n, t) =>
         Option.when(Find.uniqueResolution(t).isPointer)(n).toList
       case e: EirExpressionPattern =>
@@ -635,7 +646,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
     val parent = x.parent.to[EirMatch]
-    val parentType = parent.flatMap(_.foundType)
+    val parentType = parent.map(_.expression).flatMap(_.foundType)
     val isUnit = parentType.contains(globals.typeFor(EirLiteralTypes.Unit))
     ctx << "{" << visitPatternDecl(x.patterns, temporary(ctx)).split(n)
     val conditions = visitPatternCond(x.patterns, temporary(ctx), parentType).mkString(" && ")
@@ -643,7 +654,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
-    val (primary, secondary) = (Option.when(!isUnit)(" return"), Option.when(isUnit)("return;"))
+    val (primary, secondary) = (Option.unless(isUnit)("return"), Option.when(isUnit)("return;"))
     ctx << primary << x.body << ";" << secondary << Option.when(needsIf)("}") << "}"
   }
 
