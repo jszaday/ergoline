@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import java.io.File
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -320,22 +320,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .filterNot(_.isTrait).toList
   }
 
-  def pupperFor(ctx: CodeGenerationContext, name: String, resolvable: EirResolvable[EirType]): List[String] = {
+  def pupperFor(ctx: CodeGenerationContext, x: EirClassLike, name: String, resolvable: EirResolvable[EirType]): List[String] = {
     val ty = Find.uniqueResolution(resolvable)
     if (ty.isPointer) {
-      val typeName = nameFor(ctx, ty, includeTemplates = true)
+      val typeName = qualifiedNameFor(ctx, x, includeTemplates = true)(ty)
       List("{",
-        s"PUP::able* _ = (p.isUnpacking()) ? nullptr : $name->toPuppable();",
+        s"PUP::able* _ = (p.isUnpacking()) ? nullptr : dynamic_cast<PUP::able*>($name.get());",
         "p(&_);",
-        s"if (p.isUnpacking()) $name = std::dynamic_pointer_cast<$typeName>(std::shared_ptr<ergoline::puppable>((ergoline::puppable*)_));",
+        s"if (p.isUnpacking()) $name = std::dynamic_pointer_cast<$typeName>(std::shared_ptr<PUP::able>(_));",
         "}")
     }
     else List(s"p | $name;")
   }
 
-  def makePupper(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
+  def makePupper(ctx: CodeGenerationContext, x: EirClassLike, isMember: Boolean = false): Unit = {
     // TODO check to ensure user does not override
-    ctx << s"virtual void pup(PUP::er &p) override" << "{" << {
+    val header = if (isMember) "void pup(PUP::er &p) override" else s"void ${nameFor(ctx, x)}::pup(PUP::er &p)"
+    ctx << header << "{" << {
       val parents = puppingParents(x) match {
         case Nil => List(s"PUP::able::pup(p);")
         case ps => ps.map(nameFor(ctx, _)).map(_ + "::pup(p);")
@@ -343,7 +344,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
       }).flatMap(d => {
-        pupperFor(ctx, nameFor(ctx, d), d.declaredType)
+        pupperFor(ctx, x, nameFor(ctx, d), d.declaredType)
       })
       parents ++ values
     } << s"}"
@@ -373,7 +374,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.templateArgs.isEmpty) {
+      val isSystem = x.annotation("system").isDefined
       ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
+      if (!isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
+        makePupper(ctx, x)
+      }
     }
   }
 
@@ -542,8 +547,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val langCi = ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
     if (langCi && declTy.isPointer) ctx << "CkPointer<" + {
-      if (declTy.isTrait) "ergoline::puppable"
-      else nameFor(ctx, declTy)
+      // TODO enable this optimization
+      // if (!declTy.isTrait) nameFor(ctx, declTy) else
+      "ergoline::puppable"
     } + ">"
     else ctx << ctx.typeFor(declTy, Some(x))
     ctx << ctx.nameFor(x)

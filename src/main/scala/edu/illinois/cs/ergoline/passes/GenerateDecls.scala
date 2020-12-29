@@ -37,7 +37,10 @@ object GenerateDecls {
       if (x.isInstanceOf[EirTrait]) {
         List(s"static std::shared_ptr<${nameFor(ctx, x, x.templateArgs.nonEmpty)}> fromPuppable(ergoline::puppable *p);")
       } else if (!isTransient(x)) {
-        if (!hasPup(x)) makePupper(ctx, x)
+        if (!hasPup(x)) {
+          if (x.templateArgs.isEmpty) ctx << "void pup(PUP::er &p) override;"
+          else makePupper(ctx, x, isMember = true)
+        }
         if (!hasHash(x)) makeHasher(ctx, x)
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
