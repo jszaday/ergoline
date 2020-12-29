@@ -46,8 +46,8 @@ class TypeCheckContext {
 
   def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
     getTemplatedType(
-      assertValid[EirSpecializable](Find.uniqueResolution(t.base)),
-      t.args.map(Find.uniqueResolution[EirType]))
+      assertValid[EirSpecializable](Find.uniqueResolution[EirType](t.base)),
+      t.args.map(CheckTypes.visit(this, _)))
   }
 
   def makeDistinct(s: EirSpecialization): EirSpecialization = {

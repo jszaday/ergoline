@@ -503,6 +503,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val dealiased = alias.orElse(x match {
       case n: EirNamedNode => Some(n.name)
       case _ => None
+    }).map(x => {
+      if (x == "std::size_t" && ctx.language == "ci") "size_t"
+      else x
     })
     val proxy = Some(x).to[EirType].flatMap(ProxyManager.asProxy)
     x match {
