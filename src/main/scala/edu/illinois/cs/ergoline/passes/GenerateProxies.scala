@@ -90,12 +90,9 @@ object GenerateProxies {
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (ty.isPointer) {
-      ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << (ty match {
-        case _ if ty.isTrait => s"${qualifiedNameFor(ctx, x)(ty)}::fromPuppable(${x.name}_)"
-        case _ => {
-          "std::dynamic_pointer_cast<" + qualifiedNameFor(ctx, x, includeTemplates = true)(ty) + s">(std::shared_ptr<ergoline::puppable>(${x.name}_))"
-        }
-      }) << ";"
+      ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
+        s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
+      } << ";"
     }
   }
 
@@ -104,7 +101,7 @@ object GenerateProxies {
     if (ty.isPointer) {
       // TODO take parent into consideration
       // ctx << "CkPointer<" << ctx.nameFor(ty) << ">" << (nameFor(ctx, arg) + "_")
-      ctx << "ergoline::puppable*" << (nameFor(ctx, arg) + "_")
+      ctx << "PUP::able*" << (nameFor(ctx, arg) + "_")
     } else {
       ctx << ctx.typeFor(ty, Some(arg)) << nameFor(ctx, arg)
     }

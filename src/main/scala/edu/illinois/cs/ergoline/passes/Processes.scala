@@ -60,12 +60,6 @@ object Processes {
     kids.foreach(GenerateDecls.visit(ctx, _))
     kids.foreach(GenerateCpp.visit(ctx, _))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
-    toDecl.foreach({
-    case (namespace, classes) =>
-      ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")} {" << {
-        classes.collect({ case t: EirTrait => t }).foreach(GenerateCpp.makeFromPuppable(ctx, _))
-      } << s"}"
-    })
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",
