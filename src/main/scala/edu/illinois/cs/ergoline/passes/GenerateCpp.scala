@@ -376,7 +376,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (x.templateArgs.isEmpty) {
       val isSystem = x.annotation("system").isDefined
       ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
-      if (!isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
+      if (!x.isInstanceOf[EirTrait] && !isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
         makePupper(ctx, x)
       }
     }
