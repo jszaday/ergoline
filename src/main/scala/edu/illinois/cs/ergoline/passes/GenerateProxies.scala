@@ -91,7 +91,7 @@ object GenerateProxies {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (ty.isPointer) {
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
-        "std::dynamic_pointer_cast<" + qualifiedNameFor(ctx, x, includeTemplates = true)(ty) + s">(std::shared_ptr<PUP::able>(${x.name}_))"
+        s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
       } << ";"
     }
   }

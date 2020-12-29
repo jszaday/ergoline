@@ -84,7 +84,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def castToPuppable(ctx: CodeGenerationContext)(ptrType: Option[EirResolvable[EirType]], expr: EirExpressionNode): Unit = {
-    ctx << s"CkPointer<PUP::able>(dynamic_cast<PUP::able*>(" << expr << ".get()))"
+    ctx << s"ergoline::to_pupable(" << expr << ")"
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
