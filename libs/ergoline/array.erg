@@ -1,8 +1,11 @@
 package ergoline;
 
 @system(alias = "std::vector") class array<A> {
+    @system(alias="[]")
     def get(idx: int): A;
-    def getOrNone(idx: int): option<A>;
+    @system(alias="[]")
     def set(idx: int, value: A): unit;
+
+    def getOrNone(idx: int): option<A>;
     def size(): int;
 }

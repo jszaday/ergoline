@@ -14,13 +14,37 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   // TODO this should consider the current substitutions, and check each unique substitution!
   var classCache: List[EirClass] = Nil
 
+  def generateLval(x: EirArrayReference): EirExpressionNode = {
+    val f = EirFunctionCall(Some(x), null, x.args, Nil)
+    f.target = EirFieldAccessor(Some(f), x.target, "get")
+    f
+  }
+
+  def generateRval(x: EirAssignment): EirExpressionNode = {
+    val operator = Option.unless(x.op == "=")(
+      globals.operatorToFunction(x.op.init).getOrElse(Errors.unknownOperator(x, x.op)))
+    val arrayRef = assertValid[EirArrayReference](x.lval)
+    val rval = operator match {
+      case Some(s) =>
+        val f = EirFunctionCall(None, null, List(x.rval), Nil)
+        f.target = EirFieldAccessor(Some(f), generateLval(arrayRef), s)
+        f
+      case None => x.rval
+    }
+    val f = EirFunctionCall(Some(x), null, arrayRef.args :+ rval, Nil)
+    f.target = EirFieldAccessor(Some(f), arrayRef.target, "set")
+    f
+  }
+
   override def visitArrayReference(ctx: TypeCheckContext, x: EirArrayReference): EirType = {
     val assignment = x.parent.to[EirAssignment]
     val targetType = visit(ctx, x.target)
     if (assignment.exists(_.lval == x)) {
-      val f = EirFunctionCall(Some(x), null, x.args :+ assignment.get.rval, Nil)
-      f.target = EirFieldAccessor(Some(f), x.target, "set")
+      val f = generateRval(assignment.get)
       x.disambiguation = Some(f)
+      visit(ctx, f)
+      // TODO this is redundant, can we maybe return nothing?
+      //      (it gets visited in visitAssignment again)
       visit(ctx, assignment.get.rval)
     } else if (targetType.isInstanceOf[EirTupleType]) {
       val argType = Option.when(x.args.length == 1)(visit(ctx, x.args.head))
@@ -35,8 +59,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
       }
     } else {
-      val f = EirFunctionCall(Some(x), null, x.args, Nil)
-      f.target = EirFieldAccessor(Some(f), x.target, "get")
+      val f = generateLval(x)
       x.disambiguation = Some(f)
       visit(ctx, f)
     }
@@ -352,7 +375,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
     val op = if (node.op == "!=") "==" else node.op
-    val func = globals.operatorToFunction(op).getOrElse(throw TypeCheckException(s"could not find member func for ${node.op}"))
+    val func = globals.operatorToFunction(op).getOrElse(Errors.unknownOperator(node, op))
     val f = EirFunctionCall(Some(node), null, List(node.rhs), Nil)
     f.target = EirFieldAccessor(Some(f), node.lhs, func)
     node.disambiguation = Some(f)
