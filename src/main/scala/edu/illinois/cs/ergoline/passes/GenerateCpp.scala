@@ -678,12 +678,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           ctx << s"std::get<" << args.head << ">(" << arrayRef.target << ")"
         }
-      case Some(t : EirProxy) if t.collective.exists(_.startsWith("array")) =>
+      case Some(t) if ProxyManager.asProxy(t).flatMap(_.collective).exists(_.startsWith("array")) =>
         ctx << arrayRef.target << "(" << (arrayRef.args, ",") << ")"
-      case Some(t) if !t.isPointer =>
-        ctx << arrayRef.target
-        for (arg <- arrayRef.args) {
-          ctx << "[" << arg << "]"
+      case Some(t) =>
+        if (isPlainArrayRef(arrayRef)) {
+          if (t.isPointer) {
+            ctx << "(*" << arrayRef.target << ")"
+          } else {
+            ctx << arrayRef.target
+          }
+          for (arg <- arrayRef.args) {
+            ctx << "[" << arg << "]"
+          }
+        } else {
+          ctx << arrayRef.disambiguation
         }
       case _ => Errors.missingType(arrayRef.target)
     }
@@ -742,8 +750,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << x.toString
   }
 
+  def arrayRefIsSystem(x: EirArrayReference): Option[EirAnnotation] = {
+    x.disambiguation
+      .to[EirFunctionCall]
+      .flatMap(_.target.disambiguation)
+      .flatMap(_.annotation("system"))
+  }
+
+  def isPlainArrayRef(x: EirArrayReference): Boolean = {
+    val system = arrayRefIsSystem(x)
+    system.flatMap(_("alias").map(_.stripped)).contains("[]")
+  }
+
   override def visitAssignment(ctx: CodeGenerationContext, x: EirAssignment): Unit = {
-    ctx << x.lval << x.op << x.rval
+    x.lval match {
+      case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x
+      case _ => ctx << x.lval << x.op << x.rval
+    }
   }
 
   override def visitReturn(ctx: CodeGenerationContext, x: EirReturn): Unit = {

@@ -471,6 +471,7 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
 
   def stripped: String = {
     `type` match {
+      case EirLiteralTypes.String if value == "\"[]\"" => "[]"
       case EirLiteralTypes.String if value.matches("^\"[:a-zA-Z0-9_]+\"$") =>
         value.substring(1, value.length - 1)
       case _ => throw new RuntimeException(s"cannot strip $this")

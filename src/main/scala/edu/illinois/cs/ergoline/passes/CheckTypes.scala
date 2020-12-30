@@ -21,6 +21,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       val f = EirFunctionCall(Some(x), null, x.args :+ assignment.get.rval, Nil)
       f.target = EirFieldAccessor(Some(f), x.target, "set")
       x.disambiguation = Some(f)
+      visit(ctx, f)
+      // TODO this is redundant, can we maybe return nothing?
+      //      (it gets visited in visitAssignment again)
       visit(ctx, assignment.get.rval)
     } else if (targetType.isInstanceOf[EirTupleType]) {
       val argType = Option.when(x.args.length == 1)(visit(ctx, x.args.head))

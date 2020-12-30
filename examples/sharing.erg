@@ -37,11 +37,11 @@ class sharing {
 
     @threaded @entry def share() {
         val mine = selfProxy.index();
-        table.set(mine, 2 * mine + 1);
+        table[mine] = 2 * mine + 1;
 
         for (var i = mine; i < (mine + 4); i += 1) {
             val neighbor = (i + 1) % n;
-            val received = table.get(neighbor).get();
+            val received = table[neighbor].get();
             println(mine.toString() + " received value " + received.toString());
         }
 
