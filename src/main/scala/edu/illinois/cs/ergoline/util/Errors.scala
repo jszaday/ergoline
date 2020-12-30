@@ -84,4 +84,9 @@ object Errors {
     Console.err.println(s"${contextualize(a)}: expected an ${c.getName}, got ${nameFor(a)}.")
     exitAction()
   }
+
+  def unknownOperator(a: EirNode, s: String): Nothing = {
+    Console.err.println(s"${contextualize(a)}: unrecognized operator $s.")
+    exitAction()
+  }
 }
