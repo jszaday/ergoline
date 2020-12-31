@@ -280,7 +280,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       enter(EirFunctionCall(parent, null, null, null), (f: EirFunctionCall) => {
         f.target = visitAs[EirExpressionNode](ctx.postfixExpression())
         f.args = ctx.fnArgs.mapOrEmpty(_.expression, visitAs[EirExpressionNode])
-        f.specialization = ctx.specialization().mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+        f.specialization = specializationToList(ctx.specialization())
       })
     } else {
       visitAs[EirExpressionNode](ctx.primaryExpression())
@@ -292,7 +292,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
-    val templates = ctx.specialization().mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+    val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {
       val templatedType = EirTemplatedType(parent, base, templates)
       base.parent = Some(templatedType)
@@ -420,17 +420,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     Option(ctx.newExpression()).map(visitNewExpression).getOrElse({
       Option(ctx.postfixExpression()).map(x => visitAs[EirExpressionNode](x)).getOrElse({
         enter(EirUnaryExpression(parent, ctx.unaryOperator().getText, null), (u: EirUnaryExpression) => {
-          u.rhs = visitAs[EirExpressionNode](ctx.castExpression())
+          u.rhs = visitAs[EirExpressionNode](ctx.unaryExpression())
         })
-      })
-    })
-  }
-
-  override def visitCastExpression(ctx: CastExpressionContext): EirExpressionNode = {
-    Option(ctx.unaryExpression()).map(x => visitAs[EirExpressionNode](x)).getOrElse({
-      enter(EirTypeCast(parent, null, null), (t: EirTypeCast) => {
-        t.to = visitAs[EirResolvable[EirType]](ctx.`type`())
-        t.value = visitCastExpression(ctx.castExpression())
       })
     })
   }
@@ -498,6 +489,19 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     pop()
   }
 
+  def specializationToList(ctx: SpecializationContext): List[EirResolvable[EirType]] = {
+    if (ctx != null && ctx.LeftShift() != null) {
+      ctx.mapOrEmpty(_.`type`(), visitAs[EirResolvable[EirType]]) :+ {
+        enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
+          t.base = symbolizeType(ctx.fqn.Identifier())
+          t.args = ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+        })
+      }
+    } else {
+      ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+    }
+  }
+
   override def visitPrimaryExpression(ctx: PrimaryExpressionContext): EirExpressionNode = {
     if (ctx == null) {
       throw new RuntimeException("encountered null")
@@ -506,7 +510,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         symbolize[EirNamedNode](ctx.fqn().Identifier())
       } else {
         enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
-          s.specialization = ctx.specialization().typeList().toList
+          s.specialization = specializationToList(ctx.specialization())
           s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
         })
       }

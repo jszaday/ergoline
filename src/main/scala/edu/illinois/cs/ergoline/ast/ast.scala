@@ -547,16 +547,6 @@ case class EirFieldAccessor(var parent: Option[EirNode], var target: EirExpressi
   }
 }
 
-case class EirTypeCast(var parent: Option[EirNode], var to: EirResolvable[EirType], var value: EirExpressionNode)
-  extends EirExpressionNode {
-  override def children: Iterable[EirNode] = Seq(to, value)
-
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    ((to == oldNode) && util.applyOrFalse[EirResolvable[EirType]](to = _, newNode)) ||
-      ((value == oldNode) && util.applyOrFalse[EirExpressionNode](x => value = x, newNode))
-  }
-}
-
 trait EirForLoopHeader {
   def children: Iterable[EirNode]
 

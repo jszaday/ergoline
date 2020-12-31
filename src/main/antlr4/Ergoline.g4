@@ -198,10 +198,8 @@ postfixExpression
 
 unaryExpression
     :   postfixExpression
-    |   unaryOperator castExpression
     |   newExpression
-    // |   'sizeof' unaryExpression
-    // |   'sizeof' '(' type ')'
+    |   unaryOperator unaryExpression
     ;
 
 unaryOperator
@@ -212,16 +210,11 @@ newExpression
     :   'new' type tupleExpression?
     ;
 
-castExpression
-    :   '(' type ')' castExpression
-    |   unaryExpression
-    ;
-
 multiplicativeExpression
-    :   castExpression
-    |   multiplicativeExpression '*' castExpression
-    |   multiplicativeExpression '/' castExpression
-    |   multiplicativeExpression '%' castExpression
+    :   unaryExpression
+    |   multiplicativeExpression '*' unaryExpression
+    |   multiplicativeExpression '/' unaryExpression
+    |   multiplicativeExpression '%' unaryExpression
     ;
 
 additiveExpression
@@ -232,14 +225,14 @@ additiveExpression
 
 shiftExpression
     :   additiveExpression
-    |   shiftExpression '<<' additiveExpression
-    |   shiftExpression '>>' additiveExpression
+    |   shiftExpression LeftShift additiveExpression
+    |   shiftExpression RightShift additiveExpression
     ;
 
 relationalExpression
     :   shiftExpression
-    |   relationalExpression '<' shiftExpression
-    |   relationalExpression '>' shiftExpression
+    |   relationalExpression Less shiftExpression
+    |   relationalExpression Greater shiftExpression
     |   relationalExpression '<=' shiftExpression
     |   relationalExpression '>=' shiftExpression
     ;
@@ -293,7 +286,8 @@ tupleType
     ;
 
 specialization
-    :   '<' typeList '>'
+    :   Less typeList Greater
+    |   Less (type ',')* fqn Less typeList LeftShift
     ;
 
 proxySuffix
@@ -360,8 +354,15 @@ ModAssign: '%=';
 XorAssign: '^=';
 AndAssign: '&=';
 OrAssign: '|=';
-LeftShiftAssign: '<<=';
-RightShiftAssign: '>>=';
+LeftShiftAssign: LeftShift Equals;
+RightShiftAssign: RightShift Equals;
+
+
+Greater: '>' ;
+Less: '<' ;
+
+RightShift: Less Less ;
+LeftShift: Greater Greater ;
 
 LParen : '(' ;
 RParen : ')' ;
