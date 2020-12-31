@@ -1,7 +1,9 @@
 package ergoline;
 
-@system(alias="ergoline::hash_map")
+@system(alias="ergoline::hash_map", pointer=true)
 class map<K, V> {
+    @system def map();
+
     @system(alias="ergoline::map_contains", static=true)
     def contains(key: K): bool;
 
@@ -15,5 +17,4 @@ class map<K, V> {
     def set(key: K, value: V);
 
     @system def size(): int;
-    @system def apply(): map<K, V>;
 }

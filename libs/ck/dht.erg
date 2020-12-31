@@ -30,15 +30,15 @@ class dht_<A> {
     private val n: int;
 
     @entry def dht_(=selfProxy: dht_<A>[@]array1d, =n: int) {
-        data = map<hashcode, A>();
-        waiting = map<hashcode, queue<future<A>>>();
+        data = new map<hashcode, A>();
+        waiting = new map<hashcode, queue<future<A>>>();
     }
 
     private def enqueue(h: hashcode, f: future<A>) {
         if (waiting.contains(h)) {
             waiting[h].push(f);
         } else {
-            waiting[h] = queue<future<A>>();
+            waiting[h] = new queue<future<A>>();
             waiting[h].push(f);
         }
     }

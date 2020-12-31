@@ -130,7 +130,7 @@ object GenerateProxies {
       val dropCount = if (isConstructor) 1 else 0
       val args = f.functionArgs.drop(dropCount)
       if (isAsync) ctx << "void"
-      else if (!isConstructor) ctx.typeFor(f.returnType)
+      else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
         if (isConstructor) {
           val baseName = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
@@ -142,8 +142,7 @@ object GenerateProxies {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
         else {
           if (isAsync) {
-            ctx.typeFor(f.returnType)
-            ctx << temporary(ctx)
+            ctx << ctx.typeFor(f.returnType) << temporary(ctx)
             if (args.nonEmpty) ctx << ","
           }
           visitFunctionArguments(ctx, args)

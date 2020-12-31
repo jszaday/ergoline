@@ -41,18 +41,14 @@ class CodeGenerationContext(val language: String = "cpp") {
     this << GenerateCpp.nameFor(this, node)
   }
 
-  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
-    typeFor(Find.uniqueResolution(x), ctx)
+  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+    typeFor(Find.uniqueResolution(x), if (ctx.isEmpty) Some(x) else ctx)
   }
 
-  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
-    if (x.isPointer) this << "std::shared_ptr<"
-    try {
-      this << ctx.map(GenerateCpp.qualifiedNameFor(this, _)(x)).getOrElse(GenerateCpp.nameFor(this, x))
-    } catch {
-      case _: MatchError => visitor(this, x)
-    }
-    if (x.isPointer) this << ">"
+  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+    (if (x.isPointer) "std::shared_ptr<" else "") + {
+      ctx.map(GenerateCpp.qualifiedNameFor(this, _)(x)).getOrElse(GenerateCpp.nameFor(this, x))
+    } + (if (x.isPointer) ">" else "")
   }
 
   def appendSemi(): Unit = {
