@@ -198,10 +198,8 @@ postfixExpression
 
 unaryExpression
     :   postfixExpression
-    |   unaryOperator castExpression
     |   newExpression
-    // |   'sizeof' unaryExpression
-    // |   'sizeof' '(' type ')'
+    |   unaryOperator unaryExpression
     ;
 
 unaryOperator
@@ -212,16 +210,11 @@ newExpression
     :   'new' type tupleExpression?
     ;
 
-castExpression
-    :   '(' type ')' castExpression
-    |   unaryExpression
-    ;
-
 multiplicativeExpression
-    :   castExpression
-    |   multiplicativeExpression '*' castExpression
-    |   multiplicativeExpression '/' castExpression
-    |   multiplicativeExpression '%' castExpression
+    :   unaryExpression
+    |   multiplicativeExpression '*' unaryExpression
+    |   multiplicativeExpression '/' unaryExpression
+    |   multiplicativeExpression '%' unaryExpression
     ;
 
 additiveExpression

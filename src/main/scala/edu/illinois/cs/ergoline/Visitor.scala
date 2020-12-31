@@ -420,17 +420,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     Option(ctx.newExpression()).map(visitNewExpression).getOrElse({
       Option(ctx.postfixExpression()).map(x => visitAs[EirExpressionNode](x)).getOrElse({
         enter(EirUnaryExpression(parent, ctx.unaryOperator().getText, null), (u: EirUnaryExpression) => {
-          u.rhs = visitAs[EirExpressionNode](ctx.castExpression())
+          u.rhs = visitAs[EirExpressionNode](ctx.unaryExpression())
         })
-      })
-    })
-  }
-
-  override def visitCastExpression(ctx: CastExpressionContext): EirExpressionNode = {
-    Option(ctx.unaryExpression()).map(x => visitAs[EirExpressionNode](x)).getOrElse({
-      enter(EirTypeCast(parent, null, null), (t: EirTypeCast) => {
-        t.to = visitAs[EirResolvable[EirType]](ctx.`type`())
-        t.value = visitCastExpression(ctx.castExpression())
       })
     })
   }
