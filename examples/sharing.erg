@@ -41,7 +41,7 @@ class sharing {
 
         for (var i = mine; i < (mine + 4); i += 1) {
             val neighbor = (i + 1) % n;
-            val received = table[neighbor].get();
+            val received = await table[neighbor];
             println(mine.toString() + " received value " + received.toString());
         }
 

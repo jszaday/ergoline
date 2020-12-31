@@ -579,4 +579,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (ours.canAssignTo(goal)) null
     else Errors.cannotCast(x, ours, goal)
   }
+
+  override def visitAwait(ctx: TypeCheckContext, x: EirAwait): EirType = {
+    val f = EirFunctionCall(Some(x), null, Nil, Nil)
+    f.target = EirFieldAccessor(Some(f), x.target, "get")
+    x.disambiguation = Some(f)
+    val retTy = visit(ctx, f)
+    if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
+      Errors.expectedSync(x, f)
+    }
+    retTy
+  }
 }

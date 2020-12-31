@@ -55,12 +55,14 @@ trait EirVisitor[Context, Value] {
         if (found == x) error(ctx, found)
         else visit(ctx, found)
       }
+      case x: EirAwait => visitAwait(ctx, x)
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)
       case x => error(ctx, x)
     }
   }
 
+  def visitAwait(ctx: Context, x: EirAwait): Value
   def visitTupleType(ctx: Context, x: EirTupleType): Value
 
   def visitMatch(ctx: Context, x: EirMatch): Value

@@ -778,4 +778,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitReturn(ctx: CodeGenerationContext, x: EirReturn): Unit = {
     ctx << "return" << x.expression
   }
+
+  override def visitAwait(ctx: CodeGenerationContext, x: EirAwait): Unit = {
+    ctx << x.disambiguation
+  }
 }
