@@ -292,4 +292,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTupleType(ctx: UnparseContext, x: EirTupleType): String = {
     s"(${x.children.map(visit(ctx, _)) mkString ", "})"
   }
+
+  override def visitAwait(ctx: UnparseContext, x: EirAwait): String = {
+    s"await ${x.target}"
+  }
 }

@@ -9,6 +9,8 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
+import scala.annotation.tailrec
+
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   // TODO this should consider the current substitutions, and check each unique substitution!
@@ -578,5 +580,29 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ours = visit(ctx, x.conditions.head)
     if (ours.canAssignTo(goal)) null
     else Errors.cannotCast(x, ours, goal)
+  }
+
+  @tailrec def hasField(x: EirType, field: String): Boolean = {
+    x match {
+      case t: EirTemplatedType => hasField(Find.uniqueResolution(t.base), field)
+      case c: EirClassLike => c.members.exists(_.name == field)
+    }
+  }
+
+  override def visitAwait(ctx: TypeCheckContext, x: EirAwait): EirType = {
+    val f = EirFunctionCall(Some(x), null, Nil, Nil)
+    f.target = EirFieldAccessor(Some(f), x.target, "get")
+    x.disambiguation = Some(f)
+    val retTy = visit(ctx, f)
+    if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
+      Errors.expectedSync(x, f)
+    }
+    if (x.target.foundType.exists(hasField(_, "release"))) {
+      val f = EirFunctionCall(Some(x), null, Nil, Nil)
+      f.target = EirFieldAccessor(Some(f), x.target, "release")
+      x.release = Some(f)
+      visit(ctx, f)
+    }
+    retTy
   }
 }

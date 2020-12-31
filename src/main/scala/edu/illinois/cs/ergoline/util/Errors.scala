@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.{EirAwait, EirClassLike, EirExpressionNode, EirFunction, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object Errors {
@@ -87,6 +87,11 @@ object Errors {
 
   def unknownOperator(a: EirNode, s: String): Nothing = {
     Console.err.println(s"${contextualize(a)}: unrecognized operator $s.")
+    exitAction()
+  }
+
+  def expectedSync(a: EirAwait, target: EirExpressionNode) = {
+    Console.err.println(s"${contextualize(a)}: await must target @sync method (instead got: $target).")
     exitAction()
   }
 }

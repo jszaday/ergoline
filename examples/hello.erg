@@ -40,7 +40,7 @@ class hello {
     }
 
     @threaded @entry def wait(f: ck::future<int>) {
-        val i = f.get();
+        val i = await f;
         assert(i == n);
         println("hello #" + i.toString());
         exit();

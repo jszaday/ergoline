@@ -778,4 +778,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitReturn(ctx: CodeGenerationContext, x: EirReturn): Unit = {
     ctx << "return" << x.expression
   }
+
+  override def visitAwait(ctx: CodeGenerationContext, x: EirAwait): Unit = {
+    x.release match {
+      case Some(_) =>
+        val target = x.target
+        val found = x.target.foundType
+        val tmp = temporary(ctx)
+        ctx << "([](" << found.foreach(ctx.typeFor(_, Some(x))) << tmp << ") ->" << {
+          x.foundType.foreach(ctx.typeFor(_, Some(x)))
+        } << "{"
+        ctx << "auto" << "val" << "=" << tmp << found.map(fieldAccessorFor) << "get()" << ";"
+        ctx <<  tmp << found.map(fieldAccessorFor) << "release()" << ";"
+        ctx << "return" << "val" << ";"
+        ctx << "})(" << target << ")"
+      case None => ctx << x.disambiguation
+    }
+  }
 }

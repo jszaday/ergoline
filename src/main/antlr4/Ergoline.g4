@@ -199,11 +199,16 @@ postfixExpression
 unaryExpression
     :   postfixExpression
     |   newExpression
+    |   awaitExpression
     |   unaryOperator unaryExpression
     ;
 
 unaryOperator
     :   '+' | '-' | '~' | '!'
+    ;
+
+awaitExpression
+    :   'await' postfixExpression
     ;
 
 newExpression

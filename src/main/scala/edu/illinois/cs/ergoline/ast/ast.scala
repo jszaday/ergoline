@@ -528,6 +528,16 @@ trait EirPostfixExpression extends EirExpressionNode {
   }
 }
 
+case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode) extends EirExpressionNode {
+  var release: Option[EirExpressionNode] = None
+
+  override def children: Iterable[EirNode] = List(target)
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    (target == oldNode) && util.applyOrFalse[EirExpressionNode](target = _, newNode)
+  }
+}
+
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode,
                            var args: List[EirExpressionNode], var specialization: List[EirResolvable[EirType]])
   extends EirPostfixExpression with EirSpecialization {
