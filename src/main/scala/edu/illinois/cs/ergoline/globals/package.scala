@@ -39,6 +39,8 @@ package object globals {
     Find.firstNamedChild[EirClassLike](Modules("ck", EirGlobalNamespace), "future")
   }
 
+  def unitType: EirType = typeFor(EirLiteralTypes.Unit)
+
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
 
   def operatorToFunction(op : String): Option[String] = {

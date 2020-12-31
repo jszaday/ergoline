@@ -529,6 +529,8 @@ trait EirPostfixExpression extends EirExpressionNode {
 }
 
 case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode) extends EirExpressionNode {
+  var release: Option[EirExpressionNode] = None
+
   override def children: Iterable[EirNode] = List(target)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
