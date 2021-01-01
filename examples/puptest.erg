@@ -22,7 +22,7 @@ import ck;
             println("a[" + i.toString() + "] = " + a[i].toString());
         }
         println("t.i = " + t.i.toString());
-        selfProxy.receive(((t, t), new testHolder(t), t.i));
+        receive(new tupleHolder((t, new testHolder(t))));
     }
 
     @entry def receive(hs: ((has<int>, has<int>), has<has<int>>, int)) {
@@ -31,6 +31,12 @@ import ck;
         assert(gs[0].get() == gs[1].get());
         assert(gs[0].get() == hs[1].get().get());
         exit();
+    }
+
+    @entry def receive(h: tupleHolder) {
+        val t = h.get()[0];
+        val th = h.get()[1];
+        selfProxy.receive(((t, t), th, t.get()));
     }
 }
 
@@ -46,6 +52,14 @@ class testHolder with has<has<int>> {
     val t: test;
     def testHolder(=t: test) { }
     def get(): has<int> {
+        return t;
+    }
+}
+
+class tupleHolder with has<(has<int>, has<has<int>>)> {
+    val t: (test, testHolder);
+    def tupleHolder(=t: (test, testHolder)) { }
+    def get(): (has<int>, has<has<int>>) {
         return t;
     }
 }
