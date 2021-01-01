@@ -103,12 +103,40 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
                      ours: EirType, theirs: EirType): Unit = {
+    val str = {
+      val subCtx = ctx.makeSubContext()
+      subCtx << expr
+      subCtx.toString
+    }
     if (ours.isTransient) {
       Errors.cannotSerialize(expr, ours)
-    } else if (theirs.isTrait) {
-      ctx << s"ergoline::to_pupable(" << expr << ")"
+    } else if (GenerateProxies.needsCasting(theirs)) {
+      if (theirs.isInstanceOf[EirTupleType]) {
+        val tmp = temporary(ctx)
+        ctx << "([](" << ctx.typeFor(ours) << tmp << ") ->" << typeForEntryArgument(ctx, expr)(theirs) << "{" << {
+          "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
+        } << "})(" << str << ")"
+      } else {
+        ctx << toPupable(expr)(str, (ours, theirs))
+      }
     } else {
-      ctx << expr
+      ctx << str
+    }
+  }
+
+  def toPupable(ctx: EirExpressionNode)(current: String, types: (EirType, EirType)): String = {
+    // assumes ours, theirs for types
+    types match {
+      case (a: EirTupleType, b: EirTupleType) => {
+        val ours = a.children.map(Find.uniqueResolution[EirType])
+        val theirs = b.children.map(Find.uniqueResolution[EirType])
+        "std::make_tuple(" + ours.zip(theirs).zipWithIndex.map{
+          case (tys, idx) => toPupable(ctx)(s"std::get<$idx>($current)", tys)
+        }.mkString(", ") +")"
+      }
+      case (t, _) if t.isTransient => Errors.cannotSerialize(ctx, t)
+      case (_, t) if t.isTrait => s"ergoline::to_pupable($current)"
+      case _ => current
     }
   }
 
@@ -117,7 +145,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
-      case (Some(a), Some(b)) if (a.isPointer && !a.isSystem) && isEntryArgument(t._2) =>
+      case (Some(a), Some(b)) if isEntryArgument(t._2) =>
         castToPuppable(ctx, t._1, a, b)
       case _ => ctx << t._1
     }
@@ -556,13 +584,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def typeForEntryArgument(ctx: (CodeGenerationContext, EirNode))(ty: EirType): String = {
+    ty match {
+      case t: EirTupleType =>
+        "std::tuple<" + {
+          t.children
+            .map(Find.uniqueResolution[EirType])
+            .map(typeForEntryArgument(ctx))
+            .mkString(", ")
+        } + ">"
+      case t if t.isTransient => Errors.cannotSerialize(ctx._2, t)
+      // TODO exempt system types here?
+      case t if t.isTrait => "std::shared_ptr<PUP::able>"
+      case t => ctx._1.typeFor(t, Some(ctx._2))
+    }
+  }
+
   override def visitFunctionArgument(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
-    val isEntry = isEntryArgument(x) // ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
-    if (isEntry && declTy.isTransient) Errors.cannotSerialize(x, declTy)
-    else if (isEntry && declTy.isTrait) ctx << "std::shared_ptr<PUP::able>"
-    else ctx << ctx.typeFor(declTy, Some(x))
-    ctx << ctx.nameFor(x)
+    ctx << {
+      if (isEntryArgument(x)) typeForEntryArgument((ctx, x))(declTy)
+      else ctx.typeFor(declTy, Some(x))
+    } << ctx.nameFor(x)
   }
 
   override def visitTupleExpression(ctx: CodeGenerationContext, x: EirTupleExpression): Unit = {

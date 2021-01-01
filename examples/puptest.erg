@@ -12,7 +12,7 @@ import ck;
         for (var i = 0; i < n; i += 1) {
             a[i] = 2 * i + 1;
         }
-        receive((a, new test(true)));
+        receive((a, new test(42)));
     }
 
     @entry def receive(at: (array<int>, test)) {
@@ -21,12 +21,35 @@ import ck;
         for (var i = 0; i < a.size(); i += 1) {
             println("a[" + i.toString() + "] = " + a[i].toString());
         }
-        println("t.b = " + t.b.toString());
+        println("t.i = " + t.i.toString());
+        selfProxy.receive(((t, t), new testHolder(t), t.i));
+    }
+
+    @entry def receive(hs: ((has<int>, has<int>), has<has<int>>, int)) {
+        val gs = hs[0];
+        assert(gs[0].get() == hs[2]);
+        assert(gs[0].get() == gs[1].get());
+        assert(gs[0].get() == hs[1].get().get());
         exit();
     }
 }
 
-class test {
-    val b: bool;
-    def test(=b: bool) { }
+class test with has<int> {
+    val i: int;
+    def test(=i: int) { }
+    def get(): int {
+        return i;
+    }
+}
+
+class testHolder with has<has<int>> {
+    val t: test;
+    def testHolder(=t: test) { }
+    def get(): has<int> {
+        return t;
+    }
+}
+
+trait has<T> {
+    def get(): T;
 }

@@ -87,12 +87,26 @@ object GenerateProxies {
       "[](const char* x) -> std::string { return std::string(x); });"
   }
 
+  def makePointerRhs(ctx: (CodeGenerationContext, EirNode))(current: String, expected: EirType): String = {
+    expected match {
+      case t: EirTupleType =>
+        "std::make_tuple(" + {
+          t.children.zipWithIndex.map({
+            case (r, idx) =>
+              makePointerRhs(ctx)(s"std::get<$idx>($current)", Find.uniqueResolution(r))
+          }).mkString(", ")
+        } + ")"
+      case t if needsCasting(t) =>
+        s"ergoline::from_pupable<${qualifiedNameFor(ctx._1, ctx._2)(expected)}>($current)"
+      case _ => current
+    }
+  }
+
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (needsCasting(ty)) {
-      if (ty.isInstanceOf[EirTupleType]) ???
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
-        s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
+        makePointerRhs((ctx, x))(s"${x.name}_", ty)
       } << ";"
     }
   }
