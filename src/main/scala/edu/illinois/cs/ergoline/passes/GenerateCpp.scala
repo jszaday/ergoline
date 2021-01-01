@@ -113,7 +113,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (GenerateProxies.needsCasting(theirs)) {
       if (theirs.isInstanceOf[EirTupleType]) {
         val tmp = temporary(ctx)
-        ctx << "([](" << ctx.typeFor(ours) << tmp << ") ->" << typeForEntryArgument(ctx, expr)(theirs) << "{" << {
+        ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
           "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
         } << "})(" << str << ")"
       } else {
@@ -358,31 +358,46 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .filterNot(_.isTrait).toList
   }
 
-  def pupperFor(ctx: CodeGenerationContext, x: EirClassLike, name: String, resolvable: EirResolvable[EirType]): List[String] = {
-    val ty = Find.uniqueResolution(resolvable)
-    if (ty.isPointer && !ty.isSystem) {
-      val typeName = qualifiedNameFor(ctx, x, includeTemplates = true)(ty)
-      List("{",
-        s"PUP::able* _ = (p.isUnpacking()) ? nullptr : dynamic_cast<PUP::able*>($name.get());",
-        "p(&_);",
-        s"if (p.isUnpacking()) $name = std::dynamic_pointer_cast<$typeName>(std::shared_ptr<PUP::able>(_));",
-        "}")
+  def pupperFor(ctx: (CodeGenerationContext, EirClassLike, String))(current: String, ours: EirType): List[String] = {
+    val puper = ctx._3
+    if (GenerateProxies.needsCasting(ours)) ours match {
+      case t: EirTupleType =>
+        t.children
+          .map(Find.uniqueResolution[EirType])
+          .zipWithIndex.flatMap{
+          case (t, idx) =>
+            pupperFor(ctx)(s"std::get<$idx>($current)", t)
+        }
+      case _ =>
+        val tmp = {
+          var tmp = temporary(ctx._1)
+          while (current == tmp || puper == tmp) tmp += "_"
+          tmp
+        }
+        val typeName = qualifiedNameFor(ctx._1, ctx._2, includeTemplates = true)(ours)
+        List("{",
+          s"PUP::able* $tmp = ($puper.isUnpacking()) ? nullptr : dynamic_cast<PUP::able*>($current.get());",
+          s"$puper(&$tmp);",
+          s"if ($puper.isUnpacking()) $current = std::dynamic_pointer_cast<$typeName>(std::shared_ptr<PUP::able>($tmp));",
+          "}")
+    } else {
+      List(s"$puper | $current;")
     }
-    else List(s"p | $name;")
   }
 
   def makePupper(ctx: CodeGenerationContext, x: EirClassLike, isMember: Boolean = false): Unit = {
     // TODO check to ensure user does not override
-    val header = if (isMember) "virtual void pup(PUP::er &p) override" else s"void ${nameFor(ctx, x)}::pup(PUP::er &p)"
+    val puper = temporary(ctx)
+    val header = if (isMember) s"virtual void pup(PUP::er &$puper) override" else s"void ${nameFor(ctx, x)}::pup(PUP::er &$puper)"
     ctx << header << "{" << {
       val parents = puppingParents(x) match {
-        case Nil => List(s"PUP::able::pup(p);")
-        case ps => ps.map(nameFor(ctx, _)).map(_ + "::pup(p);")
+        case Nil => List(s"PUP::able::pup($puper);")
+        case ps => ps.map(nameFor(ctx, _)).map(_ + s"::pup($puper);")
       }
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
       }).flatMap(d => {
-        pupperFor(ctx, x, nameFor(ctx, d), d.declaredType)
+        pupperFor((ctx, x, puper))(nameFor(ctx, d), Find.uniqueResolution(d.declaredType))
       })
       parents ++ values
     } << s"}"
@@ -847,9 +862,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val target = x.target
         val found = x.target.foundType
         val tmp = temporary(ctx)
-        ctx << "([](" << found.map(ctx.typeFor(_, Some(x))) << tmp << ") ->" << {
-          x.foundType.map(ctx.typeFor(_, Some(x)))
-        } << "{"
+        ctx << "([](" << found.map(ctx.typeFor(_, Some(x))) << tmp << ")" << "{"
         ctx << "auto" << "val" << "=" << tmp << found.map(fieldAccessorFor) << "get()" << ";"
         ctx <<  tmp << found.map(fieldAccessorFor) << "release()" << ";"
         ctx << "return" << "val" << ";"

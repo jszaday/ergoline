@@ -74,7 +74,7 @@ object GenerateProxies {
     GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs) else ""
     ctx << s"struct $name: public CBase_$name$args" << "{" << {
-      ctx << "void pup(PUP::er &p)" << "{" << pupperFor(ctx, x, "impl_", x.base) << "}"; ()
+      ctx << "void pup(PUP::er &p)" << "{" << pupperFor((ctx, x, "p"))("impl_", x.base) << "}"; ()
     } << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))
