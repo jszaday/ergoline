@@ -1,7 +1,8 @@
 package ergoline;
 
-@system(alias="std::deque",fromHeader="deque")
+@system(alias="std::deque", fromHeader="deque", pointer=true)
 class queue<A> {
+    @system def queue();
     @system(alias="front")
     def head(): A;
     @system(alias="back")
@@ -15,5 +16,4 @@ class queue<A> {
     @system(alias="pop_front")
     def pop();
     @system def size(): int;
-    @system def apply(): queue<A>;
 }

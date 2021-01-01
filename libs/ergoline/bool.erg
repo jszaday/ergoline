@@ -1,3 +1,6 @@
 package ergoline;
 
-@system class bool { }
+@system class bool {
+    @system(alias="ergoline::bool_toString", static=true)
+    def toString(): string;
+}

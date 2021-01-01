@@ -21,17 +21,21 @@ inline bool operator==(const std::shared_ptr<T> &t,
 }
 
 template <typename T>
-inline std::shared_ptr<T> from_pupable(PUP::able* p) {
-  std::shared_ptr<T> q = std::dynamic_pointer_cast<T>(std::shared_ptr<PUP::able>(p));
+inline std::shared_ptr<T> from_pupable(std::shared_ptr<PUP::able> p) {
+  std::shared_ptr<T> q = std::dynamic_pointer_cast<T>(p);
   if (p && !q) CkAbort("cannot cast %s to %s", typeid(*p).name(), typeid(T).name());
   return q;
 }
 
 template <typename T>
-inline CkPointer<PUP::able> to_pupable(const std::shared_ptr<T>& p) {
+inline std::shared_ptr<PUP::able> to_pupable(const std::shared_ptr<T>& p) {
   std::shared_ptr<PUP::able> q = std::dynamic_pointer_cast<PUP::able>(p);
   if (p && !q) CkAbort("cannot cast %s to PUP::able", typeid(T).name());
-  return CkPointer<PUP::able>(q.get());
+  return q;
+}
+
+inline std::string bool_toString(const bool& b) {
+  return b ? "true" : "false";
 }
 
 }

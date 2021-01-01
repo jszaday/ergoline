@@ -19,18 +19,36 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   object GenCppSyntax {
     implicit class RichEirType(eirType : EirType) {
-      def isPointer: Boolean = eirType match {
-        case x : EirTemplatedType =>
-          Find.uniqueResolution[EirType](x.base).isPointer
-        case x if x.annotation("system").isDefined => false
-        case x : EirClassLike => !x.isInstanceOf[EirProxy]
-        case _ => false
+      def isPointer: Boolean = {
+        val system = eirType.annotation("system")
+        eirType match {
+          case x : EirTemplatedType =>
+            Find.uniqueResolution[EirType](x.base).isPointer
+          case _ if system.isDefined => system.flatMap(_("pointer")).exists(_.toBoolean)
+          case x : EirClassLike => !x.isInstanceOf[EirProxy]
+          case _ => false
+        }
+      }
+
+      def isSystem: Boolean = {
+        eirType match {
+          case x : EirTemplatedType =>
+            Find.uniqueResolution[EirType](x.base).isSystem
+          case _ => eirType.annotation("system").isDefined
+        }
       }
 
       def isTrait: Boolean = eirType match {
         case x : EirTemplatedType =>
           Find.uniqueResolution[EirType](x.base).isTrait
         case _ : EirTrait => true
+        case _ => false
+      }
+
+      def isTransient: Boolean = eirType match {
+        case x: EirTemplatedType =>
+          Find.uniqueResolution[EirType](x.base).isTransient
+        case c: EirClassLike => GenerateCpp.isTransient(c)
         case _ => false
       }
     }
@@ -83,8 +101,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
   }
 
-  def castToPuppable(ctx: CodeGenerationContext)(ptrType: Option[EirResolvable[EirType]], expr: EirExpressionNode): Unit = {
-    ctx << s"ergoline::to_pupable(" << expr << ")"
+  def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
+                     ours: EirType, theirs: EirType): Unit = {
+    if (ours.isTransient) {
+      Errors.cannotSerialize(expr, ours)
+    } else if (theirs.isTrait) {
+      ctx << s"ergoline::to_pupable(" << expr << ")"
+    } else {
+      ctx << expr
+    }
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
@@ -92,11 +117,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
-      case (Some(tty: EirTemplatedType), Some(_)) if tty.isPointer && isEntryArgument(t._2) =>
-        val base = assertValid[EirClassLike](Find.uniqueResolution(tty.base))
-        castToPuppable(ctx)(base.extendsThis, t._1)
-      case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>
-        castToPuppable(ctx)(c.extendsThis, t._1)
+      case (Some(a), Some(b)) if (a.isPointer && !a.isSystem) && isEntryArgument(t._2) =>
+        castToPuppable(ctx, t._1, a, b)
       case _ => ctx << t._1
     }
   }
@@ -133,10 +155,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val proxy = disambiguated.parent.to[EirProxy]
     val system = disambiguated.annotation("system").get
-    val static = system("static").exists(_.value.toBoolean)
-    val invert = system("invert").exists(_.value.toBoolean)
+    val static = system("static").exists(_.toBoolean)
+    val invert = system("invert").exists(_.toBoolean)
     val invOp = if (invert) "!" else ""
-    val cast = system("cast").exists(_.value.toBoolean)
+    val cast = system("cast").exists(_.toBoolean)
     val name = system("alias").map(_.stripped).getOrElse(nameFor(ctx, disambiguated))
     disambiguated.asInstanceOf[EirNamedNode] match {
       case _ : EirMember if proxy.isDefined =>
@@ -170,7 +192,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case m : EirMember =>
         if (name == "apply") ctx << base << s"(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
         else {
-          val fqnOrDot = if (m.isStatic) "::" else "."
+          val fqnOrDot = if (m.isStatic) "::" else base.foundType.map(fieldAccessorFor).getOrElse(Errors.missingType(base))
           ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
         }
       case f : EirFunction if f.name == "println" =>
@@ -310,7 +332,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def pupperFor(ctx: CodeGenerationContext, x: EirClassLike, name: String, resolvable: EirResolvable[EirType]): List[String] = {
     val ty = Find.uniqueResolution(resolvable)
-    if (ty.isPointer) {
+    if (ty.isPointer && !ty.isSystem) {
       val typeName = qualifiedNameFor(ctx, x, includeTemplates = true)(ty)
       List("{",
         s"PUP::able* _ = (p.isUnpacking()) ? nullptr : dynamic_cast<PUP::able*>($name.get());",
@@ -410,7 +432,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (asyncCi) {
       ctx << "void"
     } else {
-      Option.when(!isConstructor)(ctx.typeFor(x.returnType))
+      ctx << Option.when(!isConstructor)(ctx.typeFor(x.returnType))
     }
     val args = x.functionArgs.drop(dropCount)
     ctx << name << "("
@@ -481,7 +503,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def templateArgumentsToString(ctx: CodeGenerationContext, args: List[EirResolvable[EirType]]): String = {
     "<" + {
-      args.map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _)).mkString(", ")
+      args.map(Find.uniqueResolution[EirType]).map(ctx.typeFor(_)).mkString(", ")
     } + ">"
   }
 
@@ -535,13 +557,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitFunctionArgument(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
-    val langCi = ctx.language == "ci"
+    val isEntry = isEntryArgument(x) // ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
-    if (langCi && declTy.isPointer) ctx << "CkPointer<" + {
-      // TODO enable this optimization
-      // if (!declTy.isTrait) nameFor(ctx, declTy) else
-      "PUP::able"
-    } + ">"
+    if (isEntry && declTy.isTransient) Errors.cannotSerialize(x, declTy)
+    else if (isEntry && declTy.isTrait) ctx << "std::shared_ptr<PUP::able>"
     else ctx << ctx.typeFor(declTy, Some(x))
     ctx << ctx.nameFor(x)
   }
@@ -556,7 +575,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitLambdaExpression(ctx: CodeGenerationContext, x: EirLambdaExpression): Unit = {
     ctx << s"[=] (" << (x.args, ", ") << ") -> " << {
-      x.foundType.foreach(ctx.typeFor(_))
+      x.foundType.map(ctx.typeFor(_))
     } << x.body
   }
 
@@ -724,15 +743,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitTemplatedType(ctx: CodeGenerationContext, x: EirTemplatedType): Unit = {
     val base = Find.uniqueResolution(x.base)
-    ctx << ctx.nameFor(base) << "<" << {
-      if (x.args.nonEmpty) {
-        x.args.init.foreach(t => {
-          ctx.typeFor(t)
-          ctx << ", "
-        })
-        ctx.typeFor(x.args.last)
-      }
-    } << ">"
+    ctx << ctx.nameFor(base) << "<"
+    if (x.args.nonEmpty) {
+      x.args.init.foreach(t => {
+        ctx << ctx.typeFor(t, Some(x))
+        ctx << ", "
+      })
+      ctx << ctx.typeFor(x.args.last, Some(x))
+    }
+    ctx << ">"
   }
 
   override def visitBlock(ctx: CodeGenerationContext, x: EirBlock): Unit = {
@@ -785,8 +804,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val target = x.target
         val found = x.target.foundType
         val tmp = temporary(ctx)
-        ctx << "([](" << found.foreach(ctx.typeFor(_, Some(x))) << tmp << ") ->" << {
-          x.foundType.foreach(ctx.typeFor(_, Some(x)))
+        ctx << "([](" << found.map(ctx.typeFor(_, Some(x))) << tmp << ") ->" << {
+          x.foundType.map(ctx.typeFor(_, Some(x)))
         } << "{"
         ctx << "auto" << "val" << "=" << tmp << found.map(fieldAccessorFor) << "get()" << ";"
         ctx <<  tmp << found.map(fieldAccessorFor) << "release()" << ";"

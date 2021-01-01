@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTrait}
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
@@ -82,29 +82,32 @@ object GenerateProxies {
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
-    ctx << s"std::vector<std::string> $name(msg->argc);" <<
-      s"std::transform(msg->argv, msg->argv + msg->argc, $name.begin()," <<
+    ctx << s"auto $name = std::make_shared<std::vector<std::string>>(msg->argc);" <<
+      s"std::transform(msg->argv, msg->argv + msg->argc, $name->begin()," <<
       "[](const char* x) -> std::string { return std::string(x); });"
   }
 
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
-    if (ty.isPointer) {
+    if (needsCasting(ty)) {
+      if (ty.isInstanceOf[EirTupleType]) ???
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
         s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
       } << ";"
     }
   }
 
-  def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
-    val ty: EirType = Find.uniqueResolution(arg.declaredType)
-    if (ty.isPointer) {
-      // TODO take parent into consideration
-      // ctx << "CkPointer<" << ctx.nameFor(ty) << ">" << (nameFor(ctx, arg) + "_")
-      ctx << "PUP::able*" << (nameFor(ctx, arg) + "_")
-    } else {
-      ctx << ctx.typeFor(ty, Some(arg)) << nameFor(ctx, arg)
+  def needsCasting(t: EirType): Boolean = {
+    t match {
+      case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
+      case _ => t.isTrait && t.isPointer && !t.isSystem
     }
+  }
+
+  def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
+    val ty = Find.uniqueResolution[EirType](arg.declaredType)
+    GenerateCpp.visitFunctionArgument(ctx, arg)
+    if (needsCasting(ty)) ctx.append("_")
   }
 
   def visitFunctionArguments(ctx: CodeGenerationContext, args: List[EirFunctionArgument]): Unit = {
@@ -130,7 +133,7 @@ object GenerateProxies {
       val dropCount = if (isConstructor) 1 else 0
       val args = f.functionArgs.drop(dropCount)
       if (isAsync) ctx << "void"
-      else if (!isConstructor) ctx.typeFor(f.returnType)
+      else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
         if (isConstructor) {
           val baseName = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
@@ -142,8 +145,7 @@ object GenerateProxies {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
         else {
           if (isAsync) {
-            ctx.typeFor(f.returnType)
-            ctx << temporary(ctx)
+            ctx << ctx.typeFor(f.returnType) << temporary(ctx)
             if (args.nonEmpty) ctx << ","
           }
           visitFunctionArguments(ctx, args)

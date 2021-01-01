@@ -51,6 +51,12 @@ struct hash<T*,
 };
 
 template <class T>
+struct hash<T*,
+            typename std::enable_if<!std::is_base_of<hashable, T>::value>::type> {
+  std::size_t operator()(const T* t) const { return t ? hash<T>()(*t) : 0; }
+};
+
+template <class T>
 struct hash<
     T, typename std::enable_if<std::is_integral<T>::value ||
                                std::is_floating_point<T>::value ||
@@ -201,12 +207,17 @@ template <typename K, typename V>
 using hash_map = std::unordered_map<K, V, hash_utils::hash<K>>;
 
 template <typename K, typename V>
-bool map_contains(const hash_map<K, V>& map, const K& k) {
+inline bool map_contains(const hash_map<K, V>& map, const K& k) {
   return map.find(k) != map.end();
 }
 
 template <typename K, typename V>
-bool map_remove(hash_map<K, V>& map, const K& k) {
+inline bool map_contains(std::shared_ptr<hash_map<K, V>> map, const K& k) {
+  return map_contains(*map, k);
+}
+
+template <typename K, typename V>
+inline bool map_remove(hash_map<K, V>& map, const K& k) {
   auto search = map.find(k);
   if (search != map.end()) {
     map.erase(search);
@@ -214,6 +225,11 @@ bool map_remove(hash_map<K, V>& map, const K& k) {
   } else {
     return false;
   }
+}
+
+template <typename K, typename V>
+inline bool map_remove(std::shared_ptr<hash_map<K, V>> map, const K& k) {
+  return map_remove(*map, k);
 }
 
 struct hasher {

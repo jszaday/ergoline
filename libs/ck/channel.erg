@@ -8,8 +8,8 @@ class channel<A> {
     private val pending: queue<future<A>>;
 
     @entry def channel(=selfProxy: channel<A>@) {
-        values = queue<A>();
-        pending = queue<future<A>>();
+        values = new queue<A>();
+        pending = new queue<future<A>>();
     }
 
     @entry def send(a: A) {

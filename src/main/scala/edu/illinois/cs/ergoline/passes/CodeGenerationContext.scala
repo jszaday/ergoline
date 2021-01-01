@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -41,18 +41,20 @@ class CodeGenerationContext(val language: String = "cpp") {
     this << GenerateCpp.nameFor(this, node)
   }
 
-  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
-    typeFor(Find.uniqueResolution(x), ctx)
+  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+    typeFor(Find.uniqueResolution(x), if (ctx.isEmpty) Some(x) else ctx)
   }
 
-  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): Unit = {
-    if (x.isPointer) this << "std::shared_ptr<"
-    try {
-      this << ctx.map(GenerateCpp.qualifiedNameFor(this, _)(x)).getOrElse(GenerateCpp.nameFor(this, x))
-    } catch {
-      case _: MatchError => visitor(this, x)
+  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+    x match {
+      case t: EirTupleType =>
+        "std::tuple<" + t.children.map(typeFor(_, ctx)).mkString(", ") + ">"
+      case _ =>
+        val name = ctx
+          .map(GenerateCpp.qualifiedNameFor(this, _)(x))
+          .getOrElse(GenerateCpp.nameFor(this, x))
+        if (x.isPointer) "std::shared_ptr<" + name + ">" else name
     }
-    if (x.isPointer) this << ">"
   }
 
   def appendSemi(): Unit = {
@@ -108,6 +110,11 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   private def isControl(s: Char): Boolean = {
     s == '(' || s == ')' || s == ':' || s == '.'
+  }
+
+  def append(value: String): CodeGenerationContext = {
+    current.append(value)
+    this
   }
 
   def <<(value: String): CodeGenerationContext = {
