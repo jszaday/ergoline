@@ -34,6 +34,10 @@ inline std::shared_ptr<PUP::able> to_pupable(const std::shared_ptr<T>& p) {
   return q;
 }
 
+inline std::string bool_toString(const bool& b) {
+  return b ? "true" : "false";
+}
+
 }
 
 #endif

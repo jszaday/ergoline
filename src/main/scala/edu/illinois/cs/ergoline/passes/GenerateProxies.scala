@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTrait}
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
@@ -90,6 +90,7 @@ object GenerateProxies {
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (needsCasting(ty)) {
+      if (ty.isInstanceOf[EirTupleType]) ???
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
         s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
       } << ";"
@@ -97,7 +98,10 @@ object GenerateProxies {
   }
 
   def needsCasting(t: EirType): Boolean = {
-    t.isTrait && t.isPointer && !t.isSystem
+    t match {
+      case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
+      case _ => t.isTrait && t.isPointer && !t.isSystem
+    }
   }
 
   def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
