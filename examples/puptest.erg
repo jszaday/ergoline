@@ -57,7 +57,7 @@ class testHolder with has<has<int>> {
 }
 
 class tupleHolder with has<(has<int>, has<has<int>>)> {
-    val t: (test, testHolder);
+    val t: (has<int>, has<has<int>>);
     def tupleHolder(=t: (test, testHolder)) { }
     def get(): (has<int>, has<has<int>>) {
         return t;
