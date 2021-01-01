@@ -90,8 +90,13 @@ object Errors {
     exitAction()
   }
 
-  def expectedSync(a: EirAwait, target: EirExpressionNode) = {
-    Console.err.println(s"${contextualize(a)}: await must target @sync method (instead got: $target).")
+  def expectedSync(a: EirAwait, t: EirExpressionNode): Nothing = {
+    Console.err.println(s"${contextualize(a)}: await must target @sync method (instead got: ${nameFor(t)}).")
+    exitAction()
+  }
+
+  def cannotSerialize(ctx: EirNode, t: EirType): Nothing = {
+    Console.err.println(s"${contextualize(ctx)}: cannot pup/serialize transient type ${nameFor(t)}.")
     exitAction()
   }
 }

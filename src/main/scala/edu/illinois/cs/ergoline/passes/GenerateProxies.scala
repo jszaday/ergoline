@@ -89,22 +89,21 @@ object GenerateProxies {
 
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
-    if (ty.isPointer) {
+    if (needsCasting(ty)) {
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
         s"ergoline::from_pupable<${qualifiedNameFor(ctx, x, includeTemplates = true)(ty)}>(${x.name}_)"
       } << ";"
     }
   }
 
+  def needsCasting(t: EirType): Boolean = {
+    t.isTrait && t.isPointer && !t.isSystem
+  }
+
   def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
-    val ty: EirType = Find.uniqueResolution(arg.declaredType)
-    if (ty.isPointer) {
-      // TODO take parent into consideration
-      // ctx << "CkPointer<" << ctx.nameFor(ty) << ">" << (nameFor(ctx, arg) + "_")
-      ctx << "PUP::able*" << (nameFor(ctx, arg) + "_")
-    } else {
-      ctx << ctx.typeFor(ty, Some(arg)) << nameFor(ctx, arg)
-    }
+    val ty = Find.uniqueResolution[EirType](arg.declaredType)
+    GenerateCpp.visitFunctionArgument(ctx, arg)
+    if (needsCasting(ty)) ctx.append("_")
   }
 
   def visitFunctionArguments(ctx: CodeGenerationContext, args: List[EirFunctionArgument]): Unit = {

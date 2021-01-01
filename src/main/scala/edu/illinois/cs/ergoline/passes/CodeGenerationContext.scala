@@ -112,6 +112,11 @@ class CodeGenerationContext(val language: String = "cpp") {
     s == '(' || s == ')' || s == ':' || s == '.'
   }
 
+  def append(value: String): CodeGenerationContext = {
+    current.append(value)
+    this
+  }
+
   def <<(value: String): CodeGenerationContext = {
     if (ignores.headOption.contains(value)) {
       ignores.pop()

@@ -44,6 +44,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case _ : EirTrait => true
         case _ => false
       }
+
+      def isTransient: Boolean = eirType match {
+        case x: EirTemplatedType =>
+          Find.uniqueResolution[EirType](x.base).isTransient
+        case c: EirClassLike => GenerateCpp.isTransient(c)
+        case _ => false
+      }
     }
   }
 
@@ -94,8 +101,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
   }
 
-  def castToPuppable(ctx: CodeGenerationContext)(ptrType: Option[EirResolvable[EirType]], expr: EirExpressionNode): Unit = {
-    ctx << s"ergoline::to_pupable(" << expr << ")"
+  def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
+                     ours: EirType, theirs: EirType): Unit = {
+    if (ours.isTransient) {
+      Errors.cannotSerialize(expr, ours)
+    } else if (theirs.isTrait) {
+      ctx << s"ergoline::to_pupable(" << expr << ")"
+    } else {
+      ctx << expr
+    }
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
@@ -103,11 +117,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
-      case (Some(tty: EirTemplatedType), Some(_)) if tty.isPointer && isEntryArgument(t._2) =>
-        val base = assertValid[EirClassLike](Find.uniqueResolution(tty.base))
-        castToPuppable(ctx)(base.extendsThis, t._1)
-      case (Some(c: EirClassLike), Some(_)) if c.isPointer && isEntryArgument(t._2) =>
-        castToPuppable(ctx)(c.extendsThis, t._1)
+      case (Some(a), Some(b)) if (a.isPointer && !a.isSystem) && isEntryArgument(t._2) =>
+        castToPuppable(ctx, t._1, a, b)
       case _ => ctx << t._1
     }
   }
@@ -546,13 +557,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitFunctionArgument(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
-    val langCi = ctx.language == "ci"
+    val isEntry = isEntryArgument(x) // ctx.language == "ci"
     val declTy = Find.uniqueResolution(x.declaredType)
-    if (langCi && declTy.isPointer) ctx << "CkPointer<" + {
-      // TODO enable this optimization
-      // if (!declTy.isTrait) nameFor(ctx, declTy) else
-      "PUP::able"
-    } + ">"
+    if (isEntry && declTy.isTransient) Errors.cannotSerialize(x, declTy)
+    else if (isEntry && declTy.isTrait) ctx << "std::shared_ptr<PUP::able>"
     else ctx << ctx.typeFor(declTy, Some(x))
     ctx << ctx.nameFor(x)
   }
