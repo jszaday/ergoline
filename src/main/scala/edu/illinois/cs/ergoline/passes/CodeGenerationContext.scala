@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -46,9 +46,15 @@ class CodeGenerationContext(val language: String = "cpp") {
   }
 
   def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
-    (if (x.isPointer) "std::shared_ptr<" else "") + {
-      ctx.map(GenerateCpp.qualifiedNameFor(this, _)(x)).getOrElse(GenerateCpp.nameFor(this, x))
-    } + (if (x.isPointer) ">" else "")
+    x match {
+      case t: EirTupleType =>
+        "std::tuple<" + t.children.map(typeFor(_, ctx)).mkString(", ") + ">"
+      case _ =>
+        val name = ctx
+          .map(GenerateCpp.qualifiedNameFor(this, _)(x))
+          .getOrElse(GenerateCpp.nameFor(this, x))
+        if (x.isPointer) "std::shared_ptr<" + name + ">" else name
+    }
   }
 
   def appendSemi(): Unit = {
