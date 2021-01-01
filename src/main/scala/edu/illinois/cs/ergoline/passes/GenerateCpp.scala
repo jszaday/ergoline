@@ -113,7 +113,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (GenerateProxies.needsCasting(theirs)) {
       if (theirs.isInstanceOf[EirTupleType]) {
         val tmp = temporary(ctx)
-        ctx << "([](" << ctx.typeFor(ours) << tmp << ") ->" << typeForEntryArgument(ctx, expr)(theirs) << "{" << {
+        ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
           "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
         } << "})(" << str << ")"
       } else {
@@ -862,9 +862,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val target = x.target
         val found = x.target.foundType
         val tmp = temporary(ctx)
-        ctx << "([](" << found.map(ctx.typeFor(_, Some(x))) << tmp << ") ->" << {
-          x.foundType.map(ctx.typeFor(_, Some(x)))
-        } << "{"
+        ctx << "([](" << found.map(ctx.typeFor(_, Some(x))) << tmp << ")" << "{"
         ctx << "auto" << "val" << "=" << tmp << found.map(fieldAccessorFor) << "get()" << ";"
         ctx <<  tmp << found.map(fieldAccessorFor) << "release()" << ";"
         ctx << "return" << "val" << ";"
