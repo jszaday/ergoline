@@ -63,7 +63,7 @@ object GenerateCi {
       //      (but it shouldn't be necessary)
     specializations.foreach(sp => {
       ctx << kind << proxy.baseName << "<" << {
-        (sp.map(ctx.typeFor(_)(GenerateCpp.visit)), ", ")
+        (sp.map(ctx.typeFor(_, Some(proxy))), ", ")
       } << ">" << ";"
     })
   }

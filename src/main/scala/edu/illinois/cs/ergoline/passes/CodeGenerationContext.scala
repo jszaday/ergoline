@@ -16,6 +16,11 @@ class CodeGenerationContext(val language: String = "cpp") {
   val current: StringBuilder = new StringBuilder
   private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
 
+  def makeSubContext(): CodeGenerationContext = {
+    new CodeGenerationContext(language)
+    // TODO copy substitutions
+  }
+
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
     _substitutions += (s -> sp)
     sp
@@ -41,11 +46,11 @@ class CodeGenerationContext(val language: String = "cpp") {
     this << GenerateCpp.nameFor(this, node)
   }
 
-  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
     typeFor(Find.uniqueResolution(x), if (ctx.isEmpty) Some(x) else ctx)
   }
 
-  def typeFor(x: EirType, ctx: Option[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): String = {
+  def typeFor(x: EirType, ctx: Option[EirNode]): String = {
     x match {
       case t: EirTupleType =>
         "std::tuple<" + t.children.map(typeFor(_, ctx)).mkString(", ") + ">"
