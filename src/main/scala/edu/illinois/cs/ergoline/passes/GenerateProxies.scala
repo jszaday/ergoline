@@ -82,8 +82,8 @@ object GenerateProxies {
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
-    ctx << s"std::vector<std::string> $name(msg->argc);" <<
-      s"std::transform(msg->argv, msg->argv + msg->argc, $name.begin()," <<
+    ctx << s"auto $name = std::make_shared<std::vector<std::string>>(msg->argc);" <<
+      s"std::transform(msg->argv, msg->argv + msg->argc, $name->begin()," <<
       "[](const char* x) -> std::string { return std::string(x); });"
   }
 

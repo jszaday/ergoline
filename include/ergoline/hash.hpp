@@ -51,6 +51,12 @@ struct hash<T*,
 };
 
 template <class T>
+struct hash<T*,
+            typename std::enable_if<!std::is_base_of<hashable, T>::value>::type> {
+  std::size_t operator()(const T* t) const { return t ? hash<T>()(*t) : 0; }
+};
+
+template <class T>
 struct hash<
     T, typename std::enable_if<std::is_integral<T>::value ||
                                std::is_floating_point<T>::value ||
