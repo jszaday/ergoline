@@ -81,7 +81,7 @@ object Errors {
   }
 
   def incorrectType(a: EirNode, c: Class[_]): Nothing = {
-    Console.err.println(s"${contextualize(a)}: expected an ${c.getName}, got ${nameFor(a)}.")
+    Console.err.println(s"${contextualize(a)}: expected an ${c.getName}, got ${nameFor(a)} (a(n) ${a.getClass.getName}).")
     exitAction()
   }
 

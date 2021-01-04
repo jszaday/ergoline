@@ -231,21 +231,26 @@ object Find {
     }
   }
 
+  // TODO use this!!
   def uniqueResolution[T <: EirNode](iterable: Iterable[EirResolvable[T]]): Iterable[T] = {
     iterable.map(uniqueResolution[T])
   }
 
-  def accessibleMember(base : EirNode, name: String, ctx: EirNode): List[EirMember] = {
-    val scope = base match {
-      case s : EirClassLike => s
-      case EirTemplatedType(_, s : EirClassLike, _) => s
-      case _ => throw new RuntimeException(s"unsure how to find members of $base")
-    }
-    // TODO check parent classes as well!
-    child[EirMember](scope, withName(name).and(ctx.canAccess(_))).toList
+  def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
+    asClassLike(Find.uniqueResolution[EirType](resolvable))
+
+  def asClassLike(ty: EirType): EirClassLike = ty match {
+    case c: EirClassLike => c
+    case t: EirTemplatedType => asClassLike(t.base)
+    case _ => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  def accessibleMember(base : EirNode, x : EirFieldAccessor): List[EirMember] = accessibleMember(base, x.field, x)
+  def accessibleMember(base : EirResolvable[EirType], name: String, ctx: EirNode): List[EirMember] = {
+    // TODO check parent classes as well!
+    child[EirMember](asClassLike(base), withName(name).and(ctx.canAccess(_))).toList
+  }
+
+  def accessibleMember(base : EirResolvable[EirType], x : EirFieldAccessor): List[EirMember] = accessibleMember(base, x.field, x)
 
   def accessibleConstructor(base : EirNode, x : EirNew, mustBeConcrete: Boolean = false): List[EirMember] = {
     val c = base match {

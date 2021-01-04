@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.EirImportTests.setupEnv
-import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace}
+import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
-import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
@@ -86,6 +87,32 @@ class EirImportTests extends FunSuite {
       |}
       |""".stripMargin)
     Processes.onLoad(module)
+  }
+
+  test("complex class relationships are correctly sorted and partitioned") {
+    setupEnv()
+    val module = Modules.load("""
+        |package foobar;
+        |
+        |class foobar with foo::baz { }
+        |
+        |namespace foo {
+        |  trait bar { }
+        |  trait baz with qux::quux { }
+        |}
+        |
+        |namespace qux {
+        |  trait quux with foo::bar { }
+        |}
+        |""".stripMargin)
+    Processes.onLoad(module)
+    val unsorted = Find.within[EirClassLike](module, _ => true).toList
+    unsorted.hasValidOrder shouldBe false
+    val sorted = unsorted.dependenceSort()
+    sorted.hasValidOrder shouldBe true
+    sorted.map(_.name) shouldEqual List("bar", "quux", "baz", "foobar")
+    val partitioned = sorted.namespacePartitioned
+    partitioned.map(_._1.name) shouldEqual List("foo", "qux", "foo", "foobar")
   }
 
   test("check sophisticated and chained templates") {

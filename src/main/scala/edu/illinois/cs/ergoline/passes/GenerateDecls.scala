@@ -2,7 +2,8 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{isTransient, makeHasher, makePupper, nameFor, qualifiedNameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, nameFor, qualifiedNameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 
 object GenerateDecls {
@@ -37,7 +38,7 @@ object GenerateDecls {
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
         Nil
-      } else if (!isTransient(x)) {
+      } else if (!x.isTransient) {
         if (!hasPup(x)) {
           if (x.templateArgs.isEmpty) ctx << "virtual void pup(PUP::er&) override;"
           else makePupper(ctx, x, isMember = true)

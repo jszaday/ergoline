@@ -1,9 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{Find, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
+
+import scala.annotation.tailrec
 import scala.util.Properties.{lineSeparator => n}
 
 object Processes {
@@ -34,19 +39,78 @@ object Processes {
     }
   }
 
+  // NOTE This will go away once passes are implemented
   def generateCi(): String = {
     GenerateCi.visitAll(checked)
   }
 
+  // TODO this logic should be moved into its own file or generate cpp
+  object RichProcessesSyntax {
+    implicit class RichEirClassList(self: List[EirClassLike]) {
+
+      // TODO use a topological instead of greedy sorting algorithm
+       def dependenceSort(): List[EirClassLike] = {
+        var unplaced = self.sortBy(_.inherited.size)
+        var placed: List[EirClassLike] = Nil
+        while (unplaced.nonEmpty) {
+          val idx = unplaced.indexWhere(
+            !_.inherited.map(Find.asClassLike).exists(unplaced.contains(_)))
+          placed :+= unplaced(idx)
+          unplaced = unplaced.patch(idx, Nil, 1)
+        }
+        placed
+      }
+
+      // TODO find a more idiomatic way to do this
+      def orderedPartition[A](f: EirClassLike => A): List[(A, List[EirClassLike])] = {
+        var current: Option[A] = None
+        var group: List[EirClassLike] = Nil
+        var result: List[(A, List[EirClassLike])] = Nil
+        for (a <- self) {
+          val b = f(a)
+          if (!current.contains(b)) {
+            current match {
+              case Some(c) =>
+                result :+= (c -> group)
+              case _ =>
+            }
+            current = Some(b)
+            group = Nil
+          }
+          group :+= a
+        }
+        if (group.nonEmpty) {
+          assert(current.isDefined)
+          result :+= (current.get -> group)
+        }
+        result
+      }
+
+      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
+        self.orderedPartition(x => {
+          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+        })
+
+      def hasValidOrder: Boolean = {
+        self.zipWithIndex.forall({
+          case (c, i) =>
+            self.find(c.isDescendantOf).forall(self.indexOf(_) < i)
+        })
+      }
+    }
+  }
+
+  // TODO this logic should be moved into GenerateCpp
+  // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
     val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
-    val toDecl = checked.keys.collect({
+    val sorted = checked.keys.collect({
       case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
-    }).toList.groupBy(x => {
-      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
-    })
+    }).toList.dependenceSort()
+    assert(!globals.strict || sorted.hasValidOrder)
+    val toDecl = sorted.namespacePartitioned
     ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;")
     ctx << a.map(GenerateCpp.forwardDecl(ctx, _))
     toDecl.foreach({

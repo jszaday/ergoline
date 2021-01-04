@@ -1,13 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTrait}
+import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTemplateArgument, EirTrait}
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object GenerateProxies {
@@ -111,10 +111,13 @@ object GenerateProxies {
     }
   }
 
-  def needsCasting(t: EirType): Boolean = {
-    t match {
+  def needsCasting(n: EirNode): Boolean = {
+    n match {
+      // TODO use specialization
+      case _: EirTemplateArgument => false
       case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
-      case _ => t.isTrait && t.isPointer && !t.isSystem
+      case t: EirType => t.isTrait && t.isPointer && !t.isSystem
+      case _ => Errors.incorrectType(n, classOf[EirType])
     }
   }
 
