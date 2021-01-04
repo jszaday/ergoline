@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTemplateArgument, EirTrait}
-import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
@@ -115,6 +115,7 @@ object GenerateProxies {
     n match {
       // TODO use specialization
       case _: EirTemplateArgument => false
+      case _: EirLambdaType => false
       case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
       case t: EirType => t.isTrait && t.isPointer && !t.isSystem
       case _ => Errors.incorrectType(n, classOf[EirType])

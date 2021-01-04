@@ -16,6 +16,11 @@ class CodeGenerationContext(val language: String = "cpp") {
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
   val current: StringBuilder = new StringBuilder
   private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
+  private val _pointerOverrides: mutable.Set[EirNode] = mutable.Set()
+
+  def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
+  def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
+  def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
 
   def makeSubContext(): CodeGenerationContext = {
     new CodeGenerationContext(language)
@@ -134,7 +139,7 @@ class CodeGenerationContext(val language: String = "cpp") {
       ignores.pop()
       return this
     }
-    if (value.isBlank) {
+    if (value.isEmpty) {
       return this
     } else if (value.startsWith("{") || value.endsWith("{")) {
       val curr = current.toString()

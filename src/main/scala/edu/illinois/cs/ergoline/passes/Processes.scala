@@ -1,15 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
-
-import scala.annotation.tailrec
-import scala.util.Properties.{lineSeparator => n}
 
 object Processes {
   private val ctx = new TypeCheckContext
@@ -122,14 +118,14 @@ object Processes {
         } << "}"
     })
     ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+    a.foreach(GenerateProxies.visitProxy(ctx, _))
+    kids.foreach(GenerateDecls.visit(ctx, _))
     lambdas.foreach({
       case (namespace, lambdas) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
           lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
         } << "}"
     })
-    a.foreach(GenerateProxies.visitProxy(ctx, _))
-    kids.foreach(GenerateDecls.visit(ctx, _))
     kids.foreach(GenerateCpp.visit(ctx, _))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
     ctx << List(

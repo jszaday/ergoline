@@ -49,6 +49,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case t: EirTupleType => !t.children.exists(_.isTransient)
           // TODO use specialization?
           case _: EirTemplateArgument => false
+          case _: EirLambdaType => false
           case _: EirClassLike => x.parent.exists(_.isInstanceOf[EirMember])|| x.annotation("transient").isDefined
           case t: EirType => Find.asClassLike(t).isTransient
         }
@@ -225,8 +226,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           val fqnOrDot = if (m.isStatic) "::" else base.foundType.map(fieldAccessorFor).getOrElse(Errors.missingType(base))
           ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(ctx)(Some(disambiguated), args) << ")"
         }
-      case f : EirFunction if f.name == "println" =>
-        ctx << "CkPrintf(\"%s\\n\", " << "(" << {
+      case _ : EirFunction if name == "CkPrintf" || name == "CkAbort" =>
+        ctx << name << "(\"%s\\n\", " << "(" << {
           visitArguments(ctx)(Some(disambiguated), args)
         } << ")" << ".c_str())"
       case _ => ctx << s"($name(" << visitArguments(ctx)(Some(disambiguated), args) << "))"
@@ -369,7 +370,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .filterNot(_.isTrait).toList
   }
 
-  def pupperFor(ctx: (CodeGenerationContext, EirClassLike, String))(current: String, ours: EirType): List[String] = {
+  def pupperFor(ctx: (CodeGenerationContext, EirNode, String))(current: String, ours: EirType): List[String] = {
     val puper = ctx._3
     if (GenerateProxies.needsCasting(ours)) ours match {
       case t: EirTupleType =>
@@ -572,7 +573,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       else x
     })
     val proxy = Some(x).to[EirType].flatMap(ProxyManager.asProxy)
-    x match {
+    val result = x match {
       case _ if proxy.isDefined => {
         val prefix =
           if (proxy.get.isElement) "CProxyElement_" else "CProxy_"
@@ -612,6 +613,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else "")
       case _: EirNamedNode => dealiased.get
     }
+    if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
 
   def typeForEntryArgument(ctx: (CodeGenerationContext, EirNode))(ty: EirResolvable[EirType]): String = {
@@ -625,6 +627,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             .map(typeForEntryArgument(ctx))
             .mkString(", ")
         } + ">"
+      case t: EirLambdaType => ctx._1.typeFor(t, Some(ctx._2))
       case t: EirType if t.isTransient => Errors.cannotSerialize(ctx._2, t)
       // TODO exempt system types here?
       case t: EirType if t.isTrait => "std::shared_ptr<PUP::able>"
@@ -683,8 +686,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case _ => false
       })
       val name = qualifiedNameFor(ctx, x)(captured)
-      if (isPointer) name else s"std::shared_ptr<${ty.map(t =>
-        ctx.typeFor(t.asInstanceOf[EirResolvable[EirType]], Some(x))).getOrElse(???)}>(&$name)"
+      if (isPointer) name else {
+        val t = ty.map(t => ctx.typeFor(t.asInstanceOf[EirResolvable[EirType]], Some(x))).getOrElse(???)
+        s"std::shared_ptr<$t>(std::shared_ptr<$t>{}, &$name)"
+      }
     })
     ctx << s"std::make_shared<${nameFor(x)}>(${captures mkString ", "})"
 //    ctx << s"[=] (" << (x.args, ", ") << ") -> " << {
@@ -707,6 +712,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case t: EirType => t
         case _ => ???
       })
+    val isTransient = ctypes.exists(_.isTransient)
     val cdecltypes = ctypes.map(_t => {
       val t = ctx.typeFor(_t, Some(lambda))
       if (_t.isPointer) t else s"std::shared_ptr<$t>"
@@ -715,17 +721,37 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"$name(${
       cdecltypes.zipWithIndex.map({
         case (t, idx) => s"$t _$idx"
-      }).mkString(", ")
-    }) { }"
+      }) mkString ", "
+    })" << Option.when(captures.nonEmpty)(": ") << {
+      (captures.zipWithIndex.map({
+        case (n, idx) => s"${n.name}(_$idx)"
+      }), ", ")
+    } << "{ }"
     ctx << s"$name() { }"
     ctx << s"$name(CkMigrateMessage *m): ergoline::function<${args mkString ", "}>(m) { }"
     ctx << s"PUPable_decl_inside($name);"
-    ctx << "virtual void pup(PUP::er& p) override" << "{"
-    ctx << "PUP::able::pup(p);"
+    ctx << "virtual void pup(PUP::er& _) override" << "{"
+    if (isTransient) {
+      ctx << "CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
+    } else {
+      ctx << "PUP::able::pup(_);"
+      ctx << captures.zip(ctypes).flatMap({
+        case (n, t) => pupperFor((ctx, lambda, "_"))(n.name, t)
+      })
+    }
     ctx << "}"
     ctx << s"virtual" << args.head << "operator()("
     ctx << (lambda.args.zip(args.tail).map({ case (arg, ty) => s"$ty ${arg.name}" }), ", ")
-    ctx << ") override" << "{ }"
+    ctx << ") override"
+    val crefs = captures.zip(ctypes).collect{
+      case (x, t) if !t.isPointer => x
+    }
+    crefs.foreach(ctx.makePointer)
+    ctx << lambda.body
+    crefs.foreach(ctx.unsetPointer)
+    ctx << captures.zip(cdecltypes).map({
+      case (n, t) => s"$t ${n.name};"
+    })
     ctx << "};"
   }
 

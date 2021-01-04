@@ -255,9 +255,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case EirMember(_, f: EirFunction, _) => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
       case s: EirSpecializable if s.templateArgs.nonEmpty && !ctx.hasSubstitution(s) && !value.parent.exists(_.isInstanceOf[EirTemplatedType]) =>
         Errors.missingSpecialization(s)
-      case _ => ours.isEmpty
+      case f => ours.isEmpty || (visit(ctx, f) match {
+        case t: EirLambdaType => argumentsMatch(ours, t.from.map(visit(ctx, _)))
+        case _ => false
+      })
     })
-    found.map(visit(ctx, _)).getOrElse(Errors.unableToResolve(value))
+    found.map(visit(ctx, _)).getOrElse({
+      Errors.unableToResolve(value)
+    })
   }
 
   // TODO when the last statement in a block is an expression, put a "return" there
