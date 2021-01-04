@@ -89,7 +89,7 @@ class EirImportTests extends FunSuite {
     Processes.onLoad(module)
   }
 
-  test("complex class relationships are correctly handled") {
+  test("complex class relationships are correctly sorted and partitioned") {
     setupEnv()
     val module = Modules.load("""
         |package foobar;
@@ -111,6 +111,8 @@ class EirImportTests extends FunSuite {
     val sorted = unsorted.dependenceSort()
     sorted.hasValidOrder shouldBe true
     sorted.map(_.name) shouldEqual List("bar", "quux", "baz", "foobar")
+    val partitioned = sorted.namespacePartitioned
+    partitioned.map(_._1.name) shouldEqual List("foo", "qux", "foo", "foobar")
   }
 
   test("check sophisticated and chained templates") {

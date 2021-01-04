@@ -39,10 +39,12 @@ object Processes {
     }
   }
 
+  // NOTE This will go away once passes are implemented
   def generateCi(): String = {
     GenerateCi.visitAll(checked)
   }
 
+  // TODO this logic should be moved into its own file or generate cpp
   object RichProcessesSyntax {
     implicit class RichEirClassList(self: List[EirClassLike]) {
 
@@ -84,6 +86,11 @@ object Processes {
         result
       }
 
+      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
+        self.orderedPartition(x => {
+          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+        })
+
       def hasValidOrder: Boolean = {
         self.zipWithIndex.forall({
           case (c, i) =>
@@ -93,6 +100,8 @@ object Processes {
     }
   }
 
+  // TODO this logic should be moved into GenerateCpp
+  // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
@@ -101,10 +110,7 @@ object Processes {
       case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
     }).toList.dependenceSort()
     assert(!globals.strict || sorted.hasValidOrder)
-    val toDecl = sorted.orderedPartition(x => {
-      Find.parentOf[EirNamespace](x)
-        .getOrElse(Errors.missingNamespace(x))
-    })
+    val toDecl = sorted.namespacePartitioned
     ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;")
     ctx << a.map(GenerateCpp.forwardDecl(ctx, _))
     toDecl.foreach({
