@@ -34,6 +34,11 @@ object Errors {
 
   def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing = unableToUnify(ctx, Seq(a, b))
 
+  def unableToName(n: EirNode): Nothing ={
+    Console.err.println(s"${contextualize(n)}: unable to generate name for $n.")
+    exitAction()
+  }
+
   def missingBody(f: EirFunction): Nothing ={
     Console.err.println(s"${contextualize(f)}: expected body for ${nameFor(f)}")
     exitAction()

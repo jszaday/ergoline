@@ -19,7 +19,7 @@ object EirAccessibility extends Enumeration {
   val Public, Private, Protected = Value
 }
 
-class EirSourceInfo(sourceName: String, line: Int, start: Int, text: String) {
+class EirSourceInfo(var sourceName: String, var line: Int, var start: Int, var text: String) {
   override def toString: String = s"$sourceName:$line:$start"
 }
 
@@ -438,6 +438,24 @@ object EirTupleExpression {
 
 case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFunctionArgument], var body: EirBlock)
   extends EirExpressionNode {
+
+  def captures: List[EirNamedNode] = {
+    val predicate = (x: EirNode) => x match {
+      case s: EirSymbol[_] =>
+        val resolution = Find.uniqueResolution(s)
+        Some(resolution match {
+          case f: EirFunctionArgument => !f.parent.contains(this)
+          case d: EirDeclaration => !Find.ancestors(d).contains(this)
+          case EirMember(_, _: EirDeclaration, _) => true
+          case _ => false
+        })
+      case _ => Some(false)
+    }
+    Find.descendant(body, predicate)
+      .map(x => Find.uniqueResolution(x.asInstanceOf[EirResolvable[EirNamedNode]]))
+      .toList.distinct.sortBy(_.name)
+  }
+
   override def children: Iterable[EirNode] = args ++ List(body)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {

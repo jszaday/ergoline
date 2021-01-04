@@ -30,7 +30,23 @@ import ck;
         assert(gs[0].get() == hs[2]);
         assert(gs[0].get() == gs[1].get());
         assert(gs[0].get() == hs[1].get().get());
-        exit();
+
+        var i = 16384;
+        val f = (j: int) => {
+            println("lambda function called!");
+            return i + j;
+        };
+        i = 0;
+        selfProxy.receive(f);
+    }
+
+    @entry def receive(f: int => int) {
+        val i = f(1);
+        if (i == 1) {
+            exit();
+        } else {
+            abort("expected 1, got " + i.toString() + " instead?");
+        }
     }
 
     @entry def receive(h: tupleHolder) {

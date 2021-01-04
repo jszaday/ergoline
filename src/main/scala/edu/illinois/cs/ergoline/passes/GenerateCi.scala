@@ -10,7 +10,8 @@ import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateCi {
 
-  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {
+  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]],
+                         val lambdas: Map[EirNamespace, List[EirLambdaExpression]]) extends CodeGenerationContext("ci") {
     val puppables: Iterable[EirSpecializable] = checked.keys.filter({
       case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
       case _ => false
@@ -23,6 +24,7 @@ object GenerateCi {
     grouped.foreach({
       case (ns, pupables) => {
         ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
+        ctx << ctx.lambdas.getOrElse(ns, Nil).map(GenerateCpp.nameFor).map(name => s"PUPable $name;")
         ctx << pupables.flatMap(x => {
           if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x)};")
           else ctx.checked(x).map(y => s"PUPable ${
@@ -37,8 +39,8 @@ object GenerateCi {
     })
   }
 
-  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
-    val ctx = new CiUnparseContext(checked)
+  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]], lambdas: Map[EirNamespace, List[EirLambdaExpression]]): String = {
+    val ctx = new CiUnparseContext(checked, lambdas)
     ctx << "mainmodule generate" << "{"
     visitPuppables(ctx)
     ProxyManager.proxies

@@ -255,9 +255,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case EirMember(_, f: EirFunction, _) => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
       case s: EirSpecializable if s.templateArgs.nonEmpty && !ctx.hasSubstitution(s) && !value.parent.exists(_.isInstanceOf[EirTemplatedType]) =>
         Errors.missingSpecialization(s)
-      case _ => ours.isEmpty
+      case f => ours.isEmpty || (visit(ctx, f) match {
+        case t: EirLambdaType => argumentsMatch(ours, t.from.map(visit(ctx, _)))
+        case _ => false
+      })
     })
-    found.map(visit(ctx, _)).getOrElse(Errors.unableToResolve(value))
+    found.map(visit(ctx, _)).getOrElse({
+      Errors.unableToResolve(value)
+    })
   }
 
   // TODO when the last statement in a block is an expression, put a "return" there
@@ -440,6 +445,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitLambdaExpression(ctx: TypeCheckContext, node: EirLambdaExpression): EirType = {
+    if (!ctx.lambdas.contains(node)) ctx.lambdas +:= node
     val retTy = visit(ctx, node.body)
     if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
     EirLambdaType(Some(node), node.args.map(visit(ctx, _)), retTy)
