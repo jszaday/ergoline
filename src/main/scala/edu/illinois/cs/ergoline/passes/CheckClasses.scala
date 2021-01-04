@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.resolution.Find.asClassLike
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -54,7 +55,7 @@ object CheckClasses {
     if (resolved.isDescendantOf(node)) {
       Errors.invalidParentClass(node, resolved, "circular relationship.")
     }
-    val others = node.inherited.filterNot(_ == candidate).map(asClassLike(_))
+    val others = node.inherited.filterNot(_ == candidate).map(asClassLike)
     val found = others.find(x => x == resolved || x.isDescendantOf(resolved))
     if (found.isDefined) {
       Errors.invalidParentClass(node, resolved, s"already implemented by ${found.get.name}.")
@@ -75,15 +76,5 @@ object CheckClasses {
 
   def visitClass(node : EirClass): Unit = {
     CheckConstructors.checkConstructors(node)
-  }
-
-  @tailrec
-  def asClassLike(node : EirNode): EirClassLike = {
-    node match {
-      case c: EirClassLike => c
-      case t: EirTemplatedType => asClassLike(t.base)
-      case r: EirResolvable[_] => asClassLike(Find.uniqueResolution[EirNode](r))
-      case _ => throw new RuntimeException(s"$node is not a class-like type")
-    }
   }
 }

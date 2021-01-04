@@ -42,27 +42,20 @@ object Processes {
     GenerateCi.visitAll(checked)
   }
 
-  @tailrec
-  def toClassLike(resolvable: EirResolvable[EirType]): EirClassLike = {
-    Find.uniqueResolution(resolvable) match {
-      case EirTemplatedType(_, base, _) => toClassLike(base)
-      case c: EirClassLike => c
-      case t => Errors.incorrectType(t, classOf[EirClassLike])
-    }
-  }
-
+  // TODO use a topological instead of greedy sorting algorithm
   def sortClasses(input: List[EirClassLike]): List[EirClassLike] = {
     var unplaced = input.sortBy(_.inherited.size)
     var placed: List[EirClassLike] = Nil
     while (unplaced.nonEmpty) {
       val idx = unplaced.indexWhere(
-        !_.inherited.map(toClassLike).exists(unplaced.contains(_)))
+        !_.inherited.map(Find.asClassLike).exists(unplaced.contains(_)))
       placed :+= unplaced(idx)
       unplaced = unplaced.patch(idx, Nil, 1)
     }
     placed
   }
 
+  // TODO find a more idiomatic way to do this
   def partitionWithOrder[A, B](list: List[A], f: A => B): List[(B, List[A])] = {
     var current: Option[B] = None
     var group: List[A] = Nil

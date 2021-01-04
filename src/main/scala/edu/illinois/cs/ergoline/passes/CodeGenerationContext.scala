@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
@@ -47,7 +48,13 @@ class CodeGenerationContext(val language: String = "cpp") {
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
-    typeFor(Find.uniqueResolution(x), if (ctx.isEmpty) Some(x) else ctx)
+    Find.uniqueResolution[EirNode](x) match {
+      case t: EirTemplateArgument =>
+        ctx.map(GenerateCpp.qualifiedNameFor(this, _)(t))
+           .getOrElse(GenerateCpp.nameFor(this, t))
+      case t: EirType => typeFor(t, if (ctx.isEmpty) Some(x) else ctx)
+      case n: EirNode => Errors.incorrectType(n, classOf[EirType])
+    }
   }
 
   def typeFor(x: EirType, ctx: Option[EirNode]): String = {

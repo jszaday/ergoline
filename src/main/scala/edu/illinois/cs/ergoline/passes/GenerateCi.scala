@@ -2,20 +2,17 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.isTransient
-import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
-import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
-
-import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCi {
 
   class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {
     val puppables: Iterable[EirSpecializable] = checked.keys.filter({
-      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || isTransient(x))
+      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
       case _ => false
     })
   }

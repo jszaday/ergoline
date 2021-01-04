@@ -5,7 +5,7 @@ import java.io.File
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirResolvable, RichEirType}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -18,38 +18,33 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
 
   object GenCppSyntax {
-    implicit class RichEirType(eirType : EirType) {
+    implicit class RichEirType(self : EirType) {
       def isPointer: Boolean = {
-        val system = eirType.annotation("system")
-        eirType match {
-          case x : EirTemplatedType =>
-            Find.uniqueResolution[EirType](x.base).isPointer
-          case _ if system.isDefined => system.flatMap(_("pointer")).exists(_.toBoolean)
-          case x : EirClassLike => !x.isInstanceOf[EirProxy]
-          case _ => false
+        val cls = Find.asClassLike(self)
+        val system: Option[EirAnnotation] = cls.annotation("system")
+        system match {
+          case Some(system) => system("pointer").exists(_.toBoolean)
+          case None => !cls.isInstanceOf[EirProxy]
         }
       }
 
-      def isSystem: Boolean = {
-        eirType match {
-          case x : EirTemplatedType =>
-            Find.uniqueResolution[EirType](x.base).isSystem
-          case _ => eirType.annotation("system").isDefined
+      def isSystem: Boolean =
+        Find.asClassLike(self).annotation("system").isDefined
+
+      def isTrait: Boolean =
+        Find.asClassLike(self).isInstanceOf[EirTrait]
+    }
+
+    implicit class RichEirResolvable[T <: EirNode](self: EirResolvable[T]) {
+      def isTransient: Boolean = {
+        val x = Find.uniqueResolution[EirNode](self)
+        x match {
+          case t: EirTupleType => !t.children.exists(_.isTransient)
+          // TODO use specialization?
+          case _: EirTemplateArgument => false
+          case _: EirClassLike => x.parent.exists(_.isInstanceOf[EirMember])|| x.annotation("transient").isDefined
+          case t: EirType => Find.asClassLike(t).isTransient
         }
-      }
-
-      def isTrait: Boolean = eirType match {
-        case x : EirTemplatedType =>
-          Find.uniqueResolution[EirType](x.base).isTrait
-        case _ : EirTrait => true
-        case _ => false
-      }
-
-      def isTransient: Boolean = eirType match {
-        case x: EirTemplatedType =>
-          Find.uniqueResolution[EirType](x.base).isTransient
-        case c: EirClassLike => GenerateCpp.isTransient(c)
-        case _ => false
       }
     }
   }
@@ -329,10 +324,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"typename ${nameFor(ctx, x)}"
   }
 
-  def isTransient(x: EirClassLike): Boolean = {
-    x.parent.exists(_.isInstanceOf[EirMember]) || x.annotation("transient").isDefined
-  }
-
   def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     val parents = (x.implementsThese ++ x.extendsThis).map(Find.uniqueResolution[EirType]).map(nameFor(ctx, _))
     if (x.isInstanceOf[EirTrait]) {
@@ -344,7 +335,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
       } << {
         val hasPupableParent = x.extendsThis.map(Find.uniqueResolution[EirType]).exists(!_.isTrait)
-        Option.unless(isTransient(x) || hasPupableParent)(", public PUP::able")
+        Option.unless(x.isTransient || hasPupableParent)(", public PUP::able")
       } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
       }
@@ -429,7 +420,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (x.templateArgs.isEmpty) {
       val isSystem = x.annotation("system").isDefined
       ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
-      if (!x.isTrait && !isTransient(x) && !isSystem && !GenerateDecls.hasPup(x)) {
+      if (!x.isTrait && !x.isTransient && !isSystem && !GenerateDecls.hasPup(x)) {
         makePupper(ctx, x)
       }
     }
@@ -599,8 +590,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def typeForEntryArgument(ctx: (CodeGenerationContext, EirNode))(ty: EirType): String = {
-    ty match {
+  def typeForEntryArgument(ctx: (CodeGenerationContext, EirNode))(ty: EirResolvable[EirType]): String = {
+    val resolution = Find.uniqueResolution[EirNode](ty)
+    resolution match {
+      case _: EirTemplateArgument => qualifiedNameFor(ctx._1, ctx._2)(resolution)
       case t: EirTupleType =>
         "std::tuple<" + {
           t.children
@@ -608,18 +601,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             .map(typeForEntryArgument(ctx))
             .mkString(", ")
         } + ">"
-      case t if t.isTransient => Errors.cannotSerialize(ctx._2, t)
+      case t: EirType if t.isTransient => Errors.cannotSerialize(ctx._2, t)
       // TODO exempt system types here?
-      case t if t.isTrait => "std::shared_ptr<PUP::able>"
-      case t => ctx._1.typeFor(t, Some(ctx._2))
+      case t: EirType if t.isTrait => "std::shared_ptr<PUP::able>"
+      case t: EirType => ctx._1.typeFor(t, Some(ctx._2))
+      case _ => Errors.incorrectType(resolution, classOf[EirType])
     }
   }
 
   override def visitFunctionArgument(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
-    val declTy = Find.uniqueResolution(x.declaredType)
     ctx << {
-      if (isEntryArgument(x)) typeForEntryArgument((ctx, x))(declTy)
-      else ctx.typeFor(declTy, Some(x))
+      if (isEntryArgument(x)) typeForEntryArgument((ctx, x))(x.declaredType)
+      else ctx.typeFor(x.declaredType, Some(x))
     } << ctx.nameFor(x)
   }
 
