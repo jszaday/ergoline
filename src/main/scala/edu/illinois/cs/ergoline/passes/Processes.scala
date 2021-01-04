@@ -24,6 +24,8 @@ object Processes {
     "#include \"generate.decl.h\" // ;"
   )
 
+  def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
+    ctx.lambdas.groupBy(x => Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x)))
   def checked: Map[EirSpecializable, List[EirSpecialization]] = ctx.checked
 
   def onLoad(node : EirNode): Unit = {
@@ -41,7 +43,7 @@ object Processes {
 
   // NOTE This will go away once passes are implemented
   def generateCi(): String = {
-    GenerateCi.visitAll(checked)
+    GenerateCi.visitAll(checked, lambdas)
   }
 
   // TODO this logic should be moved into its own file or generate cpp
@@ -111,7 +113,7 @@ object Processes {
     }).toList.dependenceSort()
     assert(!globals.strict || sorted.hasValidOrder)
     val toDecl = sorted.namespacePartitioned
-    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;")
+    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;", "#include <ergoline/function.hpp> // ;")
     ctx << a.map(GenerateCpp.forwardDecl(ctx, _))
     toDecl.foreach({
       case (namespace, classes) =>
@@ -120,6 +122,12 @@ object Processes {
         } << "}"
     })
     ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+    lambdas.foreach({
+      case (namespace, lambdas) =>
+        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+          lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
+        } << "}"
+    })
     a.foreach(GenerateProxies.visitProxy(ctx, _))
     kids.foreach(GenerateDecls.visit(ctx, _))
     kids.foreach(GenerateCpp.visit(ctx, _))

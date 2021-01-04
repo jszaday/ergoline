@@ -186,7 +186,7 @@ LambdaArrow
     ;
 
 lambdaExpression
-    :   '(' functionArgumentList ')' LambdaArrow (block | expression)
+    :   '(' functionArgumentList? ')' LambdaArrow (block | expression)
     ;
 
 postfixExpression

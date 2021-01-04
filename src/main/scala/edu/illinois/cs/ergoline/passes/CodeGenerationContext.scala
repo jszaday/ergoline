@@ -134,7 +134,9 @@ class CodeGenerationContext(val language: String = "cpp") {
       ignores.pop()
       return this
     }
-    if (value.startsWith("{") || value.endsWith("{")) {
+    if (value.isBlank) {
+      return this
+    } else if (value.startsWith("{") || value.endsWith("{")) {
       val curr = current.toString()
       lines +:= curr + (if (curr.isEmpty || curr.endsWith(" ")) "" else " ") + value
       current.clear()

@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import java.io.File
+import java.nio.file.Paths
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirResolvable, RichEirType}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -11,6 +12,7 @@ import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
+import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
@@ -20,11 +22,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   object GenCppSyntax {
     implicit class RichEirType(self : EirType) {
       def isPointer: Boolean = {
-        val cls = Find.asClassLike(self)
-        val system: Option[EirAnnotation] = cls.annotation("system")
-        system match {
-          case Some(system) => system("pointer").exists(_.toBoolean)
-          case None => !cls.isInstanceOf[EirProxy]
+        self match {
+          case _: EirLambdaType => true
+          case _: EirClassLike | _: EirTemplatedType =>
+            val cls = Find.asClassLike(self)
+            val system: Option[EirAnnotation] = cls.annotation("system")
+            system match {
+              case Some(system) => system("pointer").exists(_.toBoolean)
+              case None => !cls.isInstanceOf[EirProxy]
+            }
+          case _ => false
         }
       }
 
@@ -260,7 +267,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << "(([&](){ " << ctx.typeFor(retTy) << temporary(ctx) << ";"
       }
-      ctx << x.target << visitSpecialization(ctx, x) << "(" << {
+      val isPointer = x.target match {
+        // TODO make this more robust
+        case s: EirSymbol[_] => Find.uniqueResolution(s) match {
+          case _: EirDeclaration => true
+          case EirMember(_, _: EirDeclaration, _) => true
+          case _: EirFunctionArgument => true
+          case _ => false
+        }
+        case _ => false
+      }
+      if (isPointer) ctx << "(*"
+      ctx << x.target
+      if (isPointer) ctx << ")"
+      ctx << visitSpecialization(ctx, x) << "(" << {
         if (isAsync) {
           ctx << temporary(ctx)
           if (x.args.nonEmpty) ctx << ","
@@ -571,6 +591,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
       }
+      case x: EirLambdaType => {
+        val args = (x.to +: x.from).map(ctx.typeFor(_, Some(x)))
+        s"ergoline::function<${args.mkString(", ")}>"
+      }
       case x: EirTemplateArgument =>
         ctx.hasSubstitution(x) match {
           case Some(t) => nameFor(ctx, t)
@@ -624,10 +648,85 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"std::$func(" << (x.children, ", ") << ")"
   }
 
+  private val _lambda_names: mutable.Map[EirLambdaExpression, String] = mutable.Map()
+
+  def nameFor(x: EirLambdaExpression): String = {
+    _lambda_names.get(x) match {
+      case Some(name) => name
+      case None =>
+        val name = x.location
+          .map((i: EirSourceInfo) => s"__lambda__${((s: String) => {
+            s.substring(0, s.indexOf('.'))
+          })(Paths.get(i.sourceName).getFileName.toString)}__L${i.line}C${i.start}__")
+          .getOrElse(Errors.unableToName(x))
+        _lambda_names.put(x, name)
+        name
+    }
+  }
+
+  def typeOf(n: EirNode): Option[EirResolvable[EirNode]] = {
+    n match {
+      case e: EirExpressionNode => e.foundType
+      case d: EirDeclaration => Some(d.declaredType)
+      case a: EirFunctionArgument => Some(a.declaredType)
+      case EirMember(_, d: EirDeclaration, _) => Some(d.declaredType)
+      case _ => None
+    }
+  }
+
   override def visitLambdaExpression(ctx: CodeGenerationContext, x: EirLambdaExpression): Unit = {
-    ctx << s"[=] (" << (x.args, ", ") << ") -> " << {
-      x.foundType.map(ctx.typeFor(_))
-    } << x.body
+    val captures = x.captures.map(captured => {
+      // TODO use specialized version when avail
+      val ty = typeOf(captured).map(Find.uniqueResolution[EirNode])
+      val isPointer = ty.exists({
+        case t: EirType => t.isPointer
+        case _ => false
+      })
+      val name = qualifiedNameFor(ctx, x)(captured)
+      if (isPointer) name else s"std::shared_ptr<${ty.map(t =>
+        ctx.typeFor(t.asInstanceOf[EirResolvable[EirType]], Some(x))).getOrElse(???)}>(&$name)"
+    })
+    ctx << s"std::make_shared<${nameFor(x)}>(${captures mkString ", "})"
+//    ctx << s"[=] (" << (x.args, ", ") << ") -> " << {
+//      x.foundType.map(ctx.typeFor(_))
+//    } << x.body
+  }
+
+  def makeLambdaWrapper(ctx: CodeGenerationContext, lambda: EirLambdaExpression): Unit = {
+    val name = nameFor(lambda)
+    val captures = lambda.captures
+    val ty = lambda.foundType match {
+      case Some(t: EirLambdaType) => t
+      case _ => Errors.missingType(lambda)
+    }
+    assert(ty.templateArgs.isEmpty)
+    val args = (ty.to +: ty.from).map(ctx.typeFor(_))
+    val ctypes = captures
+      .map(x => typeOf(x).getOrElse(Errors.missingType(x)))
+      .map(Find.uniqueResolution(_) match {
+        case t: EirType => t
+        case _ => ???
+      })
+    val cdecltypes = ctypes.map(_t => {
+      val t = ctx.typeFor(_t, Some(lambda))
+      if (_t.isPointer) t else s"std::shared_ptr<$t>"
+    })
+    ctx << s"struct $name: public ergoline::function<${args mkString ", "}> {"
+    ctx << s"$name(${
+      cdecltypes.zipWithIndex.map({
+        case (t, idx) => s"$t _$idx"
+      }).mkString(", ")
+    }) { }"
+    ctx << s"$name() { }"
+    ctx << s"$name(CkMigrateMessage *m): ergoline::function<${args mkString ", "}>(m) { }"
+    ctx << s"PUPable_decl_inside($name);"
+    ctx << "virtual void pup(PUP::er& p) override" << "{"
+    ctx << "PUP::able::pup(p);"
+    ctx << "}"
+    ctx << s"virtual" << args.head << "operator()("
+    ctx << (lambda.args.zip(args.tail).map({ case (arg, ty) => s"$ty ${arg.name}" }), ", ")
+    ctx << ") override" << "{ }"
+    ctx << "};"
   }
 
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {

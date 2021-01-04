@@ -440,6 +440,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitLambdaExpression(ctx: TypeCheckContext, node: EirLambdaExpression): EirType = {
+    if (!ctx.lambdas.contains(node)) ctx.lambdas +:= node
     val retTy = visit(ctx, node.body)
     if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
     EirLambdaType(Some(node), node.args.map(visit(ctx, _)), retTy)

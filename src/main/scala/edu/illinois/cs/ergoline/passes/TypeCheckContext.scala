@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
@@ -14,6 +14,8 @@ class TypeCheckContext {
   private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
+
+  var lambdas: List[EirLambdaExpression] = Nil
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
