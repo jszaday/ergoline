@@ -20,7 +20,7 @@ _Proxies_ are the mechanism by which parallel objects or chares are accessed. Th
 
     class test {
         @entry def test(selfProxy: test@) { ... }
-        @async @entry def do_something(var self: test): int {
+        @async @entry def do_something(): int {
             return 42;
         }
     }
