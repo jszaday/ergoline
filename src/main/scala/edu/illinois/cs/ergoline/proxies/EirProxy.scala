@@ -10,6 +10,16 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
 
   isAbstract = base.isAbstract
 
+  override def selfDeclarations: Iterable[EirMember] = base.selfDeclarations ++ {
+    val m = EirMember(Some(this), null, EirAccessibility.Private)
+    // add [@] for collectives as well (with index)
+    val d = EirDeclaration(Some(m), isFinal = true, "self@",
+      ProxyManager.elementFor(this).getOrElse(this), None)
+    m.member = d
+    d.skipType = true
+    Seq(m)
+  }
+
   def isMain: Boolean =
     base.annotations.exists(_.name == "main") && collective.isEmpty
 
@@ -31,6 +41,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
       EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))
     } else theirs.returnType
 //    val declType = ProxyManager.elementFor(this).getOrElse(this)
+    newMember.counterpart = Some(m)
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))

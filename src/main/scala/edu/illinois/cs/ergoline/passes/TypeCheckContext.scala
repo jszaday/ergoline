@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirMember, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 import scala.collection.mutable
 
@@ -11,7 +12,7 @@ import scala.collection.mutable
 class TypeCheckContext {
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
-  private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
+  private var _checked: Map[EirSpecializable, List[(Option[EirClassLike], EirSpecialization)]] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
@@ -20,7 +21,7 @@ class TypeCheckContext {
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
     _checked.map{
-      case (s, sp) => (s, sp.filterNot(x => {
+      case (s, sp) => (s, sp.map(_._2).distinct.filterNot(x => {
         // TODO this may need to cross-check template
         //      arguments that do not belong to us?
         x.specialization.map(Find.uniqueResolution[EirType])
@@ -59,6 +60,10 @@ class TypeCheckContext {
     }
   }
 
+  def makeContext(s: EirSpecializable, sp: EirSpecialization): (Option[EirClassLike], EirSpecialization) = {
+    (s.parent.to[EirMember].map(_.base), sp)
+  }
+
   def shouldCheck(s: EirSpecializable): Boolean = {
     if (s.annotation("system").isDefined) {
       false
@@ -68,10 +73,11 @@ class TypeCheckContext {
     } else {
       _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
         case Some(sp) => {
+          val ctx = makeContext(s, sp)
           val checked = _checked.getOrElse(s, Nil)
-          if (checked.contains(sp)) false
+          if (checked.contains(ctx)) false
           else {
-            _checked += (s -> (checked :+ sp))
+            _checked += (s -> (checked :+ ctx))
             true
           }
         }
@@ -135,10 +141,12 @@ class TypeCheckContext {
 
   def alreadyLeft(n: EirNode): Boolean = !stack.headOption.contains(n)
 
-  def cameVia[T: Manifest]: Option[T] = {
+  def immediateAncestor[T: Manifest]: Option[T] = {
     Option.when(stack.length >= 2)(stack(1) match {
       case x: T => Some(x)
       case _ => None
     }).flatten
   }
+
+  def ancestor[T: Manifest]: Option[T] = stack.collectFirst{ case t: T => t }
 }

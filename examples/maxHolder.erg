@@ -23,7 +23,7 @@ def time(value: int): int;
             dh.setValue((rand() % 100 + 1).toDouble());
         }
         // call the entry method
-        selfProxy.printMaxima(ih, dh);
+        self@printMaxima(ih, dh);
     }
 
     @entry def printMaxima(a: stringable, b: stringable) {

@@ -54,7 +54,7 @@ class pingpong {
     val count: int = 0;
 
     @entry def main(selfProxy: main@, args: array<string>) {
-        new pingpong@group(selfProxy);
+        new pingpong@group(self@);
     }
 
     @entry def finished() {

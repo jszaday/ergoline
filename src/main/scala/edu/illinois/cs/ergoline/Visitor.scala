@@ -269,7 +269,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = {
     if (ctx.Identifier() != null) {
       enter(EirFieldAccessor(parent, null, ctx.Identifier().getText), (f: EirFieldAccessor) => {
-        f.target = visitAs[EirExpressionNode](ctx.postfixExpression())
+        f.target = visitAs[EirExpressionNode](Option(ctx.postfixExpression()).getOrElse(ctx.selfExpression()))
       })
     } else if (ctx.arrArgs != null) {
       enter(EirArrayReference(parent, null, null), (f: EirArrayReference) => {
@@ -347,6 +347,10 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
     EirSymbol[T](parent, identifiers.toStringList)
+  }
+
+  def symbolize[T <: EirNamedNode : Manifest](identifier: TerminalNode): EirSymbol[T] = {
+    EirSymbol[T](parent, List(identifier.getText))
   }
 
   def symbolizeType(identifiers: java.util.List[TerminalNode]): EirResolvable[EirType] = {
@@ -507,22 +511,24 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
-  override def visitPrimaryExpression(ctx: PrimaryExpressionContext): EirExpressionNode = {
-    if (ctx == null) {
-      throw new RuntimeException("encountered null")
-    } else if (ctx.fqn() != null) {
-      if (ctx.specialization() == null) {
-        symbolize[EirNamedNode](ctx.fqn().Identifier())
-      } else {
-        enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
-          s.specialization = specializationToList(ctx.specialization())
-          s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
-        })
-      }
+  override def visitIdentifierExpression(ctx: IdentifierExpressionContext): EirNode = {
+    if (ctx.specialization() == null) {
+      symbolize[EirNamedNode](ctx.fqn().Identifier())
     } else {
-      assert(ctx.children.size() == 1)
-      visitAs[EirExpressionNode](ctx.children.get(0))
+      enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
+        s.specialization = specializationToList(ctx.specialization())
+        s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
+      })
     }
+  }
+
+  override def visitSelfExpression(ctx: SelfExpressionContext): EirNode = {
+    symbolize[EirNamedNode](ctx.SelfKeyword)
+  }
+
+  override def visitPrimaryExpression(ctx: PrimaryExpressionContext): EirExpressionNode = {
+    assert(ctx.children.size() == 1)
+    visitAs[EirExpressionNode](ctx.children.get(0))
   }
 
   override def visitBoolLiteral(ctx: BoolLiteralContext): EirLiteral =

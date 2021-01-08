@@ -334,7 +334,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
-    ctx << nameFor(ctx, Find.uniqueResolution(x))
+    ctx << nameFor(ctx, x)
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
@@ -562,6 +562,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } + ">"
   }
 
+  def selfName(ctx: CodeGenerationContext, s: EirSymbol[_]): String = {
+    if (s.qualifiedName.lastOption.exists(_.contains("@"))) {
+      "thisProxy"
+    } else {
+      selfName(ctx, s.asInstanceOf[EirNode])
+    }
+  }
+
+  def selfName(ctx: CodeGenerationContext, n: EirNode): String = {
+    val ty = n match {
+      case e: EirExpressionNode if e.foundType.isDefined => e.foundType.get
+      case d: EirDeclaration => Find.uniqueResolution(d.declaredType)
+      case EirMember(_, d: EirDeclaration, _) => Find.uniqueResolution(d.declaredType)
+      case _ => Errors.missingType(n)
+    }
+    "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+  }
+
   def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
@@ -574,6 +592,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     })
     val proxy = Some(x).to[EirType].flatMap(ProxyManager.asProxy)
     val result = x match {
+      case s: EirSymbol[_] =>
+        if (CheckTypes.isSelf(s)) {
+          selfName(ctx, s)
+        } else {
+          // TODO need to use FQN here, symbol is self-context providing
+          nameFor(ctx, Find.uniqueResolution(s), includeTemplates)
+        }
       case _ if proxy.isDefined => {
         val prefix =
           if (proxy.get.isElement) "CProxyElement_" else "CProxy_"
@@ -583,15 +608,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => name
         }
       }
-      case _ if dealiased.contains("self") => {
-        val ty = x match {
-          case e: EirExpressionNode if e.foundType.isDefined => e.foundType.get
-          case d: EirDeclaration => Find.uniqueResolution(d.declaredType)
-          case EirMember(_, d: EirDeclaration, _) => Find.uniqueResolution(d.declaredType)
-          case _ => Errors.missingType(x)
-        }
-        "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
-      }
+      case _ if dealiased.contains("self") => selfName(ctx, x)
       case x: EirLambdaType => {
         val args = (x.to +: x.from).map(ctx.typeFor(_, Some(x)))
         s"ergoline::function<${args.mkString(", ")}>"
