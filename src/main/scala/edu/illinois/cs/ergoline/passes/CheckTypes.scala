@@ -408,6 +408,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case e: MissingSelfException[_] =>
           if (member.exists(m => !m.isStatic && !m.parent.exists(_.isInstanceOf[EirProxy]))) {
             member.foreach(_.isEntryOnly = true)
+            ctx.popUntil(node)
             return null
           } else {
             Errors.unableToResolve(e.symbol)

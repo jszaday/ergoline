@@ -10,9 +10,10 @@ import scala.collection.mutable
 
 
 class TypeCheckContext {
+  type Context = (Option[EirClassLike], Option[EirSpecialization])
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
-  private var _checked: Map[EirSpecializable, List[(Option[EirClassLike], EirSpecialization)]] = Map()
+  private var _checked: Map[EirSpecializable, List[Context]] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
@@ -21,10 +22,13 @@ class TypeCheckContext {
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
     _checked.map{
-      case (s, sp) => (s, sp.map(_._2).distinct.filterNot(x => {
+      case (s, sp) => (s, sp.map(_._2).distinct.collect({
+        case Some(s) => s
+      }).filterNot(x => {
         // TODO this may need to cross-check template
         //      arguments that do not belong to us?
-        x.specialization.map(Find.uniqueResolution[EirType])
+        x.specialization
+          .map(Find.uniqueResolution[EirType])
           .exists(_.isInstanceOf[EirTemplateArgument])
       }))
     }.filter(t => {
@@ -60,27 +64,23 @@ class TypeCheckContext {
     }
   }
 
-  def makeContext(s: EirSpecializable, sp: EirSpecialization): (Option[EirClassLike], EirSpecialization) = {
-    (s.parent.to[EirMember].map(_.base), sp)
+  def shouldCheck(s: EirSpecializable, sp: Option[EirSpecialization]): Boolean = {
+    val checked = _checked.getOrElse(s, Nil)
+    val ctx = (immediateAncestor[EirMember].map(_.base), sp)
+    !(checked.contains(ctx) || {
+      _checked += (s -> (checked :+ ctx))
+      false
+    })
   }
 
   def shouldCheck(s: EirSpecializable): Boolean = {
     if (s.annotation("system").isDefined) {
       false
     } else if (s.templateArgs.isEmpty) {
-      if (_checked.contains(s)) false
-      else { _checked += (s -> Nil); true }
+      shouldCheck(s, None)
     } else {
       _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
-        case Some(sp) => {
-          val ctx = makeContext(s, sp)
-          val checked = _checked.getOrElse(s, Nil)
-          if (checked.contains(ctx)) false
-          else {
-            _checked += (s -> (checked :+ ctx))
-            true
-          }
-        }
+        case Some(sp) => shouldCheck(s, Some(sp))
         case None => false
       }
     }
@@ -149,4 +149,6 @@ class TypeCheckContext {
   }
 
   def ancestor[T: Manifest]: Option[T] = stack.collectFirst{ case t: T => t }
+
+  def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
 }
