@@ -24,16 +24,16 @@ class pingpong {
 
     @entry def pingpong(=selfProxy: pingpong[@]group, =mainProxy: main@) {
         // broadcast a ping to all members of the group
-        selfProxy.parent().receive(selfProxy.index(), new ping());
+        self@receive(self[@]index(), new ping());
     }
 
     private def notePong() {
         pongCount += 1;
     }
 
-    private def sendPong(to: int) {
-        val peer = (selfProxy.parent())[to];
-        peer.receive(selfProxy.index(), new pong());
+    @entry def sendPong(to: int) {
+        val peer = self@[to];
+        peer.receive(self[@]index(), new pong());
     }
 
     @entry def receive(from: int, msg: message<string>) {

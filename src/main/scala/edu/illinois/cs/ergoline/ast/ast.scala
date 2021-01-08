@@ -4,7 +4,7 @@ import java.io.File
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
@@ -190,6 +190,16 @@ trait EirSpecialization extends EirNode {
   def specialization: List[EirResolvable[EirType]]
 }
 
+object EirClassLike {
+  def makeSelfDeclaration(parent: Option[EirClassLike], name: String, resolvable: EirResolvable[EirType]): EirMember = {
+    val m = EirMember(parent, null, EirAccessibility.Private)
+    val d = EirDeclaration(Some(m), isFinal = true, name, resolvable, None)
+    m.member = d
+    d.skipType = true
+    m
+  }
+}
+
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
@@ -202,15 +212,10 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   }
 
   // TODO eventually traits will need a self as well
-  def selfDeclarations: Iterable[EirMember] = {
+  def selfDeclarations: List[EirMember] =
     Option.when(this.isInstanceOf[EirClass])({
-      val m = EirMember(Some(this), null, EirAccessibility.Private)
-      val d = EirDeclaration(Some(m), isFinal = true, "self", asType, None)
-      m.member = d
-      d.skipType = true
-      m
-    }).toIterable
-  }
+      EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
+    }).toList
 
   def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
 
@@ -278,10 +283,15 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   var isEntryOnly: Boolean = false
   var counterpart: Option[EirMember] = None
 
-  def base: EirClassLike = parent.to[EirClassLike].getOrElse(Errors.missingType(this))
+  def base: EirClassLike = parent match {
+    case Some(p: EirProxy) => ProxyManager.elementFor(p).getOrElse(p)
+    case Some(c: EirClassLike) => c
+    case _ => Errors.missingType(this)
+  }
+
   def selfDeclarations: List[EirMember] = {
     member match {
-      case _: EirFunction if !isStatic => base.selfDeclarations.toList
+      case _: EirFunction if !isStatic => base.selfDeclarations
       case _ => Nil
     }
   }

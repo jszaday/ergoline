@@ -248,7 +248,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def isSelf(value: EirSymbol[_]): Boolean =
     value.qualifiedName match {
-      case ("self" | "self@") :: Nil => true
+      case ("self" | "self@" | "self[@]") :: Nil => true
       case _ => false
     }
 
@@ -371,10 +371,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTrait(ctx: TypeCheckContext, node: EirTrait): EirType = visitClassLike(ctx, node)
 
   override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = {
-    assert(node.counterpart.isEmpty || node.parent.exists(_.isInstanceOf[EirProxy]))
-    node.counterpart
-      .map(m => visit(ctx, m.member))
-      .getOrElse(visit(ctx, node.member))
+    val proxy = ctx.ancestor[EirClassLike].collect{ case p: EirProxy => p }
+    visit(ctx, (proxy, node.counterpart) match {
+      case (_, Some(m)) => m.member
+      case (Some(p), _) => p.members
+        .find(_.counterpart.contains(node))
+        .getOrElse(node.member)
+      case (_, _) => node.member
+    })
   }
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
@@ -452,8 +456,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val result = super.visit(ctx, node)
     node match {
       case x: EirExpressionNode =>
-        x.foundType = Option(result)
-        if (x.foundType.isEmpty) error(ctx, node)
+        x.foundType = Option(result) match {
+          case None => Errors.missingType(x)
+          case o => o
+        }
       case _ =>
     }
     if (ctx.alreadyLeft(node)) result
@@ -574,8 +580,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = {
     if (ctx.shouldCheck(x)) {
+      val element = ProxyManager.elementFor(x).getOrElse(x)
+      element.members.map(visit(ctx, _))
       // todo put visit(ctx, x.base) here?
-      x.members.map(visit(ctx, _))
     }
     x
   }

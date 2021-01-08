@@ -562,11 +562,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } + ">"
   }
 
+  def selfIndex(p: EirProxy): String = {
+    p.collective match {
+      case Some("nodegroup") => "CkMyNode()"
+      case Some("group") => "CkMyPe()"
+      case Some(s) if s.startsWith("array") => "this->thisIndex"
+      case _ => ???
+    }
+  }
+
+  def currentProxy(s: EirSymbol[_]): EirProxy = {
+    // TODO pull this off the stack
+    s.foundType match {
+      case Some(EirTemplatedType(_, p: EirProxy, _)) => p
+      case Some(p: EirProxy) => p
+      case _ => ???
+    }
+  }
+
   def selfName(ctx: CodeGenerationContext, s: EirSymbol[_]): String = {
-    if (s.qualifiedName.lastOption.exists(_.contains("@"))) {
-      "thisProxy"
-    } else {
-      selfName(ctx, s.asInstanceOf[EirNode])
+    s.qualifiedName.last match {
+      case "self@" => "this->thisProxy"
+      case "self[@]" => s"this->thisProxy[${selfIndex(currentProxy(s))}]"
+      case _ => selfName(ctx, s.asInstanceOf[EirNode])
     }
   }
 
