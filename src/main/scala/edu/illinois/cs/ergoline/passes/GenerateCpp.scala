@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import java.io.File
 import java.nio.file.Paths
 
+import edu.illinois.cs.ergoline.ast.EirGlobalNamespace.parent
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
@@ -464,17 +465,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction, isMember: Boolean): Unit = {
     val member = x.parent.to[EirMember]
-    val langCi = ctx.language == "ci"
-    if (member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined) {
+    val parent = member.flatMap(_.parent).to[EirClassLike]
+    val entryOnly = member.exists(_.isEntryOnly) && ctx.proxy.isEmpty
+    val system = member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined
+    val abstractMember = !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
+    if (entryOnly || system || abstractMember) {
       return
     }
+    val langCi = ctx.language == "ci"
     val asyncCi = langCi && isMember && member.flatMap(_.annotation("async")).isDefined
-    val parent = member.flatMap(_.parent).to[EirClassLike]
     val isConstructor = member.exists(_.isConstructor)
     val overrides = Option.when(isMember && member.exists(_.isOverride))(" override")
-    if (!isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)) {
-      return
-    }
     val name = parent match {
       case Some(p : EirProxy) if langCi && isConstructor => p.baseName
       case Some(classLike) if !isMember => nameFor(ctx, classLike) + "::" + nameFor(ctx, x)

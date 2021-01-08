@@ -582,7 +582,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (ctx.shouldCheck(x)) {
       val element = ProxyManager.elementFor(x).getOrElse(x)
       element.members.map(visit(ctx, _))
-      // todo put visit(ctx, x.base) here?
+      val base = x.base
+      if (ctx.shouldCheck(base)) {
+        visit(ctx, x.base)
+      }
     }
     x
   }
