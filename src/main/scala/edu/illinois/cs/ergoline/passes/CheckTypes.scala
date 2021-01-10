@@ -351,10 +351,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   // TODO fix to be context sensitive! Otherwise this gon' blow up!
-  var decls: Map[EirDeclaration, EirType] = Map()
-
   override def visitDeclaration(ctx: TypeCheckContext, node: EirDeclaration): EirType = {
-    if (decls.contains(node)) return decls(node)
+    ctx.avail(node).foreach(return _)
     val lval = {
       node.declaredType match {
         case p: EirPlaceholder[_] => {
@@ -376,7 +374,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         else Errors.cannotCast(node, b, a)
       }
     }
-    decls += (node -> ty)
+    ctx.cache(node, ty)
     ty
   }
 
@@ -394,14 +392,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   // TODO need to check parent classes/traits too
   //      since they may not be reached otherwise
   def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
-    if (ctx.shouldCheck(node)) {
+    val opt = ctx.shouldCheck(node)
+    opt.foreach(subCtx => {
+      ctx.start(subCtx)
       CheckClasses.visit(node)
       node.members.foreach(visit(ctx, _))
       node.inherited.foreach(visit(ctx, _))
       if (node.annotation("main").isDefined) {
         visitProxyType(ctx, EirProxyType(None, node, None, isElement = false))
       }
-    }
+      ctx.stop(subCtx)
+    })
     node
   }
 
@@ -414,7 +415,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitMember(ctx: TypeCheckContext, node: EirMember): EirType = {
     val proxy = ctx.ancestor[EirClassLike].collect{ case p: EirProxy => p }
     visit(ctx, (proxy, node.counterpart) match {
-      case (_, Some(m)) => m.member
+      case (_, Some(m)) =>
+        visit(ctx, m.member)
+        visit(ctx, node.member)
       case (Some(p), _) => p.members
         .find(_.counterpart.contains(node))
         .getOrElse(node.member)
@@ -438,24 +441,30 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _ =>
 //    }
     val member = ctx.immediateAncestor[EirMember]
-    if (ctx.shouldCheck(node)) {
+    val opt = ctx.shouldCheck(node)
+    opt.foreach(subCtx => {
       try {
+        ctx.start(subCtx)
         val bodyType = node.body.map(visit(ctx, _))
         val retTy = visit(ctx, node.returnType)
         if (!bodyType.forall(_.canAssignTo(retTy))) {
           Errors.unableToUnify(node, bodyType.get, retTy)
         }
+        ctx.stop(subCtx)
       } catch {
         case e: MissingSelfException[_] =>
-          if (member.exists(m => !m.isStatic && !m.parent.exists(_.isInstanceOf[EirProxy]))) {
+          // TODO fix up this logic
+          //      needs to consider self[@] being inaccessible in foo@, e.g.
+          if (member.exists(!_.isStatic)) {
             member.foreach(_.makeEntryOnly())
             ctx.popUntil(node)
+            ctx.stop(subCtx)
             return null
           } else {
             Errors.unableToResolve(e.symbol)
           }
       }
-    }
+    })
     EirLambdaType(Some(node), node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
   }
 
@@ -620,13 +629,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  override def visitProxy(ctx: TypeCheckContext, x: EirProxy): EirType = {
-    if (ctx.shouldCheck(x)) {
-      val element = ProxyManager.elementFor(x).getOrElse(x)
+  override def visitProxy(ctx: TypeCheckContext, node: EirProxy): EirType = {
+    val opt = ctx.shouldCheck(node)
+    opt.foreach(subCtx => {
+      ctx.start(subCtx)
+      val element = ProxyManager.elementFor(node).getOrElse(node)
       element.members.map(visit(ctx, _))
-      visit(ctx, x.base)
-    }
-    x
+      visit(ctx, node.base)
+      ctx.stop(subCtx)
+    })
+    node
   }
 
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {

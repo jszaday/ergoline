@@ -7,12 +7,12 @@ import ck;
     val selfProxy: awaiter@;
 
     @entry def awaiter(=selfProxy: awaiter@) {
-        selfProxy.wait();
+        self@wait();
     }
 
     @threaded @entry def wait() {
-        val f1: ck::future<int> = selfProxy.expected();
-        val f2: ck::future<int> = selfProxy.expected(42);
+        val f1: ck::future<int> = self@expected();
+        val f2: ck::future<int> = self@expected(42);
         assert((await f1) == (await f2));
         exit();
     }

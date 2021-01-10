@@ -1,11 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirMember, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 import scala.collection.mutable
 
@@ -13,8 +12,10 @@ import scala.collection.mutable
 class TypeCheckContext {
   type Context = (Option[EirClassLike], Option[EirSpecialization])
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
+  private val _contexts: mutable.Stack[Context] = new mutable.Stack
   private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
+  private var _cache: Map[(Context, EirNode), EirType] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
@@ -65,25 +66,31 @@ class TypeCheckContext {
     }
   }
 
-  def shouldCheck(s: EirSpecializable, sp: Option[EirSpecialization]): Boolean = {
+  def start(c: Context): Unit = _contexts.push(c)
+  def stop(c: Context): Unit = assert(_contexts.pop() == c)
+  def current: Option[Context] = _contexts.headOption
+  def cache(n: EirNode, t: EirType): Unit = current.foreach(c => _cache += ((c, n) -> t))
+  def avail(n: EirNode): Option[EirType] = current.flatMap(c => _cache.get((c, n)))
+
+  def shouldCheck(s: EirSpecializable, sp: Option[EirSpecialization]): Option[Context] = {
     val checked = _checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
-    !(checked.contains(ctx) || {
+    Option.unless(checked.contains(ctx))({
       _checked += (s -> (checked :+ ctx))
-      false
+      ctx
     })
   }
 
-  def shouldCheck(s: EirSpecializable): Boolean = {
+  def shouldCheck(s: EirSpecializable): Option[Context] = {
     if (s.annotation("system").isDefined) {
-      false
+      None
     } else if (s.templateArgs.isEmpty) {
       shouldCheck(s, None)
     } else {
-      _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
-        case Some(sp) => shouldCheck(s, Some(sp))
-        case None => false
-      }
+      _substitutions
+        .find(_._1 == s)
+        .map(x => makeDistinct(x._2))
+        .flatMap(x => shouldCheck(s, Some(x)))
     }
   }
 
