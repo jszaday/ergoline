@@ -3,7 +3,7 @@ package examples;
 import ergoline::_;
 
 @main class main {
-    @entry def main(selfProxy: main@, args: array<string>) {
+    @entry def main(args: array<string>) {
         val n = args.size() > 1 ? args[1].toInt() : 16;
         val arrProxy: hello1d@array1d = new hello1d@array1d(n, n);
         arrProxy[0].sayHi();
@@ -13,7 +13,7 @@ import ergoline::_;
 class hello1d {
     val n: int;
 
-    @entry def hello1d(selfProxy: hello1d[@]array1d, =n: int): unit { }
+    @entry def hello1d(=n: int) { }
 
     @entry def sayHi(): unit {
         val next: int = self[@]index() + 1;

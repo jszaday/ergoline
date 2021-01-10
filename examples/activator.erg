@@ -5,7 +5,7 @@ import ergoline::_;
 @main class activator {
     var count: int;
 
-    @entry def activator(selfProxy: activator@): unit {
+    @entry def activator() {
         self@activate(new lion());
     }
 

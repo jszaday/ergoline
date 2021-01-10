@@ -47,11 +47,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       def isTransient: Boolean = {
         val x = Find.uniqueResolution[EirNode](self)
         x match {
-          case t: EirTupleType => !t.children.exists(_.isTransient)
+          case t: EirTupleType => t.children.exists(_.isTransient)
           // TODO use specialization?
           case _: EirTemplateArgument => false
           case _: EirLambdaType => false
-          case _: EirClassLike => x.parent.exists(_.isInstanceOf[EirMember])|| x.annotation("transient").isDefined
+          case _: EirClassLike => x.parent.exists(_.isInstanceOf[EirMember]) || x.annotation("transient").isDefined
           case t: EirType => Find.asClassLike(t).isTransient
         }
       }
@@ -516,7 +516,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => nameFor(ctx, x)
     }
     val virtual = Option.when(isMember && !langCi && member.exists(_.isVirtual))("virtual")
-    val dropCount = if (langCi && isConstructor) 1 else 0
     ctx << virtual
     // TODO add templates when !isMember
     if (asyncCi) {
@@ -524,7 +523,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else {
       ctx << Option.when(!isConstructor)(ctx.typeFor(x.returnType))
     }
-    val args = x.functionArgs.drop(dropCount)
+    val args = x.functionArgs
     ctx << name << "("
     if (asyncCi) {
       ctx << ctx.typeFor(x.returnType)

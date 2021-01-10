@@ -3,11 +3,10 @@ package ck;
 import ergoline::queue;
 
 class channel<A> {
-    private val selfProxy: channel<A>@;
     private val values: queue<A>;
     private val pending: queue<future<A>>;
 
-    @entry def channel(=selfProxy: channel<A>@) {
+    @entry def channel() {
         values = new queue<A>();
         pending = new queue<future<A>>();
     }

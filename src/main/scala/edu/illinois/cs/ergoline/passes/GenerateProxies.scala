@@ -156,15 +156,11 @@ object GenerateProxies {
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
       val proxy = x.parent.to[EirProxy]
       val isConstructor = x.isConstructor
-      val isCollective = proxy.exists(_.collective.isDefined)
-      val index = Option.when(isCollective)("[this->thisIndex]").getOrElse("")
       val base = proxy.map(x => nameFor(ctx, x.base, includeTemplates = true)).getOrElse("")
       val f = assertValid[EirFunction](x.member)
       val isMain = proxy.exists(_.isMain)
       val isAsync = x.annotation("async").isDefined
-      val isSingleton = proxy.exists(_.singleton)
-      val dropCount = if (isConstructor) 1 else 0
-      val args = f.functionArgs.drop(dropCount)
+      val args = f.functionArgs
       if (isAsync) ctx << "void"
       else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
@@ -194,8 +190,7 @@ object GenerateProxies {
             makeEntryBody(ctx, x)
             ctx << ";"
           case _ =>
-            ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
-              (List(s"this->thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+            ctx << "this->impl_ = std::make_shared<" << base << ">(" << (args.map(nameFor(ctx, _)), ", ") << ");"
         }
       } else {
         if (isAsync) {

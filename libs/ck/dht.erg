@@ -28,7 +28,7 @@ class dht_<A> {
     @hashExclude private val waiting: map<hashcode, queue<future<A>>>;
     private val n: int;
 
-    @entry def dht_(selfProxy: dht_<A>[@]array1d, =n: int) {
+    @entry def dht_(=n: int) {
         data = new map<hashcode, A>();
         waiting = new map<hashcode, queue<future<A>>>();
     }

@@ -31,7 +31,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
 
   // replace "self" with "selfProxy"
   // TODO use clone
-  private def correctSelf(m : EirMember): EirMember = {
+  private def updateMember(m : EirMember): EirMember = {
     val theirs = m.member.asInstanceOf[EirFunction]
     val isAsync = m.annotation("async").isDefined
     val newMember = EirMember(Some(this), null, m.accessibility)
@@ -47,13 +47,8 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     newMember
   }
 
-  private def validConstructor(m : EirMember): Boolean = {
-    val args = m.member.asInstanceOf[EirFunction].functionArgs
-    val checkArg = args.headOption
-    val checkDeclTy = checkArg.map(x => Find.uniqueResolution(x.declaredType))
-    val element = ProxyManager.elementFor(this).getOrElse(this)
-    // TODO, this will have to be made more robust going forward
-    checkDeclTy.flatMap(ProxyManager.asProxy).contains(element)
+  private def validMember(m : EirMember): Boolean = {
+    m.isEntry // && can be used with this type
   }
 
   private def indices: Option[List[EirType]] = {
@@ -79,11 +74,13 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val eleTy = ProxyManager.elementType(this)
     val needsIndex = collective.exists(_.startsWith("array"))
     base.members
-      .filter(x => x.isEntry && x.isConstructor && validConstructor(x))
+      .filter(x => validMember(x) && x.isConstructor)
       .map(m => {
-        val args = m.member.asInstanceOf[EirFunction].functionArgs.drop(1).map(_.declaredType)
+        // ckNew(n, ...); constructor with size + args
+        val args = m.member.asInstanceOf[EirFunction].functionArgs.map(_.declaredType)
         util.makeMemberFunction(this, baseName, (if (needsIndex) idx else Nil) ++ args, u, isConst = false)
       }) ++ {
+        // ckNew(); <-- empty constructor
         if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false))
         else Nil
       } :+ util.makeMemberFunction(this, "get", idx, eleTy, isConst = true)
@@ -95,15 +92,19 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
       else if (collective.isDefined) genCollectiveMembers()
       else Nil
     fromKind ++ base.members
-      .filter(x => x.isEntry && (!x.isConstructor || (singleton && validConstructor(x))))
-      .map(correctSelf)
+      .filter(x => validMember(x) && (singleton || !x.isConstructor))
+      .map(updateMember)
   }
 
   def singleton: Boolean = isElement || collective.isEmpty
 
   def membersToGen: List[EirMember] = {
-    members.filterNot(_.annotations.exists(_.name == "system")) ++
-      base.members.filter(x => !singleton && x.isEntry && (x.isConstructor && validConstructor(x))).map(correctSelf)
+    members.filterNot(_.annotation("system").isDefined) ++ Option.when(!singleton)({
+      base.members
+        .filter(validMember)
+        .filter(_.isConstructor)
+        .map(updateMember)
+    }).getOrElse(Nil)
   }
 
   override def members_=(lst: List[EirMember]): Unit = ???

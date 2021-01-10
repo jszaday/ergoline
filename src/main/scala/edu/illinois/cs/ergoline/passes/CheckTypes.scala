@@ -603,12 +603,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     visit(ctx, x.body)
   }
 
-  private def constructorDropCount(c : EirType): Int = {
-    ProxyManager.asProxy(c)
-      .map(x => x.collective.isEmpty && !x.isElement)
-      .map(if (_) 1 else 0).getOrElse(0)
-  }
-
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
@@ -618,7 +612,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       val f = m.member.asInstanceOf[EirFunction]
       val theirs =
         // proxy-related args are provided by the runtime
-        f.functionArgs.drop(constructorDropCount(base)).map(visit(ctx, _))
+        f.functionArgs.map(visit(ctx, _))
       val matches = argumentsMatch(ours, theirs)
       matches
     })

@@ -7,9 +7,9 @@ import ck::future;
 @main class receiver {
     val ch: channel<int>@;
 
-    @entry def receiver(selfProxy: receiver@) {
+    @entry def receiver() {
         ch = new channel<int>@();
-        selfProxy.receive();
+        self@receive();
         new sender@(ch);
     }
 
@@ -24,7 +24,7 @@ import ck::future;
 }
 
 class sender {
-    @entry def sender(selfProxy: sender@, ch: channel<int>@) {
+    @entry def sender(ch: channel<int>@) {
         for (var i = 0; i < 16; i += 1) {
             ch.send(i);
         }
