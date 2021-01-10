@@ -17,8 +17,10 @@ object GenerateProxies {
   def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val ns = x.namespaces.toList
     ctx << ns.map(ns => s"namespace ${nameFor(ctx, ns)} {") << {
+      ctx.updateProxy(x)
       if (x.isAbstract) visitAbstractProxy(ctx, x)
       else visitConcreteProxy(ctx, x)
+      ctx.updateProxy(x)
     } << ns.map(_ => "}")
   }
 
@@ -138,6 +140,19 @@ object GenerateProxies {
     }
   }
 
+  private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
+    member.counterpart match {
+      case Some(m@EirMember(_, f: EirFunction, _)) => {
+        if (m.isEntryOnly) {
+          ctx << "([&](void) mutable " << f.body << ")()"
+        } else {
+          ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+        }
+      }
+      case _ => ???
+    }
+  }
+
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
       val proxy = x.parent.to[EirProxy]
       val isConstructor = x.isConstructor
@@ -181,7 +196,7 @@ object GenerateProxies {
         } else if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
-        ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+        makeEntryBody(ctx, x)
         if (isAsync) ctx << ");"
         else ctx << ";"
       }

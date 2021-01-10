@@ -335,6 +335,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
+    if (!CheckTypes.isSelf(x)) {
+      x.disambiguation.to[EirMember].foreach(_ => ctx << whatIsSelf(ctx) << "->")
+    }
     ctx << nameFor(ctx, x)
   }
 
@@ -598,6 +601,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
   }
+
+  def whatIsSelf(ctx: CodeGenerationContext): String = ctx.proxy.map(_ => "impl_").getOrElse("this")
 
   def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =

@@ -283,6 +283,13 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   var isEntryOnly: Boolean = false
   var counterpart: Option[EirMember] = None
 
+  def makeEntryOnly(): Unit = {
+    isEntryOnly = true
+    counterpart.foreach(_.makeEntryOnly())
+  }
+
+  def isPublic: Boolean = accessibility == EirAccessibility.Public
+
   def base: EirClassLike = parent match {
     case Some(p: EirProxy) => ProxyManager.elementFor(p).getOrElse(p)
     case Some(c: EirClassLike) => c

@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Private, Protected}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirProxyType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
@@ -125,8 +126,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }).filterNot(_ == null)
     spec.foreach(ctx.leave)
     if (results.length == 1) {
-      x.disambiguation = Some(results.head._1)
-      return results.head._2
+      val (member, result) = results.head
+      x.disambiguation = Some(member)
+      prevFc.foreach(validate(ctx, member, _))
+      return result
     }
     Errors.missingField(x, base, x.field)
   }
@@ -171,6 +174,46 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
+
+  @tailrec
+  def accessibleMember(pair: (EirClassLike, EirClassLike), accessibility: EirAccessibility): Boolean = {
+    pair match {
+      case (a: EirProxy, b: EirProxy) => accessibleMember((a.base, b.base), accessibility)
+      case (a, b: EirProxy) => accessibleMember((a, b.base), accessibility)
+      case (a: EirProxy, b) => accessibleMember((a.base, b), accessibility)
+      case (a, b) =>
+        (accessibility == EirAccessibility.Public) ||
+        (accessibility == EirAccessibility.Protected && a.isDescendantOf(b)) ||
+        a == b
+    }
+  }
+
+  def sharedBase(a: EirClassLike, b: EirClassLike): Boolean = accessibleMember((a, b), Protected)
+
+  def sharedBase(a: EirMember, b: EirMember): Boolean = sharedBase(a.base, b.base)
+
+  @tailrec
+  def targetsSelf(a: EirMember, node: EirExpressionNode): Boolean = node match {
+    case s: EirSymbol[_] => isSelf(s) || s.disambiguation.collect({
+      case b: EirMember => sharedBase(a, b)
+      case n: EirNode => n.parent.to[EirMember].exists(sharedBase(a, _))
+    }).getOrElse(false)
+    case f: EirFieldAccessor => targetsSelf(a, f.target)
+    case p: EirPostfixExpression => targetsSelf(a, p.target)
+    case _ => false
+  }
+
+  def validate(ctx: TypeCheckContext, target: EirMember, call: EirFunctionCall): Unit = {
+    val current = ctx.ancestor[EirMember]
+    val bases = current.map(x => (x.base, target.base))
+    if ((bases.isEmpty && !target.isPublic) ||
+        !bases.exists(accessibleMember(_, target.accessibility))) {
+      Errors.inaccessibleMember(target, call)
+    }
+    if (target.isEntryOnly && current.exists(targetsSelf(_, call))) {
+      current.foreach(_.makeEntryOnly())
+    }
+  }
 
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
     val target = visit(ctx, call.target) match {
@@ -253,10 +296,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
-    val ours = value.parent match {
-      case Some(f : EirFunctionCall) if f.target == value => f.args.map(visit(ctx, _))
-      case _ => Nil
-    }
+    val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
+    val ours = prevFc.map(_.args.map(visit(ctx, _))).getOrElse(Nil)
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
     val candidates = {
       val resolved = value.resolve()
@@ -280,11 +321,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case _ => false
       })
     })
-    found.map(visit(ctx, _)).getOrElse({
-      self match {
-        case Some(_) => throw MissingSelfException(value)
-        case _ => Errors.unableToResolve(value)
-      }
+    value.disambiguation = found
+    val retTy = found.map(visit(ctx, _))
+    prevFc
+      .zip(found.collect({case m: EirMember => m}))
+      .foreach(x => validate(ctx, x._2, x._1))
+    retTy.getOrElse(self match {
+      case Some(_) => throw MissingSelfException(value)
+      case _ => Errors.unableToResolve(value)
     })
   }
 
@@ -407,7 +451,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       } catch {
         case e: MissingSelfException[_] =>
           if (member.exists(m => !m.isStatic && !m.parent.exists(_.isInstanceOf[EirProxy]))) {
-            member.foreach(_.isEntryOnly = true)
+            member.foreach(_.makeEntryOnly())
             ctx.popUntil(node)
             return null
           } else {
