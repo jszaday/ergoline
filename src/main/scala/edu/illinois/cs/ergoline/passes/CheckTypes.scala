@@ -441,7 +441,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _ =>
 //    }
     val member = ctx.immediateAncestor[EirMember]
-    val opt = ctx.shouldCheck(node)
+    val opt = node.body.flatMap(_ => ctx.shouldCheck(node))
     opt.foreach(subCtx => {
       try {
         ctx.start(subCtx)

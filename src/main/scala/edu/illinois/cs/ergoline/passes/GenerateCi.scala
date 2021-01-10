@@ -13,6 +13,7 @@ object GenerateCi {
   class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]],
                          val lambdas: Map[EirNamespace, List[EirLambdaExpression]]) extends CodeGenerationContext("ci") {
     val puppables: Iterable[EirSpecializable] = checked.keys.filter({
+      case _: EirProxy => false
       case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
       case _ => false
     })
@@ -56,7 +57,7 @@ object GenerateCi {
 
   def makeChareSpecializations(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     val kind = visitChareType(proxy.isMain, proxy.collective)
-    val specializations = ctx.checked.getOrElse(proxy.base, Nil).map(
+    val specializations = ctx.checked.getOrElse(proxy, Nil).map(
       _.specialization.map(Find.uniqueResolution[EirType])
     ) // NOTE we might want to consider putting .distinct here?
       //      (but it shouldn't be necessary)

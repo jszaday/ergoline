@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.CheckTypes.sharedBase
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -23,19 +24,10 @@ class TypeCheckContext {
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
-    _checked.filterNot(_._1.isInstanceOf[EirProxy]).map{
-      case (s, sp) => (s, sp.map(_._2).distinct.collect({
-        case Some(s) => s
-      }).filterNot(x => {
-        // TODO this may need to cross-check template
-        //      arguments that do not belong to us?
-        x.specialization
-          .map(Find.uniqueResolution[EirType])
-          .exists(_.isInstanceOf[EirTemplateArgument])
-      }))
-    }.filter(t => {
-      t._1.templateArgs.isEmpty || t._2.nonEmpty
-    })
+    _checked.map{
+      case (sp, contexts) => (sp,
+        contexts.collect({ case (_, Some(sp)) => sp }).distinct)
+    }
   }
 
   def enterNode(n: EirNode): Unit = {
@@ -88,7 +80,11 @@ class TypeCheckContext {
       shouldCheck(s, None)
     } else {
       _substitutions
-        .find(_._1 == s)
+        .find(x => (x._1, s) match {
+          case (a: EirProxy, b: EirClass) => a.base == b
+          case (a: EirProxy, b: EirTrait) => a.base == b
+          case (a, b) => a == b
+        })
         .map(x => makeDistinct(x._2))
         .flatMap(x => shouldCheck(s, Some(x)))
     }
