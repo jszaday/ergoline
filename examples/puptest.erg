@@ -4,15 +4,13 @@ import ergoline::_;
 import ck;
 
 @main class puptest {
-    val selfProxy: puptest@;
-    
-    @entry def puptest(=selfProxy: puptest@) {
+    @entry def puptest() {
         val n = ck::numPes() * 4;
         val a = new array<int>(n);
         for (var i = 0; i < n; i += 1) {
             a[i] = 2 * i + 1;
         }
-        receive((a, new test(42)));
+        self@receive((a, new test(42)));
     }
 
     @entry def receive(at: (array<int>, test)) {
@@ -22,7 +20,7 @@ import ck;
             println("a[" + i.toString() + "] = " + a[i].toString());
         }
         println("t.i = " + t.i.toString());
-        receive(new tupleHolder((t, new testHolder(t))));
+        self@receive(new tupleHolder((t, new testHolder(t))));
     }
 
     @entry def receive(hs: ((has<int>, has<int>), has<has<int>>, int)) {
@@ -37,7 +35,7 @@ import ck;
             return i + j;
         };
         i = 0;
-        selfProxy.receive(f);
+        self@receive(f);
     }
 
     @entry def receive(f: int => int) {
@@ -52,7 +50,7 @@ import ck;
     @entry def receive(h: tupleHolder) {
         val t = h.get()[0];
         val th = h.get()[1];
-        selfProxy.receive(((t, t), th, t.get()));
+        self@receive(((t, t), th, t.get()));
     }
 }
 

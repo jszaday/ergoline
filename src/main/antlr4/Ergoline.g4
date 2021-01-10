@@ -152,8 +152,17 @@ expressionList
     :   (expression ',')* expression
     ;
 
-primaryExpression
+identifierExpression
     :   fqn specialization?
+    ;
+
+selfExpression
+    :   SelfKeyword
+    ;
+
+primaryExpression
+    :   identifierExpression
+    |   selfExpression
     |   constant
     |   tupleExpression
     |   lambdaExpression
@@ -193,6 +202,7 @@ postfixExpression
     :   primaryExpression
     |   postfixExpression '[' arrArgs=expressionList? ']'
     |   postfixExpression specialization? LParen fnArgs=expressionList? RParen
+    |   selfExpression Identifier
     |   postfixExpression '.' Identifier
     ;
 
@@ -244,8 +254,7 @@ relationalExpression
 
 equalityExpression
     :   relationalExpression
-    |   equalityExpression ('==' || '===') relationalExpression
-    |   equalityExpression '!=' relationalExpression
+    |   relationalExpression ('!=' || '==' || '===') equalityExpression
     ;
 
 andExpression
@@ -349,6 +358,10 @@ TraitKwd : 'trait';
 FunctionKwd : 'def';
 TrueKwd : 'true' ;
 FalseKwd : 'false' ;
+
+SelfKeyword
+    :   'self' (Atpersand | Element)?
+    ;
 
 Equals : '=' ;
 PlusAssign: '+=';

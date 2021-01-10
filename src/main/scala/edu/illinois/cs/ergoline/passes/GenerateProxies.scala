@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLitera
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary, visitFunctionBody}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -17,8 +17,10 @@ object GenerateProxies {
   def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val ns = x.namespaces.toList
     ctx << ns.map(ns => s"namespace ${nameFor(ctx, ns)} {") << {
+      ctx.updateProxy(x)
       if (x.isAbstract) visitAbstractProxy(ctx, x)
       else visitConcreteProxy(ctx, x)
+      ctx.updateProxy(x)
     } << ns.map(_ => "}")
   }
 
@@ -138,18 +140,27 @@ object GenerateProxies {
     }
   }
 
+  private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
+    member.counterpart match {
+      case Some(m@EirMember(_, f: EirFunction, _)) => {
+        if (m.isEntryOnly) {
+          ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
+        } else {
+          ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+        }
+      }
+      case _ => ???
+    }
+  }
+
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
       val proxy = x.parent.to[EirProxy]
       val isConstructor = x.isConstructor
-      val isCollective = proxy.exists(_.collective.isDefined)
-      val index = Option.when(isCollective)("[this->thisIndex]").getOrElse("")
       val base = proxy.map(x => nameFor(ctx, x.base, includeTemplates = true)).getOrElse("")
       val f = assertValid[EirFunction](x.member)
       val isMain = proxy.exists(_.isMain)
       val isAsync = x.annotation("async").isDefined
-      val isSingleton = proxy.exists(_.singleton)
-      val dropCount = if (isConstructor) 1 else 0
-      val args = f.functionArgs.drop(dropCount)
+      val args = f.functionArgs
       if (isAsync) ctx << "void"
       else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
@@ -173,15 +184,21 @@ object GenerateProxies {
         else args.foreach(makeSmartPointer(ctx))
       }
       if (isConstructor) {
-        ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
-          (List(s"this->thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+        x.counterpart match {
+          case Some(m) if m.isEntryOnly =>
+            ctx << "this->impl_ = std::make_shared<" << base << ">((CkMigrateMessage *)nullptr);"
+            makeEntryBody(ctx, x)
+            ctx << ";"
+          case _ =>
+            ctx << "this->impl_ = std::make_shared<" << base << ">(" << (args.map(nameFor(ctx, _)), ", ") << ");"
+        }
       } else {
         if (isAsync) {
           ctx << temporary(ctx) << ".set("
         } else if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
-        ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+        makeEntryBody(ctx, x)
         if (isAsync) ctx << ");"
         else ctx << ";"
       }

@@ -1,7 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.CheckTypes.sharedBase
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
@@ -9,9 +11,12 @@ import scala.collection.mutable
 
 
 class TypeCheckContext {
+  type Context = (Option[EirClassLike], Option[EirSpecialization])
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
+  private val _contexts: mutable.Stack[Context] = new mutable.Stack
   private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
-  private var _checked: Map[EirSpecializable, List[EirSpecialization]] = Map()
+  private var _checked: Map[EirSpecializable, List[Context]] = Map()
+  private var _cache: Map[(Context, EirNode), EirType] = Map()
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
@@ -20,15 +25,9 @@ class TypeCheckContext {
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
     _checked.map{
-      case (s, sp) => (s, sp.filterNot(x => {
-        // TODO this may need to cross-check template
-        //      arguments that do not belong to us?
-        x.specialization.map(Find.uniqueResolution[EirType])
-          .exists(_.isInstanceOf[EirTemplateArgument])
-      }))
-    }.filter(t => {
-      t._1.templateArgs.isEmpty || t._2.nonEmpty
-    })
+      case (sp, contexts) => (sp,
+        contexts.collect({ case (_, Some(sp)) => sp }).distinct)
+    }
   }
 
   def enterNode(n: EirNode): Unit = {
@@ -59,24 +58,35 @@ class TypeCheckContext {
     }
   }
 
-  def shouldCheck(s: EirSpecializable): Boolean = {
+  def start(c: Context): Unit = _contexts.push(c)
+  def stop(c: Context): Unit = assert(_contexts.pop() == c)
+  def current: Option[Context] = _contexts.headOption
+  def cache(n: EirNode, t: EirType): Unit = current.foreach(c => _cache += ((c, n) -> t))
+  def avail(n: EirNode): Option[EirType] = current.flatMap(c => _cache.get((c, n)))
+
+  def shouldCheck(s: EirSpecializable, sp: Option[EirSpecialization]): Option[Context] = {
+    val checked = _checked.getOrElse(s, Nil)
+    val ctx = (immediateAncestor[EirMember].map(_.base), sp)
+    Option.unless(checked.contains(ctx))({
+      _checked += (s -> (checked :+ ctx))
+      ctx
+    })
+  }
+
+  def shouldCheck(s: EirSpecializable): Option[Context] = {
     if (s.annotation("system").isDefined) {
-      false
+      None
     } else if (s.templateArgs.isEmpty) {
-      if (_checked.contains(s)) false
-      else { _checked += (s -> Nil); true }
+      shouldCheck(s, None)
     } else {
-      _substitutions.find(_._1 == s).map(x => makeDistinct(x._2)) match {
-        case Some(sp) => {
-          val checked = _checked.getOrElse(s, Nil)
-          if (checked.contains(sp)) false
-          else {
-            _checked += (s -> (checked :+ sp))
-            true
-          }
-        }
-        case None => false
-      }
+      _substitutions
+        .find(x => (x._1, s) match {
+          case (a: EirProxy, b: EirClass) => a.base == b
+          case (a: EirProxy, b: EirTrait) => a.base == b
+          case (a, b) => a == b
+        })
+        .map(x => makeDistinct(x._2))
+        .flatMap(x => shouldCheck(s, Some(x)))
     }
   }
 
@@ -135,10 +145,14 @@ class TypeCheckContext {
 
   def alreadyLeft(n: EirNode): Boolean = !stack.headOption.contains(n)
 
-  def cameVia[T: Manifest]: Option[T] = {
+  def immediateAncestor[T: Manifest]: Option[T] = {
     Option.when(stack.length >= 2)(stack(1) match {
       case x: T => Some(x)
       case _ => None
     }).flatten
   }
+
+  def ancestor[T: Manifest]: Option[T] = stack.collectFirst{ case t: T => t }
+
+  def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
 }

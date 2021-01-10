@@ -11,7 +11,7 @@ def seedRand(seed: int): unit;
 def time(value: int): int;
 
 @main class main {
-    @entry def main(selfProxy: main@) {
+    @entry def main() {
         // seed the random number generator
         seedRand(time(0));
         // make an int and a double holder
@@ -23,7 +23,7 @@ def time(value: int): int;
             dh.setValue((rand() % 100 + 1).toDouble());
         }
         // call the entry method
-        selfProxy.printMaxima(ih, dh);
+        self@printMaxima(ih, dh);
     }
 
     @entry def printMaxima(a: stringable, b: stringable) {

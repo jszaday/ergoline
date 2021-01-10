@@ -6,18 +6,14 @@ import ck;
 /* Written with insights from:
  * https://www.appentra.com/parallel-computation-pi/ */
 
-@main class pi {
-    val stepsPerPe: int;
+@main class main {
     val numSteps: int;
     var checkIns: int;
     var runningSum: double;
 
-    def step(): double {
-        return 1.0 / (numSteps.toDouble());
-    }
-
-    @entry def pi(selfProxy: pi@, args: array<string>) {
+    @entry def main(args: array<string>) {
         numSteps = args.size() > 1 ? args[1].toInt() : 16;
+        runningSum = 0.0;
         val numPes: int = ck::numPes();
         if (numSteps < (numPes * 4)) {
             numSteps = numPes * 4;
@@ -27,14 +23,32 @@ import ck;
             exit();
         }
         println("running " + numSteps.toString() + " steps of pi computation on " + numPes.toString() + " PEs");
-        stepsPerPe = numSteps / numPes;
-        val piProxy: pi@array1d = new pi@array1d(numPes, selfProxy, stepsPerPe);
+        new pi@array1d(numPes, self@, numSteps / numPes);
     }
 
-    @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int) {
+    @entry def checkIn(partialSum : double) {
+        checkIns += 1;
+        runningSum += partialSum;
+
+        if (checkIns >= ck::numPes()) {
+            println("result = " + (runningSum / numSteps).toString());
+            exit();
+        }
+    }
+}
+
+class pi {
+    val stepsPerPe: int;
+    val numSteps: int;
+
+    def step(): double {
+        return 1.0 / (numSteps.toDouble());
+    }
+
+    @entry def pi(mainProxy: main@, =stepsPerPe: int) {
         numSteps = stepsPerPe * ck::numPes();
 
-        val idx = selfProxy.index();
+        val idx = self[@]index();
         val start = idx * stepsPerPe;
         val end = (idx + 1) * stepsPerPe;
         val s = step();
@@ -46,15 +60,5 @@ import ck;
         }
 
         mainProxy.checkIn(sum);
-    }
-
-    @entry def checkIn(partialSum : double) {
-        checkIns += 1;
-        runningSum += partialSum;
-
-        if (checkIns >= ck::numPes()) {
-            println("result = " + (runningSum * step()).toString());
-            exit();
-        }
     }
 }

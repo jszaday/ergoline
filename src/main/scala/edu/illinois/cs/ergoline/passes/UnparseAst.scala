@@ -226,7 +226,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitTemplatedType(ctx: UnparseContext, x: EirTemplatedType): String = {
-    s"${nameFor(ctx, x.base)}<${x.args.map(nameFor(ctx, _)) mkString ", "}>"
+    val proxy = x.base match {
+      case t: EirProxy => (if (t.isElement) "[@]" else "@") + t.collective.getOrElse("")
+      case t: EirProxyType => (if (t.isElement) "[@]" else "@") + t.collective.getOrElse("")
+      case _ => ""
+    }
+    s"${nameFor(ctx, x.base)}<${x.args.map(nameFor(ctx, _)) mkString ", "}>$proxy"
   }
 
   override def visitLambdaType(ctx: UnparseContext, x: EirLambdaType): String = {

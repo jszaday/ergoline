@@ -4,14 +4,13 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    val selfProxy: main@;
     val count: int = 0;
     val n: int;
 
-    @entry def main(=selfProxy: main@) {
+    @entry def main() {
         n = ck::numPes() * 16;
         val table = new ck::dht<int, int>(n);
-        new sharing@array1d(n, n, selfProxy, table);
+        new sharing@array1d(n, n, self@, table);
     }
 
     @entry def tally() {
@@ -26,17 +25,15 @@ import ck;
 
 class sharing {
     val mainProxy: main@;
-    val selfProxy: sharing[@]array1d;
     val table: ck::dht<int, int>;
     val n: int;
 
-    @entry def sharing(=selfProxy: sharing[@]array1d, =n: int,
-                       =mainProxy: main@, =table: ck::dht<int, int>) {
-        selfProxy.share();
+    @entry def sharing(=n: int, =mainProxy: main@, =table: ck::dht<int, int>) {
+        self[@]share();
     }
 
     @threaded @entry def share() {
-        val mine = selfProxy.index();
+        val mine = self[@]index();
         table[mine] = 2 * mine + 1;
 
         for (var i = mine; i < (mine + 4); i += 1) {

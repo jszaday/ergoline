@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecializatio
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -17,14 +18,27 @@ class CodeGenerationContext(val language: String = "cpp") {
   val current: StringBuilder = new StringBuilder
   private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
   private val _pointerOverrides: mutable.Set[EirNode] = mutable.Set()
+  private val _proxies: mutable.Stack[EirProxy] = new mutable.Stack[EirProxy]
 
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
   def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
 
+  def updateProxy(proxy: EirProxy): Unit = {
+    if (_proxies.headOption.contains(proxy)) {
+      _proxies.pop()
+    } else {
+      _proxies.push(proxy)
+    }
+  }
+
+  def proxy: Option[EirProxy] = _proxies.headOption
+
   def makeSubContext(): CodeGenerationContext = {
-    new CodeGenerationContext(language)
-    // TODO copy substitutions
+    val subCtx = new CodeGenerationContext(language)
+    // TODO do something smarter here
+    subCtx._proxies.pushAll(_proxies.reverse)
+    subCtx
   }
 
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {

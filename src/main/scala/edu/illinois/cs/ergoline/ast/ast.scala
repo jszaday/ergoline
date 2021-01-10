@@ -4,7 +4,7 @@ import java.io.File
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
@@ -16,7 +16,13 @@ import scala.reflect.ClassTag
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
-  val Public, Private, Protected = Value
+  val Public = Value(0)
+  val Protected = Value(1)
+  val Private = Value(2)
+
+  def compatible(a: Value, b: Value): Boolean = {
+    a.id >= b.id
+  }
 }
 
 class EirSourceInfo(var sourceName: String, var line: Int, var start: Int, var text: String) {
@@ -143,9 +149,11 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
+  var skipType: Boolean = false
+
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] = {
-    Option.when(name != "self")(declaredType) ++ initialValue
+    Option.unless(skipType)(declaredType) ++ initialValue
   }
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
@@ -188,6 +196,16 @@ trait EirSpecialization extends EirNode {
   def specialization: List[EirResolvable[EirType]]
 }
 
+object EirClassLike {
+  def makeSelfDeclaration(parent: Option[EirClassLike], name: String, resolvable: EirResolvable[EirType]): EirMember = {
+    val m = EirMember(parent, null, EirAccessibility.Private)
+    val d = EirDeclaration(Some(m), isFinal = true, name, resolvable, None)
+    m.member = d
+    d.skipType = true
+    m
+  }
+}
+
 trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType with EirSpecializable {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
@@ -200,13 +218,10 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   }
 
   // TODO eventually traits will need a self as well
-  def selfDeclaration: Option[EirMember] = {
+  def selfDeclarations: List[EirMember] =
     Option.when(this.isInstanceOf[EirClass])({
-      val m = EirMember(Some(this), null, EirAccessibility.Public)
-      m.member = EirDeclaration(Some(m), isFinal = true, "self", asType, None)
-      m
-    })
-  }
+      EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
+    }).toList
 
   def inherited: Iterable[EirResolvable[EirType]] = extendsThis ++ implementsThese
 
@@ -228,7 +243,7 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
 
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
-  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members ++ selfDeclaration
+  override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
 
   def needsInitialization: List[EirMember] =
     members.collect {
@@ -271,6 +286,35 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   extends EirNamedNode {
   var isOverride: Boolean = false
   var isStatic: Boolean = false
+  var isEntryOnly: Boolean = false
+  var counterpart: Option[EirMember] = None
+
+  def isImplOnly: Boolean =
+    member match {
+      case _: EirFunction => !isEntryOnly
+      case _: EirDeclaration => true
+      case _ => ???
+    }
+
+  def makeEntryOnly(): Unit = {
+    isEntryOnly = true
+    counterpart.foreach(_.makeEntryOnly())
+  }
+
+  def isPublic: Boolean = accessibility == EirAccessibility.Public
+
+  def base: EirClassLike = parent match {
+    case Some(p: EirProxy) => ProxyManager.elementFor(p).getOrElse(p)
+    case Some(c: EirClassLike) => c
+    case _ => Errors.missingType(this)
+  }
+
+  def selfDeclarations: List[EirMember] = {
+    member match {
+      case _: EirFunction if !isStatic => base.selfDeclarations
+      case _ => Nil
+    }
+  }
 
   def isConstructor: Boolean =
     member.isInstanceOf[EirFunction] &&
@@ -296,17 +340,14 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 //  }
 
   def isVirtual: Boolean = member match {
-    case f : EirFunction =>
-      (parent.exists({
-        case c: EirClassLike => c.isAbstract
-        case _ => false
-      }) || isOverride) && !annotations.exists(_.name == "system")
+    case _ : EirFunction =>
+      (base.isAbstract || isOverride) && !annotations.exists(_.name == "system")
     case _ => false
   }
 
   override def name: String = member.name
 
-  override def children: Iterable[EirNode] = List(member)
+  override def children: Iterable[EirNode] = selfDeclarations :+ member
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (member == oldNode) && util.applyOrFalse[EirNamedNode](member = _, newNode)

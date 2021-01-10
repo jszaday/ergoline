@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline
 
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Private, Protected}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -40,6 +41,12 @@ package object util {
     value.isValid[T].map(function).isDefined
   }
 
+  def validAccessibility(a: EirClassLike, b: EirClassLike): EirAccessibility = {
+    if (a == b) EirAccessibility.Private
+    else if (a.isDescendantOf(b)) EirAccessibility.Protected
+    else EirAccessibility.Public
+  }
+
   private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
     y match {
       case _ : EirTemplateArgument => Find.commonAncestor(x, y) == y.parent
@@ -47,8 +54,8 @@ package object util {
       case m : EirMember =>
         (Find.parentOf[EirClassLike](x), y.parent) match {
           case (Some(xParent: EirClassLike), Some(yParent: EirClassLike)) =>
-            if (m.accessibility == EirAccessibility.Private) xParent == yParent
-            else xParent.isDescendantOf(yParent)
+            val relationship = validAccessibility(xParent, yParent)
+            EirAccessibility.compatible(relationship, m.accessibility)
           case _ => false
         }
       case _ => true

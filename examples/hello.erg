@@ -4,12 +4,11 @@ import ergoline::_;
 import ck;
 
 class hello {
-    val selfProxy: hello@;
     val previous: ck::future<int>;
     val next: ck::future<int>;
 
-    @entry def hello(=selfProxy: hello@, =previous: ck::future<int>, =next: ck::future<int>) {
-        selfProxy.wait();
+    @entry def hello(=previous: ck::future<int>, =next: ck::future<int>) {
+        self@wait();
     }
 
     @threaded @entry def wait() {
@@ -22,7 +21,7 @@ class hello {
 @main class main {
     val n: int;
 
-    @entry def main(selfProxy: main@, args: array<string>): unit {
+    @entry def main(args: array<string>) {
        n = (args.size() > 1) ? args[1].toInt() : 16;
        val first = ck::future<int>();
        var curr = first;
@@ -36,7 +35,7 @@ class hello {
        // set the first future
        first.set(0);
        // then we wait on the last
-       selfProxy.wait(curr);
+       self@wait(curr);
     }
 
     @threaded @entry def wait(f: ck::future<int>) {

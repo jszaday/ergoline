@@ -18,22 +18,21 @@ class ping with message<string> {
 }
 
 class pingpong {
-    val selfProxy: pingpong[@]group;
     val mainProxy: main@;
     val pongCount: int = 0;
 
-    @entry def pingpong(=selfProxy: pingpong[@]group, =mainProxy: main@) {
+    @entry def pingpong(=mainProxy: main@) {
         // broadcast a ping to all members of the group
-        selfProxy.parent().receive(selfProxy.index(), new ping());
+        self@receive(self[@]index(), new ping());
     }
 
     private def notePong() {
         pongCount += 1;
     }
 
-    private def sendPong(to: int) {
-        val peer = (selfProxy.parent())[to];
-        peer.receive(selfProxy.index(), new pong());
+    @entry def sendPong(to: int) {
+        val peer = self@[to];
+        peer.receive(self[@]index(), new pong());
     }
 
     @entry def receive(from: int, msg: message<string>) {
@@ -53,8 +52,8 @@ class pingpong {
 @main class main {
     val count: int = 0;
 
-    @entry def main(selfProxy: main@, args: array<string>) {
-        new pingpong@group(selfProxy);
+    @entry def main(args: array<string>) {
+        new pingpong@group(self@);
     }
 
     @entry def finished() {

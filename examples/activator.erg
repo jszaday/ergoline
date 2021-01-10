@@ -3,11 +3,10 @@ package examples;
 import ergoline::_;
 
 @main class activator {
-    val selfProxy: activator@;
     var count: int;
 
-    @entry def activator(=selfProxy: activator@): unit {
-        selfProxy.activate(new lion());
+    @entry def activator() {
+        self@activate(new lion());
     }
 
     @entry def activate(a: animal): unit {
@@ -21,7 +20,7 @@ import ergoline::_;
 
         if (count == 0) {
             count += 1;
-            selfProxy.activate(new duck());
+            self@activate(new duck());
         } else {
             exit();
         }
