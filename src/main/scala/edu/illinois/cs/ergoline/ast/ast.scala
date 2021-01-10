@@ -289,6 +289,13 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   var isEntryOnly: Boolean = false
   var counterpart: Option[EirMember] = None
 
+  def isImplOnly: Boolean =
+    member match {
+      case _: EirFunction => !isEntryOnly
+      case _: EirDeclaration => true
+      case _ => ???
+    }
+
   def makeEntryOnly(): Unit = {
     isEntryOnly = true
     counterpart.foreach(_.makeEntryOnly())

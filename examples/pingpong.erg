@@ -18,11 +18,10 @@ class ping with message<string> {
 }
 
 class pingpong {
-    val selfProxy: pingpong[@]group;
     val mainProxy: main@;
     val pongCount: int = 0;
 
-    @entry def pingpong(=selfProxy: pingpong[@]group, =mainProxy: main@) {
+    @entry def pingpong(selfProxy: pingpong[@]group, =mainProxy: main@) {
         // broadcast a ping to all members of the group
         self@receive(self[@]index(), new ping());
     }

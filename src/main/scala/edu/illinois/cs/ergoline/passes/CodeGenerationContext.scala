@@ -24,7 +24,6 @@ class CodeGenerationContext(val language: String = "cpp") {
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
   def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
 
-
   def updateProxy(proxy: EirProxy): Unit = {
     if (_proxies.headOption.contains(proxy)) {
       _proxies.pop()
@@ -36,8 +35,10 @@ class CodeGenerationContext(val language: String = "cpp") {
   def proxy: Option[EirProxy] = _proxies.headOption
 
   def makeSubContext(): CodeGenerationContext = {
-    new CodeGenerationContext(language)
-    // TODO copy substitutions
+    val subCtx = new CodeGenerationContext(language)
+    // TODO do something smarter here
+    subCtx._proxies.pushAll(_proxies.reverse)
+    subCtx
   }
 
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {

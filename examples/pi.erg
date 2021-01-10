@@ -28,13 +28,13 @@ import ck;
         }
         println("running " + numSteps.toString() + " steps of pi computation on " + numPes.toString() + " PEs");
         stepsPerPe = numSteps / numPes;
-        val piProxy: pi@array1d = new pi@array1d(numPes, selfProxy, stepsPerPe);
+        val piProxy: pi@array1d = new pi@array1d(numPes, self@, stepsPerPe);
     }
 
     @entry def pi(selfProxy: pi[@]array1d, mainProxy: pi@, =stepsPerPe: int) {
         numSteps = stepsPerPe * ck::numPes();
 
-        val idx = selfProxy.index();
+        val idx = self[@]index();
         val start = idx * stepsPerPe;
         val end = (idx + 1) * stepsPerPe;
         val s = step();

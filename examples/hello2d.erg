@@ -2,26 +2,26 @@ package examples;
 
 import ergoline::_;
 
-@main class hello2d {
-    var selfProxy: hello2d[@]array2d;
-
-    @entry def hello2d(=selfProxy: hello2d[@]array2d): unit { }
-
-    @entry def hello2d(selfProxy: hello2d@, args: array<string>): unit {
+@main class main {
+    @entry def main(selfProxy: main@, args: array<string>) {
         val n: int = args.size() > 1 ? args[1].toInt() : 4;
         val arrProxy: hello2d@array2d = new hello2d@array2d(n, n);
         arrProxy[n - 1, n - 1].sayHi();
     }
+}
+
+class hello2d {
+    @entry def hello2d(selfProxy: hello2d[@]array2d): unit { }
 
     @entry def sayHi(): unit {
-        val idx: (int, int) = selfProxy.index();
+        val idx: (int, int) = self[@]index();
 
         println("hello from [" + idx[0].toString() + ", " + idx[1].toString() + "]");
 
         match (idx) {
             case 0, 0 => exit();
-            case i, 0 => selfProxy.parent()[i - 1, 0].sayHi();
-            case i, j => selfProxy.parent()[i, j - 1].sayHi();
+            case i, 0 => self@[i - 1, 0].sayHi();
+            case i, j => self@[i, j - 1].sayHi();
         }
     }
 }

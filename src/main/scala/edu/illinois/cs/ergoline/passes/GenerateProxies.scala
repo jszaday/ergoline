@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLitera
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary, visitFunctionBody}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -144,7 +144,7 @@ object GenerateProxies {
     member.counterpart match {
       case Some(m@EirMember(_, f: EirFunction, _)) => {
         if (m.isEntryOnly) {
-          ctx << "(([&](void) mutable " << f.body << ")())"
+          ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
         } else {
           ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
         }

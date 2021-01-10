@@ -4,9 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class awaiter {
-    val selfProxy: awaiter@;
-
-    @entry def awaiter(=selfProxy: awaiter@) {
+    @entry def awaiter(selfProxy: awaiter@) {
         self@wait();
     }
 

@@ -12,10 +12,11 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
 
   override def selfDeclarations: List[EirMember] = base.selfDeclarations ++ {
     Option.when(collective.nonEmpty && isElement)({
-      EirClassLike.makeSelfDeclaration(Some(this), "self[@]", ProxyManager.elementFor(this).getOrElse(this))
+      EirClassLike.makeSelfDeclaration(Some(this), "self[@]", ProxyManager.elementType(this))
     }).toList
   } :+ {
-    EirClassLike.makeSelfDeclaration(Some(this), "self@", ProxyManager.collectiveFor(this).getOrElse(this))
+    EirClassLike.makeSelfDeclaration(Some(this), "self@",
+      collective.map(_ => ProxyManager.collectiveType(this)).getOrElse(ProxyManager.proxyType(this)))
   }
 
   def isMain: Boolean =

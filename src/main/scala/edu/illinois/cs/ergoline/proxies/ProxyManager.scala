@@ -38,12 +38,12 @@ object ProxyManager {
   }
 
   def elementFor(t: EirProxy): Option[EirProxy] = {
-    Option.when(t.collective.isDefined && !t.isElement)({
+    Option.when(t.isElement)(t).orElse(t.collective.map(_ => {
       if (!_elements.contains(t)) {
         _elements += (t -> EirProxy(t.parent, t.base, t.collective, isElement = true))
       }
       _elements(t)
-    })
+    }))
   }
 
   def collectiveFor(t: EirProxy): Option[EirProxy] =
@@ -59,8 +59,20 @@ object ProxyManager {
     }
   }
 
+  def proxyType(p: EirProxy): EirType = {
+    assert(p.collective.isEmpty)
+    typeFor(p, p.templateArgs.map(Find.uniqueResolution(_)))
+  }
+
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
+      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case None => ???
+    }
+  }
+
+  def collectiveType(p: EirProxy): EirType = {
+    collectiveFor(p) match {
       case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
       case None => ???
     }
