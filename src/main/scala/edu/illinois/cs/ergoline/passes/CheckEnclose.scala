@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirEncloseExempt, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirEncloseExempt, EirMember, EirNode}
 import edu.illinois.cs.ergoline.passes.CheckEnclose.CheckEncloseSyntax.RichEirNode
 
 object CheckEnclose {
@@ -13,7 +13,10 @@ object CheckEnclose {
   }
 
   def visit(node: EirNode): Option[EirNode] = {
-    node.children.find(!_.validEnclose(node)) match {
+    (node match {
+      case x: EirMember => List(x.member)
+      case _ => node.children
+    }).find(!_.validEnclose(node)) match {
       case None => node.children.map(visit).find(_.isDefined).flatten
       case x => x
     }

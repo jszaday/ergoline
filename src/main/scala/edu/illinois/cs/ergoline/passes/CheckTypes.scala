@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 import scala.annotation.tailrec
@@ -181,10 +181,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (a: EirProxy, b: EirProxy) => accessibleMember((a.base, b.base), accessibility)
       case (a, b: EirProxy) => accessibleMember((a, b.base), accessibility)
       case (a: EirProxy, b) => accessibleMember((a.base, b), accessibility)
-      case (a, b) =>
-        (accessibility == EirAccessibility.Public) ||
-        (accessibility == EirAccessibility.Protected && a.isDescendantOf(b)) ||
-        a == b
+      case (a, b) => EirAccessibility.compatible(validAccessibility(a, b), accessibility)
     }
   }
 
@@ -207,7 +204,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val current = ctx.ancestor[EirMember]
     val bases = current.map(x => (x.base, target.base))
     if ((bases.isEmpty && !target.isPublic) ||
-        !bases.exists(accessibleMember(_, target.accessibility))) {
+         bases.exists(!accessibleMember(_, target.accessibility))) {
       Errors.inaccessibleMember(target, call)
     }
     if (target.isEntryOnly && current.exists(targetsSelf(_, call))) {

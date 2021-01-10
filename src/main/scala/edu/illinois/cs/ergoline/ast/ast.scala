@@ -16,7 +16,13 @@ import scala.reflect.ClassTag
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
-  val Public, Private, Protected = Value
+  val Public = Value(0)
+  val Protected = Value(1)
+  val Private = Value(2)
+
+  def compatible(a: Value, b: Value): Boolean = {
+    a.id >= b.id
+  }
 }
 
 class EirSourceInfo(var sourceName: String, var line: Int, var start: Int, var text: String) {
