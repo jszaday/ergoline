@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirAwait, EirClassLike, EirExpressionNode, EirFunction, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.{EirAwait, EirClassLike, EirExpressionNode, EirFunction, EirMember, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object Errors {
@@ -65,6 +65,10 @@ object Errors {
     exitAction()
   }
 
+  def inaccessibleMember(target: EirMember, usage: EirNode): Nothing = {
+    Console.err.println(s"${contextualize(usage)}: ${nameFor(target)} is not accessible within $usage.")
+    exitAction()
+  }
   def invalidTupleIndices(nodes: Iterable[EirNode]): Nothing = {
     Console.err.println(s"${contextualize(nodes.head)}: (${nodes mkString ", "}) are not proper tuple indices.")
     exitAction()

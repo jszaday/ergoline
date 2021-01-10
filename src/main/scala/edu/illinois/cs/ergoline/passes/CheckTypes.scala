@@ -401,14 +401,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       CheckClasses.visit(node)
       node.members.foreach(visit(ctx, _))
       node.inherited.foreach(visit(ctx, _))
+      if (node.annotation("main").isDefined) {
+        visitProxyType(ctx, EirProxyType(None, node, None, isElement = false))
+      }
     }
     node
   }
 
   override def visitClass(ctx: TypeCheckContext, node: EirClass): EirType = {
-    if (node.annotation("main").isDefined) {
-      visitProxyType(ctx, EirProxyType(None, node, None, isElement = false))
-    }
     visitClassLike(ctx, node)
   }
 
@@ -627,10 +627,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (ctx.shouldCheck(x)) {
       val element = ProxyManager.elementFor(x).getOrElse(x)
       element.members.map(visit(ctx, _))
-      val base = x.base
-      if (ctx.shouldCheck(base)) {
-        visit(ctx, x.base)
-      }
+      visit(ctx, x.base)
     }
     x
   }

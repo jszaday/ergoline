@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLambdaExpression, EirMember, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -21,7 +22,7 @@ class TypeCheckContext {
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
-    _checked.map{
+    _checked.filterNot(_._1.isInstanceOf[EirProxy]).map{
       case (s, sp) => (s, sp.map(_._2).distinct.collect({
         case Some(s) => s
       }).filterNot(x => {

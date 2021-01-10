@@ -334,9 +334,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     else ctx << x.value
   }
 
+  def selfFor(ctx: CodeGenerationContext, x: EirMember): String = {
+    ctx.proxy.collect({
+      case _ if !x.isEntryOnly => "impl_"
+    }).getOrElse("this")
+  }
+
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      x.disambiguation.to[EirMember].foreach(_ => ctx << whatIsSelf(ctx) << "->")
+      x.disambiguation.to[EirMember].foreach(ctx << selfFor(ctx, _) << "->")
     }
     ctx << nameFor(ctx, x)
   }
@@ -601,8 +607,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
   }
-
-  def whatIsSelf(ctx: CodeGenerationContext): String = ctx.proxy.map(_ => "impl_").getOrElse("this")
 
   def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
     val alias =
@@ -882,10 +886,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMatchCase(ctx: CodeGenerationContext, x: EirMatchCase): Unit = {
     val parent = x.parent.to[EirMatch]
-    val parentType = parent.map(_.expression).flatMap(_.foundType)
-    val isUnit = parentType.contains(globals.typeFor(EirLiteralTypes.Unit))
+    val exprType = parent.map(_.expression).flatMap(_.foundType)
+    val isUnit = parent.flatMap(_.foundType)
+      .contains(globals.typeFor(EirLiteralTypes.Unit))
     ctx << "{" << visitPatternDecl(x.patterns, temporary(ctx)).split(n)
-    val conditions = visitPatternCond(x.patterns, temporary(ctx), parentType).mkString(" && ")
+    val conditions = visitPatternCond(x.patterns, temporary(ctx), exprType).mkString(" && ")
     val needsIf = x.condition.nonEmpty || conditions.nonEmpty
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")

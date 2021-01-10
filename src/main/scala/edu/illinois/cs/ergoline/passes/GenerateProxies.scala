@@ -144,7 +144,7 @@ object GenerateProxies {
     member.counterpart match {
       case Some(m@EirMember(_, f: EirFunction, _)) => {
         if (m.isEntryOnly) {
-          ctx << "([&](void) mutable " << f.body << ")()"
+          ctx << "(([&](void) mutable " << f.body << ")())"
         } else {
           ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
         }
@@ -188,8 +188,15 @@ object GenerateProxies {
         else args.foreach(makeSmartPointer(ctx))
       }
       if (isConstructor) {
-        ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
-          (List(s"this->thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+        x.counterpart match {
+          case Some(m) if m.isEntryOnly =>
+            ctx << "this->impl_ = std::make_shared<" << base << ">((CkMigrateMessage *)nullptr);"
+            makeEntryBody(ctx, x)
+            ctx << ";"
+          case _ =>
+            ctx << "this->impl_ = std::make_shared<" << base << ">(" <<
+              (List(s"this->thisProxy$index") ++ args.map(nameFor(ctx, _))).mkString(", ") << ");"
+        }
       } else {
         if (isAsync) {
           ctx << temporary(ctx) << ".set("
