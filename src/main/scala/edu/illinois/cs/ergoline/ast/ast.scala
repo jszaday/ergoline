@@ -747,6 +747,10 @@ case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, p
   }
 }
 
+case class EirInterpolatedString(var children: List[EirExpressionNode])(var parent: Option[EirNode]) extends EirExpressionNode {
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
 //  override def eirType: EirResolvable[EirType] = exprNode.eirType
 //
