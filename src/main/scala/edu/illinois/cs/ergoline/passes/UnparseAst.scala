@@ -301,4 +301,11 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitAwait(ctx: UnparseContext, x: EirAwait): String = {
     s"await ${x.target}"
   }
+
+  override def visitInterpolatedString(ctx: UnparseContext, x: EirInterpolatedString): String = {
+    "`" + x.children.map{
+      case x: EirLiteral => x.value
+      case x => "${" + visit(ctx, x) + "}"
+    } mkString "" + "`"
+  }
 }

@@ -7,7 +7,6 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.Modules.fileSiblings
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
@@ -160,7 +159,10 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
 
     enter(EirInterpolatedString(Nil)(parent), (x: EirInterpolatedString) => {
-      var text = ctx.IStringLiteral().getText
+      var text = {
+        val tmp = ctx.IStringLiteral().getText
+        tmp.substring(1, tmp.length - 1)
+      }
       var start = findGroupStart(text)
 
       while (start >= 0) {
@@ -168,20 +170,20 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         text = text.substring(start + groupStartChar.length)
         val end = findGroupEnd(text)
 
-        if (pre.nonEmpty) {
-          x.children ++= Seq(EirLiteral(parent, EirLiteralTypes.String, pre))
-        }
+        if (pre.nonEmpty) x.append(pre)
 
         val group = text.substring(0, end).trim
         if (group.nonEmpty) {
           val subParser = Modules.parserFromString(group)
           val expr = visitAs[EirExpressionNode](subParser.expression())
-          x.children ++= Seq(expr)
+          x.append(expr)
         }
 
-        text = text.substring(end)
+        text = text.substring(end + 1)
         start = findGroupStart(text)
       }
+
+      if (text.nonEmpty) x.append(text)
     })
   }
 

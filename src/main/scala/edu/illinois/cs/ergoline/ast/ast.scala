@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{globals, util}
 
@@ -749,6 +749,8 @@ case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, p
 
 case class EirInterpolatedString(var children: List[EirExpressionNode])(var parent: Option[EirNode]) extends EirExpressionNode {
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  def append(s: String): Unit = append(EirLiteral(Some(this), EirLiteralTypes.String, s))
+  def append(n: EirExpressionNode): Unit = children :+= n
 }
 
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {

@@ -1040,4 +1040,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case None => ctx << x.disambiguation
     }
   }
+
+  // TODO implement this?
+  private def escapeInterpString(s: String) = "\"" + s + "\""
+
+  override def visitInterpolatedString(ctx: CodeGenerationContext, str: EirInterpolatedString): Unit = {
+    def matchChild(x: EirExpressionNode) = {
+      x match {
+        case x if x.disambiguation.isDefined =>
+          ctx << "(([&](){ return " << x.disambiguation << "; })())"
+        case x: EirLiteral if !x.value.startsWith("\"") =>
+          ctx << escapeInterpString(x.value)
+        case _ => ctx << x
+      }
+    }
+    ctx << "("
+    if (str.children.nonEmpty) {
+      str.children.init.foreach(matchChild(_) << " + ")
+      matchChild(str.children.last)
+    }
+    ctx << ")"
+  }
 }
