@@ -162,6 +162,7 @@ selfExpression
 
 primaryExpression
     :   identifierExpression
+    |   interpolatedString
     |   selfExpression
     |   constant
     |   tupleExpression
@@ -335,6 +336,22 @@ annotationOptions
     :   '(' (annotationOption ',')* annotationOption ')'
     ;
 
+interpolatedString
+    :   IStringLiteral
+    ;
+
+boolLiteral
+    :    TrueKwd | FalseKwd
+    ;
+
+constant
+    :   IntegerConstant
+    |   FloatingConstant
+    |   CharacterConstant
+    |   StringLiteral+
+    |   boolLiteral
+    ;
+
 Atpersand
     :   '@'
     ;
@@ -390,18 +407,6 @@ Identifier
         (   NonDigit
         |   Digit
         )*
-    ;
-
-boolLiteral
-    :    TrueKwd | FalseKwd
-    ;
-
-constant
-    :   IntegerConstant
-    |   FloatingConstant
-    |   CharacterConstant
-    |   StringLiteral+
-    |   boolLiteral
     ;
 
 fragment NonDigit
@@ -583,6 +588,49 @@ HexadecimalEscapeSequence
 StringLiteral
     :   EncodingPrefix? '"' SCharSequence? '"'
     ;
+
+IStringLiteral
+    :   Backtick (InterpGroup | InterpCharSeq)* Backtick
+    ;
+
+fragment
+Backtick
+    :   '`'
+    ;
+
+fragment
+IGroupInner
+    :   IGroupCharSeq
+    |   '{' IGroupInner? '}'
+    ;
+
+fragment
+InterpGroup
+    :   '${' IGroupInner* '}'
+    ;
+
+fragment
+IGroupCharSeq
+    :   IGroupChar+
+    ;
+
+fragment
+IGroupChar
+    :   ~('{' | '}')
+    ;
+
+fragment
+InterpCharSeq
+    :   InterpChar+
+    ;
+
+fragment
+InterpChar
+    :   ~[`$\r\n]
+    |   '\\$'
+    |   '\\`'
+    ;
+
 fragment
 EncodingPrefix
     :   'u8'

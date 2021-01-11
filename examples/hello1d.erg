@@ -17,7 +17,7 @@ class hello1d {
 
     @entry def sayHi(): unit {
         val next: int = self[@]index() + 1;
-        println("hello #" + next.toString());
+        println(`hello #${next}`);
         if (next < n) {
             self@[next].sayHi();
         } else {

@@ -19,26 +19,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   final case class MissingSelfException[A <: EirNamedNode](symbol: EirSymbol[A]) extends Exception
 
-  def generateLval(x: EirArrayReference): EirExpressionNode = {
-    val f = EirFunctionCall(Some(x), null, x.args, Nil)
-    f.target = EirFieldAccessor(Some(f), x.target, "get")
-    f
+  private def generateLval(x: EirArrayReference): EirExpressionNode = {
+    makeMemberCall(x.target, "get",  x.args)
   }
 
-  def generateRval(x: EirAssignment): EirExpressionNode = {
+  private def generateRval(x: EirAssignment): EirExpressionNode = {
     val operator = Option.unless(x.op == "=")(
       globals.operatorToFunction(x.op.init).getOrElse(Errors.unknownOperator(x, x.op)))
     val arrayRef = assertValid[EirArrayReference](x.lval)
     val rval = operator match {
-      case Some(s) =>
-        val f = EirFunctionCall(None, null, List(x.rval), Nil)
-        f.target = EirFieldAccessor(Some(f), generateLval(arrayRef), s)
-        f
+      case Some(s) => makeMemberCall(generateLval(arrayRef), s, List(x.rval))
       case None => x.rval
     }
-    val f = EirFunctionCall(Some(x), null, arrayRef.args :+ rval, Nil)
-    f.target = EirFieldAccessor(Some(f), arrayRef.target, "set")
-    f
+    makeMemberCall(arrayRef.target, "set", arrayRef.args :+ rval)
   }
 
   override def visitArrayReference(ctx: TypeCheckContext, x: EirArrayReference): EirType = {
@@ -215,6 +208,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
     val target = visit(ctx, call.target) match {
       case EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike =>
+        // TODO cycle this back into testing routine, use makeMemberFunction
         val accessor = EirFieldAccessor(Some(call), call.target, "apply")
         call.target.parent = Some(accessor)
         call.target = accessor
@@ -247,10 +241,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         val iteratorTy = globals.iteratorType
         val base = Find.uniqueResolution(t.base)
         if (base.canAssignTo(iterableTy)) {
-          val fc = EirFunctionCall(h.parent, null, Nil, Nil)
-          fc.target = EirFieldAccessor(Some(fc), h.expression, "iter")
-          h.expression = fc
-          visit(ctx, fc)
+          h.expression = makeMemberCall(h.expression, "iter")
+          visit(ctx, h.expression)
         } else if (!base.canAssignTo(iteratorTy)) {
           Errors.unableToUnify(h.expression, List(base, iterableTy, iteratorTy))
         }
@@ -482,8 +474,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
     val op = if (node.op == "!=") "==" else node.op
     val func = globals.operatorToFunction(op).getOrElse(Errors.unknownOperator(node, op))
-    val f = EirFunctionCall(Some(node), null, List(node.rhs), Nil)
-    f.target = EirFieldAccessor(Some(f), node.lhs, func)
+    val f = makeMemberCall(node.lhs, func, List(node.rhs))
     node.disambiguation = Some(f)
     val retTy = visit(ctx, f)
     if (func == "compareTo") {
@@ -698,19 +689,40 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitAwait(ctx: TypeCheckContext, x: EirAwait): EirType = {
-    val f = EirFunctionCall(Some(x), null, Nil, Nil)
-    f.target = EirFieldAccessor(Some(f), x.target, "get")
+    val f = makeMemberCall(x.target, "get")
     x.disambiguation = Some(f)
     val retTy = visit(ctx, f)
     if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
       Errors.expectedSync(x, f)
     }
     if (x.target.foundType.exists(hasField(_, "release"))) {
-      val f = EirFunctionCall(Some(x), null, Nil, Nil)
-      f.target = EirFieldAccessor(Some(f), x.target, "release")
+      val f = makeMemberCall(x.target, "release")
       x.release = Some(f)
       visit(ctx, f)
     }
     retTy
+  }
+
+  def makeMemberCall(target: EirExpressionNode, field: String, args: List[EirExpressionNode] = Nil): EirFunctionCall = {
+    val f = EirFunctionCall(Some(target), null, args, Nil)
+    f.target = EirFieldAccessor(Some(f), target, field)
+    f
+  }
+
+  override def visitInterpolatedString(ctx: TypeCheckContext, x: EirInterpolatedString): EirType = {
+    val strTy = globals.stringType
+    x.children.foreach(f => {
+      val ty = visit(ctx, f)
+      if (!ty.canAssignTo(strTy)) {
+        val fc = makeMemberCall(f, "toString")
+        val retTy = visit(ctx, fc)
+        if (retTy.canAssignTo(strTy)) {
+          assert(x.replaceChild(f, fc))
+        } else {
+          Errors.unableToUnify(f, retTy, strTy)
+        }
+      }
+    })
+    globals.stringType
   }
 }

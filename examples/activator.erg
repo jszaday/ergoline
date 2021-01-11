@@ -15,8 +15,8 @@ import ergoline::_;
             case _ => false;
         };
 
-        println("A " + a.species() + " " + a.vocalization() +
-            (canFly ? " and can fly." : " but cannot fly"));
+        println(`A ${a.species()} ${a.vocalization()} ${
+                 canFly ? "and can" : "but cannot"} fly.`);
 
         if (count == 0) {
             count += 1;

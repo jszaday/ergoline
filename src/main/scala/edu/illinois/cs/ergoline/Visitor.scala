@@ -7,13 +7,13 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.Modules.fileSiblings
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
-import edu.illinois.cs.ergoline.util.{AstManipulation, assertValid}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -59,7 +59,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def visitAs[T <: EirNode : Manifest](tree: ParseTree): T = {
-    assertValid[T](visit(tree))
+    Option(tree).map(visit).to[T].getOrElse(Errors.cannotParse(tree))
   }
 
   private def loadPackage(qualified : List[String], fileOption : Option[File]): EirScope = {
@@ -132,6 +132,59 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
     EirImport(parent, ctx.fqn().Identifier().toStringList)
+  }
+
+  override def visitInterpolatedString(ctx: InterpolatedStringContext): EirNode = {
+    val groupStartChar = "${"
+
+    @tailrec
+    def findGroupStart(s: String): Int = {
+      val found = s.indexOf(groupStartChar)
+      if (found > 0 && s.charAt(found - 1) == '\\') {
+        findGroupStart(s.substring(found + groupStartChar.length))
+      } else {
+        found
+      }
+    }
+
+    @tailrec
+    def findGroupEnd(s: String): Int = {
+      val open = s.indexOf("{")
+      val close = s.indexOf("}")
+      if (open >= 0 && open < close) {
+        findGroupEnd(s.substring(close + 1))
+      } else {
+        close
+      }
+    }
+
+    enter(EirInterpolatedString(Nil)(parent), (x: EirInterpolatedString) => {
+      var text = {
+        val tmp = ctx.IStringLiteral().getText
+        tmp.substring(1, tmp.length - 1)
+      }
+      var start = findGroupStart(text)
+
+      while (start >= 0) {
+        val pre = text.substring(0, start)
+        text = text.substring(start + groupStartChar.length)
+        val end = findGroupEnd(text)
+
+        if (pre.nonEmpty) x.append(pre)
+
+        val group = text.substring(0, end).trim
+        if (group.nonEmpty) {
+          val subParser = Modules.parserFromString(group)
+          val expr = visitAs[EirExpressionNode](subParser.expression())
+          x.append(expr)
+        }
+
+        text = text.substring(end + 1)
+        start = findGroupStart(text)
+      }
+
+      if (text.nonEmpty) x.append(text)
+    })
   }
 
   override def visitClassDeclaration(ctx: ClassDeclarationContext): EirClassLike = {

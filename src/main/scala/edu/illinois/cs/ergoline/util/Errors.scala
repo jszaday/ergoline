@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast.{EirAwait, EirClassLike, EirExpressionNode, EirFunction, EirMember, EirNamedNode, EirNode, EirSpecializable, EirTemplateArgument}
 import edu.illinois.cs.ergoline.resolution.EirResolvable
+import org.antlr.v4.runtime.tree.ParseTree
 
 object Errors {
 
@@ -107,6 +108,11 @@ object Errors {
 
   def cannotSerialize(ctx: EirNode, t: EirType): Nothing = {
     Console.err.println(s"${contextualize(ctx)}: cannot pup/serialize transient type ${nameFor(t)}.")
+    exitAction()
+  }
+
+  def cannotParse(tree: ParseTree): Nothing = {
+    Console.err.println(s"could not parse $tree.")
     exitAction()
   }
 }

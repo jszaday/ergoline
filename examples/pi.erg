@@ -22,7 +22,7 @@ import ck;
             println("expected an evenly divisible number of steps.");
             exit();
         }
-        println("running " + numSteps.toString() + " steps of pi computation on " + numPes.toString() + " PEs");
+        println(`running ${numSteps} steps of pi computation on ${numPes} PEs`);
         new pi@array1d(numPes, self@, numSteps / numPes);
     }
 
@@ -31,7 +31,7 @@ import ck;
         runningSum += partialSum;
 
         if (checkIns >= ck::numPes()) {
-            println("result = " + (runningSum / numSteps).toString());
+            println(`result = ${runningSum / numSteps}`);
             exit();
         }
     }
