@@ -9,7 +9,9 @@ import ck::future;
 
     @entry def receiver() {
         ch = new channel<int>@();
+
         self@receive();
+
         new sender@(ch);
     }
 
@@ -19,6 +21,7 @@ import ck::future;
             ch.receive(f);
             println("received value: " + (await f).toString());
         }
+
         exit();
     }
 }

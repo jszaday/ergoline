@@ -28,15 +28,19 @@ def time(value: int): int;
 
     @entry def printMaxima(a: stringable, b: stringable) {
         println(a.toString() + " " + b.toString());
+
         exit();
     }
 }
 
 class maxHolder<T> with stringable {
     var value: T;
+
     def maxHolder(=value: T) { }
+
     def getValue(): T { return value; }
     def setValue(t: T) { if (t > value) value = t; }
+
     override def toString(): string { return value.toString(); }
 }
 

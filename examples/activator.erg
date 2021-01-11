@@ -5,43 +5,42 @@ import ergoline::_;
 @main class activator {
     var count: int;
 
-    @entry def activator() {
-        self@activate(new lion());
-    }
+    @entry def activator() { self@activate(new lion()); }
 
-    @entry def activate(a: animal): unit {
-        val canFly: bool = match(a) {
-            case b: bird => true;
-            case _ => false;
-        };
+    @entry def activate(a: animal) {
+        val canFly: bool =
+            match (a) { case b: bird => true;
+                        case _ => false; };
 
         println("A " + a.species() + " " + a.vocalization() +
             (canFly ? " and can fly." : " but cannot fly"));
 
-        if (count == 0) {
-            count += 1;
-            self@activate(new duck());
-        } else {
-            exit();
-        }
+        if (count == 0) { count += 1;
+                          self@activate(new duck()); }
+        else            { exit(); }
     }
 }
 
 class lion with animal {
-    def lion(): unit { }
+    def lion(): unit {}
+
     override def vocalization(): string { return "roars"; }
+
     override def species(): string { return "lion"; }
 }
 
 class duck with bird {
-    def duck(): unit { }
+    def duck(): unit {}
+
     override def vocalization(): string { return "quacks"; }
+
     override def species(): string { return "duck"; }
 }
 
-trait bird with animal { }
+trait bird with animal {}
 
 trait animal {
     def vocalization(): string;
+
     def species(): string;
 }

@@ -3,21 +3,6 @@ package examples;
 import ergoline::_;
 import ck;
 
-class hello {
-    val previous: ck::future<int>;
-    val next: ck::future<int>;
-
-    @entry def hello(=previous: ck::future<int>, =next: ck::future<int>) {
-        self@wait();
-    }
-
-    @threaded @entry def wait() {
-        val i = previous.get();
-        println("hello #" + i.toString());
-        next.set(i + 1);
-    }
-}
-
 @main class main {
     val n: int;
 
@@ -41,7 +26,26 @@ class hello {
     @threaded @entry def wait(f: ck::future<int>) {
         val i = await f;
         assert(i == n);
+
         println("hello #" + i.toString());
+
         exit();
+    }
+}
+
+class hello {
+    val previous: ck::future<int>;
+    val next: ck::future<int>;
+
+    @entry def hello(=previous: ck::future<int>, =next: ck::future<int>) {
+        self@wait();
+    }
+
+    @threaded @entry def wait() {
+        val i = previous.get();
+
+        println("hello #" + i.toString());
+
+        next.set(i + 1);
     }
 }

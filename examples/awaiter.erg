@@ -4,22 +4,17 @@ import ergoline::_;
 import ck;
 
 @main class awaiter {
-    @entry def awaiter() {
-        self@wait();
-    }
+    @entry def awaiter() { self@wait(); }
 
     @threaded @entry def wait() {
         val f1: ck::future<int> = self@expected();
         val f2: ck::future<int> = self@expected(42);
         assert((await f1) == (await f2));
+
         exit();
     }
 
-    @async @entry def expected(): int {
-        return 42;
-    }
+    @async @entry def expected(): int { return 42; }
 
-    @async @entry def expected(n: int): int {
-        return n;
-    }
+    @async @entry def expected(n: int): int { return n; }
 }

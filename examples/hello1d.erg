@@ -13,15 +13,14 @@ import ergoline::_;
 class hello1d {
     val n: int;
 
-    @entry def hello1d(=n: int) { }
+    @entry def hello1d(=n: int) {}
 
-    @entry def sayHi(): unit {
+    @entry def sayHi() {
         val next: int = self[@]index() + 1;
+
         println("hello #" + next.toString());
-        if (next < n) {
-            self@[next].sayHi();
-        } else {
-            exit();
-        }
+
+        if (next < n) { self@[next].sayHi(); }
+        else          { exit(); }
     }
 }

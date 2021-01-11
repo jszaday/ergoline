@@ -11,12 +11,13 @@ import ergoline::_;
 }
 
 class hello2d {
-    @entry def hello2d() { }
+    @entry def hello2d() {}
 
-    @entry def sayHi(): unit {
+    @entry def sayHi() {
         val idx: (int, int) = self[@]index();
 
-        println("hello from [" + idx[0].toString() + ", " + idx[1].toString() + "]");
+        println("hello from [" + idx[0].toString() +
+                          ", " + idx[1].toString() + "]");
 
         match (idx) {
             case 0, 0 => exit();

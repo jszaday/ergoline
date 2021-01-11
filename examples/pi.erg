@@ -7,28 +7,31 @@ import ck;
  * https://www.appentra.com/parallel-computation-pi/ */
 
 @main class main {
-    val numSteps: int;
-    var checkIns: int;
     var runningSum: double;
+    var checkIns: int;
+    val numSteps: int;
 
     @entry def main(args: array<string>) {
+        val numPes = ck::numPes();
         numSteps = args.size() > 1 ? args[1].toInt() : 16;
         runningSum = 0.0;
-        val numPes: int = ck::numPes();
-        if (numSteps < (numPes * 4)) {
-            numSteps = numPes * 4;
-        }
+
+        if (numSteps < (numPes * 4)) { numSteps = numPes * 4; }
+
         if (numSteps % numPes != 0) {
             println("expected an evenly divisible number of steps.");
             exit();
         }
-        println("running " + numSteps.toString() + " steps of pi computation on " + numPes.toString() + " PEs");
+
+        println("running " + numSteps.toString() +
+                " steps of pi computation on " + numPes.toString() + " PEs");
+
         new pi@array1d(numPes, self@, numSteps / numPes);
     }
 
     @entry def checkIn(partialSum : double) {
-        checkIns += 1;
         runningSum += partialSum;
+        checkIns += 1;
 
         if (checkIns >= ck::numPes()) {
             println("result = " + (runningSum / numSteps).toString());
@@ -41,17 +44,13 @@ class pi {
     val stepsPerPe: int;
     val numSteps: int;
 
-    def step(): double {
-        return 1.0 / (numSteps.toDouble());
-    }
-
     @entry def pi(mainProxy: main@, =stepsPerPe: int) {
-        numSteps = stepsPerPe * ck::numPes();
-
         val idx = self[@]index();
         val start = idx * stepsPerPe;
         val end = (idx + 1) * stepsPerPe;
         val s = step();
+
+        numSteps = stepsPerPe * ck::numPes();
 
         var sum: double = 0.0;
         for (var i: int = start; i < end; i += 1) {
@@ -61,4 +60,6 @@ class pi {
 
         mainProxy.checkIn(sum);
     }
+
+    def step(): double { return 1.0 / (numSteps.toDouble()); }
 }

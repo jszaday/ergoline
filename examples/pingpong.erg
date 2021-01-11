@@ -52,16 +52,12 @@ class pingpong {
 @main class main {
     val count: int = 0;
 
-    @entry def main(args: array<string>) {
-        new pingpong@group(self@);
-    }
+    @entry def main(args: array<string>) { new pingpong@group(self@); }
 
     @entry def finished() {
         count += 1;
 
-        if (count >= ck::numPes()) {
-            exit();
-        }
+        if (count >= ck::numPes()) { exit(); }
     }
 }
 

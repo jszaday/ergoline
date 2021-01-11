@@ -10,16 +10,15 @@ import ck;
     @entry def main() {
         n = ck::numPes() * 16;
         val table = new ck::dht<int, int>(n);
+
         new sharing@array1d(n, n, self@, table);
     }
 
     @entry def tally() {
         count += 1;
 
-        if (count >= n) {
-            println("done");
-            exit();
-        }
+        if (count >= n) { println("done");
+                          exit(); }
     }
 }
 
@@ -34,6 +33,7 @@ class sharing {
 
     @threaded @entry def share() {
         val mine = self[@]index();
+
         table[mine] = 2 * mine + 1;
 
         for (var i = mine; i < (mine + 4); i += 1) {

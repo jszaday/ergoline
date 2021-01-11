@@ -8,7 +8,7 @@ import ergoline::_;
         new fib@(self@, (n > 16) ? n : 16);
     }
 
-    @entry override def accept(x: int): unit {
+    @entry override def accept(x: int) {
         println("result = " + x.toString());
         exit();
     }
@@ -20,20 +20,16 @@ class fib with acceptor {
     val parent: acceptor@;
 
     @entry def fib(=parent: acceptor@, n: int) {
-        if (n > 1) {
-            new fib@(self@, n - 1);
-            new fib@(self@, n - 2);
-        } else {
-            parent.accept(n);
-        }
+        if (n > 1) { new fib@(self@, n - 1);
+                     new fib@(self@, n - 2); }
+        else       { parent.accept(n); }
     }
 
-    @entry override def accept(x: int): unit {
+    @entry override def accept(x: int) {
         count += 1;
         value += x;
-        if (count >= 2) {
-            parent.accept(value);
-        }
+
+        if (count >= 2) { parent.accept(value); }
     }
 }
 
