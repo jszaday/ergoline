@@ -17,7 +17,7 @@ import ck::future;
         for (var i = 0; i < 16; i += 1) {
             val f = future<int>();
             ch.receive(f);
-            println("received value: " + (await f).toString());
+            println(`received value: ${await f}`);
         }
         exit();
     }

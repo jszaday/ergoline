@@ -9,7 +9,7 @@ import ergoline::_;
     }
 
     @entry override def accept(x: int): unit {
-        println("result = " + x.toString());
+        println(`result = ${x}`);
         exit();
     }
 }

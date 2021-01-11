@@ -27,7 +27,7 @@ def time(value: int): int;
     }
 
     @entry def printMaxima(a: stringable, b: stringable) {
-        println(a.toString() + " " + b.toString());
+        println(`${a} ${b}`);
         exit();
     }
 }

@@ -748,7 +748,9 @@ case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, p
 }
 
 case class EirInterpolatedString(var children: List[EirExpressionNode])(var parent: Option[EirNode]) extends EirExpressionNode {
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+    AstManipulation.updateWithin(children, oldNode, newNode).map(children = _).isDefined
+  }
   def append(s: String): Unit = append(EirLiteral(Some(this), EirLiteralTypes.String, s))
   def append(n: EirExpressionNode): Unit = children :+= n
 }

@@ -1047,8 +1047,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitInterpolatedString(ctx: CodeGenerationContext, str: EirInterpolatedString): Unit = {
     def matchChild(x: EirExpressionNode) = {
       x match {
+        // TODO is this right?? Idk...
         case x if x.disambiguation.isDefined =>
-          ctx << "(([&](){ return " << x.disambiguation << "; })())"
+          ctx << "(([&](){ return " << visit(ctx, x.disambiguation.get) << "; })())"
         case x: EirLiteral if !x.value.startsWith("\"") =>
           ctx << escapeInterpString(x.value)
         case _ => ctx << x

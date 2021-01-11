@@ -6,14 +6,14 @@ import ck;
 class pong with message<string> {
     def pong() { }
     override def value(): string {
-        return "pong on " + ck::myPe().toString();
+        return `pong on ${ck::myPe()}`;
     }
 }
 
 class ping with message<string> {
     def ping() { }
     override def value(): string {
-        return "ping on " + ck::myPe().toString();
+        return `ping on ${ck::myPe()}`;
     }
 }
 

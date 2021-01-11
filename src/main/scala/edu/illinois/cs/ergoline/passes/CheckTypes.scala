@@ -717,7 +717,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         val fc = makeMemberCall(f, "toString")
         val retTy = visit(ctx, fc)
         if (retTy.canAssignTo(strTy)) {
-          f.disambiguation = Some(fc)
+          assert(x.replaceChild(f, fc))
         } else {
           Errors.unableToUnify(f, retTy, strTy)
         }
