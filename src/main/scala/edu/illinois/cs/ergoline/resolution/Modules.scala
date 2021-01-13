@@ -32,8 +32,7 @@ object Modules {
 
   private object ErgolineErrorListener extends ConsoleErrorListener {
     override def syntaxError(recognizer: Recognizer[_, _], offendingSymbol: Any, line: Int, charPositionInLine: Int, msg: String, e: RecognitionException): Unit = {
-      super.syntaxError(recognizer, offendingSymbol, line, charPositionInLine, msg, e)
-      Errors.exitAction()
+      Errors.exit("line " + line + ":" + charPositionInLine + " " + msg)
     }
   }
 

@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirTrait}
 import edu.illinois.cs.ergoline.passes.{CheckConstructors, CheckEnclose, CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
@@ -39,7 +40,7 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     )
-    assertThrows[java.lang.RuntimeException](
+    assertThrows[EirException](
       CheckConstructors.checkConstructorsWithin(module))
   }
 
@@ -52,7 +53,7 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     )
-    assertThrows[java.lang.RuntimeException](
+    assertThrows[EirException](
       CheckConstructors.checkConstructorsWithin(module))
   }
 
@@ -65,7 +66,7 @@ class EirConstructorTests extends FunSuite {
         |class c extends a { }
         |""".stripMargin
     )
-    assertThrows[java.lang.RuntimeException](
+    assertThrows[EirException](
       CheckTypes.visit(new TypeCheckContext, module))
   }
 
@@ -77,7 +78,7 @@ class EirConstructorTests extends FunSuite {
         |class b<A> { }
         |""".stripMargin
     )
-    assertThrows[java.lang.RuntimeException](
+    assertThrows[EirException](
       CheckTypes.visit(new TypeCheckContext, module))
   }
 

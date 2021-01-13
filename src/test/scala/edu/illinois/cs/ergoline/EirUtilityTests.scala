@@ -7,12 +7,13 @@ import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern};
 
 class EirUtilityTests extends FunSuite {
   EirGlobalNamespace.clear()
-  Errors.exitAction = () => throw new RuntimeException("")
+  Errors.useDebugAction()
 
   test("block position and contains") {
     EirGlobalNamespace.clear()
@@ -50,16 +51,13 @@ class EirUtilityTests extends FunSuite {
       case Some(_ : EirBlock) =>
     }
     symbol.get.resolve() shouldEqual Nil
-//    assertThrows[java.lang.RuntimeException]({
-//      symbol.get.resolve()
-//    })
   }
 
   test("should not access inaccessible scope") {
     EirGlobalNamespace.clear()
     val foo = Modules.load("package foo ; def bar(): unit { { val baz : unit = (); } baz; }")
     val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
-    assertThrows[java.lang.RuntimeException]({
+    assertThrows[EirException]({
       symbol.map(Find.uniqueResolution(_))
     })
   }

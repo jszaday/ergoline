@@ -29,23 +29,24 @@ object CheckConstructors {
   def checkConstructors(cls: EirClassLike, constructors: List[EirMember]): Int = {
     val needsInitialization = cls.needsInitialization
     if (constructors.isEmpty && needsInitialization.nonEmpty) {
-      throw new RuntimeException(s"$cls does not fulfill all mandatory assignments")
+      Errors.missingConstructor(cls)
     }
     for (constructor <- constructors) {
       if (!fulfillsSuperConstructor(constructor)) {
-        throw new RuntimeException(s"$constructor does not fulfill all super constructors")
+        Errors.missingSuperConstructor(constructor)
       }
       if (!selfAssignmentsOk(cls, constructor)) {
-        throw new RuntimeException(s"${Errors.contextualize(constructor)} contains an invalid self-assignment")
+        Errors.invalidSelfAssignment(constructor)
       }
       if (!fulfillsMandatoryAssignments(needsInitialization, constructor)) {
-        throw new RuntimeException(s"$constructor does not fulfill all mandatory assignments")
+        Errors.missingMemberAssignment(constructor)
       }
     }
     constructors.length
   }
 
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = {
+    // TODO implement this?
     true
   }
 
