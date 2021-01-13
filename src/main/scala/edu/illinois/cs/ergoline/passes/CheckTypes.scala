@@ -229,9 +229,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def argumentsMatch(x: List[EirResolvable[EirType]], y: List[EirResolvable[EirType]]): Boolean = {
+  def argumentsMatch(x: Iterable[EirType], y: Iterable[EirType], exact: Boolean): Boolean =
+    argumentsMatch(x.toList, y.toList, exact)
+
+  def argumentsMatch(x: List[EirType], y: List[EirType], exact: Boolean = false): Boolean = {
     (x.length == y.length) &&
-      x.zip(y).forall({ case (ours: EirType, theirs: EirType) => ours.canAssignTo(theirs) case _ => false })
+      x.zip(y).forall({
+        case (x, y) if exact => x == y
+        case (x, y) => x.canAssignTo(y)
+      })
   }
 
   def resolveIterator(ctx: TypeCheckContext, h: EirForAllHeader): EirType = {
@@ -437,6 +443,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     opt.foreach(subCtx => {
       try {
         ctx.start(subCtx)
+        CheckFunctions.visit(ctx, node)
         val bodyType = node.body.map(visit(ctx, _))
         val retTy = visit(ctx, node.returnType)
         if (!bodyType.forall(_.canAssignTo(retTy))) {

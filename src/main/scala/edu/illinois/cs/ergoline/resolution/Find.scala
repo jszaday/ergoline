@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 import scala.collection.mutable
@@ -275,4 +275,37 @@ object Find {
 
   }
 
+  def overloads(function: EirFunction): List[EirFunction] = {
+    val member = function.parent.to[EirMember]
+    val base = member.map(_.base).orElse(function.parent)
+    base.map(_.children
+      .map(extractFunction)
+      .flatMap(_.find(child =>
+        (child.name == function.name) && child != function)).toList)
+      .getOrElse(Nil)
+  }
+
+  def inherited(classLike: EirClassLike, f: (EirClassLike, Option[EirSpecialization]) => Unit): Unit = {
+    classLike.inherited
+      .map(Find.uniqueResolution[EirType])
+      .foreach{
+        case t: EirTemplatedType =>
+          val base = assertValid[EirClassLike](Find.uniqueResolution(t.base))
+          f(base, Some(t))
+          inherited(base, f)
+        case t: EirClassLike =>
+          f(t, None)
+          inherited(t, f)
+        case _ => ???
+      }
+  }
+
+//  def overrides(member: EirMember): List[(EirMember, Option[EirSpecialization])] = {
+//    var members: List[(EirMember, Option[EirSpecialization])] = Nil
+//    inherited(member.base, (t, sp) => {
+//      val found = Find.child[EirMember](t, withName(member.name))
+//      members ++= found.zip(List.fill(found.size)(sp))
+//    })
+//    members
+//  }
 }

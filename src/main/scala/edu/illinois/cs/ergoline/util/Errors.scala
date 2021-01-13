@@ -111,8 +111,23 @@ object Errors {
     exitAction()
   }
 
+  def ambiguousOverload(a: EirFunction, b: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} is potentially ambiguous with ${nameFor(b)}.")
+    exitAction()
+  }
+
   def cannotParse(tree: ParseTree): Nothing = {
     Console.err.println(s"could not parse $tree.")
+    exitAction()
+  }
+
+  def systemFnHasBody(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: system functions cannot have a body.")
+    exitAction()
+  }
+
+  def bodyLessFunction(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: expected a body for function ${nameFor(f)}.")
     exitAction()
   }
 }
