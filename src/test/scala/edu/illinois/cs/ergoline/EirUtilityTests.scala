@@ -20,8 +20,10 @@ class EirUtilityTests extends FunSuite {
     val b = new Visitor().visitBlock(
       parserFromString("{ val x : int = 42; val y : int = 16; }").block())
     // test a fairly elaborate query
-    Find.within[EirLiteral](b, _.value == "16")
-      .flatMap(b.findPositionOf(_)) shouldEqual List(1)
+    val pos =
+      Find.within[EirLiteral](b, _.value == "16")
+        .flatMap(b.findPositionOf(_)).headOption
+    pos shouldEqual Some(1)
     b.children.zipWithIndex.foreach({
       case (n, i) => n.visitAll(x => {
         Option.when(!x.isInstanceOf[EirResolvable[_]])(b.findPositionOf(x) shouldEqual Some(i))

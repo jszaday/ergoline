@@ -3,11 +3,12 @@ package edu.illinois.cs.ergoline.resolution
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.TypeCheckContext
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited}
 
-import scala.collection.mutable
+import scala.collection.{View, mutable}
 import scala.reflect.ClassTag
 
 object Find {
@@ -51,8 +52,8 @@ object Find {
   }
 
   // recursively check all children of a node
-  def within[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
-    Find.child[T](node, predicate) ++ node.children.flatMap(within[T](_, predicate))
+  def within[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
+    Find.child[T](node, predicate).concat(node.children.view.flatMap(within[T](_, predicate)))
   }
 
   private def matchesPredicate[T](predicate: T => Boolean)(x : Any): Boolean = {
@@ -64,8 +65,8 @@ object Find {
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): Iterable[T] = {
-    node.children.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
+  def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
+    node.children.view.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
   }
 
   def namedChildren[T <: EirNamedNode](node: EirNode, name: String)(implicit tag: ClassTag[T]): Iterable[T] = {
@@ -96,7 +97,7 @@ object Find {
 //      n.children.flatMap(classes)
 //  }
 
-  def annotatedWith[T <: EirNode : Manifest](scope: EirScope, name: String): Iterable[T] = {
+  def annotatedWith[T <: EirNode : Manifest](scope: EirScope, name: String): View[T] = {
     Find.within[T](scope, _.annotations.exists(_.name == name))
   }
 

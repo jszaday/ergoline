@@ -99,7 +99,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ours =
       if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
     // find the candidates ^_^
-    val candidates = Find.accessibleMember(base, x)
+    val candidates = Find.accessibleMember(Find.asClassLike(base), x)
     val results = candidates.map(candidate => {
       val member = visit(ctx, candidate)
       val innerSpec = handleSpecialization(ctx, member)
@@ -118,13 +118,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       found
     }).filterNot(_ == null)
     spec.foreach(ctx.leave)
-    if (results.length == 1) {
+    if (results.nonEmpty) {
       val (member, result) = results.head
       x.disambiguation = Some(member)
       prevFc.foreach(validate(ctx, member, _))
       return result
+    } else {
+      Errors.missingField(x, base, x.field)
     }
-    Errors.missingField(x, base, x.field)
   }
 
   override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = {
