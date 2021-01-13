@@ -1,15 +1,13 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.types.EirNamedType
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.FullyResolve
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
-import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern};
+import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
 class EirUtilityTests extends FunSuite {
   EirGlobalNamespace.clear()
@@ -35,7 +33,7 @@ class EirUtilityTests extends FunSuite {
 
   test("symbol resolution") {
     val foo = Modules.load("package foo ; class bar { val other : bar ; }")
-    val symbol = Find.all[EirSymbol[EirNamedType]](foo).headOption
+    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _ => true).headOption
     symbol.flatMap(_.resolve().headOption) should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>
     }
@@ -44,8 +42,8 @@ class EirUtilityTests extends FunSuite {
   test("should not find before definition") {
     EirGlobalNamespace.clear()
     val foo = Modules.load("package foo ; def bar(): unit { baz; val baz : unit = (); }")
-    val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
-    val declaration = Find.all[EirDeclaration](foo).headOption
+    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _.qualifiedName == List("baz")).headOption
+    val declaration = Find.within[EirDeclaration](foo, _ => true).headOption
     symbol.isDefined shouldBe true
     declaration.isDefined shouldBe true
     val ancestor = Find.commonAncestor(symbol.get, declaration.get)
@@ -58,9 +56,9 @@ class EirUtilityTests extends FunSuite {
   test("should not access inaccessible scope") {
     EirGlobalNamespace.clear()
     val foo = Modules.load("package foo ; def bar(): unit { { val baz : unit = (); } baz; }")
-    val symbol = Find.all[EirSymbol[EirDeclaration]](foo).find(_.qualifiedName == List("baz"))
+    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _.qualifiedName == List("baz"))
     assertThrows[EirException]({
-      symbol.map(Find.uniqueResolution(_))
+      symbol.foreach(Find.uniqueResolution(_))
     })
   }
 }

@@ -28,23 +28,6 @@ object Find {
   def withName[T <: EirNamedNode](name: String): T => Boolean =
     (n: T) => n.name == name
 
-  def qualifications(scope: EirScope, fqn: List[String])(implicit ctx: Option[EirNode] = None): Iterable[EirNamedScope] = {
-    fqn match {
-      case head :: Nil => globally[EirNamedScope](scope, withName(head))
-      case init :+ last => qualifications(scope, init)
-        .flatMap(_.findChild[EirNamedScope](withName(last)))
-      case _ => Nil
-    }
-  }
-
-  // search up and down from a node
-  def globally[T <: EirNode : Manifest](scope: EirScope, predicate: T => Boolean, searched: mutable.ArrayBuffer[EirScope] = mutable.ArrayBuffer())(implicit ctx: Option[EirNode] = None): Iterable[T] = {
-    (ctx.forall(_.canAccess(scope)) && !searched.contains(scope)).ifTrue({
-      searched += scope
-      Find.within(scope, predicate) ++ scope.scope.toIterable.flatMap(globally(_, predicate, searched))
-    })
-  }
-
   def descendant(node: EirNode, predicate: EirNode => Option[Boolean]): Iterable[EirNode] = {
     node.children.zip(node.children.map(predicate)).collect({
       case (node, Some(x)) => Option.when(x)(node) ++ descendant(node, predicate)
@@ -84,27 +67,6 @@ object Find {
     node.flatMap(namedChildren[T](_, name).headOption)
       .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
   }
-
-  def all[T <: EirNode : Manifest](node: EirNode): Iterable[T] = {
-    node.children.flatMap(all(_)) ++
-      node.children.collect {
-        case x: T => x
-      }
-  }
-
-//  def classes(n : EirNode): Iterable[EirClassLike] = {
-//    Option.when(n.isInstanceOf[EirClassLike])(n.asInstanceOf[EirClassLike]) ++
-//      n.children.flatMap(classes)
-//  }
-
-  def annotatedWith[T <: EirNode : Manifest](scope: EirScope, name: String): View[T] = {
-    Find.within[T](scope, _.annotations.exists(_.name == name))
-  }
-
-  // find values strictly "owned" by the owner, such that no other instance of its class owns it as well
-//  def owned[C <: EirNode : Manifest, T <: EirNode : Manifest](owner : C): Iterable[T] = {
-//    owner.findWithin[T]((t : T) => parentOf[C](t).contains(owner))
-//  }
 
   def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {
     val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.uniqueResolution(rY))
@@ -170,7 +132,7 @@ object Find {
   //      both the EirMember itself and its .member
   //      e.g. EirMember("foo"...), EirFunction("foo"...)
   //      need to figure out a way around this?
-  def anywhereAccessible(ctx : EirNode, name : String): Seq[EirNamedNode] = {
+  def anywhereAccessible(ctx : EirNode, name : String): View[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
     val predicate: EirNode => Option[Boolean] = {
@@ -184,22 +146,26 @@ object Find {
       case x if !isTopLevel(x) => Option.when(matches(x))(true)
       case x => Some(matches(x))
     }
-    ancestors.flatMap(ancestor =>
+    ancestors.view.flatMap(ancestor => {
       Find.descendant(ancestor, predicate).filter(x => {
         ancestor match {
-          case block: EirBlock => {
+          case block: EirBlock =>
             block.findPositionOf(ctx) > block.findPositionOf(x)
-          }
           case _ => true
         }
-      })
-    ).filter(ctx.canAccess(_)).map({
+      }) ++ {
+        // Descendent searches only include descendents,
+        // so we need an explicit check for the last ancestor
+        val isLast = ancestors.lastOption.contains(ancestor)
+        Option.when(isLast && matches(ancestor))(ancestor)
+      }
+    }).filter(ctx.canAccess(_)).map({
       case fs : EirFileSymbol => fs.resolve().head
       case x => x
     }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): Seq[T] = {
+  def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): View[T] = {
     symbol.qualifiedName match {
       case last :: Nil =>
         val found = anywhereAccessible(symbol, last)
@@ -261,11 +227,6 @@ object Find {
     }
     if (c.isAbstract && mustBeConcrete) throw new RuntimeException(s"cannot instantiate ${c.name}")
     child[EirMember](c, (y: EirMember) => y.isConstructor && x.canAccess(y)).toList
-  }
-
-  def callable(x : EirClassLike): List[EirMember] = {
-    // TODO may need to check if first argument is self or not?
-    child[EirMember](x, withName("apply").and(x.canAccess(_))).toList
   }
 
   object FindSyntax {

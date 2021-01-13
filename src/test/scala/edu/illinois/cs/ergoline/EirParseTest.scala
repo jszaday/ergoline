@@ -30,8 +30,8 @@ class EirParseTest extends FunSuite {
   test("define class and resolve it") {
     EirGlobalNamespace.clear()
     val result = Modules.load("package foo; namespace bar { class baz { } }")
-    val namespace = Find.qualifications(result, List("foo", "bar")).headOnly
-    Find.child[EirClass](namespace, withName("baz")).headOnly
+    val symbol = EirSymbol[EirClassLike](Some(result), List("foo", "bar", "baz"))
+    Find.uniqueResolution(symbol)
   }
 
   test("tuple with one element same type as base type") {
@@ -77,7 +77,8 @@ class EirParseTest extends FunSuite {
   test("annotated function retrieval test") {
     EirGlobalNamespace.clear()
     val ns = Modules.load("package foo; @entry def bar(): unit { }")
-    val fs = Find.annotatedWith[EirFunction](ns, "entry").headOption
+    val fs =
+      Find.within[EirFunction](ns, _.annotation("entry").isDefined).headOption
     fs should matchPattern {
       case Some(EirFunction(_, _, "bar", _, _, _)) =>
     }

@@ -99,7 +99,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ours =
       if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
     // find the candidates ^_^
-    val candidates = Find.accessibleMember(Find.asClassLike(base), x)
+    val candidates = Find.accessibleMember(base, x)
     val results = candidates.map(candidate => {
       val member = visit(ctx, candidate)
       val innerSpec = handleSpecialization(ctx, member)
