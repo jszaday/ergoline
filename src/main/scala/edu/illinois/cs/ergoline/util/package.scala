@@ -43,7 +43,7 @@ package object util {
     base.inherited.view.map(resolveToPair).flatMap {
       case (a, None) => f(a)
       case (a, Some(sp)) =>
-        val spec = ctx.specialize(base, sp)
+        val spec = ctx.specialize(a, sp)
         val found = f(a)
         ctx.leave(spec)
         found
