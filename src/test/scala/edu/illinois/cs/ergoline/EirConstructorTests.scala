@@ -10,7 +10,7 @@ import org.scalatest.Matchers.convertToAnyShouldWrapper
 class EirConstructorTests extends FunSuite {
 
   private val bigProgram = {
-    EirGlobalNamespace.clear()
+    EirImportTests.setupEnv()
     Modules.load(
       """package foo;
         |class bar {
@@ -31,7 +31,7 @@ class EirConstructorTests extends FunSuite {
   }
 
   test("expected failure, invalid self-assignment") {
-    EirGlobalNamespace.clear()
+    EirImportTests.setupEnv()
     val module = Modules.load(
       """package foo;
         |class bar {
@@ -45,7 +45,7 @@ class EirConstructorTests extends FunSuite {
   }
 
   test("expected failure, uninitialized field") {
-    EirGlobalNamespace.clear()
+    EirImportTests.setupEnv()
     val module = Modules.load(
       """package foo;
         |class bar {
