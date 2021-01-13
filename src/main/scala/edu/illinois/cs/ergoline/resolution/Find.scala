@@ -4,11 +4,11 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichIntOption, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited}
 
-import scala.collection.{View, mutable}
+import scala.collection.View
 import scala.reflect.ClassTag
 
 object Find {
@@ -39,33 +39,41 @@ object Find {
     Find.child[T](node, predicate).concat(node.children.view.flatMap(within[T](_, predicate)))
   }
 
-  private def matchesPredicate[T](predicate: T => Boolean)(x : Any): Boolean = {
-    try {
-      predicate(x.asInstanceOf[T])
-    } catch {
-      case _ : ClassCastException => false
-    }
-  }
-
   // check only the immediate children of the node (do not descend)
   def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
     node.children.view.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
   }
 
+  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
+    node.flatMap(firstNamedChild[T](_, name))
+      .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
+  }
+
   private def firstNamedChild[T <: EirNamedNode](node: EirNode, name: String)(implicit tag: ClassTag[T]): Option[T] = {
-    node.children.view.collect{
+    node.children.view.collect {
       case n: EirNamedNode if n.name == name => n
-    }.map{
+    }.map {
       case r: EirResolvable[_] if !r.resolved => Find.uniqueResolution(r)
       case n => n
-    }.collectFirst{
+    }.collectFirst {
       case t: T => t
     }
   }
 
-  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
-    node.flatMap(firstNamedChild[T](_, name))
-      .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
+  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
+    val found = x.resolve()
+    assert(!globals.strict || found.length == found.distinct.length)
+    found match {
+      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
+      case head :: _ if !globals.strict => head
+      // check to ensure unique resolution
+      case head :: rest if globals.strict =>
+        val all: List[T] = head +: rest
+        if (all.length != all.distinct.length) Errors.warn(s"repeated resolutions of $x")
+        if (all.length > 1) Errors.warn(s"potential ambiguity, selected $head from $all")
+        head
+      case _ => Errors.unableToResolve(x)
+    }
   }
 
   def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {
@@ -76,12 +84,7 @@ object Find {
     }
   }
 
-  def unionType(x: EirType, y: EirType): Option[EirType] = {
-    if (x == y) Some(x)
-    else if (x.canAssignTo(y)) Some(y)
-    else Some(x).filter(y.canAssignTo)
-    // TODO seek common ancestor classes and cast
-  }
+  def unionType(types: EirType*): Option[EirType] = unionType(types)
 
   def unionType(types: Iterable[EirType]): Option[EirType] = {
     val distinct = types.toList.distinct
@@ -91,57 +94,48 @@ object Find {
     })
   }
 
-  def unionType(types: EirType*): Option[EirType] = unionType(types)
+  def unionType(x: EirType, y: EirType): Option[EirType] = {
+    if (x == y) Some(x)
+    else if (x.canAssignTo(y)) Some(y)
+    else Some(x).filter(y.canAssignTo)
+    // TODO seek common ancestor classes and cast
+  }
 
   def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))
 
-  private def _traits(x: EirClassLike): Iterable[EirType] = {
-    x.inherited.flatMap(x => {
-      val res = uniqueResolution(x)
-      val base = res match {
-        case t: EirClassLike => t
-        case t: EirTemplatedType =>
-          val res = assertValid[EirClassLike](uniqueResolution(t.base))
-          if (res.inherited.nonEmpty) ???
-          res
-      }
-      _traits(base) ++ Option.when(base.isInstanceOf[EirTrait])(res)
-    })
-  }
-
   def traits(x: EirClassLike): Set[EirType] = _traits(x).toSet
 
-  import FindSyntax.RichPredicate
-
-  def isTopLevel(x : EirNode): Boolean = x match {
+  def isTopLevel(x: EirNode): Boolean = x match {
     // TODO can this simplify to?
     //      case _ : EirScope => true
-    case _ : EirBlock => true
-    case _ : EirForLoop => true
-    case _ : EirLambdaExpression => true
-    case _ : EirFunction => true
-    case _ : EirClassLike => true
-    case _ : EirNamespace => true
-    case _ : EirImport => true
-    case _ : EirMatchCase => true
+    case _: EirBlock => true
+    case _: EirForLoop => true
+    case _: EirLambdaExpression => true
+    case _: EirFunction => true
+    case _: EirClassLike => true
+    case _: EirNamespace => true
+    case _: EirImport => true
+    case _: EirMatchCase => true
     case _ => false
   }
+
+  import FindSyntax.RichPredicate
 
   // NOTE when trying to resolve members this seems to return
   //      both the EirMember itself and its .member
   //      e.g. EirMember("foo"...), EirFunction("foo"...)
   //      need to figure out a way around this?
-  def anywhereAccessible(ctx : EirNode, name : String): View[EirNamedNode] = {
+  def anywhereAccessible(ctx: EirNode, name: String): View[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = matchesPredicate(withName(name))(_)
     val predicate: EirNode => Option[Boolean] = {
-      case _ : EirBlock => None
+      case _: EirBlock => None
       // only allowed to consider members when within the class?
-      case x : EirMember => Option.when(x.parent.exists(ancestors.contains))(matches(x))
-      case x : EirFunction => Option.when(matches(x))(true)
-      case x : EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
-      case x : EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
+      case x: EirMember => Option.when(x.parent.exists(ancestors.contains))(matches(x))
+      case x: EirFunction => Option.when(matches(x))(true)
+      case x: EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
+      case x: EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
       case x if !isTopLevel(x) => Option.when(matches(x))(true)
       case x => Some(matches(x))
@@ -160,12 +154,12 @@ object Find {
         Option.when(isLast && matches(ancestor))(ancestor)
       }
     }).filter(ctx.canAccess(_)).map({
-      case fs : EirFileSymbol => fs.resolve().head
+      case fs: EirFileSymbol => fs.resolve().head
       case x => x
     }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol[T <: EirNamedNode : ClassTag](symbol : EirSymbol[T]): View[T] = {
+  def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): View[T] = {
     symbol.qualifiedName match {
       case last :: Nil =>
         val found = anywhereAccessible(symbol, last)
@@ -176,25 +170,9 @@ object Find {
           namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
         }
         namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)).map({
-          case fs : EirFileSymbol => fs.resolve().head.asInstanceOf[T]
+          case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[T]
           case x => x
         }))
-    }
-  }
-
-  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
-    val found = x.resolve()
-    assert(!globals.strict || found.length == found.distinct.length)
-    found match {
-      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
-      case head :: _ if !globals.strict => head
-      // check to ensure unique resolution
-      case head :: rest if globals.strict =>
-        val all: List[T] = head +: rest
-        if (all.length != all.distinct.length) Errors.warn(s"repeated resolutions of $x")
-        if (all.length > 1) Errors.warn(s"potential ambiguity, selected $head from $all")
-        head
-      case _ => Errors.unableToResolve(x)
     }
   }
 
@@ -215,6 +193,7 @@ object Find {
   def resolveAccessor(ctx: TypeCheckContext, base: EirType,
                       accessor: EirFieldAccessor): View[(EirMember, EirType)] = {
     def helper(x: EirMember) = (x, CheckTypes.visit(ctx, x))
+
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
@@ -225,27 +204,10 @@ object Find {
     }
   }
 
-  def accessibleMember(base : EirType, x : EirFieldAccessor): View[EirMember] = {
-    // TODO check parent classes as well!
-    child[EirMember](asClassLike(base), withName(x.field).and(x.canAccess(_)))
-  }
-
-  def accessibleConstructor(base : EirNode, x : EirNew, mustBeConcrete: Boolean = false): List[EirMember] = {
-    val c = base match {
-      case EirTemplatedType(_, s : EirClassLike, _) => s
-      case s : EirClassLike => s
-      case _ => throw new RuntimeException(s"unsure how to find members of $base")
-    }
+  def accessibleConstructor(base: EirType, x: EirNew, mustBeConcrete: Boolean = false): View[EirMember] = {
+    val c = asClassLike(base)
     if (c.isAbstract && mustBeConcrete) throw new RuntimeException(s"cannot instantiate ${c.name}")
-    child[EirMember](c, (y: EirMember) => y.isConstructor && x.canAccess(y)).toList
-  }
-
-  object FindSyntax {
-
-    implicit class RichPredicate[T](predicate: T => Boolean) {
-      def and(other: T => Boolean): T => Boolean = (t: T) => predicate(t) && other(t)
-    }
-
+    child[EirMember](c, (y: EirMember) => y.isConstructor && x.canAccess(y))
   }
 
   def overloads(function: EirFunction): View[EirFunction] = {
@@ -256,4 +218,40 @@ object Find {
       .flatMap(_.find(child => (child.name == function.name) && child != function)))
       .getOrElse(View())
   }
+
+  private def matchesPredicate[T](predicate: T => Boolean)(x: Any): Boolean = {
+    try {
+      predicate(x.asInstanceOf[T])
+    } catch {
+      case _: ClassCastException => false
+    }
+  }
+
+  private def _traits(x: EirClassLike): Iterable[EirType] = {
+    x.inherited.flatMap(x => {
+      val res = uniqueResolution(x)
+      val base = res match {
+        case t: EirClassLike => t
+        case t: EirTemplatedType =>
+          val res = assertValid[EirClassLike](uniqueResolution(t.base))
+          if (res.inherited.nonEmpty) ???
+          res
+      }
+      _traits(base) ++ Option.when(base.isInstanceOf[EirTrait])(res)
+    })
+  }
+
+  private def accessibleMember(base: EirType, x: EirFieldAccessor): View[EirMember] = {
+    // TODO check parent classes as well!
+    child[EirMember](asClassLike(base), withName(x.field).and(x.canAccess(_)))
+  }
+
+  object FindSyntax {
+
+    implicit class RichPredicate[T](predicate: T => Boolean) {
+      def and(other: T => Boolean): T => Boolean = (t: T) => predicate(t) && other(t)
+    }
+
+  }
+
 }
