@@ -12,7 +12,7 @@ import org.scalatest.Matchers.convertToAnyShouldWrapper
 object EirImportTests{
   def setupEnv(): Unit = {
     globals.strict = true
-    Errors.exitAction = () => throw new RuntimeException("")
+    Errors.useDebugAction()
     EirGlobalNamespace.clear()
     Processes.reset()
   }

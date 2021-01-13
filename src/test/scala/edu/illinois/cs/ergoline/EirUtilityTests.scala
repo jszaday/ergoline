@@ -12,7 +12,7 @@ import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern};
 
 class EirUtilityTests extends FunSuite {
   EirGlobalNamespace.clear()
-  Errors.exitAction = () => throw new RuntimeException("")
+  Errors.useDebugAction()
 
   test("block position and contains") {
     EirGlobalNamespace.clear()

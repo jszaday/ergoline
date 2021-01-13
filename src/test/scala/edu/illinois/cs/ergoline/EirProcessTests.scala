@@ -10,7 +10,7 @@ import org.scalatest.FunSuite
 import scala.util.Properties
 
 class EirProcessTests extends FunSuite {
-  Errors.exitAction = () => throw new RuntimeException("")
+  Errors.useDebugAction()
 
   def files(path: String = "examples"): Iterable[File] =
     Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile)

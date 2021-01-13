@@ -22,7 +22,7 @@ class EirParseTest extends FunSuite {
     }
   }
 
-  Errors.exitAction = () => throw new RuntimeException("")
+  Errors.useDebugAction()
 
   import ParseTestSyntax.RichIterable
 

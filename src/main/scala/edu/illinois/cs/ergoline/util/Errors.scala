@@ -19,130 +19,123 @@ object Errors {
     case _ => n.toString
   }
 
-  var exitAction: () => Nothing = () => sys.exit(errorCode)
+
+  def format(ctx: EirNode, msg: String, params: Any*): String = {
+    val start = Option(ctx).map(contextualize).getOrElse("???")
+    start + ": " + msg.format(params.map {
+      case n: EirNode => nameFor(n)
+      case x => x.toString
+    }: _*)
+  }
+
+  private var exitAction: String => Nothing = (s: String) => {
+    Console.err.println(s)
+    sys.exit(errorCode)
+  }
 
   def log(msg: String): Unit = if (globals.verbose) println(msg)
   def warn(msg: String): Unit = Console.err.println(s"warning: $msg")
+  def exit(msg: String): Nothing = exitAction(msg)
+
+  def useDebugAction(): Unit = {
+    exitAction = (s: String) => throw new RuntimeException(s)
+  }
 
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
-    Console.err.println(s"${contextualize(ctx)}: ${nameFor(a)} cannot be cast to ${nameFor(b)}")
-    exitAction()
+    exitAction(format(ctx, "%s cannot be cast to %s", a, b))
   }
 
   def missingField(ctx: EirNode, a: EirType, field: String): Nothing = {
-    Console.err.println(s"${contextualize(ctx)}: cannot resolve field '$field' of ${nameFor(a)}")
-    exitAction()
+    exitAction(format(ctx, "cannot resolve field '%s' of %s", field, a))
   }
 
   def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing = unableToUnify(ctx, Seq(a, b))
 
   def unableToName(n: EirNode): Nothing ={
-    Console.err.println(s"${contextualize(n)}: unable to generate name for $n.")
-    exitAction()
+    exitAction(format(n, "unable to generate name for %s", n))
   }
 
   def missingBody(f: EirFunction): Nothing ={
-    Console.err.println(s"${contextualize(f)}: expected body for ${nameFor(f)}")
-    exitAction()
+    exitAction(format(f, "expected body for %s", f))
   }
 
   def unableToUnify(ctx: EirNode, it : Iterable[EirType]): Nothing = {
     if (it.isEmpty) missingType(ctx)
-    Console.err.println(s"${contextualize(ctx)}: could not unify types: ${it.init.map(nameFor) mkString ", "} and ${nameFor(it.last)}")
-    exitAction()
+    else exitAction(format(ctx, "could not unify types: [%s]", it.map(nameFor) mkString ", "))
   }
 
   def unableToResolve(resolvable: EirResolvable[_]): Nothing = {
-    Console.err.println(s"${contextualize(resolvable)}: unable to resolve $resolvable")
-    exitAction()
+    exitAction(format(resolvable, "unable to resolve %s", resolvable))
   }
 
   def unableToResolve(s: String): Nothing = {
-    Console.err.println(s"unable to resolve $s")
-    exitAction()
+    exitAction(format(null, "unable to resolve %s", s))
   }
 
   def missingType(node: EirNode): Nothing = {
-    Console.err.println(s"${contextualize(node)}: could not find the type of $node")
-    exitAction()
+    exitAction(format(node, "could not find the type of %s", node))
   }
 
   def inaccessibleMember(target: EirMember, usage: EirNode): Nothing = {
-    Console.err.println(s"${contextualize(usage)}: ${nameFor(target)} is not accessible within $usage.")
-    exitAction()
+    exitAction(format(target, "%s is not accessible within %s", target, usage))
   }
   def invalidTupleIndices(nodes: Iterable[EirNode]): Nothing = {
-    Console.err.println(s"${contextualize(nodes.head)}: (${nodes mkString ", "}) are not proper tuple indices.")
-    exitAction()
+    exitAction(format(nodes.head, "%s are not valid tuple indices", nodes mkString ", "))
   }
 
   def missingNamespace(node: EirNode): Nothing = {
-    Console.err.println(s"${contextualize(node)}: could not find the namespace of $node")
-    exitAction()
+    exitAction(format(node, "could not find the namespace of %s", node))
   }
 
   def invalidParentClass(a: EirClassLike, b: EirClassLike, hint: String = ""): Nothing = {
-    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} cannot be used as a parent class for ${nameFor(b)}${if (hint.nonEmpty) ", " + hint else "."}")
-    exitAction()
+    exitAction(format(a, "%s cannot be used as a parent class for %s %s", a, b, if (hint.nonEmpty) ", " + hint else "."))
   }
 
   def missingSpecialization(a: EirNode): Nothing = {
-    Console.err.println(s"${contextualize(a)}: missing specialization for ${nameFor(a)}.")
-    exitAction()
+    exitAction(format(a, "missing specialization for %s", a))
   }
 
   def incorrectType(a: EirNode, c: Class[_]): Nothing = {
-    Console.err.println(s"${contextualize(a)}: expected an ${c.getName}, got ${nameFor(a)} (a(n) ${a.getClass.getName}).")
-    exitAction()
+    exitAction(format(a, "expected a(n) %s, instead got %s (a(n) %s)", c.getName, a, a.getClass.getName))
   }
 
   def unknownOperator(a: EirNode, s: String): Nothing = {
-    Console.err.println(s"${contextualize(a)}: unrecognized operator $s.")
-    exitAction()
+    exitAction(format(a, "unrecognized operator %s", s))
   }
 
   def expectedSync(a: EirAwait, t: EirExpressionNode): Nothing = {
-    Console.err.println(s"${contextualize(a)}: await must target @sync method (instead got: ${nameFor(t)}).")
-    exitAction()
+    exitAction(format(a, "await must target @sync method (instead got: %s)", t))
   }
 
   def cannotSerialize(ctx: EirNode, t: EirType): Nothing = {
-    Console.err.println(s"${contextualize(ctx)}: cannot pup/serialize transient type ${nameFor(t)}.")
-    exitAction()
+    exitAction(format(ctx, "cannot pup/serialize transient type %s", t))
   }
 
   def ambiguousOverload(a: EirFunction, b: EirFunction): Nothing = {
-    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} is potentially ambiguous with ${nameFor(b)}.")
-    exitAction()
+    exitAction(format(a, "%s is potentially ambiguous with %s", a, b))
   }
 
   def cannotParse(tree: ParseTree): Nothing = {
-    Console.err.println(s"could not parse $tree.")
-    exitAction()
+    exitAction(format(null, "could not parse %s", tree))
   }
 
   def systemFnHasBody(f: EirFunction): Nothing = {
-    Console.err.println(s"${contextualize(f)}: system functions cannot have a body.")
-    exitAction()
+    exitAction(format(f, "system functions cannot have a body"))
   }
 
   def bodyLessFunction(f: EirFunction): Nothing = {
-    Console.err.println(s"${contextualize(f)}: expected a body for function ${nameFor(f)}.")
-    exitAction()
+    exitAction(format(f, "expected a body for function %s", f))
   }
 
   def doesNotOverride(f: EirFunction): Nothing = {
-    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} marked override but does not override anything.")
-    exitAction()
+    exitAction(format(f, "%s marked override but does not override anything", f))
   }
 
   def expectedOverride(a: EirFunction, b: EirMember): Nothing = {
-    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} not marked override but overrides ${nameFor(b)}.")
-    exitAction()
+    exitAction(format(a, "%s not marked override but overrides %s", a, b))
   }
 
   def incompatibleOverride(f: EirFunction, a: EirType, b: EirType): Nothing = {
-    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} has an incompatible return type with overridden function (${nameFor(a)} vs. ${nameFor(b)}).")
-    exitAction()
+    exitAction(format(f, "%s has an incompatible return type with overridden function (%s vs. %s)", f, a, b))
   }
 }

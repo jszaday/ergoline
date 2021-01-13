@@ -16,7 +16,7 @@ object Driver extends App {
   val (options, files) = args.partition(x => x startsWith "-")
   globals.strict = options.contains("-Wall")
   globals.verbose = options.contains("--verbose")
-  if (options.contains("--debug")) Errors.exitAction = () => throw new RuntimeException
+  if (options.contains("--debug")) Errors.useDebugAction()
   // open each specified file
   val modules: Iterable[EirNode] =
     files.map(Paths.get(_)).map(x => load(x.toFile, EirGlobalNamespace))
