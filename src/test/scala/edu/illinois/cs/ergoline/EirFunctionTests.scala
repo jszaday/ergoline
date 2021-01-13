@@ -48,7 +48,7 @@ class EirFunctionTests extends FunSuite {
   test("incompatible override fails") {
     EirImportTests.setupEnv()
     assertThrows[RuntimeException]({
-      val res = Modules.load("package foo; trait foo { def bar(); } class baz with foo { override def bar(): int {} }")
+      val res = Modules.load("package foo; trait foo { def bar(); } class baz with foo { override def bar(): foo {} }")
       Processes.onLoad(res)
     })
   }
