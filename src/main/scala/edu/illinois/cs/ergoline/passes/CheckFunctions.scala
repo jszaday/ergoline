@@ -1,11 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.EirAccessibility.Private
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirMember}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, resolveToPair}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirResolvable
 
 object CheckFunctions {
 
@@ -21,26 +23,26 @@ object CheckFunctions {
     }
   }
 
-  private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[EirMember] = {
+  private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[(EirMember, EirType)] = {
     def seek(base: EirClassLike) = {
       Find.child[EirMember](base, withName(of.name)).collectFirst{
-        case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) => m
+        case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) =>
+          (m, CheckTypes.visit(ctx, f.returnType))
       }.orElse(overridesWithin(ctx, base, of))
     }
 
     val inherited = within.inherited.map(resolveToPair)
     inherited.flatMap {
       case (base, None) => seek(base)
-      case (base, Some(sp)) => {
+      case (base, Some(sp)) =>
         val spec = ctx.specialize(base, sp)
         val found = seek(base)
         ctx.leave(spec)
         found
-      }
     }.headOption
   }
 
-  def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[EirMember] = {
+  def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[(EirMember, EirType)] = {
     overridesWithin(ctx, member.base, assertValid[EirFunction](member.member))
   }
 
@@ -63,7 +65,15 @@ object CheckFunctions {
     val isOverride = member.exists(_.isOverride)
     val found = member.flatMap(seekOverrides(ctx, _))
     found match {
-      case Some(m) if !isOverride => Errors.expectedOverride(function, m)
+      case Some((m: EirMember, theirs: EirType)) =>
+        if (!isOverride) {
+          Errors.expectedOverride(function, m)
+        } else {
+          val ours = CheckTypes.visit(ctx, function.returnType)
+          if (!ours.canAssignTo(theirs)) {
+            Errors.incompatibleOverride(function, ours, theirs)
+          }
+        }
       case None if isOverride => Errors.doesNotOverride(function)
       case _ => // OK
     }

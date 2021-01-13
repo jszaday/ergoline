@@ -140,4 +140,9 @@ object Errors {
     Console.err.println(s"${contextualize(a)}: ${nameFor(a)} not marked override but overrides ${nameFor(b)}.")
     exitAction()
   }
+
+  def incompatibleOverride(f: EirFunction, a: EirType, b: EirType): Nothing = {
+    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} has an incompatible return type with overridden function (${nameFor(a)} vs. ${nameFor(b)}).")
+    exitAction()
+  }
 }
