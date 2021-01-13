@@ -49,7 +49,7 @@ object CheckFunctions {
     }
 
     overloads
-      .find(sharedArgs(ctx, function, _))
+      .filter(sharedArgs(ctx, function, _))
       .foreach(Errors.ambiguousOverload(function, _))
 
     val isOverride = member.exists(_.isOverride)

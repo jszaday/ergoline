@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.resolution
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.TypeCheckContext
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichBoolean, RichEirNode, RichIntOption, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited}
@@ -212,12 +212,23 @@ object Find {
     case _ => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  def accessibleMember(base : EirResolvable[EirType], name: String, ctx: EirNode): List[EirMember] = {
-    // TODO check parent classes as well!
-    child[EirMember](asClassLike(base), withName(name).and(ctx.canAccess(_))).toList
+  def resolveAccessor(ctx: TypeCheckContext, base: EirType,
+                      accessor: EirFieldAccessor): View[(EirMember, EirType)] = {
+    def helper(x: EirMember) = (x, CheckTypes.visit(ctx, x))
+    val cls = asClassLike(base)
+    val imm = accessibleMember(cls, accessor)
+    imm.map(helper) ++ {
+      sweepInherited(ctx, cls, other => {
+        // TODO filter if overridden?
+        resolveAccessor(ctx, other, accessor)
+      })
+    }
   }
 
-  def accessibleMember(base : EirResolvable[EirType], x : EirFieldAccessor): List[EirMember] = accessibleMember(base, x.field, x)
+  def accessibleMember(base : EirType, x : EirFieldAccessor): View[EirMember] = {
+    // TODO check parent classes as well!
+    child[EirMember](asClassLike(base), withName(x.field).and(x.canAccess(_)))
+  }
 
   def accessibleConstructor(base : EirNode, x : EirNew, mustBeConcrete: Boolean = false): List[EirMember] = {
     val c = base match {
@@ -237,13 +248,12 @@ object Find {
 
   }
 
-  def overloads(function: EirFunction): List[EirFunction] = {
+  def overloads(function: EirFunction): View[EirFunction] = {
     val member = function.parent.to[EirMember]
     val base = member.map(_.base).orElse(function.parent)
-    base.map(_.children
+    base.map(_.children.view
       .map(extractFunction)
-      .flatMap(_.find(child =>
-        (child.name == function.name) && child != function)).toList)
-      .getOrElse(Nil)
+      .flatMap(_.find(child => (child.name == function.name) && child != function)))
+      .getOrElse(View())
   }
 }
