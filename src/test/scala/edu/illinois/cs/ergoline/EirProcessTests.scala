@@ -5,6 +5,7 @@ import java.nio.file.{Files, Path, Paths}
 
 import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
 
 import scala.util.Properties
@@ -51,7 +52,7 @@ class EirProcessTests extends FunSuite {
       }
     }
     failures.foreach({
-      case (f, t) => throw new RuntimeException(s"failure on ${f.getName} due to $t")
+      case (f, t) => throw EirException(s"failure on ${f.getName} due to $t")
     })
   }
 }
