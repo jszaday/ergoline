@@ -52,19 +52,19 @@ object Find {
     node.children.view.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
   }
 
-  def namedChildren[T <: EirNamedNode](node: EirNode, name: String)(implicit tag: ClassTag[T]): Iterable[T] = {
-    node.children.collect{
+  private def firstNamedChild[T <: EirNamedNode](node: EirNode, name: String)(implicit tag: ClassTag[T]): Option[T] = {
+    node.children.view.collect{
       case n: EirNamedNode if n.name == name => n
     }.map{
       case r: EirResolvable[_] if !r.resolved => Find.uniqueResolution(r)
       case n => n
-    }.collect{
+    }.collectFirst{
       case t: T => t
     }
   }
 
-  def firstNamedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
-    node.flatMap(namedChildren[T](_, name).headOption)
+  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
+    node.flatMap(firstNamedChild[T](_, name))
       .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
   }
 
