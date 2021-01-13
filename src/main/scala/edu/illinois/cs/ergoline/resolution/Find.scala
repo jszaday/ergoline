@@ -284,28 +284,4 @@ object Find {
         (child.name == function.name) && child != function)).toList)
       .getOrElse(Nil)
   }
-
-  def inherited(classLike: EirClassLike, f: (EirClassLike, Option[EirSpecialization]) => Unit): Unit = {
-    classLike.inherited
-      .map(Find.uniqueResolution[EirType])
-      .foreach{
-        case t: EirTemplatedType =>
-          val base = assertValid[EirClassLike](Find.uniqueResolution(t.base))
-          f(base, Some(t))
-          inherited(base, f)
-        case t: EirClassLike =>
-          f(t, None)
-          inherited(t, f)
-        case _ => ???
-      }
-  }
-
-//  def overrides(member: EirMember): List[(EirMember, Option[EirSpecialization])] = {
-//    var members: List[(EirMember, Option[EirSpecialization])] = Nil
-//    inherited(member.base, (t, sp) => {
-//      val found = Find.child[EirMember](t, withName(member.name))
-//      members ++= found.zip(List.fill(found.size)(sp))
-//    })
-//    members
-//  }
 }

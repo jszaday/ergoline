@@ -36,4 +36,12 @@ class EirFunctionTests extends FunSuite {
       Processes.onLoad(res)
     })
   }
+
+  test("missing override fails") {
+    EirImportTests.setupEnv()
+    assertThrows[RuntimeException]({
+      val res = Modules.load("package foo; trait foo { def bar(); } class baz with foo { def bar() {} }")
+      Processes.onLoad(res)
+    })
+  }
 }

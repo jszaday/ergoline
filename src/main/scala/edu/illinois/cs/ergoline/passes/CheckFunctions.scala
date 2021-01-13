@@ -1,8 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirMember}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.Private
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirMember}
 import edu.illinois.cs.ergoline.resolution.Find
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, resolveToPair}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object CheckFunctions {
@@ -17,6 +19,29 @@ object CheckFunctions {
       val bs = CheckTypes.visit(ctx, b.functionArgs)
       CheckTypes.argumentsMatch(as, bs, exact = true)
     }
+  }
+
+  private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[EirMember] = {
+    def seek(base: EirClassLike) = {
+      Find.child[EirMember](base, withName(of.name)).collectFirst{
+        case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) => m
+      }.orElse(overridesWithin(ctx, base, of))
+    }
+
+    val inherited = within.inherited.map(resolveToPair)
+    inherited.flatMap {
+      case (base, None) => seek(base)
+      case (base, Some(sp)) => {
+        val spec = ctx.specialize(base, sp)
+        val found = seek(base)
+        ctx.leave(spec)
+        found
+      }
+    }.headOption
+  }
+
+  def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[EirMember] = {
+    overridesWithin(ctx, member.base, assertValid[EirFunction](member.member))
   }
 
   def visit(ctx: TypeCheckContext, function: EirFunction): Unit = {
@@ -34,6 +59,14 @@ object CheckFunctions {
     overloads
       .find(sharedArgs(ctx, function, _))
       .foreach(Errors.ambiguousOverload(function, _))
+
+    val isOverride = member.exists(_.isOverride)
+    val found = member.flatMap(seekOverrides(ctx, _))
+    found match {
+      case Some(m) if !isOverride => Errors.expectedOverride(function, m)
+      case None if isOverride => Errors.doesNotOverride(function)
+      case _ => // OK
+    }
 
     // TODO check if @entry outside of proxy?
   }

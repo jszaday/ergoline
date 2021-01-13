@@ -130,4 +130,14 @@ object Errors {
     Console.err.println(s"${contextualize(f)}: expected a body for function ${nameFor(f)}.")
     exitAction()
   }
+
+  def doesNotOverride(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} marked override but does not override anything.")
+    exitAction()
+  }
+
+  def expectedOverride(a: EirFunction, b: EirMember): Nothing = {
+    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} not marked override but overrides ${nameFor(b)}.")
+    exitAction()
+  }
 }

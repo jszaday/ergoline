@@ -24,6 +24,14 @@ package object util {
     m
   }
 
+  def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
+    Find.uniqueResolution(resolvable) match {
+      case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
+      case c: EirClassLike => (c, None)
+      case _ => ???
+    }
+  }
+
   def extractFunction(node: EirNode): Option[EirFunction] = {
     node match {
       case EirMember(_, f: EirFunction, _) => Some(f)
