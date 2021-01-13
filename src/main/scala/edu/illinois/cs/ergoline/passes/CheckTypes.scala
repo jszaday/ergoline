@@ -439,11 +439,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _ =>
 //    }
     val member = ctx.immediateAncestor[EirMember]
-    val opt = node.body.flatMap(_ => ctx.shouldCheck(node))
+    val proxy = member.flatMap(_.parent).to[EirProxy]
+    val opt = (proxy, node.body) match {
+      case (Some(_), None) => None
+      case _ => ctx.shouldCheck(node)
+    }
     opt.foreach(subCtx => {
       try {
-        ctx.start(subCtx)
         CheckFunctions.visit(ctx, node)
+        ctx.start(subCtx)
         val bodyType = node.body.map(visit(ctx, _))
         val retTy = visit(ctx, node.returnType)
         if (!bodyType.forall(_.canAssignTo(retTy))) {

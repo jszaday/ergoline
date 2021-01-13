@@ -11,5 +11,5 @@ class array<A> {
     def set(idx: int, value: A): unit;
     @system def size(): int;
 
-    def getOrNone(idx: int): option<A>;
+    @system def getOrNone(idx: int): option<A>;
 }

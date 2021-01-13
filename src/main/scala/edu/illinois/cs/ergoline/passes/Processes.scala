@@ -8,7 +8,11 @@ import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 
 object Processes {
-  private val ctx = new TypeCheckContext
+  private var ctx = new TypeCheckContext
+
+  def reset(): Unit = {
+    ctx = new TypeCheckContext
+  }
 
   var cppIncludes: Set[String] = Set(
     "algorithm",
