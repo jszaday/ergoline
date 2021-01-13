@@ -111,8 +111,38 @@ object Errors {
     exitAction()
   }
 
+  def ambiguousOverload(a: EirFunction, b: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} is potentially ambiguous with ${nameFor(b)}.")
+    exitAction()
+  }
+
   def cannotParse(tree: ParseTree): Nothing = {
     Console.err.println(s"could not parse $tree.")
+    exitAction()
+  }
+
+  def systemFnHasBody(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: system functions cannot have a body.")
+    exitAction()
+  }
+
+  def bodyLessFunction(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: expected a body for function ${nameFor(f)}.")
+    exitAction()
+  }
+
+  def doesNotOverride(f: EirFunction): Nothing = {
+    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} marked override but does not override anything.")
+    exitAction()
+  }
+
+  def expectedOverride(a: EirFunction, b: EirMember): Nothing = {
+    Console.err.println(s"${contextualize(a)}: ${nameFor(a)} not marked override but overrides ${nameFor(b)}.")
+    exitAction()
+  }
+
+  def incompatibleOverride(f: EirFunction, a: EirType, b: EirType): Nothing = {
+    Console.err.println(s"${contextualize(f)}: ${nameFor(f)} has an incompatible return type with overridden function (${nameFor(a)} vs. ${nameFor(b)}).")
     exitAction()
   }
 }

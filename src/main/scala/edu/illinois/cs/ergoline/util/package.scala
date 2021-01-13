@@ -24,6 +24,22 @@ package object util {
     m
   }
 
+  def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
+    Find.uniqueResolution(resolvable) match {
+      case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
+      case c: EirClassLike => (c, None)
+      case _ => ???
+    }
+  }
+
+  def extractFunction(node: EirNode): Option[EirFunction] = {
+    node match {
+      case EirMember(_, f: EirFunction, _) => Some(f)
+      case f: EirFunction => Some(f)
+      case _ => None
+    }
+  }
+
   def assertValid[T](value: EirNode)(implicit manifest: Manifest[T]): T = {
     Option(value) match {
       case Some(x: T) => x

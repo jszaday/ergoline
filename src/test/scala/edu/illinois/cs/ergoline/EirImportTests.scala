@@ -14,6 +14,7 @@ object EirImportTests{
     globals.strict = true
     Errors.exitAction = () => throw new RuntimeException("")
     EirGlobalNamespace.clear()
+    Processes.reset()
   }
 }
 
