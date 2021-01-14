@@ -8,8 +8,8 @@ As we march towards a usable compiler, several things need to be addressed.
 
 ## Code Generation
 
-* Ensure that Generated Classes are Correctly Ordered
-* Ensure that Names/Types are Correctly Qualified
+* ~~Ensure that Generated Classes are Correctly Ordered~~
+* Ensure that Names/Types are Correctly Qualified (50-70% done)
 * Generate Specialized Template Functions/Classes/Proxies.
 * Use heap-allocated memory only when necessary/use stack-allocated memory when possible.
     - May consider adding `@simple` annotation to denote when a type should always be stack-allocated.
@@ -23,13 +23,13 @@ As we march towards a usable compiler, several things need to be addressed.
 
 ## Correctness Checking
 
-* Check Overloads (compile to templated functions?)
-* Check Overrides Against Base Class
-    - Fail When Member Not Marked as Override
-    - Ensure Types Match
+* ~~Check Overloads (compile to templated functions?)~~
+* ~~Check Overrides Against Base Class~~
+    - ~~Fail When Member Not Marked as Override~~
+    - ~~Ensure Types Match~~
 * Check `@transient` Classes:
     - A class derived from a `@transient` class must be marked as such.
-    - A `@transient` type cannot be used as arguments for an entry method.
+    - ~~A `@transient` type cannot be used as arguments for an entry method.~~
     - Sub-classes must be marked as `@transient`.
 * Regarding staticness:
     - Check that `static` members can only access `static` members.
@@ -43,12 +43,12 @@ As we march towards a usable compiler, several things need to be addressed.
 * Add template parameter packs (a la C++, but must be non-empty. `unit` is used to denote "nothing")
 * Add support for partial/full specialization of functions/classes.
     - Currently considering something like: `class foo<A>` ... `class foo<int!>`
-* Add support for templated proxy types.
+* ~~Add support for templated proxy types.~~
 * Add support for custom array indices (e.g. `foo@array<int>`)
 * Use pattern matching for `for` loops and as lval's for assignments:
     - This will enable iterating with and assignment to multiple variables.
     - Use `std::tie` and `std::pair` for the generated code for added niceness.
-* Make lambdas and functions pup'able!
+* Make lambdas and functions pup'able! (Preliminarily... done! Need to figure out captures.)
 * Add a sophisticated containers/iterables layer (`foreach`, `filter`, etc.)
 * Add support for wrapping native iterators.
     - Transform map iterator's `first`/`second` to tuple elements.
@@ -58,7 +58,7 @@ As we march towards a usable compiler, several things need to be addressed.
 
 ## Things to Ruminate On
 
-* How should we support `null` pointers/uninitialized values?
+* How should we support `null` pointers/uninitialized values? If at all?
 * Should we add support for concepts? (i.e. high-level SFINAE)
 * Add support for lightweight/`@simple` classes?
     - Generate struct and inline function calls?
