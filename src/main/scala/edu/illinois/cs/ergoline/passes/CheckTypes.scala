@@ -487,6 +487,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
     val op = if (node.op == "!=") "==" else node.op
+    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
+    if (op == "&&" || op == "||") {
+      val (lhsTy, rhsTy) = (visit(ctx, node.lhs), visit(ctx, node.rhs))
+      val failure =
+        Option.when(!lhsTy.canAssignTo(boolTy))(lhsTy).orElse(
+          Option.when(!rhsTy.canAssignTo(boolTy))(rhsTy))
+      failure.foreach(Errors.unableToUnify(node, _, boolTy))
+      return boolTy
+    }
     val func = globals.operatorToFunction(op).getOrElse(Errors.unknownOperator(node, op))
     val f = makeMemberCall(node.lhs, func, List(node.rhs))
     node.disambiguation = Some(f)
@@ -494,7 +503,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (func == "compareTo") {
       val integer = globals.typeFor(EirLiteralTypes.Integer)
       if (retTy.canAssignTo(integer)) {
-        globals.typeFor(EirLiteralTypes.Boolean)
+        boolTy
       } else {
         Errors.cannotCast(node, retTy, integer)
       }

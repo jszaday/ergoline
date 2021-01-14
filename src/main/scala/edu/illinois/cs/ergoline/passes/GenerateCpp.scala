@@ -3,15 +3,14 @@ package edu.illinois.cs.ergoline.passes
 import java.io.File
 import java.nio.file.Paths
 
-import edu.illinois.cs.ergoline.ast.EirGlobalNamespace.parent
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirResolvable, RichEirType}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirResolvable, RichEirType, RichEirNode}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
@@ -21,6 +20,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
 
   object GenCppSyntax {
+    implicit class RichEirNode(self : EirNode) {
+      def isSystem: Boolean =
+        self.parent match {
+          case Some(m: EirMember) => m.isSystem
+          case _ => self.annotation("system").isDefined
+        }
+    }
+
     implicit class RichEirType(self : EirType) {
       def isPointer: Boolean = {
         self match {
@@ -554,30 +561,41 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitBinaryExpression(ctx: CodeGenerationContext, x: EirBinaryExpression): Unit = {
-    ctx << "(" << x.lhs << x.op << x.rhs << ")"
+    val target = x.disambiguation.collect {
+      case EirFunctionCall(_, f: EirFieldAccessor, _, _) => f.disambiguation
+    }.flatten
+    val isSystem = target.forall(_.isSystem)
+    ctx << Option.when(isSystem)("(") << x.lhs
+    if (isSystem) {
+      ctx << x.op
+    } else {
+      ctx << "->" << target.to[EirNamedNode].map(_.name) << "("
+    }
+    ctx << x.rhs << ")"
   }
 
-  def qualifiedNameFor(ctx: CodeGenerationContext, usage: EirNode, includeTemplates: Boolean = false)(of: EirNode): String = {
+  def qualifiedNameFor(ctx: CodeGenerationContext, _usage: EirNode, includeTemplates: Boolean = false)(of: EirNode): String = {
+    val usage = Some(_usage)
     val base = of match {
       case t: EirTemplatedType => Find.uniqueResolution(t.base)
       case _ => of
     }
     if (base.annotation("system").isDefined) {
-      return nameFor(ctx, of, includeTemplates)
+      return nameFor(ctx, of, includeTemplates, usage)
     }
-    val ours = Find.parentOf[EirNamespace](usage)
+    val ours = usage.flatMap(Find.parentOf[EirNamespace])
     val theirs = Find.parentOf[EirNamespace](base)
     val qualifications: Seq[String] = if (ours != theirs) {
       (theirs.get.name +: Find.ancestors(theirs.get).collect{
         case n: EirNamespace => n.name
       }).reverse
     } else Nil
-    (qualifications :+ nameFor(ctx, of, includeTemplates)).mkString("::")
+    (qualifications :+ nameFor(ctx, of, includeTemplates, usage)).mkString("::")
   }
 
-  def templateArgumentsToString(ctx: CodeGenerationContext, args: List[EirResolvable[EirType]]): String = {
+  def templateArgumentsToString(ctx: CodeGenerationContext, args: List[EirResolvable[EirType]], usage: Option[EirNode]): String = {
     "<" + {
-      args.map(Find.uniqueResolution[EirType]).map(ctx.typeFor(_)).mkString(", ")
+      args.map(Find.uniqueResolution[EirType]).map(ctx.typeFor(_, usage)).mkString(", ")
     } + ">"
   }
 
@@ -617,7 +635,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
   }
 
-  def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false): String = {
+  def nameFor(ctx: CodeGenerationContext, x : EirNode, includeTemplates: Boolean = false, usage : Option[EirNode] = None): String = {
     val alias =
       x.annotation("system").flatMap(_("alias")).map(_.stripped)
     val dealiased = alias.orElse(x match {
@@ -634,14 +652,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           selfName(ctx, s)
         } else {
           // TODO need to use FQN here, symbol is self-context providing
-          nameFor(ctx, Find.uniqueResolution(s), includeTemplates)
+          nameFor(ctx, Find.uniqueResolution(s), includeTemplates, usage.orElse(Some(s)))
         }
       case _ if proxy.isDefined => {
         val prefix =
           if (proxy.get.isElement) "CProxyElement_" else "CProxy_"
         val name = prefix + proxy.get.baseName
         x match {
-          case t: EirTemplatedType => name + templateArgumentsToString(ctx, t.args)
+          case t: EirTemplatedType => name + templateArgumentsToString(ctx, t.args, usage)
           case _ => name
         }
       }
@@ -655,14 +673,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case Some(t) => nameFor(ctx, t)
           case None => dealiased.get
         }
-      case x: EirTemplatedType => nameFor(ctx, Find.uniqueResolution(x.base)) + templateArgumentsToString(ctx, x.args)
+      case x: EirTemplatedType => {
+        nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
+      }
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
         val substDefined = subst.forall(_.isDefined)
         dealiased.get + (if (includeTemplates || substDefined) {
            "<" + {
-             if (substDefined) subst.map(x => nameFor(ctx, x.get))
-             else x.templateArgs.map(nameFor(ctx, _))
+             if (substDefined) subst.map(x => nameFor(ctx, x.get, usage=usage))
+             else x.templateArgs.map(nameFor(ctx, _, usage=usage))
            }.mkString(", ") + ">"
         } else "")
       case _: EirNamedNode => dealiased.get
