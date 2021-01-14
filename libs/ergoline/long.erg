@@ -2,6 +2,8 @@ package ergoline;
 
 @system(alias="std::int64_t")
 class long {
+    @system def plus(other: int): long;
+    
     @system def plus(other: long): long;
     @system def minus(other: long): long;
     @system def times(other: long): long;

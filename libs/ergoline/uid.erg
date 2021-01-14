@@ -7,16 +7,20 @@ class uid {
     static var lastCount: long;
 
     var pe: int;
-    var time: int;
-    var count: int;
+    var time: long;
+    var count: long;
 
     def uid() {
         // set our variables
         pe = ck::myPe();
         time = timestamp();
-        count = (time == lastTime) ? (lastCount + 1) : 0;
+        count = (time == lastTime) ? (lastCount + 1) : (0).toLong();
         // then update the static variables
         lastTime = time;
         lastCount = count;
+    }
+
+    def toString(): string {
+        return `${pe}:${time}:${count}`;
     }
 }

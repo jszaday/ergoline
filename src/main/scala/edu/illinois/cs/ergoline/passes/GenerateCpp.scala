@@ -159,6 +159,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val theirs: List[EirFunctionArgument] =
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>
+          // TODO why does this work?
           if (m.isStatic) f.functionArgs
           else f.functionArgs.drop(if (m.isConstructor && m.isEntry) 1 else 0)
         case Some(f: EirFunction) => f.functionArgs
@@ -342,7 +343,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      x.disambiguation.to[EirMember].foreach(ctx << selfFor(ctx, _) << "->")
+      val m = x.disambiguation.to[EirMember]
+      if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
     }
     ctx << nameFor(ctx, x)
   }
@@ -417,7 +419,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case ps => ps.map(nameFor(ctx, _)).map(_ + s"::pup($puper);")
       }
       val values = x.members.collect({
-        case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty => d
+        case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty && !m.isStatic => d
       }).flatMap(d => {
         pupperFor((ctx, x, puper))(nameFor(ctx, d), Find.uniqueResolution(d.declaredType))
       })
@@ -436,7 +438,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     // TODO combine with hash of parents
     val members = x.members.collect({
       // TODO should we consider transient or nah?
-      case m@EirMember(_, d: EirDeclaration, _) if m.annotation("hashExclude").isEmpty => d
+      case m@EirMember(_, d: EirDeclaration, _) if m.annotation("hashExclude").isEmpty && !m.isStatic => d
     })
     if (members.nonEmpty) {
       members.foreach(hasherFor(ctx, _, hasher))
@@ -458,6 +460,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
+    ctx << Option.when(x.isStatic)("static")
     visit(ctx, x.member)
   }
 

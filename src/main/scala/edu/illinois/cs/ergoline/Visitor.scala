@@ -214,6 +214,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       Option(ctx.accessModifier()).map(_.getText.capitalize)
         .map(EirAccessibility.withName).getOrElse(defaultMemberAccessibility)
     enter(EirMember(parent, null, modifier), (m: EirMember) => {
+      m.isStatic = ctx.StaticKwd() != null
       m.isOverride = ctx.OverrideKwd() != null
       Option(ctx.fieldDeclaration())
         .orElse(Option(ctx.topLevelStatement()))
