@@ -5,9 +5,9 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFunction, EirMember}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, resolveToPair}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirResolvable
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, sweepInheritedFirst}
 
 object CheckFunctions {
 
@@ -24,22 +24,12 @@ object CheckFunctions {
   }
 
   private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[(EirMember, EirType)] = {
-    def seek(base: EirClassLike) = {
+    sweepInheritedFirst(ctx, within, (base: EirClassLike) => {
       Find.child[EirMember](base, withName(of.name)).collectFirst{
         case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) =>
           (m, CheckTypes.visit(ctx, f.returnType))
       }.orElse(overridesWithin(ctx, base, of))
-    }
-
-    val inherited = within.inherited.map(resolveToPair)
-    inherited.flatMap {
-      case (base, None) => seek(base)
-      case (base, Some(sp)) =>
-        val spec = ctx.specialize(base, sp)
-        val found = seek(base)
-        ctx.leave(spec)
-        found
-    }.headOption
+    })
   }
 
   def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[(EirMember, EirType)] = {
@@ -59,7 +49,7 @@ object CheckFunctions {
     }
 
     overloads
-      .find(sharedArgs(ctx, function, _))
+      .filter(sharedArgs(ctx, function, _))
       .foreach(Errors.ambiguousOverload(function, _))
 
     val isOverride = member.exists(_.isOverride)

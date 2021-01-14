@@ -24,19 +24,19 @@ package object globals {
   )
 
   def iterableType: EirType = {
-    Find.firstNamedChild[EirClassLike](ergolineModule, "iterable")
+    Find.namedChild[EirClassLike](ergolineModule, "iterable")
   }
 
   def iteratorType: EirType = {
-    Find.firstNamedChild[EirClassLike](ergolineModule, "iterator")
+    Find.namedChild[EirClassLike](ergolineModule, "iterator")
   }
 
   def objectType: EirType = {
-    Find.firstNamedChild[EirClassLike](ergolineModule, "object")
+    Find.namedChild[EirClassLike](ergolineModule, "object")
   }
 
   def futureType: EirType = {
-    Find.firstNamedChild[EirClassLike](Modules("ck", EirGlobalNamespace), "future")
+    Find.namedChild[EirClassLike](Modules("ck", EirGlobalNamespace), "future")
   }
 
   def unitType: EirType = typeFor(EirLiteralTypes.Unit)

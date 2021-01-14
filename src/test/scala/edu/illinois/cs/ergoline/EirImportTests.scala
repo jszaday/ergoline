@@ -90,6 +90,17 @@ class EirImportTests extends FunSuite {
     Processes.onLoad(module)
   }
 
+  test("can access parent field") {
+    setupEnv()
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::int;
+      |class bar { protected val x: int = 42; }
+      |class foo extends bar { def getX(): int { return self.x; } }
+      |""".stripMargin)
+    Processes.onLoad(module)
+  }
+
   test("complex class relationships are correctly sorted and partitioned") {
     setupEnv()
     val module = Modules.load("""

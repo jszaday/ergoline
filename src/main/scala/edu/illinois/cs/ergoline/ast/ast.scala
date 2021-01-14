@@ -567,7 +567,7 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
 
   override def resolve(): Seq[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Find.fromSymbol[T](this)
+      _resolved = Find.fromSymbol[T](this).toSeq
     }
     _resolved
   }

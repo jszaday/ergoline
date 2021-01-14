@@ -1,12 +1,12 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Private, Protected}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.passes.TypeCheckContext
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import org.antlr.v4.runtime.ParserRuleContext
 
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.collection.View
 
 package object util {
 
@@ -29,6 +29,24 @@ package object util {
       case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
       case c: EirClassLike => (c, None)
       case _ => ???
+    }
+  }
+
+  // lazily sweep (immediately) inherited classes, applying specialization(s)
+  def sweepInheritedFirst[T](ctx: TypeCheckContext, base: EirClassLike,
+                        f: EirClassLike => Option[T]): Option[T] = {
+    sweepInherited(ctx, base, (a: EirClassLike) => f(a).view).headOption
+  }
+
+  def sweepInherited[T](ctx: TypeCheckContext, base: EirClassLike,
+                        f: EirClassLike => View[T]): View[T] = {
+    base.inherited.view.map(resolveToPair).flatMap {
+      case (a, None) => f(a)
+      case (a, Some(sp)) =>
+        val spec = ctx.specialize(a, sp)
+        val found = f(a)
+        ctx.leave(spec)
+        found
     }
   }
 
