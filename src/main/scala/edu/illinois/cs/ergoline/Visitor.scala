@@ -245,7 +245,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     val name = ctx.Identifier().getText
     val opts =
       ctx.annotationOptions().mapOrEmpty(_.annotationOption(), (ctx: AnnotationOptionContext) => {
-        (ctx.Identifier().getText, visitAs[EirLiteral](ctx.constant()))
+        (Option(ctx.Identifier()).getOrElse(ctx.StaticKwd()).getText, visitAs[EirLiteral](ctx.constant()))
       }).toMap
     EirAnnotation(name, opts)
   }

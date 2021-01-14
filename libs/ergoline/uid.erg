@@ -1,0 +1,22 @@
+package ergoline;
+
+import ck;
+
+class uid {
+    static var lastTime: long;
+    static var lastCount: long;
+
+    var pe: int;
+    var time: int;
+    var count: int;
+
+    def uid() {
+        // set our variables
+        pe = ck::myPe();
+        time = timestamp();
+        count = (time == lastTime) ? (lastCount + 1) : 0;
+        // then update the static variables
+        lastTime = time;
+        lastCount = count;
+    }
+}

@@ -3,6 +3,7 @@
 
 #include <memory>
 #include "hash.hpp"
+#include "util.hpp"
 #include "pup.h"
 
 namespace ergoline {
@@ -32,10 +33,6 @@ inline std::shared_ptr<PUP::able> to_pupable(const std::shared_ptr<T>& p) {
   std::shared_ptr<PUP::able> q = std::dynamic_pointer_cast<PUP::able>(p);
   if (p && !q) CkAbort("cannot cast %s to PUP::able", typeid(T).name());
   return q;
-}
-
-inline std::string bool_toString(const bool& b) {
-  return b ? "true" : "false";
 }
 
 }

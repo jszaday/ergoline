@@ -108,7 +108,7 @@ annotatedMember
     ;
 
 member
-    :   accessModifier? OverrideKwd? ( fieldDeclaration | topLevelStatement )
+    :   accessModifier? (OverrideKwd | StaticKwd)? ( fieldDeclaration | topLevelStatement )
     ;
 
 namespace
@@ -329,7 +329,7 @@ annotation
     ;
 
 annotationOption
-    :   Identifier Equals constant
+    :   (StaticKwd | Identifier) Equals constant
     ;
 
 annotationOptions
@@ -375,6 +375,7 @@ TraitKwd : 'trait';
 FunctionKwd : 'def';
 TrueKwd : 'true' ;
 FalseKwd : 'false' ;
+StaticKwd : 'static';
 
 SelfKeyword
     :   'self' (Atpersand | Element)?
