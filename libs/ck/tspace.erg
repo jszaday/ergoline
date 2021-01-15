@@ -8,10 +8,10 @@ class tspace<K, Vs...> {
     }
 
     def get(k: K): future<(K, Vs...)> {
-        return table.get(k);
+        return table[k];
     }
 
     def put(t: (K, Vs...)) {
-        table.set(t[0], t);
+        table[t[0]] = t;
     }
 }
