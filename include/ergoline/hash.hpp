@@ -257,4 +257,11 @@ std::size_t hash(const T&... args) {
 }
 }
 
+namespace PUP {
+template <class V, class T>
+inline void operator|(er& p, typename ergoline::hash_map<V, T>& m) {
+  PUP_stl_map<ergoline::hash_map<V, T>, V, T>(p, m);
+}
+}
+
 #endif
