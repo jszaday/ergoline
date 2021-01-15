@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
@@ -74,6 +74,17 @@ class TypeCheckContext {
       case t: EirTemplatedType => getTemplatedType(t)
       case _ => s
     }
+  }
+
+  private var _tuples: Map[List[EirType], EirTupleType] = Map()
+
+  def getTupleType(_ts: Iterable[EirType]): EirTupleType = {
+    val ts = _ts.toList
+    _tuples.getOrElse(ts, {
+      val u = EirTupleType(None, ts)
+      _tuples += (ts -> u)
+      u
+    })
   }
 
   def start(c: Context): Unit = _contexts.push(c)

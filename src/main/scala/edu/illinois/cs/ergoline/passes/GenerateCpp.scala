@@ -681,8 +681,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val substDefined = subst.forall(_.isDefined)
         dealiased.get + (if (includeTemplates || substDefined) {
            "<" + {
-             if (substDefined) subst.map(x => nameFor(ctx, x.get, usage=usage))
-             else x.templateArgs.map(nameFor(ctx, _, usage=usage))
+             val name = (x: EirType) => {
+               usage.map(qualifiedNameFor(ctx, _)(x)).getOrElse(nameFor(ctx, x))
+             }
+             if (substDefined) subst.flatten.map(name) else x.templateArgs.map(name)
            }.mkString(", ") + ">"
         } else "")
       case t: EirTupleType =>

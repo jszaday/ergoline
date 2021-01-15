@@ -688,7 +688,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
       case x => List(x)
     }
-    EirTupleType(None, visit(ctx, children).toList)
+    ctx.getTupleType(visit(ctx, children))
   }
 
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
