@@ -7,3 +7,6 @@ package ergoline;
 
 @system(alias = "ergoline::hash")
 def hash<A>(a: A): hashcode;
+
+@system(alias = "ergoline::timestamp")
+def timestamp(): long;

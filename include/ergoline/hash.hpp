@@ -8,13 +8,9 @@
 #include <type_traits>
 #include <unordered_map>
 #include "charm++.h"
+#include "object.hpp"
 
 namespace ergoline {
-
-struct hashable {
-  virtual std::size_t hash() = 0;
-};
-
 namespace hash_utils {
 
 template <bool B>
@@ -204,7 +200,7 @@ struct hash<std::tuple<Args...>> {
 }
 
 template <typename K, typename V>
-using hash_map = std::unordered_map<K, V, hash_utils::hash<K>>;
+using hash_map = std::unordered_map<K, V, hash_utils::hash<K>, equal_to<K>>;
 
 template <typename K, typename V>
 inline bool map_contains(const hash_map<K, V>& map, const K& k) {
@@ -258,6 +254,13 @@ std::size_t hash(const T&... args) {
   hasher h;
   (void)expander{0, (void(h | args), 0)...};
   return h.hash();
+}
+}
+
+namespace PUP {
+template <class V, class T>
+inline void operator|(er& p, typename ergoline::hash_map<V, T>& m) {
+  PUP_stl_map<ergoline::hash_map<V, T>, V, T>(p, m);
 }
 }
 

@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, nameFor, qualifiedNameFor, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
@@ -16,13 +17,20 @@ object GenerateDecls {
     node match {
       case x: EirNamespace => visitNamespace(ctx, x)
       case x: EirClassLike => visitClassLike(ctx, x)
-      case x: EirMember => visit(ctx, x.member)
+      case x: EirMember => visitMember(ctx, x)
       case x: EirFunction => visitFunction(ctx, x)
       case x: EirDeclaration => visitDeclaration(ctx, x)
       case x: EirFunctionArgument => GenerateCpp.visitFunctionArgument(ctx, x)
       case _: EirImport =>
       case _: EirFileSymbol =>
     }
+  }
+
+  def visitMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
+    ctx << Option.when(x.isStatic)({
+      if (x.member.isInstanceOf[EirDeclaration]) "thread_local static" else "static"
+    })
+    visit(ctx, x.member)
   }
 
   def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
@@ -58,6 +66,17 @@ object GenerateDecls {
         Nil
       }
     } << x.members << s"};"
+
+    x.members.collect {
+      case m@EirMember(_, d: EirDeclaration, _) if m.isStatic => m
+    }.foreach(outsideStaticDecl(ctx, _))
+  }
+
+  def outsideStaticDecl(ctx: CodeGenerationContext, m: EirMember): Unit = {
+    val decl: EirDeclaration = assertValid[EirDeclaration](m.member)
+    ctx << visitTemplateArgs(ctx, m.base.templateArgs)
+    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << nameFor(ctx, m.base, includeTemplates = true) << "::" << m.name
+    ctx << decl.initialValue.map(_ => "=") << decl.initialValue << ";"
   }
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =

@@ -8,8 +8,10 @@ package ergoline;
     @system def rem(other: int): int;
     @system def equals(other: int): bool;
     @system def compareTo(other: int): int;
-    @system(cast = true) def toDouble(): double;
 
-    @system(alias = "std::to_string", static = true)
+    @system(cast=true) def toDouble(): double;
+    @system(cast=true) def toLong(): long;
+
+    @system(alias="std::to_string",static=true)
     def toString(): string;
 }

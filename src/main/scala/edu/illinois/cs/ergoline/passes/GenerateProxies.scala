@@ -74,7 +74,7 @@ object GenerateProxies {
     val base = nameFor(ctx, x.base)
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
-    val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs) else ""
+    val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "{" << {
       ctx << "void pup(PUP::er &p)" << "{" << pupperFor((ctx, x, "p"))("impl_", x.base) << "}"; ()
     } << {

@@ -2,23 +2,19 @@
 #define __ERGOLINE_OBJECT_HPP__
 
 #include <memory>
-#include "hash.hpp"
-#include "pup.h"
+#include <charm++.h>
+#include "util.hpp"
 
 namespace ergoline {
+struct hashable {
+  virtual std::size_t hash() = 0;
+};
+
 struct object: public hashable {
   virtual bool equals(std::shared_ptr<object> other) {
     return this == other.get();
   }
 };
-
-template <typename T, typename U,
-          typename std::enable_if<std::is_base_of<object, T>::value &&
-                                  std::is_base_of<object, U>::value>::type>
-inline bool operator==(const std::shared_ptr<T> &t,
-                       const std::shared_ptr<U> &u) {
-  return (!t || !u) ? (t.get() == u.get()) : (t->equals(u));
-}
 
 template <typename T>
 inline std::shared_ptr<T> from_pupable(std::shared_ptr<PUP::able> p) {
@@ -34,10 +30,23 @@ inline std::shared_ptr<PUP::able> to_pupable(const std::shared_ptr<T>& p) {
   return q;
 }
 
-inline std::string bool_toString(const bool& b) {
-  return b ? "true" : "false";
-}
+template <class T, typename Enable = void>
+struct equal_to {
+  inline bool operator()(const T &lhs, const T &rhs) const {
+    return lhs == rhs;
+  }
+};
+
+template <class T>
+struct equal_to<std::shared_ptr<T>,
+                typename std::enable_if<std::is_base_of<object, T>::value>::type> {
+  inline bool operator()(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs) const {
+    return (!lhs || !rhs) ? (lhs == rhs) : (lhs->equals(rhs));
+  }
+};
 
 }
+
+#include "hash.hpp"
 
 #endif

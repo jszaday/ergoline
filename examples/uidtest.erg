@@ -1,0 +1,28 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class uidtest {
+    @entry def uidtest(args: array<string>) {
+        val n = 256;
+        val arr = new array<uid>(n);
+
+        for (var i = 0; i < n; i += 1) {
+            arr[i] = new uid();
+        }
+
+        for (var i = 0; i < n; i += 1) {
+            assert(arr[i].pe == ck::myPe());
+            assert(i == 0 || (arr[i - 1].time >= arr[i].time) || (arr[i - 1].count > arr[i].count));
+            for (var j = 0; j < n; j += 1) {
+                if (i != j && arr[i] == arr[j]) {
+                    abort("error: found matching uids!");
+                }
+            }
+        }
+
+        println("success: test(s) passed");
+        exit();
+    }
+}

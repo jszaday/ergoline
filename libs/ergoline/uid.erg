@@ -1,0 +1,35 @@
+package ergoline;
+
+import ck;
+
+// this is heavily inspired by: java.rmi.server.UID
+//
+// should be globally unique because of its use of the
+// Pe# and Pes, by their nature, may only make one
+// uid at a time
+class uid {
+    static var lastTime: long;
+    static var lastCount: long;
+
+    var pe: int;
+    var time: long;
+    var count: long;
+
+    def uid() {
+        // set our variables
+        pe = ck::myPe();
+        time = timestamp();
+        count = (time == lastTime) ? (lastCount + 1) : (0).toLong();
+        // then update the static variables
+        lastTime = time;
+        lastCount = count;
+    }
+
+    def toString(): string {
+        return `${pe}:${time}:${count}`;
+    }
+
+    def equals(other : uid): bool {
+        return (pe == other.pe) && (time == other.time) && (count == other.count);
+    }
+}
