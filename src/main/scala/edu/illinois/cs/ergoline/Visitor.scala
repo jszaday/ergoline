@@ -351,6 +351,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     ctx.typeList().toList.toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
+    if (ctx.Ellipses() != null) {
+      return EirPackExpansion(ctx.fqn.Identifier.toStringList)(parent)
+    }
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
     val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {

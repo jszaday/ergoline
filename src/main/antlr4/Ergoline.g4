@@ -88,7 +88,7 @@ templateDeclArg
     ;
 
 templateDecl
-    :   '<' (templateDeclArg ',')* templateDeclArg ellipses='...'? '>'
+    :   '<' (templateDeclArg ',')* templateDeclArg ellipses=Ellipses? '>'
     ;
 
 accessModifier
@@ -311,7 +311,8 @@ proxySuffix
     ;
 
 basicType
-    :   fqn specialization? proxySuffix?
+    :   fqn Ellipses
+    |   fqn specialization? proxySuffix?
     ;
 
 lambdaType
@@ -392,7 +393,7 @@ AndAssign: '&=';
 OrAssign: '|=';
 LeftShiftAssign: LeftShift Equals;
 RightShiftAssign: RightShift Equals;
-
+Ellipses: '...';
 
 Greater: '>' ;
 Less: '<' ;

@@ -685,6 +685,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
              else x.templateArgs.map(nameFor(ctx, _, usage=usage))
            }.mkString(", ") + ">"
         } else "")
+      case t: EirTupleType =>
+        s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode => dealiased.get
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result

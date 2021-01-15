@@ -15,7 +15,7 @@ object Errors {
   }
 
   def contextualize(n: EirNode): String =
-    n.location.map(_.toString).getOrElse(n.toString)
+    n.location.map(_.toString).getOrElse("???")
 
   def nameFor(n: EirNode): String = n match {
     case n: EirNamedNode => n.name
@@ -156,5 +156,9 @@ object Errors {
 
   def missingSuperConstructor(cons: EirMember): Nothing = {
     exit(format(cons, "%s must call super constructor", cons))
+  }
+
+  def expectedParameterPack(expansion: EirPackExpansion): Nothing = {
+    exit(format(expansion, "expected %s to be a parameter pack", expansion))
   }
 }
