@@ -262,6 +262,7 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
   extends EirType with EirNamedNode {
   var lowerBound: Option[EirResolvable[EirType]] = None
   var upperBound: Option[EirResolvable[EirType]] = None
+  var isPack: Boolean = false
 
   override def children: Iterable[EirNode] = Nil
 
@@ -753,6 +754,25 @@ case class EirInterpolatedString(var children: List[EirExpressionNode])(var pare
   }
   def append(s: String): Unit = append(EirLiteral(Some(this), EirLiteralTypes.String, s))
   def append(n: EirExpressionNode): Unit = children :+= n
+}
+
+case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode]) extends EirResolvable[EirType] {
+  private var _resolved: Option[EirTemplateArgument] = None
+
+  override def resolve(): Seq[EirType] = {
+    if (_resolved.isEmpty) {
+      val symbol = EirSymbol[EirNamedNode with EirType](parent, fqn)
+      _resolved = symbol.resolve().headOption.to[EirTemplateArgument]
+      if (!_resolved.forall(_.isPack)) {
+        Errors.expectedParameterPack(this)
+      }
+    }
+    _resolved.toSeq
+  }
+
+  override def resolved: Boolean = _resolved.isDefined
+  override def children: Iterable[EirNode] = Nil
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 }
 
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {

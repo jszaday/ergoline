@@ -1,25 +1,33 @@
 package examples;
 
 import ergoline::_;
+import ck;
 
 @main class main {
     @entry def main(args: array<string>) {
         val n = args.size() > 1 ? args[1].toInt() : 16;
-        val arrProxy: hello1d@array1d = new hello1d@array1d(n, n);
-        arrProxy[0].sayHi();
+        val ts = new ck::tspace<uid, int>(n);
+        val arrProxy: hello1d@array1d = new hello1d@array1d(n, n, ts);
+        val id = new uid();
+        arrProxy[0].sayHi(id);
+        ts.put((id, 0));
     }
 }
 
 class hello1d {
     val n: int;
+    val ts: ck::tspace<uid, int>;
 
-    @entry def hello1d(=n: int) { }
+    @entry def hello1d(=n: int, =ts: ck::tspace<uid, int>) {}
 
-    @entry def sayHi(): unit {
-        val next: int = self[@]index() + 1;
-        println(`hello #${next}`);
+    @threaded @entry def sayHi(a: uid): unit {
+        val t = await ts[a];
+        val next: int = t[1] + 1;
+        println(`[${self[@]index()}] sending a hello to ${next}~!`);
         if (next < n) {
-            self@[next].sayHi();
+            val b = new uid();
+            ts.put((b, next));
+            self@[next].sayHi(b);
         } else {
             exit();
         }

@@ -679,8 +679,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTupleType(ctx: TypeCheckContext, x: types.EirTupleType): EirType = {
-    x.children = x.children.map(visit(ctx, _))
-    x
+    val children = x.children.flatMap{
+      case x: EirPackExpansion =>
+        val found = x.resolve().headOption.getOrElse(Errors.unableToResolve(x))
+        visit(ctx, found) match {
+          case EirTupleType(_, ts) => ts
+          case t => List(t)
+        }
+      case x => List(x)
+    }
+    ctx.getTupleType(visit(ctx, children))
   }
 
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {

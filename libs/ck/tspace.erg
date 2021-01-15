@@ -1,0 +1,17 @@
+package ck;
+
+class tspace<K, Vs...> {
+    private val table: dht<K, (K, Vs...)>;
+
+    def tspace(n: int) {
+        table = new dht<K, (K, Vs...)>(n);
+    }
+
+    def get(k: K): future<(K, Vs...)> {
+        return table[k];
+    }
+
+    def put(t: (K, Vs...)) {
+        table[t[0]] = t;
+    }
+}

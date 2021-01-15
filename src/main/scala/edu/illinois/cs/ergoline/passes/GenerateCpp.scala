@@ -361,7 +361,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitTemplateArgument(ctx: CodeGenerationContext, x: EirTemplateArgument): Unit = {
-    ctx << s"typename ${nameFor(ctx, x)}"
+    ctx << s"typename ${x match {
+      case _ if x.isPack => s"... ${x.name}"
+      case _ => x.name
+    }}"
   }
 
   def visitInherits(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
@@ -669,10 +672,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         s"ergoline::function<${args.mkString(", ")}>"
       }
       case x: EirTemplateArgument =>
-        ctx.hasSubstitution(x) match {
+        (ctx.hasSubstitution(x) match {
           case Some(t) => nameFor(ctx, t)
           case None => dealiased.get
-        }
+        }) + (if (x.isPack) "..." else "")
       case x: EirTemplatedType => {
         nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
       }
@@ -681,10 +684,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val substDefined = subst.forall(_.isDefined)
         dealiased.get + (if (includeTemplates || substDefined) {
            "<" + {
-             if (substDefined) subst.map(x => nameFor(ctx, x.get, usage=usage))
-             else x.templateArgs.map(nameFor(ctx, _, usage=usage))
+             if (substDefined) subst.flatten.map(ctx.typeFor(_, usage)) else x.templateArgs.map(ctx.typeFor(_, usage))
            }.mkString(", ") + ">"
         } else "")
+      case t: EirTupleType =>
+        s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode => dealiased.get
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result

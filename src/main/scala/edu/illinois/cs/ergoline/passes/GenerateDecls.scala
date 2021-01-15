@@ -58,7 +58,7 @@ object GenerateDecls {
           .getOrElse("PUP::able")
         // TODO PUPable_decl_base_template
         List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
-        else s"PUPable_decl_inside_template(${nameFor(ctx, x)});",
+        else s"PUPable_decl_inside_template((${nameFor(ctx, x, includeTemplates = true)}));",
           s"${nameFor(ctx, x)}(CkMigrateMessage *m) : $parent(m) { }") ++
           Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
       } else {

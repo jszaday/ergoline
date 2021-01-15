@@ -198,9 +198,15 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     enter(node, (c: EirClassLike) => {
       c.isAbstract = c.isAbstract || ctx.AbstractKwd() != null
       Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
-      c.templateArgs = ctx.templateDecl().mapOrEmpty(_.templateDeclArg, visitAs[EirTemplateArgument])
+      c.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
       c.members = ctx.mapOrEmpty(_.annotatedMember, visitAs[EirMember])
     })
+  }
+
+  def visitTemplateDeclaration(ctx: TemplateDeclContext): List[EirTemplateArgument] = {
+    val list = ctx.mapOrEmpty(_.templateDeclArg, visitAs[EirTemplateArgument])
+    list.lastOption.foreach(_.isPack = Option(ctx).exists(_.ellipses != null))
+    list
   }
 
   override def visitAnnotatedMember(ctx: AnnotatedMemberContext): EirMember = {
@@ -253,7 +259,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, null), (f: EirFunction) => {
-      f.templateArgs = ctx.templateDecl().mapOrEmpty(_.templateDeclArg, visitTemplateDeclArg)
+      f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
       f.functionArgs = ctx.functionArgumentList.mapOrEmpty(_.functionArgument, visitFunctionArgument)
       f.returnType = Option(ctx.`type`())
         .map(visitAs[EirResolvable[EirType]](_))
@@ -345,6 +351,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     ctx.typeList().toList.toTupleType(parent)
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
+    if (ctx.Ellipses() != null) {
+      return EirPackExpansion(ctx.fqn.Identifier.toStringList)(parent)
+    }
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
     val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {
