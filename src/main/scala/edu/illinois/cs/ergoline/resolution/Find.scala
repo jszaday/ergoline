@@ -137,6 +137,8 @@ object Find {
       case x: EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
+      case x: EirImport =>
+        Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(matches(x))
       case x if !isTopLevel(x) => Option.when(matches(x))(true)
       case x => Some(matches(x))
     }

@@ -88,7 +88,7 @@ templateDeclArg
     ;
 
 templateDecl
-    :   '<' (templateDeclArg ',')* templateDeclArg '...'? '>'
+    :   '<' (templateDeclArg ',')* templateDeclArg ellipses='...'? '>'
     ;
 
 accessModifier

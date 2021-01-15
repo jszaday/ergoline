@@ -1,16 +1,34 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.CheckTypes.sharedBase
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
 
-
 class TypeCheckContext {
+  object TypeCheckSyntax {
+    implicit class RichEirSpecializable(specializable: EirSpecializable) {
+      def accepts(specialization: EirSpecialization): Boolean = {
+        // TODO eventually check upper/lower bounds
+        val (init, last) = (specializable.templateArgs.init, specializable.templateArgs.last)
+        def comparator(x: Int, y: Int): Boolean = if (last.isPack) x <= y else x == y
+        comparator(init.length + 1, specialization.specialization.length)
+      }
+
+      def sameAs(specialization: EirSpecialization): Boolean = {
+        val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
+        val theirs = Find.uniqueResolution[EirType](specialization.specialization)
+        ours.zip(theirs).forall(t => t._1 == t._2)
+      }
+    }
+  }
+
+  import TypeCheckSyntax.RichEirSpecializable
+
   type Context = (Option[EirClassLike], Option[EirSpecialization])
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
@@ -91,18 +109,16 @@ class TypeCheckContext {
   }
 
   def specialize(s : EirSpecializable): EirSpecialization = {
-    val sp = specialization
-      .find(_.specialization.length == s.templateArgs.length)
-      .getOrElse(Errors.missingSpecialization(s))
+    val sp = specialization.find(s.accepts(_)).getOrElse(Errors.missingSpecialization(s))
     specialize(s, sp)
   }
 
+
+
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    val ours = s.templateArgs.map(Find.uniqueResolution[EirType])
-    val theirs = sp.specialization.map(Find.uniqueResolution[EirType])
-    if (ours.length != theirs.length) {
+    if (!s.accepts(sp)) {
       Errors.missingSpecialization(s)
-    } else if (ours.zip(theirs).forall(t => t._1 == t._2)) {
+    } else if (s.sameAs(sp)) {
       null
     } else {
       // TODO this needs to substitute template arguments with
@@ -130,9 +146,20 @@ class TypeCheckContext {
 
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
+  def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {
+    val (init, last) = (s.templateArgs.init, s.templateArgs.last)
+    if (last.isPack) {
+      init.zip(sp.specialization) :+ {
+        (last, sp.specialization.slice(init.length, sp.specialization.length).toTupleType(None))
+      }
+    } else {
+      (init :+ last).zip(sp.specialization)
+    }
+  }
+
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {
     _substitutions.reverse.flatMap({
-      case (sable, stion) => sable.templateArgs.zip(stion.specialization)
+      case (s, sp) => templateZipArgs(s, sp)
     }).collectFirst({
       case (arg, ty) if arg == t => ty
     })
