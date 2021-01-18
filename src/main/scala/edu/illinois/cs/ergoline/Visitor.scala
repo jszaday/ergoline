@@ -289,7 +289,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
-  override def visitTemplateDefaultVal(ctx: TemplateDefaultValContext): EirNode = {
+  override def visitSpecializationElement(ctx: SpecializationElementContext): EirNode = {
     if (ctx.constant() != null) {
       enter(EirConstantFacade(null)(parent), (x: EirConstantFacade) => {
         x.value = visitAs[EirLiteral](ctx.constant())
@@ -306,7 +306,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       t.lowerBound = Option(ctx.lowerBound).map(visitAs[EirResolvable[EirType]])
       t.upperBound = Option(ctx.upperBound).map(visitAs[EirResolvable[EirType]])
       t.argumentType = Option(ctx.argTy).map(visitAs[EirResolvable[EirType]])
-      t.defaultValue = Option(ctx.templateDefaultVal()).map(visitAs[EirResolvable[EirType]])
+      t.defaultValue = Option(ctx.specializationElement()).map(visitAs[EirResolvable[EirType]])
       t.isPack = ctx.ellipses != null
     })
   }
@@ -590,11 +590,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       ctx.mapOrEmpty(_.`type`(), visitAs[EirResolvable[EirType]]) :+ {
         enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
           t.base = symbolizeType(ctx.fqn.Identifier())
-          t.args = ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+          t.args = ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
         })
       }
     } else {
-      ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+      ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
     }
   }
 

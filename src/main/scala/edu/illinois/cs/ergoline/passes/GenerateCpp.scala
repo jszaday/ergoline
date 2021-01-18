@@ -348,9 +348,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }).getOrElse("this")
   }
 
+  def asMember(x: Option[EirNode]): Option[EirMember] = {
+    x match {
+      case Some(m: EirMember) => Some(m)
+      case _ => x.flatMap(_.parent).to[EirMember]
+    }
+  }
+
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      val m = x.disambiguation.to[EirMember]
+      val m = asMember(x.disambiguation)
       if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
     }
     ctx << nameFor(ctx, x)

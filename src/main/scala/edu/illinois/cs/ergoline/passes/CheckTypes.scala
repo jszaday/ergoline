@@ -381,7 +381,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
     ctx.hasSubstitution(node) match {
-      case Some(x) => visit(ctx, x)
+      case Some(x) => x match {
+        case c: EirConstantFacade => c
+        case _ => visit(ctx, x)
+      }
       case _ => Errors.missingSpecialization(node)
     }
   }
@@ -767,11 +770,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {
-    x.resolve().headOption.flatMap{
-      case x: EirTemplateArgument =>
-        ctx.hasSubstitution(x).map(valueWithin(ctx, _))
-      case y: EirConstantFacade => Some(y.value)
-      case _ => None
+    x.resolve().headOption.map{
+      case y: EirConstantFacade => y.value
+      case x: EirTemplateArgument => valueWithin(ctx, visit(ctx, x))
+      case _ => ???
     }.getOrElse(Errors.unableToResolve(x))
   }
 

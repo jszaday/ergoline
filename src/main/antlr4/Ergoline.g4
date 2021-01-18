@@ -88,12 +88,8 @@ block
     :   '{' statement* '}'
     ;
 
-templateDefaultVal
-    :   '=' (constant | type)
-    ;
-
 templateDeclArg
-    :   name=Identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) templateDefaultVal?
+    :   name=Identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) ('=' specializationElement)?
     ;
 
 templateDecl
@@ -315,9 +311,18 @@ tupleType
     |   tupleType multiply='.*' constExpression
     ;
 
+specializationElement
+    :   type
+    |   constant
+    ;
+
+specTypeList
+    :   (specializationElement ',')* specializationElement
+    ;
+
 specialization
-    :   Less typeList Greater
-    |   Less (type ',')* fqn Less typeList LeftShift
+    :   Less specTypeList Greater
+    |   Less (type ',')* fqn Less specTypeList LeftShift
     ;
 
 proxySuffix
