@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirProxyType, EirTempl
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
@@ -531,11 +531,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
-  def isFinalDecl(lval : EirExpressionNode): Boolean = {
-    lval match {
+  def isInvalidFinalAssign(node : EirAssignment): Boolean = {
+    node.lval match {
       case s : EirSymbol[_] => Find.uniqueResolution(s) match {
-        case d : EirDeclaration => d.isFinal
-        case a : EirFunctionArgument => a.isFinal
+        case d : EirDeclaration => d.isFinal && {
+          !d.parent.to[EirMember].map(_.base).exists(x => {
+            Find.parentOf[EirMember](node)
+              .exists(m => m.base == x && m.isConstructor)
+          })
+        }
+        case a : EirFunctionArgument => true
         case _ => false
       }
       case _: EirArrayReference => false
@@ -548,10 +553,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val rval = visit(ctx, node.lval)
     if (!rval.canAssignTo(lval)) {
       Errors.cannotCast(node, lval, rval)
-    } else if (isFinalDecl(node.lval)) {
-      error(ctx, node, s"$rval cannot be assigned to final ${node.lval}")
+    } else if (isInvalidFinalAssign(node)) {
+      Errors.assignToVal(node)
     } else {
-      null
+      globals.unitType
     }
   }
 
@@ -755,5 +760,41 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }
     })
     globals.stringType
+  }
+
+  override def visitTypeAlias(ctx: TypeCheckContext, x: EirTypeAlias): EirType = {
+    visit(ctx, x.resolve().headOption.getOrElse(Errors.unableToResolve(x.value)))
+  }
+
+  def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {
+    x.resolve().headOption.flatMap{
+      case x: EirTemplateArgument =>
+        ctx.hasSubstitution(x).map(valueWithin(ctx, _))
+      case y: EirConstantFacade => Some(y.value)
+      case _ => None
+    }.getOrElse(Errors.unableToResolve(x))
+  }
+
+  def evaluateConstExpr(ctx: TypeCheckContext, expr: EirExpressionNode): EirLiteral = {
+    expr match {
+      case x: EirSymbol[_] => valueWithin(ctx, x)
+      case x: EirLiteral => x
+      case _ => ???
+    }
+  }
+
+  override def visitTupleMultiply(ctx: TypeCheckContext, multiply: types.EirTupleMultiply): EirType = {
+    val lhs = visit(ctx, multiply.lhs)
+    val rhs = evaluateConstExpr(ctx, multiply.rhs)
+    val intTy = EirLiteralTypes.Integer
+    if (rhs.`type` != intTy ) {
+      Errors.unableToUnify(multiply, visit(ctx, rhs), globals.typeFor(intTy))
+    } else {
+      rhs.toInt match {
+        case 0 => globals.unitType
+        case 1 => lhs
+        case n => ctx.getTupleType(List.fill(n)(lhs))
+      }
+    }
   }
 }

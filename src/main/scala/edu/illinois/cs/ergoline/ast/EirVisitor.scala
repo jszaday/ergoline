@@ -51,6 +51,7 @@ trait EirVisitor[Context, Value] {
       case x: EirIdentifierPattern => visitIdentifierPattern(ctx, x)
       case x: EirExpressionPattern => visitExpressionPattern(ctx, x)
       case x: EirInterpolatedString => visitInterpolatedString(ctx, x)
+      case x: EirTupleMultiply => visitTupleMultiply(ctx, x)
       case x: EirResolvable[_] if x.resolved => {
         val found = Find.uniqueResolution(x)
         if (found == x) error(ctx, found)
@@ -59,10 +60,14 @@ trait EirVisitor[Context, Value] {
       case x: EirAwait => visitAwait(ctx, x)
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)
+      case x: EirTypeAlias => visitTypeAlias(ctx, x)
       case x => error(ctx, x)
     }
   }
 
+  def visitTupleMultiply(context: Context, multiply: types.EirTupleMultiply): Value
+
+  def visitTypeAlias(ctx: Context, x: EirTypeAlias): Value
   def visitInterpolatedString(ctx: Context, x: EirInterpolatedString): Value
   def visitAwait(ctx: Context, x: EirAwait): Value
   def visitTupleType(ctx: Context, x: EirTupleType): Value

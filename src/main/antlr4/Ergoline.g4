@@ -10,6 +10,7 @@ annotatedTopLevelStatement
 
 topLevelStatement
     :   function
+    |   usingStatement
     |   importStatement
     |   classDeclaration
     ;
@@ -20,6 +21,10 @@ packageStatement
 
 importStatement
     :   'import' fqn ';'
+    ;
+
+usingStatement
+    :   'using' Identifier templateDecl? '=' type ';'
     ;
 
 statement
@@ -83,12 +88,16 @@ block
     :   '{' statement* '}'
     ;
 
+templateDefaultVal
+    :   '=' (constant | type)
+    ;
+
 templateDeclArg
-    :   Identifier ('<:' upperBound=type)? ('>:' lowerBound=type)?
+    :   name=Identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) templateDefaultVal?
     ;
 
 templateDecl
-    :   '<' (templateDeclArg ',')* templateDeclArg ellipses=Ellipses? '>'
+    :   '<' (templateDeclArg ',')* templateDeclArg '>'
     ;
 
 accessModifier
@@ -296,8 +305,14 @@ typeList
     :   (type ',')* type
     ;
 
+constExpression
+    :   constant
+    |   fqn
+    ;
+
 tupleType
     :   '(' typeList ')'
+    |   tupleType multiply='.*' constExpression
     ;
 
 specialization

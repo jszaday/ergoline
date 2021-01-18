@@ -1089,4 +1089,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     ctx << ")"
   }
+
+  override def visitTypeAlias(ctx: CodeGenerationContext, x: EirTypeAlias): Unit = ()
+
+  override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = {
+    ???
+  }
 }

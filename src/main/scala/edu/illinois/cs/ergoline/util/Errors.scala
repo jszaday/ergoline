@@ -43,6 +43,10 @@ object Errors {
     exitAction = (s: String) => throw EirException(s)
   }
 
+  def assignToVal(node: EirAssignment): Nothing = {
+    exit(format(node, "assignment to val (%s)", node.lval))
+  }
+
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
     exit(format(ctx, "%s cannot be cast to %s", a, b))
   }
@@ -119,7 +123,7 @@ object Errors {
   }
 
   def cannotParse(tree: ParseTree): Nothing = {
-    exit(format(null, "could not parse %s", tree))
+    exit(format(null, "could not parse %s (a(n) %s)", tree.getText, tree.getClass.getName))
   }
 
   def systemFnHasBody(f: EirFunction): Nothing = {

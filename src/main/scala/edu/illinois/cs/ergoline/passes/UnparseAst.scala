@@ -308,4 +308,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case x => "${" + visit(ctx, x) + "}"
     } mkString "") + "`"
   }
+
+  override def visitTypeAlias(ctx: UnparseContext, x: EirTypeAlias): String = ???
+
+  override def visitTupleMultiply(context: UnparseContext, multiply: EirTupleMultiply): String = ???
 }

@@ -21,6 +21,11 @@ package object types {
     }
   }
 
+  case class EirTupleMultiply(var lhs: EirResolvable[EirType], var rhs: EirExpressionNode)(var parent: Option[EirNode]) extends EirType {
+    override def children: Iterable[EirNode] = List(lhs, rhs)
+    override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  }
+
   case class EirLambdaType(var parent: Option[EirNode],
                            var from: List[EirResolvable[EirType]], var to: EirResolvable[EirType],
                            var templateArgs: List[EirTemplateArgument] = Nil) extends EirType with EirSpecializable {
