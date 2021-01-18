@@ -90,8 +90,8 @@ object Errors {
     exit(format(nodes.head, "cannot use %s as indices for %s", nodes, tuple))
   }
 
-  def invalidConstExpr(expr: EirExpressionNode): Nothing = {
-    exit(format(expr, "could not statically determine the value of `%s`"))
+  def invalidConstExpr(expr: EirNode): Nothing = {
+    exit(format(expr, "could not statically determine the value of `%s`", expr))
   }
 
   def missingNamespace(node: EirNode): Nothing = {

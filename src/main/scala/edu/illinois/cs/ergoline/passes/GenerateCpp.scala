@@ -151,18 +151,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
+  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
     val theirs = t._2.declaredType.resolve().headOption
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
       case (Some(a), Some(b)) if isEntryArgument(t._2) =>
-        castToPuppable(ctx, t._1, a, b)
+        ctx << castToPuppable(ctx, t._1, a, b)
       case _ => ctx << t._1
     }
   }
 
-  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): Unit = {
+  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): CodeGenerationContext = {
     val theirs: List[EirFunctionArgument] =
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>
@@ -172,16 +172,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case Some(f: EirFunction) => f.functionArgs
         case _ => Nil
       }
+
     if (theirs.length == args.length) {
       val zipped = args.zip(theirs)
+
       if (zipped.nonEmpty) {
         zipped.init.foreach(pair => {
           visitCallArgument(ctx)(pair)
           ctx << ","
         })
-        visitCallArgument(ctx)(zipped.last)
-      }
 
+        visitCallArgument(ctx)(zipped.last)
+      } else {
+        ctx
+      }
     } else {
       ctx << (args, ",")
     }
@@ -841,6 +845,40 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "};"
   }
 
+  def isArray(t: EirResolvable[EirType]): Boolean = {
+    Find.asClassLike(t) match {
+      case c: EirClass =>
+        c.name == "array" && c.parent == globals.ergolineModule
+      case _ => false
+    }
+  }
+
+  def arrayDim(ctx: CodeGenerationContext, t: EirType): Option[Int] = {
+    Find.uniqueResolution(t) match {
+      case t: EirTemplatedType if isArray(t.base) => {
+        t.args match {
+          case _ +: Nil => Some(1)
+          case _ +: t +: Nil => Some(ctx.eval2const(t).toInt)
+          case _ => None
+        }
+      }
+      case _ => None
+    }
+  }
+
+  def arrayElementType(t: EirType): EirResolvable[EirType] = {
+    t match {
+      case t: EirTemplatedType => t.args.head
+      case _ => ???
+    }
+  }
+
+  def explode(args: List[EirExpressionNode]): List[EirExpressionNode] = {
+    args.headOption.collect{
+      case x: EirTupleExpression => x.expressions
+    }.getOrElse(???)
+  }
+
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
     val objTy: EirType = Find.uniqueResolution(x.target)
     val proxy = ProxyManager.asProxy(objTy)
@@ -851,9 +889,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     objTy match {
       case _ if proxy.isDefined =>
-        ctx << qualifiedNameFor(ctx, x)(objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << qualifiedNameFor(ctx, x)(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case _ => ctx << "new" << ctx.typeFor(objTy, Some(x))  << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+        ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+      case t: EirType if t.isPointer =>
+        ctx << "std::make_shared<" << ctx.nameFor(objTy, Some(x)) << ">("
+        if (isArray(t)) {
+          val ndim = arrayDim(ctx, t)
+          if (ndim.exists(_ > 1)) ctx << "std::make_pair("
+          ctx << args << ","
+          // TODO once argument exploding is adding, refactor explode(...) -> ...
+          ctx << "std::vector<" << ctx.typeFor(arrayElementType(t), Some(x)) << ">(" << (explode(args), "*") << ")"
+          if (ndim.exists(_ > 1)) ctx << ")"
+        } else {
+          visitArguments(ctx)(x.disambiguation, args)
+        }
+        ctx<< ")"
+      case _ => ctx << "new" << ctx.typeFor(objTy, Some(x)) << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
     }
   }
 

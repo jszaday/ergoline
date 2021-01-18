@@ -1,8 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
+import edu.illinois.cs.ergoline.ast.{EirConstantFacade, EirExpressionNode, EirLiteral, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.arrayDim
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -43,6 +44,13 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def typeContext: TypeCheckContext = new TypeCheckContext
 
+  def eval2const(n: EirNode): EirLiteral = n match {
+    case e: EirExpressionNode => CheckTypes.evaluateConstExpr(typeContext, e)
+    case c: EirConstantFacade => c.value
+    case r: EirResolvable[_] => eval2const(Find.uniqueResolution(r))
+    case _ => Errors.invalidConstExpr(n)
+  }
+
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
     _substitutions += (s -> sp)
     sp
@@ -64,35 +72,32 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def ignoreNext(s: String): Unit = ignores.push(s)
 
-  def nameFor(node: EirNode): Unit = {
-    this << GenerateCpp.nameFor(this, node)
+  def nameFor(node: EirNode, usage: Option[EirNode] = None): String = {
+    usage
+      .map(GenerateCpp.qualifiedNameFor(this, _)(node))
+      .getOrElse(GenerateCpp.nameFor(this, node))
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
     Find.uniqueResolution[EirNode](x) match {
-      case t: EirTemplateArgument =>
-        ctx.map(GenerateCpp.qualifiedNameFor(this, _)(t))
-           .getOrElse(GenerateCpp.nameFor(this, t))
-      case t: EirType => typeFor(t, if (ctx.isEmpty) Some(x) else ctx)
+      case t: EirTemplateArgument => nameFor(t, ctx)
+      case t: EirType => typeFor(t, ctx)
       case n: EirNode => Errors.incorrectType(n, classOf[EirType])
     }
   }
 
   def typeFor(x: EirType, ctx: Option[EirNode]): String = {
     x match {
-      case t: EirTupleType =>
-        "std::tuple<" + t.children.map(typeFor(_, ctx)).mkString(", ") + ">"
-      case _ =>
-        val name = ctx
-          .map(GenerateCpp.qualifiedNameFor(this, _)(x))
-          .getOrElse(GenerateCpp.nameFor(this, x))
-        if (x.isPointer) "std::shared_ptr<" + name + ">" else name
+      case t: EirTupleType => s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
+      case _ => (if (x.isPointer) "std::shared_ptr<%s>" else "%s").format(nameFor(x, ctx))
     }
   }
 
   def appendSemi(): Unit = {
     if (current.nonEmpty && !current.endsWith(";")) this << ";"
   }
+
+  def <<(ctx: CodeGenerationContext): CodeGenerationContext = ctx
 
   def <<(node: EirNode)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
     visitor(this, node)
