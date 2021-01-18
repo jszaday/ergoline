@@ -956,12 +956,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .flatMap(ProxyManager.asProxy)
       .flatMap(x => if (!x.isElement) x.collective else None)
     ty match {
-      case Some(_ : EirTupleType) =>
-        val args = arrayRef.args
-        if (args.length != 1 && !args.head.isInstanceOf[EirLiteral]) {
-          Errors.invalidTupleIndices(args)
-        } else {
-          ctx << s"std::get<" << args.head << ">(" << arrayRef.target << ")"
+      case Some(tty : EirTupleType) =>
+        val arg = arrayRef.args.headOption.map(CheckTypes.evaluateConstExpr(ctx.typeContext, _))
+        arg match {
+          case Some(x) => ctx << s"std::get<" << x << ">(" << arrayRef.target << ")"
+          case None => Errors.invalidTupleIndices(tty, arrayRef.args)
         }
       case Some(_) if collective.exists(_.startsWith("array")) =>
         ctx << arrayRef.target << "(" << (arrayRef.args, ",") << ")"

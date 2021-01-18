@@ -86,8 +86,12 @@ object Errors {
     exit(format(target, "%s is not accessible within %s", target, usage))
   }
 
-  def invalidTupleIndices(nodes: Iterable[EirNode]): Nothing = {
-    exit(format(nodes.head, "%s are not valid tuple indices", nodes mkString ", "))
+  def invalidTupleIndices(tuple: EirTupleType, nodes: Iterable[EirNode]): Nothing = {
+    exit(format(nodes.head, "cannot use %s as indices for %s", nodes, tuple))
+  }
+
+  def invalidConstExpr(expr: EirExpressionNode): Nothing = {
+    exit(format(expr, "could not statically determine the value of `%s`"))
   }
 
   def missingNamespace(node: EirNode): Nothing = {

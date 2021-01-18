@@ -44,22 +44,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // TODO this is redundant, can we maybe return nothing?
       //      (it gets visited in visitAssignment again)
       visit(ctx, assignment.get.rval)
-    } else if (targetType.isInstanceOf[EirTupleType]) {
-      val argType = Option.when(x.args.length == 1)(visit(ctx, x.args.head))
-      val integer = globals.typeFor(EirLiteralTypes.Integer)
-      if (!argType.exists(_.canAssignTo(integer))) {
-        Errors.invalidTupleIndices(x.args)
-      } else {
-        val targetTypes = targetType.asInstanceOf[EirTupleType].children.map(visit(ctx, _))
-        x.args.head match {
-          case l: EirLiteral => targetTypes(l.toInt)
-          case _ => Find.unionType(targetTypes).getOrElse(Errors.unableToUnify(x, targetTypes))
+    } else targetType match {
+      case tupleType: EirTupleType =>
+        val lit = Option.when(x.args.length == 1)(x.args.head).map(evaluateConstExpr(ctx, _))
+        val idx = lit.collect { case x if x.`type` == EirLiteralTypes.Integer => x.toInt }
+        if (idx.exists(_ < tupleType.children.length)) {
+          visit(ctx, tupleType.children(idx.get))
+        } else {
+          Errors.invalidTupleIndices(tupleType, x.args)
         }
-      }
-    } else {
-      val f = generateLval(x)
-      x.disambiguation = Some(f)
-      visit(ctx, f)
+      case _ =>
+        val f = generateLval(x)
+        x.disambiguation = Some(f)
+        visit(ctx, f)
     }
   }
 
@@ -682,7 +679,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     ctx.goal.pushAll(theirs.reverse)
     val ours = x.patterns.map(visit(ctx, _))
-    if (ours.length != theirs.length) Errors.invalidTupleIndices(theirs)
+    if (ours.length != theirs.length) Errors.invalidTupleIndices(EirTupleType(None, theirs), ours)
     else null
   }
 
@@ -781,7 +778,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     expr match {
       case x: EirSymbol[_] => valueWithin(ctx, x)
       case x: EirLiteral => x
-      case _ => ???
+      case _ => Errors.invalidConstExpr(expr)
     }
   }
 

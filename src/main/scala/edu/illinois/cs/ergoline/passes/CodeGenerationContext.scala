@@ -41,6 +41,8 @@ class CodeGenerationContext(val language: String = "cpp") {
     subCtx
   }
 
+  def typeContext: TypeCheckContext = new TypeCheckContext
+
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
     _substitutions += (s -> sp)
     sp
