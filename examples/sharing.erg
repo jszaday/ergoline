@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    val count: int = 0;
+    var count: int = 0;
     val n: int;
 
     @entry def main() {

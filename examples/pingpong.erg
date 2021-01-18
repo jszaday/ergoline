@@ -50,7 +50,7 @@ class pingpong {
 }
 
 @main class main {
-    val count: int = 0;
+    var count: int = 0;
 
     @entry def main(args: array<string>) {
         new pingpong@group(self@);
