@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
@@ -217,11 +218,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     }
   }
 
-  def visitSpecialization(ctx : UnparseContext, s : EirSpecialization): String = {
-    if (s.specialization.isEmpty) {
-      ""
-    } else {
-      s"<${s.specialization.map(nameFor(ctx, _)) mkString ", "}>"
+  def visitSpecialization(ctx : UnparseContext, s : EirSpecialization): String = visitSpecialization(ctx, s.specialization)
+
+  def visitSpecialization(ctx : UnparseContext, lst : List[EirResolvable[EirType]]): String = {
+    lst match {
+      case Nil => ""
+      case _ => s"<${lst.map(nameFor(ctx, _)) mkString ", "}>"
     }
   }
 
@@ -309,7 +311,13 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     } mkString "") + "`"
   }
 
-  override def visitTypeAlias(ctx: UnparseContext, x: EirTypeAlias): String = ???
+  override def visitTypeAlias(ctx: UnparseContext, x: EirTypeAlias): String = {
+    s"using ${x.name}${visitSpecialization(ctx, x.templateArgs)} = ${visit(ctx, x.value)};"
+  }
 
-  override def visitTupleMultiply(context: UnparseContext, multiply: EirTupleMultiply): String = ???
+  override def visitTupleMultiply(ctx: UnparseContext, multiply: EirTupleMultiply): String = {
+    s"s${nameFor(ctx, multiply.lhs)} .* ${visit(ctx, multiply)}"
+  }
+
+  override def visitConstantFacade(context: UnparseContext, facade: EirConstantFacade): String = visit(context, facade.value)
 }

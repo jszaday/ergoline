@@ -697,6 +697,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t: EirTupleType =>
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode => dealiased.get
+      case s: EirConstantFacade => s.value.value
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -1101,4 +1102,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = {
     ???
   }
+
+  override def visitConstantFacade(context: CodeGenerationContext, facade: EirConstantFacade): Unit = visit(context, facade.value)
 }

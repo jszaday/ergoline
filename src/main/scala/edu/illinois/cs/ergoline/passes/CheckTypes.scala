@@ -376,10 +376,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
     ctx.hasSubstitution(node) match {
-      case Some(x) => x match {
-        case c: EirConstantFacade => c
-        case _ => visit(ctx, x)
-      }
+      case Some(x) => visit(ctx, x)
       case _ => Errors.missingSpecialization(node)
     }
   }
@@ -794,4 +791,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }
     }
   }
+
+  override def visitConstantFacade(context: TypeCheckContext, facade: EirConstantFacade): EirType = facade
 }
