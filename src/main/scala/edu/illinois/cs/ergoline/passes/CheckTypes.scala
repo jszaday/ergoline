@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Private,
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirProxyType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
@@ -184,10 +185,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   @tailrec
   def targetsSelf(a: EirMember, node: EirExpressionNode): Boolean = node match {
-    case s: EirSymbol[_] => isSelf(s) || s.disambiguation.collect({
-      case b: EirMember => sharedBase(a, b)
-      case n: EirNode => n.parent.to[EirMember].exists(sharedBase(a, _))
-    }).getOrElse(false)
+    case s: EirSymbol[_] => isSelf(s) || asMember(s.disambiguation).exists(sharedBase(a, _))
     case f: EirFieldAccessor => targetsSelf(a, f.target)
     case p: EirPostfixExpression => targetsSelf(a, p.target)
     case _ => false
@@ -319,7 +317,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     value.disambiguation = found
     val retTy = found.map(visit(ctx, _))
     prevFc
-      .zip(found.collect({case m: EirMember => m}))
+      .zip(asMember(found))
       .foreach(x => validate(ctx, x._2, x._1))
     retTy.getOrElse(self match {
       case Some(_) => throw MissingSelfException(value)
