@@ -290,15 +290,12 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitTemplateDefaultVal(ctx: TemplateDefaultValContext): EirNode = {
-    val arg = parent.to[EirTemplateArgument]
     if (ctx.constant() != null) {
-      val lit = visitAs[EirLiteral](ctx.constant())
-      arg.foreach(_.defaultValue = Some(Right(lit)))
-      lit
+      enter(EirConstantFacade(null)(parent), (x: EirConstantFacade) => {
+        x.value = visitAs[EirLiteral](ctx.constant())
+      })
     } else if (ctx.`type`() != null) {
-      val ty = visitAs[EirResolvable[EirType]](ctx.`type`())
-      arg.foreach(_.defaultValue = Some(Left(ty)))
-      ty
+      visitAs[EirResolvable[EirType]](ctx.`type`())
     } else {
       ???
     }
@@ -309,7 +306,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       t.lowerBound = Option(ctx.lowerBound).map(visitAs[EirResolvable[EirType]])
       t.upperBound = Option(ctx.upperBound).map(visitAs[EirResolvable[EirType]])
       t.argumentType = Option(ctx.argTy).map(visitAs[EirResolvable[EirType]])
-      Option(ctx.templateDefaultVal()).map(visit)
+      t.defaultValue = Option(ctx.templateDefaultVal()).map(visitAs[EirResolvable[EirType]])
       t.isPack = ctx.ellipses != null
     })
   }

@@ -262,7 +262,7 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
   extends EirType with EirNamedNode {
   var lowerBound: Option[EirResolvable[EirType]] = None
   var upperBound: Option[EirResolvable[EirType]] = None
-  var defaultValue: Option[Either[EirResolvable[EirType], EirLiteral]] = None
+  var defaultValue: Option[EirResolvable[EirType]] = None
   var argumentType: Option[EirResolvable[EirType]] = None
   var isPack: Boolean = false
 

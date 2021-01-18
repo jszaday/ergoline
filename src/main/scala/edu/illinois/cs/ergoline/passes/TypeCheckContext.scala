@@ -177,18 +177,12 @@ class TypeCheckContext {
 
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
-  def getDefaultValue(s: EirTemplateArgument): EirResolvable[EirType] = {
-    s.defaultValue match {
-      case Some(Left(t)) => t
-      case Some(Right(t)) => EirConstantFacade(t)(None)
-      case _ => Errors.missingType(s)
-    }
-  }
-
   def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {
     if (sp.specialization.length < s.templateArgs.length) {
       s.templateArgs.zip(sp.specialization ++ {
-        s.templateArgs.slice(sp.specialization.length, s.templateArgs.length).map(getDefaultValue)
+        s.templateArgs.slice(sp.specialization.length, s.templateArgs.length).map(x => {
+          x.defaultValue.getOrElse(Errors.missingType(x))
+        })
       })
     } else {
       val (init, last) = (s.templateArgs.init, s.templateArgs.last)
