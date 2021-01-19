@@ -11,6 +11,8 @@ trait EirVisitor[Context, Value] {
 
   def visit(ctx: Context, it: Iterable[EirNode]): Iterable[Value] = it.map(visit(ctx, _))
 
+  def visit(ctx: Context, it: List[EirNode]): List[Value] = it.map(visit(ctx, _))
+
   def visit(ctx: Context, node: EirNode): Value = {
     node match {
       case x: EirSpecializedSymbol => visitSpecializedSymbol(ctx, x)

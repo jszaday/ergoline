@@ -4,9 +4,9 @@ import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLitera
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{nameFor, pupperFor, qualifiedNameFor, temporary, visitFunctionBody}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{arrayDim, arrayElementType, containsArray, isArray, nameFor, pupperFor, qualifiedNameFor, temporary, visitFunctionBody}
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
@@ -84,9 +84,11 @@ object GenerateProxies {
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
-    ctx << s"auto $name = std::make_shared<std::vector<std::string>>(msg->argc);" <<
-      s"std::transform(msg->argv, msg->argv + msg->argc, $name->begin()," <<
+    ctx << s"std::vector<std::string> tmp(msg->argc);" <<
+      s"std::transform(msg->argv, msg->argv + msg->argc, tmp.begin()," <<
       "[](const char* x) -> std::string { return std::string(x); });"
+    ctx << "auto" << name << "=" << "std::make_shared<std::pair<int, std::shared_ptr<std::string>>>(std::make_pair((int)tmp.size(),"
+    ctx << "std::shared_ptr<std::string>(std::shared_ptr<std::string>{}, tmp.data())));"
   }
 
   def makePointerRhs(ctx: (CodeGenerationContext, EirNode))(current: String, expected: EirType): String = {
@@ -106,7 +108,11 @@ object GenerateProxies {
 
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
-    if (needsCasting(ty)) {
+    if (containsArray(ctx, ty)) {
+      ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
+        unflattenArgument((ctx, x), x.name, ty)
+      } << ";"
+    } else if (needsCasting(ty)) {
       ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
         makePointerRhs((ctx, x))(s"${x.name}_", ty)
       } << ";"
@@ -124,10 +130,50 @@ object GenerateProxies {
     }
   }
 
+  private def arraySizes(ctx: CodeGenerationContext, name: String, t: EirType): List[String] = {
+    val nd = arrayDim(ctx, t).getOrElse(???)
+    (0 until nd).map(name + "_sz" + _).toList
+  }
+
+  def flattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
+    ty match {
+      case t: EirTupleType if containsArray(ctx._1, t) => t.children.zipWithIndex.map {
+        case (ty, idx) => flattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
+      } mkString ", "
+      case t if isArray(ctx._1, t) =>
+        val names = arraySizes(ctx._1, name, ty)
+        names.map("int " + _).mkString(", ") + s", ${GenerateCpp.typeForEntryArgument(ctx)(arrayElementType(t))}" + {
+          if (ctx._1.language == "ci") s" ${name}_arr[${names mkString " * "}]"
+          else s"* ${name}_arr"
+        }
+      case _ => s"${GenerateCpp.typeForEntryArgument(ctx)(ty)} $name"
+    }
+  }
+
+  def unflattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
+    ty match {
+      case t: EirTupleType if containsArray(ctx._1, t) =>
+        s"std::make_tuple(${t.children.zipWithIndex.map {
+          case (ty, idx) => unflattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
+        } mkString ", "})"
+      case t if isArray(ctx._1, t) =>
+        val names = arraySizes(ctx._1, name, ty)
+        val index = if (names.size == 1) names.head else s"std::make_tuple(${names mkString ", "})"
+        val eleTy = GenerateCpp.typeForEntryArgument(ctx)(arrayElementType(t))
+        s"std::make_shared<${ctx._1.nameFor(t, Some(ctx._2))}>(std::make_pair($index, std::shared_ptr<$eleTy>(std::shared_ptr<$eleTy>{}, ${name}_arr)))"
+      case t if needsCasting(t) => makePointerRhs(ctx)(name, t)
+      case _ => name
+    }
+  }
+
   def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
     val ty = Find.uniqueResolution[EirType](arg.declaredType)
-    GenerateCpp.visitFunctionArgument(ctx, arg)
-    if (needsCasting(ty)) ctx.append("_")
+    if (GenerateCpp.containsArray(ctx, ty)) {
+      ctx << flattenArgument((ctx, arg), arg.name, ty)
+    } else {
+      GenerateCpp.visitFunctionArgument(ctx, arg)
+      if (needsCasting(ty)) ctx.append("_")
+    }
   }
 
   def visitFunctionArguments(ctx: CodeGenerationContext, args: List[EirFunctionArgument]): Unit = {

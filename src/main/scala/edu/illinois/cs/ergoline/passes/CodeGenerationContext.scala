@@ -1,9 +1,8 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirConstantFacade, EirExpressionNode, EirLiteral, EirNode, EirSpecializable, EirSpecialization, EirTemplateArgument}
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.arrayDim
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -33,6 +32,11 @@ class CodeGenerationContext(val language: String = "cpp") {
     }
   }
 
+  def resolve[T <: EirNode](resolvable: EirResolvable[T]): T =
+    Find.uniqueResolution(resolvable)
+
+  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
+
   def proxy: Option[EirProxy] = _proxies.headOption
 
   def makeSubContext(): CodeGenerationContext = {
@@ -47,7 +51,7 @@ class CodeGenerationContext(val language: String = "cpp") {
   def eval2const(n: EirNode): EirLiteral = n match {
     case e: EirExpressionNode => CheckTypes.evaluateConstExpr(typeContext, e)
     case c: EirConstantFacade => c.value
-    case r: EirResolvable[_] => eval2const(Find.uniqueResolution(r))
+    case r: EirResolvable[_] => eval2const(resolve(r))
     case _ => Errors.invalidConstExpr(n)
   }
 
@@ -66,7 +70,7 @@ class CodeGenerationContext(val language: String = "cpp") {
     _substitutions.flatMap({
       case (sable, stion) => sable.templateArgs.zip(stion.specialization)
     }).collectFirst({
-      case (arg, ty) if arg == t => Find.uniqueResolution(ty)
+      case (arg, ty) if arg == t => resolve(ty)
     })
   }
 
@@ -79,7 +83,7 @@ class CodeGenerationContext(val language: String = "cpp") {
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
-    Find.uniqueResolution[EirNode](x) match {
+    resolve[EirNode](x) match {
       case t: EirTemplateArgument => nameFor(t, ctx)
       case t: EirType => typeFor(t, ctx)
       case n: EirNode => Errors.incorrectType(n, classOf[EirType])
