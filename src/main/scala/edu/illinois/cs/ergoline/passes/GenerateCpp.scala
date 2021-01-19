@@ -756,7 +756,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case Some(0) => "nullptr_t"
           case Some(n) =>
             val index = if (n > 1) s"std::tuple<${List.fill(n)("int") mkString ", "}>" else "int"
-            s"std::pair<$index, std::shared_ptr<${ctx.nameFor(arrayElementType(x), usage)}>>"
+            s"std::pair<$index, std::shared_ptr<${ctx.typeFor(arrayElementType(x), usage)}>>"
           case None =>
             nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
         }
@@ -968,12 +968,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ if proxy.isDefined =>
         ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
       case t: EirType if t.isPointer =>
-        ctx << "std::make_shared<" << ctx.nameFor(objTy, Some(x)) << ">("
+        ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {
           case Some(0) => ctx << "nullptr"
           case Some(n) =>
             ctx << "std::make_pair("
-            if (n == 1) ctx << args.head else ctx << "std::make_tuple(" << (args, ", ") << ")"
+            if (n == 1) ctx << args.head else ctx << (args, ", ") << ")"
             val eleTy = ctx.typeFor(arrayElementType(t), Some(x))
             ctx << "," << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (explode(args), "*") << ")), [](void* p) { free(p); }))"
           case None => visitArguments(ctx)(x.disambiguation, args)
