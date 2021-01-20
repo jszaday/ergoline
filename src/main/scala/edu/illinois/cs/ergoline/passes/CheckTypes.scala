@@ -66,7 +66,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
-    visit(ctx, x) match {
+    (x match {
+      case x: EirTemplatedType => visit(ctx, x)
+      case x => x
+    }) match {
       case x : EirTemplatedType => Some(ctx.specialize(assertValid[EirSpecializable](x.base), x))
       case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
       case _ => None
@@ -350,7 +353,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         resolved
       }
     }
-    val candidates = resolved.zip(resolved.map(visit(ctx, _)))
+    val candidates = resolved.view.zip(resolved.view.map(visit(ctx, _)))
     val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))

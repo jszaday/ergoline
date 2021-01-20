@@ -214,6 +214,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): CodeGenerationContext = {
+    // TODO add support for expansions
     val theirs: List[EirFunctionArgument] =
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>

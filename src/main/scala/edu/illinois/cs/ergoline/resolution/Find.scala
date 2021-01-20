@@ -132,7 +132,7 @@ object Find {
     val predicate: EirNode => Option[Boolean] = {
       case _: EirBlock => None
       // only allowed to consider members when within the class?
-      case x: EirMember => Option.when(matches(x))(false)
+      case x: EirMember => Option.when(matches(x) && ancestors.contains(x.base))(false)
       case x: EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x: EirImport =>
