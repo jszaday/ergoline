@@ -88,7 +88,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _: EirSpecializedSymbol => false
 //      case _ => true
 //    }
-    val prevFc: Option[EirFunctionCall] = ctx.immediateAncestor[EirFunctionCall]
+    val prevFc: Option[EirFunctionCall] = ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
 //    val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
 //    val ours =
 //      if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
@@ -111,7 +111,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      innerSpec.foreach(ctx.leave)
 //      found
 //    })
-    val found = screenCandidates(ctx, getArguments(ctx, prevFc), Find.resolveAccessor(ctx, base, x))
+    val candidates = Find.resolveAccessor(ctx, base, x)
+    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
     spec.foreach(ctx.leave)
     found match {
       case Some((member, result)) =>
@@ -305,7 +306,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def screenCandidates(ctx: TypeCheckContext, args: Option[List[EirResolvable[EirType]]], candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
     val ours = args.map(_.map(visit(ctx, _)))
-    val results = candidates.map(pair => {
+    val results = candidates.flatMap(pair => {
       val (candidate, member) = pair
       val innerSpec = handleSpecialization(ctx, member)
       val found = (member, ours) match {
@@ -322,7 +323,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       innerSpec.foreach(ctx.leave)
       found
     })
-    results.collectFirst{ case Some(x) => x }
+    results.headOption
   }
 
 

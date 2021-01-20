@@ -948,6 +948,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  private def makeIndex(ctx: CodeGenerationContext, args: List[EirExpressionNode]): Unit = {
+    if (args.length > 1) ctx << "std::make_tuple("
+    if (args.nonEmpty) ctx << (args, ",")
+    if (args.length > 1) ctx << ")"
+  }
+
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
     val objTy: EirType = Find.uniqueResolution(x.target)
     val proxy = ProxyManager.asProxy(objTy)
@@ -964,10 +970,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         arrayDim(ctx, t) match {
           case Some(0) => ctx << "nullptr"
           case Some(n) =>
-            ctx << "std::make_pair("
-            if (n == 1) ctx << args.head else ctx << (args, ", ") << ")"
+            ctx << "std::make_pair(" << makeIndex(ctx, args) << ","
             val eleTy = ctx.typeFor(arrayElementType(t), Some(x))
-            ctx << "," << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (args, "*") << ")), [](void* p) { free(p); })"
+            ctx << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (args, "*") << ")), [](void* p) { free(p); }))"
           case None => visitArguments(ctx)(x.disambiguation, args)
         }
         ctx<< ")"
