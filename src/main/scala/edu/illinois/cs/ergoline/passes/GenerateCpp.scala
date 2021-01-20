@@ -772,6 +772,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode => dealiased.get
       case s: EirConstantFacade => s.value.value
+      case x: EirLambdaExpression =>
+        _lambda_names.get(x) match {
+          case Some(name) => name
+          case None =>
+            val name = x.location
+              .map((i: EirSourceInfo) => s"__lambda__${((s: String) => {
+                s.substring(0, s.indexOf('.'))
+              })(Paths.get(i.sourceName).getFileName.toString)}__L${i.line}C${i.start}__")
+              .getOrElse(Errors.unableToName(x))
+            _lambda_names.put(x, name)
+            name
+        }
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -813,20 +825,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   private val _lambda_names: mutable.Map[EirLambdaExpression, String] = mutable.Map()
 
-  def nameFor(x: EirLambdaExpression): String = {
-    _lambda_names.get(x) match {
-      case Some(name) => name
-      case None =>
-        val name = x.location
-          .map((i: EirSourceInfo) => s"__lambda__${((s: String) => {
-            s.substring(0, s.indexOf('.'))
-          })(Paths.get(i.sourceName).getFileName.toString)}__L${i.line}C${i.start}__")
-          .getOrElse(Errors.unableToName(x))
-        _lambda_names.put(x, name)
-        name
-    }
-  }
-
   def typeOf(n: EirNode): Option[EirResolvable[EirNode]] = {
     n match {
       case e: EirExpressionNode => e.foundType
@@ -851,14 +849,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         s"std::shared_ptr<$t>(std::shared_ptr<$t>{}, &$name)"
       }
     })
-    ctx << s"std::make_shared<${nameFor(x)}>(${captures mkString ", "})"
+    ctx << s"std::make_shared<${ctx.nameFor(x)}>(${captures mkString ", "})"
 //    ctx << s"[=] (" << (x.args, ", ") << ") -> " << {
 //      x.foundType.map(ctx.typeFor(_))
 //    } << x.body
   }
 
   def makeLambdaWrapper(ctx: CodeGenerationContext, lambda: EirLambdaExpression): Unit = {
-    val name = nameFor(lambda)
+    val name = ctx.nameFor(lambda)
     val captures = lambda.captures
     val ty = lambda.foundType match {
       case Some(t: EirLambdaType) => t
