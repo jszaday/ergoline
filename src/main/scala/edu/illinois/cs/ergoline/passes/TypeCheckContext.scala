@@ -144,8 +144,6 @@ class TypeCheckContext {
     specialize(s, sp)
   }
 
-
-
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
     if (!s.accepts(sp)) {
       Errors.missingSpecialization(s)

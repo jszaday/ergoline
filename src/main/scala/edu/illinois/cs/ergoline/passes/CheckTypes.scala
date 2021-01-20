@@ -66,12 +66,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
-    x match {
-      case x : EirTemplatedType =>
-        val base = visit(ctx, x.base)
-        val specialization = ctx.specialize(base.asInstanceOf[EirSpecializable], x)
-        visit(ctx, x.base)
-        Some(specialization)
+    visit(ctx, x) match {
+      case x : EirTemplatedType => Some(ctx.specialize(assertValid[EirSpecializable](x.base), x))
       case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
       case _ => None
     }
@@ -161,9 +157,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = {
-    val res = ProxyManager.proxyFor(x)
-    visit(ctx, res)
-    res
+    visit(ctx, ProxyManager.proxyFor(x))
   }
 
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
@@ -294,15 +288,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def applyFuncArgs(ctx: TypeCheckContext, node: EirNode, types: List[EirResolvable[EirType]]): List[EirType] = {
     val fnArgs = node match {
-      case EirMember(_, f: EirFunction, _) => f.functionArgs
-      case f: EirFunction => f.functionArgs
-      case l: EirLambdaExpression => l.args
-      case _ => Nil
+      case EirMember(_, f: EirFunction, _) => Some(f.functionArgs)
+      case f: EirFunction => Some(f.functionArgs)
+      case l: EirLambdaExpression => Some(l.args)
+      case _ => None
     }
-    fnArgs.zip(types.map(visit(ctx, _))).flatMap {
+    fnArgs.map(args => args.zip(types.map(visit(ctx, _))).flatMap {
       case (arg, ty : EirTupleType) if arg.isExpansion => ty.children.map(visit(ctx, _))
       case (_, ty) => Some(ty)
-    }
+    }).getOrElse(visit(ctx, node) match {
+      // NOTE this does not consider expansions?
+      case t: EirLambdaType => t.from.map(visit(ctx, _))
+      case _ => Nil
+    })
   }
 
   def screenCandidates(ctx: TypeCheckContext, args: Option[List[EirResolvable[EirType]]], candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
@@ -318,7 +316,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           } else {
             None
           }
-        case (x, None) => Some(candidate, x)
+        case (x, None) => Some(candidate, visit(ctx, x))
         case (_, Some(_)) => None
       }
       innerSpec.foreach(ctx.leave)
@@ -339,7 +337,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
     val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
-    val candidates = {
+    val resolved = {
       val resolved = value.resolve()
       if (resolved.isEmpty && self.isDefined) {
         ctx.ancestor[EirMember] match {
@@ -351,7 +349,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         resolved
       }
     }
-    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates.zip(candidates.map(visit(ctx, _))))
+    val candidates = resolved.zip(resolved.map(visit(ctx, _)))
+    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))
     prevFc
@@ -582,8 +581,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitAssignment(ctx: TypeCheckContext, node: EirAssignment): EirType = {
-    val lval = visit(ctx, node.rval)
-    val rval = visit(ctx, node.lval)
+    val lval = visit(ctx, node.lval)
+    val rval = visit(ctx, node.rval)
     if (!rval.canAssignTo(lval)) {
       Errors.cannotCast(node, lval, rval)
     } else if (isInvalidFinalAssign(node)) {
@@ -663,7 +662,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     x.disambiguation = found.map(_._2)
     spec.foreach(ctx.leave)
     found match {
-      case Some((m, _)) => base
+      case Some(_) => base
       case _ => error(ctx, x, "could not find a suitable constructor")
     }
   }
@@ -677,7 +676,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       visit(ctx, node.base)
       ctx.stop(subCtx)
     })
-    node
+    if (node.templateArgs.nonEmpty) {
+      ctx.getTemplatedType(node, node.templateArgs.map(visit(ctx, _)))
+    } else {
+      node
+    }
   }
 
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
