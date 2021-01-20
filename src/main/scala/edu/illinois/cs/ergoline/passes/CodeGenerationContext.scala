@@ -35,8 +35,6 @@ class CodeGenerationContext(val language: String = "cpp") {
   def resolve[T <: EirNode](resolvable: EirResolvable[T]): T =
     Find.uniqueResolution(resolvable)
 
-  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
-
   def proxy: Option[EirProxy] = _proxies.headOption
 
   def makeSubContext(): CodeGenerationContext = {
@@ -96,6 +94,8 @@ class CodeGenerationContext(val language: String = "cpp") {
       case _ => (if (x.isPointer) "std::shared_ptr<%s>" else "%s").format(nameFor(x, ctx))
     }
   }
+
+  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
 
   def appendSemi(): Unit = {
     if (current.nonEmpty && !current.endsWith(";")) this << ";"

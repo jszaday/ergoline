@@ -16,7 +16,7 @@ object GenerateProxies {
 
   def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val ns = x.namespaces.toList
-    ctx << ns.map(ns => s"namespace ${nameFor(ctx, ns)} {") << {
+    ctx << ns.map(ns => s"namespace ${ctx.nameFor(ns)} {") << {
       ctx.updateProxy(x)
       if (x.isAbstract) visitAbstractProxy(ctx, x)
       else visitConcreteProxy(ctx, x)
@@ -32,8 +32,8 @@ object GenerateProxies {
 
   def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, numImpls: Int): Unit = {
     val args = f.functionArgs
-    val name = nameFor(ctx, f)
-    val nArgs = args.map(nameFor(ctx, _)).mkString(", ")
+    val name = ctx.nameFor(f)
+    val nArgs = args.map(ctx.nameFor(_)).mkString(", ")
     // TODO support non-void returns?
     ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
@@ -52,12 +52,12 @@ object GenerateProxies {
     ctx << "default: { CkAbort(\"abstract proxy unable to find match\"); }"
     ctx << "}"
     ctx << "return _.hash();"
-    ctx << "}" 
+    ctx << "}"
   }
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
-    val name = nameFor(ctx, x)
-    val impls = x.derived.map(nameFor(ctx, _)).toList
+    val name = ctx.nameFor(x)
+    val impls = x.derived.map(ctx.nameFor(_)).toList
     ctx << s"struct $name: public ergoline::hashable" << "{" << s"int handle;" << {
         impls.zipWithIndex.flatMap({
           case (derived, idx) =>
@@ -71,7 +71,7 @@ object GenerateProxies {
   }
 
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
-    val base = nameFor(ctx, x.base)
+    val base = ctx.nameFor(x.base)
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
@@ -101,7 +101,7 @@ object GenerateProxies {
           }).mkString(", ")
         } + ")"
       case t if needsCasting(t) =>
-        s"ergoline::from_pupable<${qualifiedNameFor(ctx._1, ctx._2)(expected)}>($current)"
+        s"ergoline::from_pupable<${ctx._1.nameFor(expected, Some(ctx._2))}>($current)"
       case _ => current
     }
   }
@@ -109,11 +109,11 @@ object GenerateProxies {
   def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
     val ty: EirType = Find.uniqueResolution(x.declaredType)
     if (containsArray(ctx, ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
+      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
         unflattenArgument((ctx, x), x.name, ty)
       } << ";"
     } else if (needsCasting(ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << nameFor(ctx, x) << "=" << {
+      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
         makePointerRhs((ctx, x))(s"${x.name}_", ty)
       } << ";"
     }
@@ -192,7 +192,7 @@ object GenerateProxies {
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
         } else {
-          ctx << s"this->impl_->${nameFor(ctx, f)}(${f.functionArgs.map(nameFor(ctx, _)).mkString(", ")})"
+          ctx << s"this->impl_->${ctx.nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
         }
       }
       case _ => ???
@@ -211,10 +211,10 @@ object GenerateProxies {
       else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
         if (isConstructor) {
-          val baseName = proxy.map(x => nameFor(ctx, x.base)).getOrElse("")
+          val baseName = proxy.map(x => ctx.nameFor(x.base)).getOrElse("")
           s"${baseName}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
         } else {
-          nameFor(ctx, f)
+          ctx.nameFor(f)
         }
       } << "(" << {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
@@ -236,7 +236,7 @@ object GenerateProxies {
             makeEntryBody(ctx, x)
             ctx << ";"
           case _ =>
-            ctx << "this->impl_ = std::make_shared<" << base << ">(" << (args.map(nameFor(ctx, _)), ", ") << ");"
+            ctx << "this->impl_ = std::make_shared<" << base << ">(" << (args.map(ctx.nameFor(_)), ", ") << ");"
         }
       } else {
         if (isAsync) {
