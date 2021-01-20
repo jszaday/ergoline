@@ -25,12 +25,12 @@ object GenerateCi {
     grouped.foreach({
       case (ns, pupables) => {
         ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
-        ctx << ctx.lambdas.getOrElse(ns, Nil).map(GenerateCpp.nameFor).map(name => s"PUPable $name;")
+        ctx << ctx.lambdas.getOrElse(ns, Nil).map(ctx.nameFor(_)).map(name => s"PUPable $name;")
         ctx << pupables.flatMap(x => {
-          if (x.templateArgs.isEmpty) List(s"PUPable ${GenerateCpp.nameFor(ctx, x, usage=Some(ns))};")
+          if (x.templateArgs.isEmpty) List(s"PUPable ${ctx.nameFor(x, usage=Some(ns))};")
           else ctx.checked(x).map(y => s"PUPable ${
             ctx.specialize(x, y)
-            val ret: String = GenerateCpp.nameFor(ctx, x, usage=Some(ns))
+            val ret: String = ctx.nameFor(x, usage=Some(ns))
             ctx.leave(y)
             ret
           };")

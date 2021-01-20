@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, nameFor, qualifiedNameFor, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
@@ -34,7 +34,7 @@ object GenerateDecls {
   }
 
   def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << ctx.typeFor(x.declaredType, Some(x)) << nameFor(ctx, x) << ";"
+    ctx << ctx.typeFor(x.declaredType, Some(x)) << ctx.nameFor(x) << ";"
   }
 
   def visitNamespace(ctx: CodeGenerationContext, x: EirNamespace): Unit = {
@@ -43,7 +43,7 @@ object GenerateDecls {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.annotation("system").isDefined) return
-    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${nameFor(ctx, x)}" << visitInherits(ctx, x) << "{" << {
+    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${ctx.nameFor(x)}" << visitInherits(ctx, x) << "{" << {
       if (x.isInstanceOf[EirTrait]) {
         Nil
       } else if (!x.isTransient) {
@@ -54,13 +54,13 @@ object GenerateDecls {
         if (!hasHash(x)) makeHasher(ctx, x)
         val parent = x.extendsThis
           .map(Find.uniqueResolution[EirType])
-          .map(qualifiedNameFor(ctx, x)(_))
+          .map(ctx.nameFor(_, Some(x)))
           .getOrElse("PUP::able")
         // TODO PUPable_decl_base_template
-        List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${nameFor(ctx, x)});"
-        else s"PUPable_decl_inside_template((${nameFor(ctx, x, includeTemplates = true)}));",
-          s"${nameFor(ctx, x)}(CkMigrateMessage *m) : $parent(m) { }") ++
-          Find.traits(x).map(x => s"friend class ${nameFor(ctx, x)};")
+        List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${ctx.nameFor(x)});"
+        else s"PUPable_decl_inside_template((${GenerateCpp.nameFor(ctx, x, includeTemplates = true)}));",
+          s"${ctx.nameFor(x)}(CkMigrateMessage *m) : $parent(m) { }") ++
+          Find.traits(x).map(x => s"friend class ${ctx.nameFor(x)};")
       } else {
         if (!hasHash(x)) makeHasher(ctx, x)
         Nil
@@ -75,7 +75,7 @@ object GenerateDecls {
   def outsideStaticDecl(ctx: CodeGenerationContext, m: EirMember): Unit = {
     val decl: EirDeclaration = assertValid[EirDeclaration](m.member)
     ctx << visitTemplateArgs(ctx, m.base.templateArgs)
-    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << nameFor(ctx, m.base, includeTemplates = true) << "::" << m.name
+    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << GenerateCpp.nameFor(ctx, m.base, includeTemplates = true) << "::" << m.name
     ctx << decl.initialValue.map(_ => "=") << decl.initialValue << ";"
   }
 
