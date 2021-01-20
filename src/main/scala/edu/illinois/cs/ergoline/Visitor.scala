@@ -59,7 +59,10 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def visitAs[T <: EirNode : Manifest](tree: ParseTree): T = {
-    Option(tree).map(visit).to[T].getOrElse(Errors.cannotParse(tree))
+    Option(tree).map(visit) match {
+      case Some(x) => assertValid[T](x)
+      case None => Errors.cannotParse(tree)
+    }
   }
 
   private def loadPackage(qualified : List[String], fileOption : Option[File]): EirScope = {
@@ -204,9 +207,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   def visitTemplateDeclaration(ctx: TemplateDeclContext): List[EirTemplateArgument] = {
-    val list = ctx.mapOrEmpty(_.templateDeclArg, visitAs[EirTemplateArgument])
-    list.lastOption.foreach(_.isPack = Option(ctx).exists(_.ellipses != null))
-    list
+    ctx.mapOrEmpty(_.templateDeclArg, visitAs[EirTemplateArgument])
   }
 
   override def visitAnnotatedMember(ctx: AnnotatedMemberContext): EirMember = {
@@ -288,16 +289,31 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
+  override def visitSpecializationElement(ctx: SpecializationElementContext): EirNode = {
+    if (ctx.constant() != null) {
+      enter(EirConstantFacade(null)(parent), (x: EirConstantFacade) => {
+        x.value = visitAs[EirLiteral](ctx.constant())
+      })
+    } else if (ctx.`type`() != null) {
+      visitAs[EirResolvable[EirType]](ctx.`type`())
+    } else {
+      ???
+    }
+  }
+
   override def visitTemplateDeclArg(ctx: TemplateDeclArgContext): EirTemplateArgument = {
-    enter(EirTemplateArgument(parent, ctx.Identifier().getText), (t: EirTemplateArgument) => {
+    enter(EirTemplateArgument(parent, ctx.name.getText), (t: EirTemplateArgument) => {
       t.lowerBound = Option(ctx.lowerBound).map(visitAs[EirResolvable[EirType]])
       t.upperBound = Option(ctx.upperBound).map(visitAs[EirResolvable[EirType]])
+      t.argumentType = Option(ctx.argTy).map(visitAs[EirResolvable[EirType]])
+      t.defaultValue = Option(ctx.specializationElement()).map(visitAs[EirResolvable[EirType]])
+      t.isPack = ctx.ellipses != null
     })
   }
 
   override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
     val arg = EirFunctionArgument(parent, ctx.Identifier.getText, null,
-      isFinal = Option(ctx.VariableKeyword()).isEmpty,
+      isExpansion = Option(ctx.expansion).isDefined,
       isSelfAssigning = Option(ctx.Equals()).isDefined)
     enter(arg, (_: EirFunctionArgument) => {
       arg.declaredType = visitAs[EirResolvable[EirType]](ctx.`type`())
@@ -347,8 +363,16 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
-  override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] =
-    ctx.typeList().toList.toTupleType(parent)
+  override def visitTupleType(ctx: TupleTypeContext): EirResolvable[EirType] = {
+    if (ctx.multiply != null) {
+      enter(EirTupleMultiply(null, null)(parent), (x: EirTupleMultiply) => {
+        x.lhs = visitAs[EirResolvable[EirType]](ctx.tupleType())
+        x.rhs = visitAs[EirExpressionNode](ctx.constExpression())
+      })
+    } else {
+      ctx.typeList().toList.toTupleType(parent)
+    }
+  }
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     if (ctx.Ellipses() != null) {
@@ -566,11 +590,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       ctx.mapOrEmpty(_.`type`(), visitAs[EirResolvable[EirType]]) :+ {
         enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
           t.base = symbolizeType(ctx.fqn.Identifier())
-          t.args = ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+          t.args = ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
         })
       }
     } else {
-      ctx.mapOrEmpty(_.typeList().`type`(), visitAs[EirResolvable[EirType]])
+      ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
     }
   }
 
@@ -585,6 +609,13 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     }
   }
 
+  override def visitUsingStatement(ctx: UsingStatementContext): EirNode = {
+    enter(EirTypeAlias(ctx.Identifier().getText, null, null)(parent), (x: EirTypeAlias) => {
+      x.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
+      x.value = visitAs[EirResolvable[EirType]](ctx.`type`())
+    })
+  }
+
   override def visitSelfExpression(ctx: SelfExpressionContext): EirNode = {
     symbolize[EirNamedNode](ctx.SelfKeyword)
   }
@@ -597,6 +628,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   override def visitBoolLiteral(ctx: BoolLiteralContext): EirLiteral =
     EirLiteral(parent, EirLiteralTypes.Boolean,
       Option(ctx.FalseKwd()).getOrElse(ctx.TrueKwd()).getText)
+
+    override def visitConstExpression(ctx: ConstExpressionContext): EirNode = {
+      Option(ctx.fqn()).map(fqn => symbolizeType(fqn.Identifier()))
+        .getOrElse(visitAs[EirExpressionNode](ctx.constant()))
+    }
 
   override def visitConstant(ctx: ConstantContext): EirLiteral = {
     if (ctx.IntegerConstant() != null) {

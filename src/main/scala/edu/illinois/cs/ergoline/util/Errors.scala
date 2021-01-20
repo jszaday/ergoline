@@ -43,6 +43,10 @@ object Errors {
     exitAction = (s: String) => throw EirException(s)
   }
 
+  def assignToVal(node: EirAssignment): Nothing = {
+    exit(format(node, "assignment to val (%s)", node.lval))
+  }
+
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
     exit(format(ctx, "%s cannot be cast to %s", a, b))
   }
@@ -82,8 +86,12 @@ object Errors {
     exit(format(target, "%s is not accessible within %s", target, usage))
   }
 
-  def invalidTupleIndices(nodes: Iterable[EirNode]): Nothing = {
-    exit(format(nodes.head, "%s are not valid tuple indices", nodes mkString ", "))
+  def invalidTupleIndices(tuple: EirTupleType, nodes: Iterable[EirNode]): Nothing = {
+    exit(format(nodes.head, "cannot use %s as indices for %s", nodes, tuple))
+  }
+
+  def invalidConstExpr(expr: EirNode): Nothing = {
+    exit(format(expr, "could not statically determine the value of `%s`", expr))
   }
 
   def missingNamespace(node: EirNode): Nothing = {
@@ -119,7 +127,7 @@ object Errors {
   }
 
   def cannotParse(tree: ParseTree): Nothing = {
-    exit(format(null, "could not parse %s", tree))
+    exit(format(null, "could not parse %s (a(n) %s)", tree.getText, tree.getClass.getName))
   }
 
   def systemFnHasBody(f: EirFunction): Nothing = {

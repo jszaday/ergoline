@@ -92,8 +92,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitFieldAccessor(ctx: CodeGenerationContext, x: EirFieldAccessor): Unit = {
     // TODO handle self applications :3
-    val targetTy: EirType = x.target.foundType.getOrElse(Errors.missingType(x.target))
-    ctx << x.target << fieldAccessorFor(targetTy) << x.field
+    val arrName = asMember(x.disambiguation).collect{
+      case m: EirMember if isArray(ctx, m.base) => m.name
+    }
+    arrName match {
+      case Some("size") =>
+        ctx << x.target << "->first"
+      case _ =>
+        val targetTy: EirType = x.target.foundType.getOrElse(Errors.missingType(x.target))
+        ctx << x.target << fieldAccessorFor(targetTy) << x.field
+    }
   }
 
   override def visitLambdaType(ctx: CodeGenerationContext, x: types.EirLambdaType): Unit = {
@@ -112,26 +120,69 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     f.parent.flatMap(_.parent).flatMap(_.parent).exists(_.isInstanceOf[EirProxy])
   }
 
+  def splitIndex(ctx: CodeGenerationContext, t: EirType, curr: String): Iterable[String] = {
+    arrayDim(ctx, t) match {
+      case Some(1) => List(curr)
+      case Some(n) => (0 until n).map(idx => s"std::get<$idx>($curr)")
+      case _ => ???
+    }
+  }
+
+  def flattenArgument(ctx: CodeGenerationContext, expr: EirExpressionNode,
+                      ours: EirType, theirs: EirType): Unit = {
+    (theirs, expr) match {
+      case (a: EirTupleType, b: EirTupleExpression) if containsArray(ctx, a) =>
+        val list = a.children.map(ctx.resolve).zip(b.expressions)
+        list.zipWithIndex.foreach {
+          case ((t, x), i) =>
+            flattenArgument(ctx, x, ctx.exprType(x), t)
+            if (i < (list.length - 1)) ctx << ","
+        }
+      case (a: EirType, b) if isArray(ctx, a) =>
+        // TODO do this?
+        if (!b.isInstanceOf[EirSymbol[_]]) Errors.warn(Errors.format(b,
+          "warning, trying to split %s into multiple arguments, consider introducing a temporary", b))
+        val str = {
+          val subCtx = ctx.makeSubContext()
+          subCtx << expr
+          subCtx.toString
+        }
+        ctx << (splitIndex(ctx, a, s"$str->first"), ",") << "," << s"$str->second.get()"
+      case (_, _) => castToPuppable(ctx, expr, ours, theirs)
+    }
+  }
+
   def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
                      ours: EirType, theirs: EirType): Unit = {
-    val str = {
+    val str = () => {
       val subCtx = ctx.makeSubContext()
       subCtx << expr
       subCtx.toString
     }
     if (ours.isTransient) {
       Errors.cannotSerialize(expr, ours)
+    } else if (containsArray(ctx, theirs)) {
+      flattenArgument(ctx, expr, ours, theirs)
     } else if (GenerateProxies.needsCasting(theirs)) {
-      if (theirs.isInstanceOf[EirTupleType]) {
-        val tmp = temporary(ctx)
-        ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
-          "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
-        } << "})(" << str << ")"
-      } else {
-        ctx << toPupable(expr)(str, (ours, theirs))
+      (theirs, expr) match {
+        case (a: EirTupleType, b: EirTupleExpression) =>
+          ctx << "std::make_tuple(" << {
+            val list = a.children.map(ctx.resolve).zip(b.expressions)
+            list.zipWithIndex.foreach {
+              case ((t, x), i) =>
+                castToPuppable(ctx, x, ctx.exprType(x), t)
+                if (i < (list.length - 1)) ctx << ","
+            }
+          } << ")"
+        case (_: EirTupleType, _) =>
+          val tmp = temporary(ctx)
+          ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
+            "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
+          } << "})(" << str() << ")"
+        case (_, _) => ctx << toPupable(expr)(str(), (ours, theirs))
       }
     } else {
-      ctx << str
+      ctx << str()
     }
   }
 
@@ -151,18 +202,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): Unit = {
+  def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
     val theirs = t._2.declaredType.resolve().headOption
     (t._1.foundType, theirs) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << s"${nameFor(ctx, b)}(" << t._1 << ")"
       case (Some(a), Some(b)) if isEntryArgument(t._2) =>
-        castToPuppable(ctx, t._1, a, b)
+        ctx << castToPuppable(ctx, t._1, a, b)
       case _ => ctx << t._1
     }
   }
 
-  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): Unit = {
+  def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): CodeGenerationContext = {
+    // TODO add support for expansions
     val theirs: List[EirFunctionArgument] =
       disambiguation match {
         case Some(m@EirMember(_, f: EirFunction, _)) =>
@@ -172,16 +224,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case Some(f: EirFunction) => f.functionArgs
         case _ => Nil
       }
+
     if (theirs.length == args.length) {
       val zipped = args.zip(theirs)
+
       if (zipped.nonEmpty) {
         zipped.init.foreach(pair => {
           visitCallArgument(ctx)(pair)
           ctx << ","
         })
-        visitCallArgument(ctx)(zipped.last)
-      }
 
+        visitCallArgument(ctx)(zipped.last)
+      } else {
+        ctx
+      }
     } else {
       ctx << (args, ",")
     }
@@ -264,9 +320,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitFunctionCall(ctx: CodeGenerationContext, x: EirFunctionCall): Unit = {
     val disambiguated = disambiguate(x.target)
+    val arrayAccessor = asMember(Some(disambiguated)).collect{
+      case m: EirMember if isArray(ctx, m.base) => m.name
+    }
+    // bypass arguments for size (implicit field accessor)
+    if (arrayAccessor.contains("size")) {
+      ctx << x.target
+      return
+    }
     val isAsync = disambiguated.annotation("async").isDefined
-    val isSystem = disambiguated.annotations.exists(_.name == "system")
-    if (isSystem) {
+    if (disambiguated.isSystem) {
       ctx << visitSystemCall(ctx, x.target, disambiguated, x.args)
     } else {
       if (isAsync) {
@@ -348,9 +411,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }).getOrElse("this")
   }
 
+  def asMember(x: Option[EirNode]): Option[EirMember] = {
+    x match {
+      case Some(m: EirMember) => Some(m)
+      case _ => x.flatMap(_.parent).to[EirMember]
+    }
+  }
+
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      val m = x.disambiguation.to[EirMember]
+      val m = asMember(x.disambiguation)
       if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
     }
     ctx << nameFor(ctx, x)
@@ -542,7 +612,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ctx.typeFor(x.returnType)
       if (args.nonEmpty) ctx << ","
     }
-    ctx << (args, ", ") << ")" << overrides
+    if (langCi) {
+      GenerateProxies.visitFunctionArguments(ctx, args)
+    } else {
+      ctx << (args, ", ")
+    }
+    ctx << ")" << overrides
     if (isMember) {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
@@ -676,9 +751,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case Some(t) => nameFor(ctx, t)
           case None => dealiased.get
         }) + (if (x.isPack) "..." else "")
-      case x: EirTemplatedType => {
-        nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
-      }
+      case x: EirTemplatedType =>
+        arrayDim(ctx, x) match {
+          case Some(0) => "nullptr_t"
+          case Some(n) =>
+            val index = if (n > 1) s"std::tuple<${List.fill(n)("int") mkString ", "}>" else "int"
+            s"std::pair<$index, std::shared_ptr<${ctx.typeFor(arrayElementType(x), usage)}>>"
+          case None =>
+            nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
+        }
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
         val substDefined = subst.forall(_.isDefined)
@@ -690,6 +771,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t: EirTupleType =>
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode => dealiased.get
+      case s: EirConstantFacade => s.value.value
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -833,6 +915,46 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "};"
   }
 
+  def isArray(ctx: CodeGenerationContext, t: EirType): Boolean = {
+    t match {
+      case t: EirTemplatedType => isArray(ctx, ctx.resolve(t.base))
+      case c: EirClass => c.name == "array" && c.parent == globals.ergolineModule
+      case _ => false
+    }
+  }
+
+  def containsArray(ctx: CodeGenerationContext, t: EirResolvable[EirType]): Boolean = {
+    ctx.resolve(t) match {
+      case t: EirTupleType => t.children.exists(containsArray(ctx, _))
+      case t => isArray(ctx, t)
+    }
+  }
+
+  def arrayDim(ctx: CodeGenerationContext, t: EirType): Option[Int] = {
+    ctx.resolve(t) match {
+      case t: EirTemplatedType if isArray(ctx, t) =>
+        t.args match {
+          case _ +: Nil => Some(1)
+          case _ +: t +: Nil => Some(ctx.eval2const(t).toInt)
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  def arrayElementType(t: EirType): EirResolvable[EirType] = {
+    t match {
+      case t: EirTemplatedType => t.args.head
+      case _ => ???
+    }
+  }
+
+  private def makeIndex(ctx: CodeGenerationContext, args: List[EirExpressionNode]): Unit = {
+    if (args.length > 1) ctx << "std::make_tuple("
+    if (args.nonEmpty) ctx << (args, ",")
+    if (args.length > 1) ctx << ")"
+  }
+
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
     val objTy: EirType = Find.uniqueResolution(x.target)
     val proxy = ProxyManager.asProxy(objTy)
@@ -843,9 +965,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     objTy match {
       case _ if proxy.isDefined =>
-        ctx << qualifiedNameFor(ctx, x)(objTy) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case t: EirType if t.isPointer => ctx << s"std::make_shared<" << qualifiedNameFor(ctx, x)(t) << ">(" << visitArguments(ctx)(x.disambiguation, args) << ")"
-      case _ => ctx << "new" << ctx.typeFor(objTy, Some(x))  << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+        ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew(" << visitArguments(ctx)(x.disambiguation, args) << ")"
+      case t: EirType if t.isPointer =>
+        ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
+        arrayDim(ctx, t) match {
+          case Some(0) => ctx << "nullptr"
+          case Some(n) =>
+            ctx << "std::make_pair(" << makeIndex(ctx, args) << ","
+            val eleTy = ctx.typeFor(arrayElementType(t), Some(x))
+            ctx << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (args, "*") << ")), [](void* p) { free(p); }))"
+          case None => visitArguments(ctx)(x.disambiguation, args)
+        }
+        ctx<< ")"
+      case _ => ctx << "new" << ctx.typeFor(objTy, Some(x)) << "(" << visitArguments(ctx)(x.disambiguation, args) << ")"
     }
   }
 
@@ -949,17 +1081,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .flatMap(ProxyManager.asProxy)
       .flatMap(x => if (!x.isElement) x.collective else None)
     ty match {
-      case Some(_ : EirTupleType) =>
-        val args = arrayRef.args
-        if (args.length != 1 && !args.head.isInstanceOf[EirLiteral]) {
-          Errors.invalidTupleIndices(args)
-        } else {
-          ctx << s"std::get<" << args.head << ">(" << arrayRef.target << ")"
+      case Some(tty : EirTupleType) =>
+        val arg = arrayRef.args.headOption.map(CheckTypes.evaluateConstExpr(ctx.typeContext, _))
+        arg match {
+          case Some(x) => ctx << s"std::get<" << x << ">(" << arrayRef.target << ")"
+          case None => Errors.invalidTupleIndices(tty, arrayRef.args)
         }
       case Some(_) if collective.exists(_.startsWith("array")) =>
         ctx << arrayRef.target << "(" << (arrayRef.args, ",") << ")"
       case Some(_) if collective.exists(x => x == "group" || x == "nodegroup") =>
         ctx << arrayRef.target << "[" << (arrayRef.args, ",") << "]"
+      case Some(t) if isArray(ctx, t) => {
+        val target = arrayRef.target
+        val args = arrayRef.args
+        ctx << "(" << target << "->second.get())["
+        args.init.zipWithIndex.foreach {
+          case (arg, idx) => ctx << arg << s"* std::get<$idx>(" << target << "->first) +"
+        }
+        ctx << args.last
+        ctx << "]"
+      }
       case Some(t) =>
         if (isPlainArrayRef(arrayRef)) {
           if (t.isPointer) {
@@ -1089,4 +1230,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     ctx << ")"
   }
+
+  override def visitTypeAlias(ctx: CodeGenerationContext, x: EirTypeAlias): Unit = ()
+
+  override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = {
+    ???
+  }
+
+  override def visitConstantFacade(context: CodeGenerationContext, facade: EirConstantFacade): Unit = visit(context, facade.value)
 }

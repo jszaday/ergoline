@@ -11,12 +11,32 @@ import scala.collection.mutable
 
 class TypeCheckContext {
   object TypeCheckSyntax {
+    implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
+      // TODO implement this, check upper/lower/type bounds
+      def accepts(resolvable: EirResolvable[EirType]): Boolean = true
+    }
+
     implicit class RichEirSpecializable(specializable: EirSpecializable) {
       def accepts(specialization: EirSpecialization): Boolean = {
-        // TODO eventually check upper/lower bounds
-        val (init, last) = (specializable.templateArgs.init, specializable.templateArgs.last)
-        def comparator(x: Int, y: Int): Boolean = if (last.isPack) x <= y else x == y
-        comparator(init.length + 1, specialization.specialization.length)
+        val ours = specializable.templateArgs
+        val theirs = specialization.specialization
+        val n = math.max(ours.length, theirs.length)
+        var i = 0
+        while (i < n) {
+          if (i >= theirs.length) {
+            if (!ours(i).hasDefaultValue) {
+              return false
+            }
+          } else if (i >= ours.length) {
+            if (!ours.lastOption.exists(t => t.isPack && t.accepts(theirs(i)))) {
+              return false
+            }
+          } else if (!ours(i).accepts(theirs(i))) {
+            return false
+          }
+          i += 1
+        }
+        true
       }
 
       def sameAs(specialization: EirSpecialization): Boolean = {
@@ -124,8 +144,6 @@ class TypeCheckContext {
     specialize(s, sp)
   }
 
-
-
   def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
     if (!s.accepts(sp)) {
       Errors.missingSpecialization(s)
@@ -158,13 +176,21 @@ class TypeCheckContext {
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {
-    val (init, last) = (s.templateArgs.init, s.templateArgs.last)
-    if (last.isPack) {
-      init.zip(sp.specialization) :+ {
-        (last, sp.specialization.slice(init.length, sp.specialization.length).toTupleType(None))
-      }
+    if (sp.specialization.length < s.templateArgs.length) {
+      s.templateArgs.zip(sp.specialization ++ {
+        s.templateArgs.slice(sp.specialization.length, s.templateArgs.length).map(x => {
+          x.defaultValue.getOrElse(Errors.missingType(x))
+        })
+      })
     } else {
-      (init :+ last).zip(sp.specialization)
+      val (init, last) = (s.templateArgs.init, s.templateArgs.last)
+      if (last.isPack) {
+        init.zip(sp.specialization) :+ {
+          (last, sp.specialization.slice(init.length, sp.specialization.length).toTupleType(None))
+        }
+      } else {
+        (init :+ last).zip(sp.specialization)
+      }
     }
   }
 

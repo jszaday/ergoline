@@ -132,14 +132,14 @@ object Find {
     val predicate: EirNode => Option[Boolean] = {
       case _: EirBlock => None
       // only allowed to consider members when within the class?
-      case x: EirMember => Option.when(x.parent.exists(ancestors.contains))(matches(x))
-      case x: EirFunction => Option.when(matches(x))(true)
+      case x: EirMember => Option.when(matches(x) && ancestors.contains(x.base))(false)
       case x: EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
-      case x if x.parent.exists(_.isInstanceOf[EirMember]) => Some(false)
       case x: EirImport =>
         Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(matches(x))
-      case x if !isTopLevel(x) => Option.when(matches(x))(true)
+      case x if !isTopLevel(x) || x.isInstanceOf[EirFunction] => Option.when(matches(x))(true)
+      // TODO how to handle arguments?
+//      case x: EirFunction => Option.when(matches(x))(true)
       case x => Some(matches(x))
     }
     ancestors.view.flatMap(ancestor => {
@@ -161,11 +161,11 @@ object Find {
     }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): View[T] = {
+  def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
       case last :: Nil =>
-        val found = anywhereAccessible(symbol, last)
-        found.collect({ case x: T => x })
+        val found = anywhereAccessible(symbol, last).toSeq
+        found.collect{ case t: T => t }
       case init :+ last =>
         var namespace = anywhereAccessible(symbol, init.head)
         for (mid <- init.tail) {
@@ -174,7 +174,7 @@ object Find {
         namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)).map({
           case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[T]
           case x => x
-        }))
+        })).toSeq
     }
   }
 

@@ -19,7 +19,7 @@ package object util {
     m.annotations +:= EirAnnotation("system", Map())
     m.member = EirFunction(Some(m), None, name, Nil, Nil, retTy)
     m.member.asInstanceOf[EirFunction].functionArgs = args.zipWithIndex.map({
-      case (value, i) => EirFunctionArgument(Some(m.member), s"x$i", value, isFinal = false, isSelfAssigning = false)
+      case (value, i) => EirFunctionArgument(Some(m.member), s"x$i", value, isExpansion = false, isSelfAssigning = false)
     })
     m
   }

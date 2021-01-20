@@ -10,6 +10,7 @@ annotatedTopLevelStatement
 
 topLevelStatement
     :   function
+    |   usingStatement
     |   importStatement
     |   classDeclaration
     ;
@@ -20,6 +21,10 @@ packageStatement
 
 importStatement
     :   'import' fqn ';'
+    ;
+
+usingStatement
+    :   'using' Identifier templateDecl? '=' type ';'
     ;
 
 statement
@@ -84,11 +89,11 @@ block
     ;
 
 templateDeclArg
-    :   Identifier ('<:' upperBound=type)? ('>:' lowerBound=type)?
+    :   name=Identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) ('=' specializationElement)?
     ;
 
 templateDecl
-    :   '<' (templateDeclArg ',')* templateDeclArg ellipses=Ellipses? '>'
+    :   '<' (templateDeclArg ',')* templateDeclArg '>'
     ;
 
 accessModifier
@@ -141,7 +146,7 @@ function
     ;
 
 functionArgument
-    :   VariableKeyword? Equals? Identifier ':' type
+    :   Equals? Identifier ':' expansion='*'? type
     ;
 
 functionArgumentList
@@ -296,13 +301,28 @@ typeList
     :   (type ',')* type
     ;
 
+constExpression
+    :   constant
+    |   fqn
+    ;
+
 tupleType
     :   '(' typeList ')'
+    |   tupleType multiply='.*' constExpression
+    ;
+
+specializationElement
+    :   type
+    |   constant
+    ;
+
+specTypeList
+    :   (specializationElement ',')* specializationElement
     ;
 
 specialization
-    :   Less typeList Greater
-    |   Less (type ',')* fqn Less typeList LeftShift
+    :   Less specTypeList Greater
+    |   Less (type ',')* fqn Less specTypeList LeftShift
     ;
 
 proxySuffix

@@ -19,7 +19,7 @@ class ping with message<string> {
 
 class pingpong {
     val mainProxy: main@;
-    val pongCount: int = 0;
+    var pongCount: int = 0;
 
     @entry def pingpong(=mainProxy: main@) {
         // broadcast a ping to all members of the group
@@ -50,7 +50,7 @@ class pingpong {
 }
 
 @main class main {
-    val count: int = 0;
+    var count: int = 0;
 
     @entry def main(args: array<string>) {
         new pingpong@group(self@);

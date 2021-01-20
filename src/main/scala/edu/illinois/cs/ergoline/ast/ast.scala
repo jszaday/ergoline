@@ -262,7 +262,11 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
   extends EirType with EirNamedNode {
   var lowerBound: Option[EirResolvable[EirType]] = None
   var upperBound: Option[EirResolvable[EirType]] = None
+  var defaultValue: Option[EirResolvable[EirType]] = None
+  var argumentType: Option[EirResolvable[EirType]] = None
   var isPack: Boolean = false
+
+  def hasDefaultValue: Boolean = defaultValue.nonEmpty
 
   override def children: Iterable[EirNode] = Nil
 
@@ -436,7 +440,7 @@ case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var r
 }
 
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
-                               var declaredType: EirResolvable[EirType], var isFinal: Boolean, var isSelfAssigning: Boolean)
+                               var declaredType: EirResolvable[EirType], var isExpansion: Boolean, var isSelfAssigning: Boolean)
   extends EirNamedNode {
   override def children: Iterable[EirNode] = Seq(declaredType)
 
@@ -445,11 +449,13 @@ case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
   }
 
   def cloneWith(other: Option[EirNode]): EirFunctionArgument = {
-    EirFunctionArgument(other, name, declaredType, isFinal, isSelfAssigning)
+    EirFunctionArgument(other, name, declaredType, isExpansion, isSelfAssigning)
   }
 }
 
 case class EirAssignment(var parent: Option[EirNode], var lval: EirExpressionNode, var op: String, var rval: EirExpressionNode) extends EirNode {
+  var isValueInitializer: Boolean = false
+
   override def children: Iterable[EirNode] = Seq(lval, rval)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
@@ -541,6 +547,10 @@ case class EirLiteral(var parent: Option[EirNode], var `type`: EirLiteralTypes.V
   def toInt: Int = value.toInt
 
   def toBoolean: Boolean = value.toBoolean
+
+  def equivalentTo(other: EirLiteral): Boolean = {
+    `type` == other.`type` && value == other.value
+  }
 
   override def children: Iterable[EirNode] = Nil
 
@@ -773,6 +783,29 @@ case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode]) 
   override def resolved: Boolean = _resolved.isDefined
   override def children: Iterable[EirNode] = Nil
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
+}
+
+case class EirTypeAlias(var name: String, var templateArgs: List[EirTemplateArgument],
+                        var value: EirResolvable[EirType])(var parent: Option[EirNode]) extends EirNamedNode with EirType with EirSpecializable {
+  override def children: Iterable[EirNode] = templateArgs :+ value
+
+  override def resolved: Boolean = value.resolved
+
+  override def resolve(): List[EirType] = {
+    if (templateArgs.nonEmpty) {
+      ???
+    } else {
+      value.resolve().toList
+    }
+  }
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+case class EirConstantFacade(var value: EirLiteral)(var parent: Option[EirNode]) extends EirType {
+  override def children: Iterable[EirNode] = List(value)
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
