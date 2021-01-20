@@ -76,44 +76,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  // TODO fix behavior for static field members
+  // TODO add checks for static-ness?
   override def visitFieldAccessor(ctx: TypeCheckContext, x: EirFieldAccessor): EirType = {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
-    // TODO detection of cameViaFC and expectsSelf not at 100% yet, need to work on these
-    //      and implement self-application as well (i.e. (42).toString vs 42.toString())
-//    val expectsSelf = x.target match {
-//      // we do not expect ourself for static applications and that's it :)
-//      case s: EirSymbol[_] => !Find.uniqueResolution(s).isInstanceOf[EirClassLike]
-//      // one may only make field accesses to a specialized class
-//      // NOTE unless self-symbol application is added i.e. f<3> sugaring to f<3>()...
-//      // NOTE i think that's fairly unlikely tho cause' it's kinda vague
-//      case _: EirSpecializedSymbol => false
-//      case _ => true
-//    }
-    val prevFc: Option[EirFunctionCall] = ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
-//    val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
-//    val ours =
-//      if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
-//    // find the candidates ^_^
-//    val candidates = Find.resolveAccessor(ctx, base, x)
-//    val results = candidates.map(pair => {
-//      val (candidate, member) = pair
-//      val innerSpec = handleSpecialization(ctx, member)
-//      val found = member match {
-//        case t : EirLambdaType =>
-//          val theirs = t.from.map(visit(ctx, _))
-//          if (argumentsMatch(ours, theirs)) {
-//            (candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to)))
-//          } else {
-//            null
-//          }
-//        case x if ours.isEmpty => (candidate, x)
-//        case _ => null
-//      }
-//      innerSpec.foreach(ctx.leave)
-//      found
-//    })
+    val prevFc: Option[EirFunctionCall] =
+      ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     val candidates = Find.resolveAccessor(ctx, base, x)
     val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
     spec.foreach(ctx.leave)

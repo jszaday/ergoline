@@ -1,14 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFunction, EirFunctionArgument, EirLiteral, EirLiteralTypes, EirMember, EirNode, EirTemplateArgument, EirTrait}
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{arrayDim, arrayElementType, containsArray, isArray, nameFor, pupperFor, qualifiedNameFor, temporary, visitFunctionBody}
+import edu.illinois.cs.ergoline.passes.GenerateCpp._
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 object GenerateProxies {
 
