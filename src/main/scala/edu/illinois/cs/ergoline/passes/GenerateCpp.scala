@@ -177,26 +177,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case (_: EirTupleType, _) =>
           val tmp = temporary(ctx)
           ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
-            "return " + toPupable(expr)(tmp, (ours, theirs)) + ";"
+            "return " + toPupable((ctx, expr))(tmp, (ours, theirs)) + ";"
           } << "})(" << str() << ")"
-        case (_, _) => ctx << toPupable(expr)(str(), (ours, theirs))
+        case (_, _) => ctx << toPupable((ctx, expr))(str(), (ours, theirs))
       }
     } else {
       ctx << str()
     }
   }
 
-  def toPupable(ctx: EirExpressionNode)(current: String, types: (EirType, EirType)): String = {
+  def toPupable(ctx: (CodeGenerationContext, EirExpressionNode))(current: String, types: (EirType, EirType)): String = {
     // assumes ours, theirs for types
     types match {
       case (a: EirTupleType, b: EirTupleType) => {
-        val ours = a.children.map(Find.uniqueResolution[EirType])
-        val theirs = b.children.map(Find.uniqueResolution[EirType])
+        val ours = a.children.map(ctx._1.resolve[EirType])
+        val theirs = b.children.map(ctx._1.resolve[EirType])
         "std::make_tuple(" + ours.zip(theirs).zipWithIndex.map{
           case (tys, idx) => toPupable(ctx)(s"std::get<$idx>($current)", tys)
         }.mkString(", ") +")"
       }
-      case (t, _) if t.isTransient => Errors.cannotSerialize(ctx, t)
+      case (t, _) if t.isTransient => Errors.cannotSerialize(ctx._2, t)
       case (_, t) if t.isTrait => s"ergoline::to_pupable($current)"
       case _ => current
     }
@@ -299,16 +299,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def disambiguate(x: EirExpressionNode): EirNode = {
+  def disambiguate(ctx: CodeGenerationContext, x: EirExpressionNode): EirNode = {
     x.disambiguation.getOrElse(x match {
-      case x: EirResolvable[_] => Find.uniqueResolution(x)
+      case x: EirResolvable[_] => ctx.resolve(x)
       case x => x
     })
   }
 
   def visitSpecialization(ctx: CodeGenerationContext, s: EirSpecialization): Unit = {
     if (s.specialization.nonEmpty) {
-      val types = s.specialization.map(Find.uniqueResolution[EirType])
+      val types = s.specialization.map(ctx.resolve[EirType])
       ctx << "<" << {
         for (t <- types.init) {
           ctx << ctx.typeFor(t)
@@ -319,7 +319,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitFunctionCall(ctx: CodeGenerationContext, x: EirFunctionCall): Unit = {
-    val disambiguated = disambiguate(x.target)
+    val disambiguated = disambiguate(ctx, x.target)
     val arrayAccessor = asMember(Some(disambiguated)).collect{
       case m: EirMember if isArray(ctx, m.base) => m.name
     }
@@ -334,15 +334,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else {
       if (isAsync) {
         val retTy = disambiguated match {
-          case EirMember(_, f: EirFunction, _) => Find.uniqueResolution(f.returnType)
-          case f: EirFunction => Find.uniqueResolution(f.returnType)
+          case EirMember(_, f: EirFunction, _) => ctx.resolve(f.returnType)
+          case f: EirFunction => ctx.resolve(f.returnType)
           case _ => Errors.missingType(disambiguated)
         }
         ctx << "(([&](){ " << ctx.typeFor(retTy) << temporary(ctx) << ";"
       }
       val isPointer = x.target match {
         // TODO make this more robust
-        case s: EirSymbol[_] => Find.uniqueResolution(s) match {
+        case s: EirSymbol[_] => ctx.resolve(s) match {
           case _: EirDeclaration => true
           case EirMember(_, _: EirDeclaration, _) => true
           case _: EirFunctionArgument => true
@@ -447,7 +447,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ": " << {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(", ")
       } << {
-        val hasPupableParent = x.extendsThis.map(Find.uniqueResolution[EirType]).exists(!_.isTrait)
+        val hasPupableParent = x.extendsThis.map(ctx.resolve[EirType]).exists(!_.isTrait)
         Option.unless(x.isTransient || hasPupableParent)(", public PUP::able")
       } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
@@ -455,10 +455,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def puppingParents(x: EirClassLike): List[EirType] = {
+  def puppingParents(ctx: CodeGenerationContext, x: EirClassLike): List[EirType] = {
     // TODO enable stateful traits?
     // TODO be templating aware?
-    (x.extendsThis ++ x.implementsThese).map(Find.uniqueResolution[EirType])
+    (x.extendsThis ++ x.implementsThese).map(ctx.resolve[EirType])
       .filterNot(_.isTrait).toList
   }
 
@@ -467,7 +467,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (GenerateProxies.needsCasting(ours)) ours match {
       case t: EirTupleType =>
         t.children
-          .map(Find.uniqueResolution[EirType])
+          .map(ctx._1.resolve[EirType])
           .zipWithIndex.flatMap{
           case (t, idx) =>
             pupperFor(ctx)(s"std::get<$idx>($current)", t)
@@ -494,14 +494,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val puper = temporary(ctx)
     val header = if (isMember) s"virtual void pup(PUP::er &$puper) override" else s"void ${ctx.nameFor(x)}::pup(PUP::er &$puper)"
     ctx << header << "{" << {
-      val parents = puppingParents(x) match {
+      val parents = puppingParents(ctx, x) match {
         case Nil => List(s"PUP::able::pup($puper);")
         case ps => ps.map(ctx.nameFor(_)).map(_ + s"::pup($puper);")
       }
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty && !m.isStatic => d
       }).flatMap(d => {
-        pupperFor((ctx, x, puper))(ctx.nameFor(d), Find.uniqueResolution(d.declaredType))
+        pupperFor((ctx, x, puper))(ctx.nameFor(d), ctx.resolve(d.declaredType))
       })
       parents ++ values
     } << s"}"
@@ -655,7 +655,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def qualifiedNameFor(ctx: CodeGenerationContext, _usage: EirNode, includeTemplates: Boolean = false)(of: EirNode): String = {
     val usage = Some(_usage)
     val base = of match {
-      case t: EirTemplatedType => Find.uniqueResolution(t.base)
+      case t: EirTemplatedType => ctx.resolve(t.base)
       case _ => of
     }
     if (base.annotation("system").isDefined) {
@@ -673,7 +673,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def templateArgumentsToString(ctx: CodeGenerationContext, args: List[EirResolvable[EirType]], usage: Option[EirNode]): String = {
     "<" + {
-      args.map(Find.uniqueResolution[EirType]).map(ctx.typeFor(_, usage)).mkString(", ")
+      args.map(ctx.resolve[EirType]).map(ctx.typeFor(_, usage)).mkString(", ")
     } + ">"
   }
 
@@ -706,8 +706,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def selfName(ctx: CodeGenerationContext, n: EirNode): String = {
     val ty = n match {
       case e: EirExpressionNode if e.foundType.isDefined => e.foundType.get
-      case d: EirDeclaration => Find.uniqueResolution(d.declaredType)
-      case EirMember(_, d: EirDeclaration, _) => Find.uniqueResolution(d.declaredType)
+      case d: EirDeclaration => ctx.resolve(d.declaredType)
+      case EirMember(_, d: EirDeclaration, _) => ctx.resolve(d.declaredType)
       case _ => Errors.missingType(n)
     }
     "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
@@ -730,7 +730,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           selfName(ctx, s)
         } else {
           // TODO need to use FQN here, symbol is self-context providing
-          nameFor(ctx, Find.uniqueResolution(s), includeTemplates, usage.orElse(Some(s)))
+          nameFor(ctx, ctx.resolve(s), includeTemplates, usage.orElse(Some(s)))
         }
       case _ if proxy.isDefined => {
         val prefix =
@@ -758,7 +758,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             val index = if (n > 1) s"std::tuple<${List.fill(n)("int") mkString ", "}>" else "int"
             s"std::pair<$index, std::shared_ptr<${ctx.typeFor(arrayElementType(x), usage)}>>"
           case None =>
-            nameFor(ctx, Find.uniqueResolution(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
+            nameFor(ctx, ctx.resolve(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
         }
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
@@ -789,13 +789,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def typeForEntryArgument(ctx: (CodeGenerationContext, EirNode))(ty: EirResolvable[EirType]): String = {
-    val resolution = Find.uniqueResolution[EirNode](ty)
+    val resolution = ctx._1.resolve[EirNode](ty)
     resolution match {
       case _: EirTemplateArgument => ctx._1.nameFor(resolution, Some(ctx._2))
       case t: EirTupleType =>
         "std::tuple<" + {
           t.children
-            .map(Find.uniqueResolution[EirType])
+            .map(ctx._1.resolve[EirType])
             .map(typeForEntryArgument(ctx))
             .mkString(", ")
         } + ">"
@@ -838,7 +838,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitLambdaExpression(ctx: CodeGenerationContext, x: EirLambdaExpression): Unit = {
     val captures = x.captures.map(captured => {
       // TODO use specialized version when avail
-      val ty = typeOf(captured).map(Find.uniqueResolution[EirNode])
+      val ty = typeOf(captured).map(ctx.resolve[EirNode])
       val isPointer = ty.exists({
         case t: EirType => t.isPointer
         case _ => false
@@ -866,7 +866,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val args = (ty.to +: ty.from).map(ctx.typeFor(_))
     val ctypes = captures
       .map(x => typeOf(x).getOrElse(Errors.missingType(x)))
-      .map(Find.uniqueResolution(_) match {
+      .map(ctx.resolve(_) match {
         case t: EirType => t
         case _ => ???
       })
@@ -954,7 +954,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
-    val objTy: EirType = Find.uniqueResolution(x.target)
+    val objTy: EirType = ctx.resolve(x.target)
     val proxy = ProxyManager.asProxy(objTy)
     val moveHeadToLast: Boolean = proxy.flatMap(_.collective).exists(_.startsWith("array"))
     val args = {
@@ -1000,7 +1000,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           })
       }
       case i@EirIdentifierPattern(_, n, t) if n != "_" =>
-        val ty = Find.uniqueResolution(t)
+        val ty = ctx.resolve(t)
         ctx.ignoreNext(";")
         if (ty.isPointer) ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current);"
         else ctx << i.declarations.head << s" = $current;"
@@ -1012,10 +1012,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx.toString
   }
 
-  def typeAt(t: Option[EirType], idx: Int): Option[EirType] = {
+  def typeAt(ctx: CodeGenerationContext, t: Option[EirType], idx: Int): Option[EirType] = {
     t match {
       case Some(t: EirTupleType) if idx < t.children.length =>
-        Some(Find.uniqueResolution[EirType](t.children(idx)))
+        Some(ctx.resolve[EirType](t.children(idx)))
       case _ => None
     }
   }
@@ -1026,7 +1026,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case p :: Nil => visitPatternCond(parent, p, current, parentType)
         case patterns =>
           patterns.zipWithIndex.flatMap {
-            case (p, idx) => visitPatternCond(parent, p, s"std::get<$idx>($current)", typeAt(parentType, idx))
+            case (p, idx) => visitPatternCond(parent, p, s"std::get<$idx>($current)", typeAt(parent, parentType, idx))
           }
       }
       case EirIdentifierPattern(_, "_", t) =>
@@ -1040,7 +1040,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
         }
       case EirIdentifierPattern(_, n, t) =>
-        Option.when(Find.uniqueResolution(t).isPointer)(n).toList
+        Option.when(parent.resolve(t).isPointer)(n).toList
       case e: EirExpressionPattern =>
         val ctx = parent.makeSubContext()
         (ctx << current << " == " << e.expression).toString.split(n).toList
@@ -1123,7 +1123,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = ???
 
   override def visitSpecializedSymbol(ctx: CodeGenerationContext, x: EirSpecializedSymbol): Unit = {
-    val base = Find.uniqueResolution(x.symbol)
+    val base = ctx.resolve(x.symbol)
     ctx << ctx.nameFor(base) << visitSpecialization(ctx, x)
   }
 
@@ -1136,7 +1136,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitTemplatedType(ctx: CodeGenerationContext, x: EirTemplatedType): Unit = {
-    val base = Find.uniqueResolution(x.base)
+    val base = ctx.resolve(x.base)
     ctx << ctx.nameFor(base) << "<"
     if (x.args.nonEmpty) {
       x.args.init.foreach(t => {
