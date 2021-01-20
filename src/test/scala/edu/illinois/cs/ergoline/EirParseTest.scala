@@ -65,7 +65,7 @@ class EirParseTest extends FunSuite {
   }
   test("mini function args test") {
     EirGlobalNamespace.clear()
-    val f = (new Visitor).visitFunction(parserFromString("def foo (var bar : unit, =baz : unit): unit { }").function())
+    val f = (new Visitor).visitFunction(parserFromString("def foo (bar : unit, =baz : *unit): unit { }").function())
     f.functionArgs.length shouldEqual 2
     f.functionArgs.head should matchPattern {
       case EirFunctionArgument(_, "bar", _, false, false) =>

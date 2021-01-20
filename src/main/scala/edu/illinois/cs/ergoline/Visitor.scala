@@ -313,7 +313,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
     val arg = EirFunctionArgument(parent, ctx.Identifier.getText, null,
-      isFinal = Option(ctx.VariableKeyword()).isEmpty,
+      isExpansion = Option(ctx.expansion).isDefined,
       isSelfAssigning = Option(ctx.Equals()).isDefined)
     enter(arg, (_: EirFunctionArgument) => {
       arg.declaredType = visitAs[EirResolvable[EirType]](ctx.`type`())

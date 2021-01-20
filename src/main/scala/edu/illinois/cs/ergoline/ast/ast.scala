@@ -440,7 +440,7 @@ case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var r
 }
 
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
-                               var declaredType: EirResolvable[EirType], var isFinal: Boolean, var isSelfAssigning: Boolean)
+                               var declaredType: EirResolvable[EirType], var isExpansion: Boolean, var isSelfAssigning: Boolean)
   extends EirNamedNode {
   override def children: Iterable[EirNode] = Seq(declaredType)
 
@@ -449,7 +449,7 @@ case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
   }
 
   def cloneWith(other: Option[EirNode]): EirFunctionArgument = {
-    EirFunctionArgument(other, name, declaredType, isFinal, isSelfAssigning)
+    EirFunctionArgument(other, name, declaredType, isExpansion, isSelfAssigning)
   }
 }
 

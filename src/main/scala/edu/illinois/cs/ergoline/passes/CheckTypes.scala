@@ -93,30 +93,29 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 //      case _ => true
 //    }
     val prevFc: Option[EirFunctionCall] = ctx.immediateAncestor[EirFunctionCall]
-    val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
-    val ours =
-      if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
-    // find the candidates ^_^
-    val candidates = Find.resolveAccessor(ctx, base, x)
-    val results = candidates.map(pair => {
-      val (candidate, member) = pair
-      val innerSpec = handleSpecialization(ctx, member)
-      val found = member match {
-        case t : EirLambdaType =>
-          val theirs = t.from.map(visit(ctx, _))
-          if (argumentsMatch(ours, theirs)) {
-            (candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to)))
-          } else {
-            null
-          }
-        case x if ours.isEmpty => (candidate, x)
-        case _ => null
-      }
-      innerSpec.foreach(ctx.leave)
-      found
-    })
-    val found = results
-      .filterNot(_ == null).headOption
+//    val cameViaFuncCall = prevFc.isDefined && !prevFc.exists(_.args.contains(x))
+//    val ours =
+//      if (cameViaFuncCall) prevFc.get.args.map(visit(ctx, _)) else Nil
+//    // find the candidates ^_^
+//    val candidates = Find.resolveAccessor(ctx, base, x)
+//    val results = candidates.map(pair => {
+//      val (candidate, member) = pair
+//      val innerSpec = handleSpecialization(ctx, member)
+//      val found = member match {
+//        case t : EirLambdaType =>
+//          val theirs = t.from.map(visit(ctx, _))
+//          if (argumentsMatch(ours, theirs)) {
+//            (candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to)))
+//          } else {
+//            null
+//          }
+//        case x if ours.isEmpty => (candidate, x)
+//        case _ => null
+//      }
+//      innerSpec.foreach(ctx.leave)
+//      found
+//    })
+    val found = screenCandidates(ctx, getArguments(ctx, prevFc), Find.resolveAccessor(ctx, base, x))
     spec.foreach(ctx.leave)
     found match {
       case Some((member, result)) =>
@@ -191,15 +190,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     case _ => false
   }
 
-  def validate(ctx: TypeCheckContext, target: EirMember, call: EirFunctionCall): Unit = {
-    val current = ctx.ancestor[EirMember]
-    val bases = current.map(x => (x.base, target.base))
-    if ((bases.isEmpty && !target.isPublic) ||
-         bases.exists(!accessibleMember(_, target.accessibility))) {
-      Errors.inaccessibleMember(target, call)
-    }
-    if (target.isEntryOnly && current.exists(targetsSelf(_, call))) {
-      current.foreach(_.makeEntryOnly())
+  def validate(ctx: TypeCheckContext, target: EirNamedNode, call: EirFunctionCall): Unit = {
+    target match {
+      case member: EirMember =>
+        val current = ctx.ancestor[EirMember]
+        val bases = current.map(x => (x.base, member.base))
+        if ((bases.isEmpty && !member.isPublic) ||
+          bases.exists(!accessibleMember(_, member.accessibility))) {
+          Errors.inaccessibleMember(member, call)
+        }
+        // NOTE this should probably check to see if self@ only?
+        if (member.isEntryOnly && current.exists(targetsSelf(_, call))) {
+          current.foreach(_.makeEntryOnly())
+        }
+      case _ =>
     }
   }
 
@@ -288,9 +292,52 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _ => false
     }
 
+  def applyFuncArgs(ctx: TypeCheckContext, node: EirNode, types: List[EirResolvable[EirType]]): List[EirType] = {
+    val fnArgs = node match {
+      case EirMember(_, f: EirFunction, _) => f.functionArgs
+      case f: EirFunction => f.functionArgs
+      case l: EirLambdaExpression => l.args
+      case _ => Nil
+    }
+    fnArgs.zip(types.map(visit(ctx, _))).flatMap {
+      case (arg, ty : EirTupleType) if arg.isExpansion => ty.children.map(visit(ctx, _))
+      case (_, ty) => Some(ty)
+    }
+  }
+
+  def screenCandidates(ctx: TypeCheckContext, args: Option[List[EirResolvable[EirType]]], candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
+    val ours = args.map(_.map(visit(ctx, _)))
+    val results = candidates.map(pair => {
+      val (candidate, member) = pair
+      val innerSpec = handleSpecialization(ctx, member)
+      val found = (member, ours) match {
+        case (t : EirLambdaType, Some(ours)) =>
+          val theirs = applyFuncArgs(ctx, candidate, t.from)
+          if (argumentsMatch(ours, theirs)) {
+            Some((candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to))))
+          } else {
+            None
+          }
+        case (x, None) => Some(candidate, x)
+        case (_, Some(_)) => None
+      }
+      innerSpec.foreach(ctx.leave)
+      found
+    })
+    results.collectFirst{ case Some(x) => x }
+  }
+
+
+  def getArguments(ctx: TypeCheckContext, opt: Option[EirExpressionNode]): Option[List[EirType]] = {
+    val args = opt.collect{
+      case f: EirFunctionCall => f.args
+      case n: EirNew => n.args
+    }
+    args.map(_.map(visit(ctx, _)))
+  }
+
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
     val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
-    val ours = prevFc.map(_.args.map(visit(ctx, _))).getOrElse(Nil)
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
     val candidates = {
       val resolved = value.resolve()
@@ -304,20 +351,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         resolved
       }
     }
-    val found = candidates.find({
-      case f: EirFunction => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
-      case EirMember(_, f: EirFunction, _) => argumentsMatch(ours, f.functionArgs.map(visit(ctx, _)))
-      case s: EirSpecializable if s.templateArgs.nonEmpty && !ctx.hasSubstitution(s) && !value.parent.exists(_.isInstanceOf[EirTemplatedType]) =>
-        Errors.missingSpecialization(s)
-      case f => ours.isEmpty || (visit(ctx, f) match {
-        case t: EirLambdaType => argumentsMatch(ours, t.from.map(visit(ctx, _)))
-        case _ => false
-      })
-    })
-    value.disambiguation = found
-    val retTy = found.map(visit(ctx, _))
+    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates.zip(candidates.map(visit(ctx, _))))
+    value.disambiguation = found.map(_._1)
+    val retTy = found.map(x => visit(ctx, x._2))
     prevFc
-      .zip(asMember(found))
+      .zip(asMember(found.map(_._1)))
       .foreach(x => validate(ctx, x._2, x._1))
     retTy.getOrElse(self match {
       case Some(_) => throw MissingSelfException(value)
@@ -621,18 +659,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
-    val ours = visit(ctx, x.args).toList
-    x.disambiguation = candidates.find((m : EirMember) => {
-      val f = m.member.asInstanceOf[EirFunction]
-      val theirs =
-        // proxy-related args are provided by the runtime
-        f.functionArgs.map(visit(ctx, _))
-      val matches = argumentsMatch(ours, theirs)
-      matches
-    })
+    val found = screenCandidates(ctx, getArguments(ctx, Some(x)), candidates.zip(candidates.map(visit(ctx, _))))
+    x.disambiguation = found.map(_._2)
     spec.foreach(ctx.leave)
-    x.disambiguation match {
-      case Some(_) => base
+    found match {
+      case Some((m, _)) => base
       case _ => error(ctx, x, "could not find a suitable constructor")
     }
   }

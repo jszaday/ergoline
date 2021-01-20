@@ -328,8 +328,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       return
     }
     val isAsync = disambiguated.annotation("async").isDefined
-    val isSystem = disambiguated.annotations.exists(_.name == "system")
-    if (isSystem) {
+    if (disambiguated.isSystem) {
       ctx << visitSystemCall(ctx, x.target, disambiguated, x.args)
     } else {
       if (isAsync) {
@@ -949,13 +948,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def explode(args: List[EirExpressionNode]): List[EirExpressionNode] = {
-    args.headOption.collect{
-      case x: EirTupleExpression => x.expressions
-      case x: EirExpressionNode => List(x)
-    }.getOrElse(???)
-  }
-
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
     val objTy: EirType = Find.uniqueResolution(x.target)
     val proxy = ProxyManager.asProxy(objTy)
@@ -975,7 +967,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             ctx << "std::make_pair("
             if (n == 1) ctx << args.head else ctx << (args, ", ") << ")"
             val eleTy = ctx.typeFor(arrayElementType(t), Some(x))
-            ctx << "," << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (explode(args), "*") << ")), [](void* p) { free(p); }))"
+            ctx << "," << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (args, "*") << ")), [](void* p) { free(p); })"
           case None => visitArguments(ctx)(x.disambiguation, args)
         }
         ctx<< ")"
@@ -1094,9 +1086,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case Some(_) if collective.exists(x => x == "group" || x == "nodegroup") =>
         ctx << arrayRef.target << "[" << (arrayRef.args, ",") << "]"
       case Some(t) if isArray(ctx, t) => {
-        ctx << "(" << arrayRef.target << "->second.get())[" << {
-          arrayRef.args.head
-        } << "]"
+        val target = arrayRef.target
+        val args = arrayRef.args
+        ctx << "(" << target << "->second.get())["
+        args.init.zipWithIndex.foreach {
+          case (arg, idx) => ctx << arg << s"* std::get<$idx>(" << target << "->first) +"
+        }
+        ctx << args.last
+        ctx << "]"
       }
       case Some(t) =>
         if (isPlainArrayRef(arrayRef)) {

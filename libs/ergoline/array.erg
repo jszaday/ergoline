@@ -5,12 +5,12 @@ class array<A, N: int = 1> {
     using shape = (int) .* N;
 
     @system def array();
-    @system def array(n: shape);
+    @system def array(n: *shape);
 
     @system(alias="[]")
-    def get(idx: shape): A;
+    def get(idx: *shape): A;
     @system(alias="[]")
-    def set(idx: shape, value: A): unit;
+    def set(idx: *shape, value: A): unit;
     @system def size(): shape;
 
     @system def getOrNone(idx: int): option<A>;

@@ -146,7 +146,7 @@ function
     ;
 
 functionArgument
-    :   VariableKeyword? Equals? Identifier ':' type
+    :   Equals? Identifier ':' expansion='*'? type
     ;
 
 functionArgumentList
