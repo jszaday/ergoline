@@ -19,7 +19,7 @@ class TypeCheckContext {
     implicit class RichEirSpecializable(specializable: EirSpecializable) {
       def accepts(specialization: EirSpecialization): Boolean = {
         val ours = specializable.templateArgs
-        val theirs = specialization.specialization
+        val theirs = specialization.types
         val n = math.max(ours.length, theirs.length)
         var i = 0
         while (i < n) {
@@ -41,7 +41,7 @@ class TypeCheckContext {
 
       def sameAs(specialization: EirSpecialization): Boolean = {
         val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
-        val theirs = Find.uniqueResolution[EirType](specialization.specialization)
+        val theirs = Find.uniqueResolution[EirType](specialization.types)
         ours.zip(theirs).forall(t => t._1 == t._2)
       }
     }
@@ -168,7 +168,7 @@ class TypeCheckContext {
     stack.collectFirst {
       case x: EirSpecialization if !_substitutions.exists(y => {
         x.asInstanceOf[AnyRef] eq y._2
-      }) && x.specialization.nonEmpty => x
+      }) && x.types.nonEmpty => x
     }
   }
 
@@ -176,20 +176,20 @@ class TypeCheckContext {
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {
-    if (sp.specialization.length < s.templateArgs.length) {
-      s.templateArgs.zip(sp.specialization ++ {
-        s.templateArgs.slice(sp.specialization.length, s.templateArgs.length).map(x => {
+    if (sp.types.length < s.templateArgs.length) {
+      s.templateArgs.zip(sp.types ++ {
+        s.templateArgs.slice(sp.types.length, s.templateArgs.length).map(x => {
           x.defaultValue.getOrElse(Errors.missingType(x))
         })
       })
     } else {
       val (init, last) = (s.templateArgs.init, s.templateArgs.last)
       if (last.isPack) {
-        init.zip(sp.specialization) :+ {
-          (last, sp.specialization.slice(init.length, sp.specialization.length).toTupleType(None))
+        init.zip(sp.types) :+ {
+          (last, sp.types.slice(init.length, sp.types.length).toTupleType(None))
         }
       } else {
-        (init :+ last).zip(sp.specialization)
+        (init :+ last).zip(sp.types)
       }
     }
   }

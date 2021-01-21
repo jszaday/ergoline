@@ -419,20 +419,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
-    // TODO check self-assigning arguments?
-//    val args = node.functionArgs.map(_.declaredType).map(visit(ctx, _))
-//    val retTy: EirType = visit(ctx, node.returnType)
-//    val found: Option[EirType] = node.body.flatMap(body => Option(visit(ctx, body)))
-//    // TODO or member of abstract class (to be added
-//    val noReturnOk = retTy.isUnitType ||
-//      (node.body.isEmpty && annotationsOf(node).map(_.name).contains("system"))
-//    found match {
-//      case None if !noReturnOk =>
-//        throw TypeCheckException(s"expected a return value of type $retTy for ${node.name}")
-//      case Some(other) if !other.canAssignTo(retTy) =>
-//        throw TypeCheckException(s"${node.name} cannot return a value of type $other")
-//      case _ =>
-//    }
     val member = ctx.immediateAncestor[EirMember]
     val proxy = member.flatMap(_.parent).to[EirProxy]
     val opt = (proxy, node.body) match {
@@ -571,7 +557,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class TypeCheckException(message: String) extends Exception(message)
 
   def visitSpecializedFunction(ctx: TypeCheckContext, f: EirFunction, x: EirSpecialization): EirType = {
-    if (f.templateArgs.length != x.specialization.length) {
+    if (f.templateArgs.length != x.types.length) {
       error(ctx, x, "template length mismatch")
     }
     val enter = ctx.specialize(f, x)
@@ -587,7 +573,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     // TODO iterate through overloads
     val specializable = Find.uniqueResolution(x.symbol)
     specializable.asInstanceOf[Any] match {
-      case c : EirClassLike if c.templateArgs.length == x.specialization.length => EirTemplatedType(Some(x), c, x.specialization)
+      case c : EirClassLike if c.templateArgs.length == x.types.length => EirTemplatedType(Some(x), c, x.types)
       // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
       case EirMember(_, f : EirFunction, _) => visitSpecializedFunction(ctx, f, x)
       case f: EirFunction => visitSpecializedFunction(ctx, f, x)
@@ -688,7 +674,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
     val goal = ctx.goal.pop()
-    val ours = x.ty
     val found = x.ty match {
       case _: EirPlaceholder[_] => goal
       // TODO add type-checking to verify:
@@ -757,10 +742,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {
-    x.resolve().headOption.map{
+    x.resolve().headOption.collect {
       case y: EirConstantFacade => y.value
       case x: EirTemplateArgument => valueWithin(ctx, visit(ctx, x))
-      case _ => ???
     }.getOrElse(Errors.unableToResolve(x))
   }
 

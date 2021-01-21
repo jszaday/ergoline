@@ -14,7 +14,7 @@ object ProxyManager {
     s match {
       case arrayPtn(dim) => dim.toInt
       case "nodegroup" | "group" => 1
-      case _ => throw new RuntimeException(s"unsure how to match $s")
+      case _ => Errors.unreachable()
     }
   }
 
@@ -67,19 +67,19 @@ object ProxyManager {
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
       case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
-      case None => ???
+      case None => Errors.missingType(p)
     }
   }
 
   def collectiveType(p: EirProxy): EirType = {
     collectiveFor(p) match {
       case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
-      case None => ???
+      case None => Errors.missingType(p)
     }
   }
 
   def proxyFor(t: EirProxyType): EirType = {
-    val ctve = t.collective.getOrElse("")
+    val collective = t.collective.getOrElse("")
     val resolved = Find.uniqueResolution(t.base)
     val base = resolved match {
       case t: EirTemplatedType =>
@@ -92,11 +92,11 @@ object ProxyManager {
       case _ if base.templateArgs.isEmpty => Nil
       case _ => Errors.missingSpecialization(base)
     }
-    val baseProxy = _proxies.get((ctve, base)) match {
+    val baseProxy = _proxies.get((collective, base)) match {
       case Some(p) => p
       case _ =>
         val proxy = checkProxyable(base, t.collective, isElement = false)
-        _proxies += ((ctve, base) -> proxy)
+        _proxies += ((collective, base) -> proxy)
         proxy
     }
     typeFor(Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy), templateArgs)

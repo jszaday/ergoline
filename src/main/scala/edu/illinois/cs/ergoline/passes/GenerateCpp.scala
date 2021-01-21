@@ -306,8 +306,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitSpecialization(ctx: CodeGenerationContext, s: EirSpecialization): Unit = {
-    if (s.specialization.nonEmpty) {
-      val types = s.specialization.map(ctx.resolve[EirType])
+    if (s.types.nonEmpty) {
+      val types = s.types.map(ctx.resolve[EirType])
       ctx << "<" << {
         for (t <- types.init) {
           ctx << ctx.typeFor(t)

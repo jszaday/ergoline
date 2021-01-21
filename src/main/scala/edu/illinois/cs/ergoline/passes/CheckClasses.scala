@@ -1,12 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.resolution.Find.asClassLike
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
-
-import scala.annotation.tailrec
 
 object CheckClasses {
 

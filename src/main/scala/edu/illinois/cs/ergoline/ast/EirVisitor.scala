@@ -55,11 +55,10 @@ trait EirVisitor[Context, Value] {
       case x: EirInterpolatedString => visitInterpolatedString(ctx, x)
       case x: EirTupleMultiply => visitTupleMultiply(ctx, x)
       case x: EirConstantFacade => visitConstantFacade(ctx, x)
-      case x: EirResolvable[_] if x.resolved => {
+      case x: EirResolvable[_] if x.resolved =>
         val found = Find.uniqueResolution(x)
         if (found == x) error(ctx, found)
         else visit(ctx, found)
-      }
       case x: EirAwait => visitAwait(ctx, x)
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)

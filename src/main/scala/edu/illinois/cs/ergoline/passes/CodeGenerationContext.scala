@@ -73,7 +73,8 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
     _substitutions.flatMap({
-      case (sable, stion) => sable.templateArgs.zip(stion.specialization)
+      case (specializable, specialization) =>
+        specializable.templateArgs.zip(specialization.types)
     }).collectFirst({
       case (arg, ty) if arg == t => resolve(ty)
     })

@@ -5,14 +5,14 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirTy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 object TypeCompatibility {
+
   implicit class RichEirType(ours: EirType) {
     def canAssignTo(theirs: EirType): Boolean = (ours == theirs) || ((ours, theirs) match {
-      case (x: EirTemplatedType, y: EirTemplatedType) => {
+      case (x: EirTemplatedType, y: EirTemplatedType) =>
         // TODO add checking for default arguments
         x.base.canAssignTo(y.base) && (x.args.length == y.args.length) && x.args.zip(y.args).forall{
           case (xx, yy) => xx.canAssignTo(yy)
         }
-      }
       case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
       case (x: EirTupleType, y: EirTupleType) =>
         x.children.length == y.children.length &&

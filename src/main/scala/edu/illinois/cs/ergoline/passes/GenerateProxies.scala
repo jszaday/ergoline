@@ -131,7 +131,7 @@ object GenerateProxies {
   }
 
   private def arraySizes(ctx: CodeGenerationContext, name: String, t: EirType): List[String] = {
-    val nd = arrayDim(ctx, t).getOrElse(???)
+    val nd = arrayDim(ctx, t).getOrElse(Errors.unreachable())
     (0 until nd).map(name + "_sz" + _).toList
   }
 
@@ -188,14 +188,13 @@ object GenerateProxies {
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
-      case Some(m@EirMember(_, f: EirFunction, _)) => {
+      case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
         } else {
           ctx << s"this->impl_->${ctx.nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
         }
-      }
-      case _ => ???
+      case _ => Errors.unreachable()
     }
   }
 

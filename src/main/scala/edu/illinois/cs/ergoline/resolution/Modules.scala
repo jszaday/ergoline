@@ -1,17 +1,16 @@
 package edu.illinois.cs.ergoline.resolution
 
-import java.io.File
-import java.io.File.{pathSeparator, separator}
-import java.nio.file.{Files, Path, Paths}
-
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.Processes
-import edu.illinois.cs.ergoline.resolution.Find.{parentOf, withName}
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
+import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
-import org.antlr.v4.runtime.{BailErrorStrategy, CharStream, CharStreams, CommonTokenStream, ConsoleErrorListener, RecognitionException, Recognizer}
+import org.antlr.v4.runtime._
 
+import java.io.File
+import java.io.File.pathSeparator
+import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable
 import scala.util.Properties
 

@@ -45,10 +45,8 @@ object CheckConstructors {
     constructors.length
   }
 
-  def fulfillsSuperConstructor(constructor: EirMember): Boolean = {
-    // TODO implement this?
-    true
-  }
+  // TODO implement this?
+  def fulfillsSuperConstructor(constructor: EirMember): Boolean = true
 
   def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {

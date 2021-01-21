@@ -1,10 +1,9 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirExpressionNode, EirFileSymbol, EirGlobalNamespace, EirLiteral, EirLiteralTypes, EirNamedNode, EirNode, EirScope, EirSymbol}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode = EirLiteral(parent, EirLiteralTypes.Unit, "()")
