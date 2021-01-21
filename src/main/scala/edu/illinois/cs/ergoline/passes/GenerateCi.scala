@@ -23,7 +23,7 @@ object GenerateCi {
     // TODO this is not nesting aware!
     val grouped = ctx.puppables.groupBy(Find.parentOf[EirNamespace](_).getOrElse(???))
     grouped.foreach({
-      case (ns, pupables) => {
+      case (ns, pupables) =>
         ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
         ctx << ctx.lambdas.getOrElse(ns, Nil).map(ctx.nameFor(_)).map(name => s"PUPable $name;")
         ctx << pupables.flatMap(x => {
@@ -36,7 +36,6 @@ object GenerateCi {
           };")
         })
         ctx << "}"
-      }
     })
   }
 
@@ -58,7 +57,7 @@ object GenerateCi {
   def makeChareSpecializations(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     val kind = visitChareType(proxy.isMain, proxy.collective)
     val specializations = ctx.checked.getOrElse(proxy, Nil).map(
-      _.specialization.map(Find.uniqueResolution[EirType])
+      _.types.map(Find.uniqueResolution[EirType])
     ) // NOTE we might want to consider putting .distinct here?
       //      (but it shouldn't be necessary)
     specializations.foreach(sp => {

@@ -36,6 +36,7 @@ object CheckFunctions {
     overridesWithin(ctx, member.base, assertValid[EirFunction](member.member))
   }
 
+  // TODO check self-assigning arguments?
   def visit(ctx: TypeCheckContext, function: EirFunction): Unit = {
     val overloads = Find.overloads(function)
     val member = function.parent.to[EirMember]

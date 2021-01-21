@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.Errors
 
 case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var collective: Option[String], var isElement: Boolean) extends EirClassLike {
 
@@ -107,7 +108,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     }).getOrElse(Nil)
   }
 
-  override def members_=(lst: List[EirMember]): Unit = ???
+  override def members_=(lst: List[EirMember]): Unit = Errors.exit("cannot assign to members of proxy")
 
   override var extendsThis: Option[EirResolvable[types.EirType]] = None
   override var implementsThese: List[EirResolvable[types.EirType]] = Nil

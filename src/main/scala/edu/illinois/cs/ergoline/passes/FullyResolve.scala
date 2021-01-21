@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNamespace, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -10,12 +10,11 @@ object FullyResolve {
     node.children.foreach({
       case x: EirImport if !x.resolved => x.resolve()
       case x: EirImport if x.resolved =>
-      case x if x.annotation("system").isDefined => {
+      case x if x.annotation("system").isDefined =>
         // TODO this PROBABLY should happen somewhere else.
         Processes.cppIncludes ++= x.annotation("system")
           .flatMap(_.opts.get("fromHeader").map(_.stripped))
         x
-      }
       case child => seekImports(child)
     })
   }
@@ -51,11 +50,10 @@ object FullyResolve {
 
   def verify(node : EirNode): Boolean = {
     node.children.map({
-      case resolvable: EirResolvable[_] => {
+      case resolvable: EirResolvable[_] =>
         val resolved = resolvable.resolved
         if (!resolved) Errors.unableToResolve(resolvable)
         resolved
-      }
       case child => verify(child)
     }).forall(identity)
   }

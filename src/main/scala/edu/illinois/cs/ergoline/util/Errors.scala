@@ -43,6 +43,11 @@ object Errors {
     exitAction = (s: String) => throw EirException(s)
   }
 
+  def unreachable(): Nothing = {
+    useDebugAction()
+    exit("this should be unreachable, you may need to report this issue!")
+  }
+
   def assignToVal(node: EirAssignment): Nothing = {
     exit(format(node, "assignment to val (%s)", node.lval))
   }

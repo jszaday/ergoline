@@ -187,12 +187,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ours = call.args.map(visit(ctx, _))
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
-      case EirLambdaType(_, args, retTy, _) if argumentsMatch(ours, args.map(visit(ctx, _))) => {
+      case EirLambdaType(_, args, retTy, _) if argumentsMatch(ours, args.map(visit(ctx, _))) =>
         retTy match {
           case t: EirType => t
           case _ => visit(ctx, retTy)
         }
-      }
       case _ => error(ctx, call, s"cannot resolve ((${ours mkString ", "}) => ???) and $target")
     }
   }
@@ -221,13 +220,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           Errors.unableToUnify(h.expression, List(base, iterableTy, iteratorTy))
         }
         visit(ctx, t.args.head)
-      case _ => ???
+      case t => Errors.incorrectType(t, EirTemplatedType.getClass)
     }
   }
 
   override def visitForLoop(ctx: TypeCheckContext, loop: EirForLoop): EirType = {
     loop.header match {
-      case EirCStyleHeader(decl, test, incr) => {
+      case EirCStyleHeader(decl, test, incr) =>
         visit(ctx, decl)
         val ttype = test.map(visit(ctx, _))
         val boolean = globals.typeFor(EirLiteralTypes.Boolean)
@@ -235,15 +234,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           Errors.cannotCast(loop, ttype.get, boolean)
         }
         visit(ctx, incr)
-      }
-      case h: EirForAllHeader => {
+      case h: EirForAllHeader =>
         val iterTy = resolveIterator(ctx, h)
         if (h.identifiers.length == 1) {
           h.declarations.head.declaredType = iterTy
-        }
-        else ???
-      }
-      case _ => ???
+        } else ???
+      case _ => Errors.unreachable()
     }
     visit(ctx, loop.body)
   }
@@ -296,7 +292,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
     results.headOption
   }
-
 
   def getArguments(ctx: TypeCheckContext, opt: Option[EirExpressionNode]): Option[List[EirType]] = {
     val args = opt.collect{
@@ -360,9 +355,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     ctx.avail(node).foreach(return _)
     val lval = {
       node.declaredType match {
-        case p: EirPlaceholder[_] => {
-          p.expectation.map(visit(ctx, _))
-        }
+        case p: EirPlaceholder[_] => p.expectation.map(visit(ctx, _))
         case t => Some(visit(ctx, t))
       }
     }
@@ -370,14 +363,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ty = (lval, rval) match {
       case (None, None) => Errors.missingType(node)
       case (Some(a), None) => a
-      case (None, Some(b)) => {
-        node.declaredType = b
-        b
-      }
-      case (Some(a), Some(b)) => {
-        if (b.canAssignTo(a)) a
-        else Errors.cannotCast(node, b, a)
-      }
+      case (None, Some(b)) => node.declaredType = b; b
+      case (Some(a), Some(b)) if b.canAssignTo(a) => a
+      case (Some(a), Some(b)) => Errors.cannotCast(node, b, a)
     }
     ctx.cache(node, ty)
     ty
@@ -431,20 +419,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
-    // TODO check self-assigning arguments?
-//    val args = node.functionArgs.map(_.declaredType).map(visit(ctx, _))
-//    val retTy: EirType = visit(ctx, node.returnType)
-//    val found: Option[EirType] = node.body.flatMap(body => Option(visit(ctx, body)))
-//    // TODO or member of abstract class (to be added
-//    val noReturnOk = retTy.isUnitType ||
-//      (node.body.isEmpty && annotationsOf(node).map(_.name).contains("system"))
-//    found match {
-//      case None if !noReturnOk =>
-//        throw TypeCheckException(s"expected a return value of type $retTy for ${node.name}")
-//      case Some(other) if !other.canAssignTo(retTy) =>
-//        throw TypeCheckException(s"${node.name} cannot return a value of type $other")
-//      case _ =>
-//    }
     val member = ctx.immediateAncestor[EirMember]
     val proxy = member.flatMap(_.parent).to[EirProxy]
     val opt = (proxy, node.body) match {
@@ -544,11 +518,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
               .exists(m => m.base == x && m.isConstructor)
           })
         }
-        case a : EirFunctionArgument => true
+        case _ : EirFunctionArgument => true
         case _ => false
       }
-      case _: EirArrayReference => false
-      case _ => ???
+      case _ : EirArrayReference => false
+      case _ : EirFieldAccessor => ???
+      case _ => true
     }
   }
 
@@ -582,7 +557,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class TypeCheckException(message: String) extends Exception(message)
 
   def visitSpecializedFunction(ctx: TypeCheckContext, f: EirFunction, x: EirSpecialization): EirType = {
-    if (f.templateArgs.length != x.specialization.length) {
+    if (f.templateArgs.length != x.types.length) {
       error(ctx, x, "template length mismatch")
     }
     val enter = ctx.specialize(f, x)
@@ -598,7 +573,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     // TODO iterate through overloads
     val specializable = Find.uniqueResolution(x.symbol)
     specializable.asInstanceOf[Any] match {
-      case c : EirClassLike if c.templateArgs.length == x.specialization.length => EirTemplatedType(Some(x), c, x.specialization)
+      case c : EirClassLike if c.templateArgs.length == x.types.length => EirTemplatedType(Some(x), c, x.types)
       // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
       case EirMember(_, f : EirFunction, _) => visitSpecializedFunction(ctx, f, x)
       case f: EirFunction => visitSpecializedFunction(ctx, f, x)
@@ -699,7 +674,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
     val goal = ctx.goal.pop()
-    val ours = x.ty
     val found = x.ty match {
       case _: EirPlaceholder[_] => goal
       // TODO add type-checking to verify:
@@ -768,10 +742,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {
-    x.resolve().headOption.map{
+    x.resolve().headOption.collect {
       case y: EirConstantFacade => y.value
       case x: EirTemplateArgument => valueWithin(ctx, visit(ctx, x))
-      case _ => ???
     }.getOrElse(Errors.unableToResolve(x))
   }
 

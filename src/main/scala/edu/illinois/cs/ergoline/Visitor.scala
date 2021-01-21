@@ -297,7 +297,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     } else if (ctx.`type`() != null) {
       visitAs[EirResolvable[EirType]](ctx.`type`())
     } else {
-      ???
+      Errors.unreachable()
     }
   }
 
@@ -356,7 +356,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       enter(EirFunctionCall(parent, null, null, null), (f: EirFunctionCall) => {
         f.target = visitAs[EirExpressionNode](ctx.postfixExpression())
         f.args = ctx.fnArgs.mapOrEmpty(_.expression, visitAs[EirExpressionNode])
-        f.specialization = specializationToList(ctx.specialization())
+        f.types = specializationToList(ctx.specialization())
       })
     } else {
       visitAs[EirExpressionNode](ctx.primaryExpression())
@@ -603,7 +603,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       symbolize[EirNamedNode](ctx.fqn().Identifier())
     } else {
       enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
-        s.specialization = specializationToList(ctx.specialization())
+        s.types = specializationToList(ctx.specialization())
         s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
       })
     }

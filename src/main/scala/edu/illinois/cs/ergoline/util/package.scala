@@ -28,7 +28,7 @@ package object util {
     Find.uniqueResolution(resolvable) match {
       case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
       case c: EirClassLike => (c, None)
-      case _ => ???
+      case _ => Errors.unableToResolve(resolvable)
     }
   }
 

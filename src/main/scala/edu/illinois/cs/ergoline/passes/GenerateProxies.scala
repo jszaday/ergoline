@@ -131,7 +131,7 @@ object GenerateProxies {
   }
 
   private def arraySizes(ctx: CodeGenerationContext, name: String, t: EirType): List[String] = {
-    val nd = arrayDim(ctx, t).getOrElse(???)
+    val nd = arrayDim(ctx, t).getOrElse(Errors.unreachable())
     (0 until nd).map(name + "_sz" + _).toList
   }
 
@@ -188,14 +188,13 @@ object GenerateProxies {
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
-      case Some(m@EirMember(_, f: EirFunction, _)) => {
+      case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
         } else {
           ctx << s"this->impl_->${ctx.nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
         }
-      }
-      case _ => ???
+      case _ => Errors.unreachable()
     }
   }
 
@@ -220,7 +219,7 @@ object GenerateProxies {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
         else {
           if (isAsync) {
-            ctx << ctx.typeFor(f.returnType) << temporary(ctx)
+            ctx << ctx.typeFor(f.returnType) << ctx.temporary
             if (args.nonEmpty) ctx << ","
           }
           visitFunctionArguments(ctx, args)
@@ -240,8 +239,8 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << temporary(ctx) << ".set("
-        } else if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
+          ctx << ctx.temporary << ".set("
+        } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
         makeEntryBody(ctx, x)

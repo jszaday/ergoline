@@ -41,9 +41,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def error(ctx: UnparseContext, node: EirNode): String = error(ctx, node, "unknown")
 
-  def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String = {
-    throw new RuntimeException(s"error in $ctx on type ${node.getClass.getSimpleName} ${if (msg.nonEmpty) s"($msg)" else ""}")
-  }
+  def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String = Errors.exit(Errors.format(node, msg))
 
   def visitAnnotations(ctx: UnparseContext, annotations: Iterable[EirAnnotation]): String = {
     annotations.map(visitAnnotation(ctx, _)).mkString(" ")
@@ -218,7 +216,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     }
   }
 
-  def visitSpecialization(ctx : UnparseContext, s : EirSpecialization): String = visitSpecialization(ctx, s.specialization)
+  def visitSpecialization(ctx : UnparseContext, s : EirSpecialization): String = visitSpecialization(ctx, s.types)
 
   def visitSpecialization(ctx : UnparseContext, lst : List[EirResolvable[EirType]]): String = {
     lst match {

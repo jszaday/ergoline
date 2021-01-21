@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.proxies.ProxyManager
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util
 import edu.illinois.cs.ergoline.util.AstManipulation
@@ -66,7 +66,7 @@ package object types {
       }
     }
 
-    override def specialization: List[EirResolvable[EirType]] = args
+    override def types: List[EirResolvable[EirType]] = args
   }
 
   case class EirProxyType(var parent: Option[EirNode], var base: EirResolvable[EirType], var collective: Option[String], var isElement: Boolean) extends EirType {

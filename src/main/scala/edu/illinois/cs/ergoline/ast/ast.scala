@@ -193,7 +193,7 @@ trait EirSpecializable extends EirNode {
 }
 
 trait EirSpecialization extends EirNode {
-  def specialization: List[EirResolvable[EirType]]
+  def types: List[EirResolvable[EirType]]
 }
 
 object EirClassLike {
@@ -611,9 +611,9 @@ case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode) 
 }
 
 case class EirFunctionCall(var parent: Option[EirNode], var target: EirExpressionNode,
-                           var args: List[EirExpressionNode], var specialization: List[EirResolvable[EirType]])
+                           var args: List[EirExpressionNode], var types: List[EirResolvable[EirType]])
   extends EirPostfixExpression with EirSpecialization {
-  override def children: Iterable[EirNode] = super.children ++ specialization
+  override def children: Iterable[EirNode] = super.children ++ types
 }
 
 case class EirArrayReference(var parent: Option[EirNode], var target: EirExpressionNode, var args: List[EirExpressionNode])
@@ -679,12 +679,12 @@ case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader,
 
 case class EirSpecializedSymbol(var parent: Option[EirNode],
                                 var symbol: EirResolvable[EirNamedNode with EirSpecializable],
-                                var specialization: List[EirResolvable[EirType]])
+                                var types: List[EirResolvable[EirType]])
   extends EirExpressionNode with EirSpecialization {
-  override def children: Iterable[EirNode] = symbol +: specialization
+  override def children: Iterable[EirNode] = symbol +: types
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    AstManipulation.updateWithin(specialization, oldNode, newNode).map(specialization = _).isDefined ||
+    AstManipulation.updateWithin(types, oldNode, newNode).map(types = _).isDefined ||
       ((symbol == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](symbol = _, newNode))
   }
 }
