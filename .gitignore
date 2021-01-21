@@ -5,3 +5,10 @@ project/project
 src/main/antlr4/.antlr
 .gradle/
 .bsp/
+*.cc
+*.ci
+a.out
+*.de*.h
+charmrun
+.idea/
+.vscode/
