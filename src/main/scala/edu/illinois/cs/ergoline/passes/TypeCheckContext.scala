@@ -172,7 +172,6 @@ class TypeCheckContext {
     }
   }
 
-
   def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
 
   def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {

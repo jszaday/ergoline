@@ -373,7 +373,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
-        ctx << s"for (" <||< (declaration, ";") << test << ";" << increment << ")" << x.body
+        ctx << s"for (" <| (declaration, ";") << test << ";" << increment << ")" << x.body
       case h: EirForAllHeader =>
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))
         // TODO find a better name than it_
@@ -577,7 +577,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       declarations.foreach(d => {
         ctx << currSelf << "->" << ctx.nameFor(d) << "=" << d.initialValue << ";"
       })
-    } <||< (x.body, ";")
+    } <| (x.body, ";")
   }
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction, isMember: Boolean): Unit = {

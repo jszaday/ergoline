@@ -16,9 +16,9 @@ class CodeGenerationContext(val language: String = "cpp") {
   var lines: List[String] = Nil
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
   val current: StringBuilder = new StringBuilder
-  private var _substitutions: Map[EirSpecializable, EirSpecialization] = Map()
   private val _pointerOverrides: mutable.Set[EirNode] = mutable.Set()
   private val _proxies: mutable.Stack[EirProxy] = new mutable.Stack[EirProxy]
+  private var _ctx : TypeCheckContext = new TypeCheckContext
 
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
@@ -41,10 +41,11 @@ class CodeGenerationContext(val language: String = "cpp") {
     val subCtx = new CodeGenerationContext(language)
     // TODO do something smarter here
     subCtx._proxies.pushAll(_proxies.reverse)
+    subCtx._ctx = _ctx
     subCtx
   }
 
-  def typeContext: TypeCheckContext = new TypeCheckContext
+  def typeContext: TypeCheckContext = _ctx
 
   def typeOf(n: EirNode): EirType = {
     n match {
@@ -60,24 +61,12 @@ class CodeGenerationContext(val language: String = "cpp") {
     case _ => Errors.invalidConstExpr(n)
   }
 
-  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    _substitutions += (s -> sp)
-    sp
-  }
+  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = _ctx.specialize(s, sp)
 
-  def leave(ours: EirSpecialization): Unit = {
-    _substitutions = _substitutions.filterNot({
-      case (_, theirs) => ours == theirs
-    })
-  }
+  def leave(ours: EirSpecialization): Unit = _ctx.leave(ours)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
-    _substitutions.flatMap({
-      case (specializable, specialization) =>
-        specializable.templateArgs.zip(specialization.types)
-    }).collectFirst({
-      case (arg, ty) if arg == t => resolve(ty)
-    })
+    _ctx.hasSubstitution(t).map(CheckTypes.visit(_ctx, _))
   }
 
   def temporary: String = "_"
@@ -118,7 +107,7 @@ class CodeGenerationContext(val language: String = "cpp") {
     this
   }
 
-  def <||<(t: (Option[EirNode], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <|(t: (Option[EirNode], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
     t._1 match {
       case Some(n) => this << n
       case None => this << t._2
