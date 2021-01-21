@@ -97,7 +97,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     arrName match {
       case Some("size") =>
-        ctx << x.target << "->first"
+        arrayDim(ctx, ctx.typeOf(x.target)) match {
+          case Some(1) => ctx << x.target << "->shape[0]"
+          case Some(n) if n > 0 => ctx << "std::tuple_cat(" << x.target << "->shape)"
+          case _ => Errors.unreachable()
+        }
       case _ =>
         val targetTy: EirType = ctx.exprType(x.target)
         ctx << x.target << fieldAccessorFor(targetTy) << x.field
@@ -122,8 +126,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def splitIndex(ctx: CodeGenerationContext, t: EirType, curr: String): Iterable[String] = {
     arrayDim(ctx, t) match {
-      case Some(1) => List(curr)
-      case Some(n) => (0 until n).map(idx => s"std::get<$idx>($curr)")
+      case Some(n) => (0 until n).map(idx => s"$curr[$idx]")
       case _ => Errors.unreachable()
     }
   }
@@ -147,7 +150,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           subCtx << expr
           subCtx.toString
         }
-        ctx << (splitIndex(ctx, a, s"$str->first"), ",") << "," << s"$str->second.get()"
+        ctx << (splitIndex(ctx, a, s"$str->shape"), ",") << "," << s"$str->buffer.get()"
       case (_, _) => castToPuppable(ctx, expr, ours, theirs)
     }
   }
@@ -742,12 +745,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }) + (if (x.isPack) "..." else "")
       case x: EirTemplatedType =>
         arrayDim(ctx, x) match {
-          case Some(0) => "nullptr_t"
-          case Some(n) =>
-            val index = if (n > 1) s"std::tuple<${List.fill(n)("int") mkString ", "}>" else "int"
-            s"std::pair<$index, std::shared_ptr<${ctx.typeFor(arrayElementType(x), usage)}>>"
-          case None =>
-            nameFor(ctx, ctx.resolve(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
+          case Some(n) => s"ergoline::array<${ctx.typeFor(arrayElementType(x), usage)}, $n>"
+          case None =>  nameFor(ctx, ctx.resolve(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
         }
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)
@@ -912,10 +911,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  private def makeIndex(ctx: CodeGenerationContext, args: List[EirExpressionNode]): Unit = {
-    if (args.length > 1) ctx << "std::make_tuple("
-    if (args.nonEmpty) ctx << (args, ",")
-    if (args.length > 1) ctx << ")"
+  def makeIndex(ctx: CodeGenerationContext, args: List[EirExpressionNode]): Unit = {
+    ctx << "{ (std::size_t) " << (args, ", (std::size_t) ") << "}"
   }
 
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
@@ -932,11 +929,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t: EirType if t.isPointer =>
         ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {
-          case Some(0) => ctx << "nullptr"
-          case Some(_) =>
-            ctx << "std::make_pair(" << makeIndex(ctx, args) << ","
-            val eleTy = ctx.typeFor(arrayElementType(t), Some(x))
-            ctx << "std::shared_ptr<" << eleTy << s">(static_cast<$eleTy*>(malloc(sizeof($eleTy) *" << (args, "*") << ")), [](void* p) { free(p); }))"
+          case Some(n) =>
+            ctx << "ergoline::array<" << ctx.typeFor(arrayElementType(t), Some(x)) << "," << n.toString << ">(" << makeIndex(ctx, args) << ")"
           case None => visitArguments(ctx)(x.disambiguation, args)
         }
         ctx<< ")"
@@ -1052,9 +1046,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t if isArray(ctx, t) =>
         val target = arrayRef.target
         val args = arrayRef.args
-        ctx << "(" << target << "->second.get())["
+        ctx << "(*" << target << ")["
         args.init.zipWithIndex.foreach {
-          case (arg, idx) => ctx << arg << s"* std::get<$idx>(" << target << "->first) +"
+          case (arg, idx) => ctx << arg << s"* (" << target << s"->shape[$idx]) +"
         }
         ctx << args.last
         ctx << "]"
