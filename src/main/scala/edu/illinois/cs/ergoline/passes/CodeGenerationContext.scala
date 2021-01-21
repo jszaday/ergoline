@@ -46,6 +46,13 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def typeContext: TypeCheckContext = new TypeCheckContext
 
+  def typeOf(n: EirNode): EirType = {
+    n match {
+      case x: EirExpressionNode => exprType(x)
+      case x => CheckTypes.visit(typeContext, x)
+    }
+  }
+
   def eval2const(n: EirNode): EirLiteral = n match {
     case e: EirExpressionNode => CheckTypes.evaluateConstExpr(typeContext, e)
     case c: EirConstantFacade => c.value
@@ -71,6 +78,8 @@ class CodeGenerationContext(val language: String = "cpp") {
       case (arg, ty) if arg == t => resolve(ty)
     })
   }
+
+  def temporary: String = "_"
 
   def ignoreNext(s: String): Unit = ignores.push(s)
 

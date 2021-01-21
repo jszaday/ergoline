@@ -220,7 +220,7 @@ object GenerateProxies {
         if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
         else {
           if (isAsync) {
-            ctx << ctx.typeFor(f.returnType) << temporary(ctx)
+            ctx << ctx.typeFor(f.returnType) << ctx.temporary
             if (args.nonEmpty) ctx << ","
           }
           visitFunctionArguments(ctx, args)
@@ -240,8 +240,8 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << temporary(ctx) << ".set("
-        } else if (Find.uniqueResolution(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
+          ctx << ctx.temporary << ".set("
+        } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
         makeEntryBody(ctx, x)

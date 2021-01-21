@@ -68,7 +68,7 @@ object GenerateDecls {
     } << x.members << s"};"
 
     x.members.collect {
-      case m@EirMember(_, d: EirDeclaration, _) if m.isStatic => m
+      case m@EirMember(_, _: EirDeclaration, _) if m.isStatic => m
     }.foreach(outsideStaticDecl(ctx, _))
   }
 
