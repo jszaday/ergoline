@@ -344,8 +344,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = {
     if (ctx.Identifier() != null) {
-      enter(EirFieldAccessor(parent, null, ctx.Identifier().getText), (f: EirFieldAccessor) => {
+      enter(EirScopedSymbol[EirNode](null, null)(parent), (f: EirScopedSymbol[EirNode]) => {
         f.target = visitAs[EirExpressionNode](Option(ctx.postfixExpression()).getOrElse(ctx.selfExpression()))
+        f.pending = symbolize[EirNamedNode](ctx.Identifier())
       })
     } else if (ctx.arrArgs != null) {
       enter(EirArrayReference(parent, null, null), (f: EirArrayReference) => {
@@ -585,28 +586,49 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     pop()
   }
 
-  def specializationToList(ctx: SpecializationContext): List[EirResolvable[EirType]] = {
-    if (ctx != null && ctx.LeftShift() != null) {
-      ctx.mapOrEmpty(_.`type`(), visitAs[EirResolvable[EirType]]) :+ {
-        enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
-          t.base = symbolizeType(ctx.fqn.Identifier())
-          t.args = ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
-        })
-      }
-    } else {
-      ctx.mapOrEmpty(_.specTypeList().specializationElement(), visitAs[EirResolvable[EirType]])
+  def specializationToList(ctx: ParseTree): List[EirResolvable[EirType]] = {
+    ctx match {
+      case null => Nil
+      case s: StartSpecListContext => specializationToList(s, None)
+      case s: SpecializationContext => specializationToList(s.endSpecList())
+      case s: EndSpecListContext => specializationToList(s.init, Option(s.last))
+      case s: QualEndSpecListContext => specializationToList(s.init, Option(s.last))
+      case _ => Errors.unreachable()
     }
   }
 
-  override def visitIdentifierExpression(ctx: IdentifierExpressionContext): EirNode = {
-    if (ctx.specialization() == null) {
-      symbolize[EirNamedNode](ctx.fqn().Identifier())
-    } else {
-      enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
-        s.types = specializationToList(ctx.specialization())
-        s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
-      })
+  def specializationToList(start: StartSpecListContext, end: Option[StartSpecListContext]): List[EirResolvable[EirType]] = {
+    val specs = start.specializationElement.asScala
+    val init = specs.init.map(visitAs[EirResolvable[EirType]])
+    val last = (specs.lastOption, end) match {
+      case (Some(a), Some(b)) =>
+        // TODO use symbol here?
+        enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
+          t.base = visitAs[EirResolvable[EirType]](a)
+          t.args = specializationToList(b)
+        })
+      case (Some(a), None) => visitAs[EirResolvable[EirType]](a)
+      case _ => Errors.cannotParse(start)
     }
+    init.toList :+ last
+  }
+
+  override def visitIdentifierExpression(ctx: IdentifierExpressionContext): EirResolvable[EirNode] = {
+    val curr = Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
+      case Some(spec) =>
+        enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
+          s.types = specializationToList(spec)
+          s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
+        })
+      case None => symbolize[EirNamedNode](ctx.fqn().Identifier())
+    }
+    Option(ctx.identifierExpression()).map(next => {
+      enter(EirScopedSymbol[EirNode](curr, null)(parent),
+        (r: EirScopedSymbol[EirNode]) => {
+          r.isStatic = true
+          r.pending = visitIdentifierExpression(next)
+        })
+    }).getOrElse(curr)
   }
 
   override def visitUsingStatement(ctx: UsingStatementContext): EirNode = {

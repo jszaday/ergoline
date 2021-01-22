@@ -84,11 +84,10 @@ object GenerateProxies {
   }
 
   def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
-    ctx << s"std::vector<std::string> tmp(msg->argc);" <<
-      s"std::transform(msg->argv, msg->argv + msg->argc, tmp.begin()," <<
-      "[](const char* x) -> std::string { return std::string(x); });"
-    ctx << "auto" << name << "=" << "std::make_shared<std::pair<int, std::shared_ptr<std::string>>>(std::make_pair((int)tmp.size(),"
-    ctx << "std::shared_ptr<std::string>(std::shared_ptr<std::string>{}, tmp.data())));"
+    assert(name != "msg" && name != "_argc_")
+    ctx << s"""std::array<std::size_t, 1> _argc_ = {(std::size_t) msg->argc};
+      |auto $name = std::make_shared<ergoline::array<std::string, 1>>(_argc_);
+      |for (auto i = 0; i < args->size(); i++) { new (&(*$name)[i]) std::string(msg->argv[i]); } //;""".stripMargin
   }
 
   def makePointerRhs(ctx: (CodeGenerationContext, EirNode))(current: String, expected: EirType): String = {
@@ -158,9 +157,9 @@ object GenerateProxies {
         } mkString ", "})"
       case t if isArray(ctx._1, t) =>
         val names = arraySizes(ctx._1, name, ty)
-        val index = if (names.size == 1) names.head else s"std::make_tuple(${names mkString ", "})"
-        val eleTy = GenerateCpp.typeForEntryArgument(ctx)(arrayElementType(t))
-        s"std::make_shared<${ctx._1.nameFor(t, Some(ctx._2))}>(std::make_pair($index, std::shared_ptr<$eleTy>(std::shared_ptr<$eleTy>{}, ${name}_arr)))"
+        val index = s"(std::size_t) ${names mkString ", (std::size_t) "}"
+        val arrTy = ctx._1.nameFor(t, Some(ctx._2))
+        s"std::make_shared<$arrTy>(${name}_arr, $index)"
       case t if needsCasting(t) => makePointerRhs(ctx)(name, t)
       case _ => name
     }

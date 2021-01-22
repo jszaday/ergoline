@@ -21,6 +21,7 @@ object Processes {
     "tuple",
     "utility",
     "vector",
+    "ergoline/array.hpp",
     "#include \"generate.decl.h\" // ;"
   )
 

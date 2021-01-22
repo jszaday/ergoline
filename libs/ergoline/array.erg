@@ -1,6 +1,6 @@
 package ergoline;
 
-@system(alias = "std::vector", pointer=true)
+@system(alias="ergoline::array",pointer=true)
 class array<A, N: int = 1> {
     using shape = (int) .* N;
 
@@ -14,4 +14,7 @@ class array<A, N: int = 1> {
     @system def size(): shape;
 
     @system def getOrNone(idx: int): option<A>;
+
+    @system
+    static def fill(idx: shape, value: A): array<A, N>;
 }

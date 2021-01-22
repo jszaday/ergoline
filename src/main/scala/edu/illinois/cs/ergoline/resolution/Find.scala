@@ -163,24 +163,33 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case last :: Nil =>
+      case last +: Nil =>
         val found = anywhereAccessible(symbol, last).toSeq
         found.collect{ case t: T => t }
-      case init :+ last =>
-        var namespace = anywhereAccessible(symbol, init.head)
-        for (mid <- init.tail) {
-          namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
+      case head :: tail =>
+        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail)).toSeq.collect {
+          case t: T => t
         }
-        namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)).map({
-          case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[T]
-          case x => x
-        })).toSeq
     }
   }
 
   // TODO use this!!
   def uniqueResolution[T <: EirNode](iterable: Iterable[EirResolvable[T]]): Iterable[T] = {
     iterable.map(uniqueResolution[T])
+  }
+
+  private def qualified(usage: EirNode, scope: EirNamedNode, names: List[String]): Seq[EirNamedNode] = {
+    if (names.nonEmpty) {
+      val last = names.init.foldRight(Iterable(scope))((name, curr) => {
+        curr.headOption.view.flatMap(child[EirNamedNode](_, withName(name).and(usage.canAccess)))
+      })
+      last.flatMap(child(_, withName(names.last).and(usage.canAccess)).map({
+        case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[EirNamedNode]
+        case x => x
+      })).toSeq
+    } else {
+      Seq(scope)
+    }
   }
 
   def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
@@ -192,16 +201,14 @@ object Find {
     case _ => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  def resolveAccessor(ctx: TypeCheckContext, base: EirType,
-                      accessor: EirFieldAccessor): View[(EirMember, EirType)] = {
+  def resolveAccessor(ctx: TypeCheckContext, accessor: EirScopedSymbol[_], base: Option[EirType]): View[(EirMember, EirType)] = {
     def helper(x: EirMember) = (x, CheckTypes.visit(ctx, x))
-
-    val cls = asClassLike(base)
+    val cls = asClassLike(base.getOrElse(CheckTypes.visit(ctx, accessor.target)))
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
       sweepInherited(ctx, cls, other => {
         // TODO filter if overridden?
-        resolveAccessor(ctx, other, accessor)
+        resolveAccessor(ctx, accessor, Some(other))
       })
     }
   }
@@ -243,9 +250,19 @@ object Find {
     })
   }
 
-  private def accessibleMember(base: EirType, x: EirFieldAccessor): View[EirMember] = {
+  private def accessibleMember(base: EirType, x: EirScopedSymbol[_]): View[EirMember] =
+    x.pending match {
+      case EirSymbol(_, head :: rest) => accessibleMember(base, x, head).flatMap(qualified(x, _, rest)).collect {
+        case m: EirMember => m
+      }
+      // TODO add support for this
+      case s: EirSpecializedSymbol => Errors.unableToResolve(s)
+      case _ => Errors.unreachable()
+    }
+
+  def accessibleMember(base: EirType, ctx: EirNode, field: String): View[EirMember] = {
     // TODO check parent classes as well!
-    child[EirMember](asClassLike(base), withName(x.field).and(x.canAccess(_)))
+    child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
   object FindSyntax {
