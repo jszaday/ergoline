@@ -90,12 +90,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def error(ctx: CodeGenerationContext, node : EirNode): Unit = ()
 
-  override def visitFieldAccessor(ctx: CodeGenerationContext, x: EirFieldAccessor): Unit = {
-    // TODO handle self applications :3
-    val arrName = asMember(x.disambiguation).collect{
+  private def arrayMember(ctx: CodeGenerationContext, x: Option[EirNode]): Option[String] = {
+    asMember(x).collect{
       case m: EirMember if isArray(ctx, m.base) => m.name
     }
-    arrName match {
+  }
+
+  override def visitScopedSymbol[A <: EirNode](ctx: CodeGenerationContext, x: EirScopedSymbol[A]): Unit = {
+    // TODO handle self applications :3
+    arrayMember(ctx, x.disambiguation) match {
       case Some("size") =>
         arrayDim(ctx, ctx.typeOf(x.target)) match {
           case Some(1) => ctx << x.target << "->shape[0]"
@@ -104,7 +107,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       case _ =>
         val targetTy: EirType = ctx.exprType(x.target)
-        ctx << x.target << fieldAccessorFor(targetTy) << x.field
+        ctx << x.target << fieldAccessorFor(targetTy) << {
+          x.pending match {
+            case EirSymbol(_, s +: Nil) => s
+            case _ => ???
+          }
+        }
     }
   }
 
@@ -248,7 +256,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitSystemCall(ctx: CodeGenerationContext, target: EirExpressionNode,
                       disambiguated: EirNode, args: List[EirExpressionNode]): Unit = {
     val base = target match {
-      case f: EirFieldAccessor => f.target
+      case f: EirScopedSymbol[_] => f.target
       case _ => target
     }
     val proxy = disambiguated.parent.to[EirProxy]
@@ -643,7 +651,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitBinaryExpression(ctx: CodeGenerationContext, x: EirBinaryExpression): Unit = {
     val target = x.disambiguation.collect {
-      case EirFunctionCall(_, f: EirFieldAccessor, _, _) => f.disambiguation
+      case EirFunctionCall(_, f: EirScopedSymbol[_], _, _) => f.disambiguation
     }.flatten
     val isSystem = target.forall(_.isSystem)
     ctx << Option.when(isSystem)("(") << x.lhs

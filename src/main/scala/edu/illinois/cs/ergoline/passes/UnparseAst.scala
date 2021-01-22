@@ -242,8 +242,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     s"(${visit(ctx, x.test)} ? ${visit(ctx, x.ifTrue)} : ${visit(ctx, x.ifFalse)})"
   }
 
-  override def visitFieldAccessor(ctx: UnparseContext, x: EirFieldAccessor): String = {
-    s"${visit(ctx, x.target)}.${x.field}"
+  override def visitScopedSymbol[A <: EirNode](ctx: UnparseContext, x: EirScopedSymbol[A]): String = {
+    s"${visit(ctx, x.target)}${if (x.isStatic) "::" else "."}${visit(ctx, x.pending)}"
   }
 
   override def visitArrayReference(ctx: UnparseContext, x: EirArrayReference): String = {

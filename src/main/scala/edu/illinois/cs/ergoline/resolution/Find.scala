@@ -197,16 +197,14 @@ object Find {
     case _ => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  def resolveAccessor(ctx: TypeCheckContext, base: EirType,
-                      accessor: EirFieldAccessor): View[(EirMember, EirType)] = {
+  def resolveAccessor(ctx: TypeCheckContext, accessor: EirScopedSymbol[_], base: Option[EirType]): View[(EirMember, EirType)] = {
     def helper(x: EirMember) = (x, CheckTypes.visit(ctx, x))
-
-    val cls = asClassLike(base)
+    val cls = asClassLike(base.getOrElse(CheckTypes.visit(ctx, accessor.target)))
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
       sweepInherited(ctx, cls, other => {
         // TODO filter if overridden?
-        resolveAccessor(ctx, other, accessor)
+        resolveAccessor(ctx, accessor, Some(other))
       })
     }
   }
@@ -248,8 +246,12 @@ object Find {
     })
   }
 
-  private def accessibleMember(base: EirType, x: EirFieldAccessor): View[EirMember] =
-    accessibleMember(base, x, x.field)
+  private def accessibleMember(base: EirType, x: EirScopedSymbol[_]): View[EirMember] =
+    x.pending match {
+      // TODO add support for FQN here? Meow.
+      case EirSymbol(_, s +: Nil) => accessibleMember(base, x, s)
+      case _ => ???
+    }
 
   def accessibleMember(base: EirType, ctx: EirNode, field: String): View[EirMember] = {
     // TODO check parent classes as well!

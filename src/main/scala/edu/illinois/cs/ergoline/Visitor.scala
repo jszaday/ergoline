@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.{EirChildResolver, EirPlaceholder, EirResolvable, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
@@ -344,8 +344,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
 
   override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = {
     if (ctx.Identifier() != null) {
-      enter(EirFieldAccessor(parent, null, ctx.Identifier().getText), (f: EirFieldAccessor) => {
+      enter(EirScopedSymbol[EirNode](null, null)(parent), (f: EirScopedSymbol[EirNode]) => {
         f.target = visitAs[EirExpressionNode](Option(ctx.postfixExpression()).getOrElse(ctx.selfExpression()))
+        f.pending = symbolize[EirNamedNode](ctx.Identifier())
       })
     } else if (ctx.arrArgs != null) {
       enter(EirArrayReference(parent, null, null), (f: EirArrayReference) => {
@@ -622,8 +623,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       case None => symbolize[EirNamedNode](ctx.fqn().Identifier())
     }
     Option(ctx.identifierExpression()).map(next => {
-      enter(EirChildResolver[EirNode, EirNode](curr, null)(parent),
-        (r: EirChildResolver[EirNode, EirNode]) => { r.member = visitIdentifierExpression(next) })
+      enter(EirScopedSymbol[EirNode](curr, null)(parent),
+        (r: EirScopedSymbol[EirNode]) => {
+          r.isStatic = true
+          r.pending = visitIdentifierExpression(next)
+        })
     }).getOrElse(curr)
   }
 

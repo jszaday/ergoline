@@ -620,13 +620,13 @@ case class EirArrayReference(var parent: Option[EirNode], var target: EirExpress
   extends EirPostfixExpression {
 }
 
-case class EirFieldAccessor(var parent: Option[EirNode], var target: EirExpressionNode, var field: String)
-  extends EirExpressionNode {
+case class EirScopedSymbol[T <: EirNode](var target: EirExpressionNode, var pending: EirResolvable[T])(var parent: Option[EirNode])
+  extends EirExpressionNode with EirResolvable[T] {
+  var isStatic = false
+  override def resolve(): Seq[T] = Nil
+  override def resolved: Boolean = pending.resolved
   override def children: Iterable[EirNode] = Seq(target)
-
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    (target == oldNode) && util.applyOrFalse[EirExpressionNode](target = _, newNode)
-  }
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 trait EirForLoopHeader {

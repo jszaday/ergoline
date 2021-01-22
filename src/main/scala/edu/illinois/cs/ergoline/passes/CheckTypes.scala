@@ -73,12 +73,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   // TODO add checks for static-ness?
-  override def visitFieldAccessor(ctx: TypeCheckContext, x: EirFieldAccessor): EirType = {
+  override def visitScopedSymbol[A <: EirNode](ctx: TypeCheckContext, x: EirScopedSymbol[A]): EirType = {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
-    val candidates = Find.resolveAccessor(ctx, base, x)
+    val candidates = Find.resolveAccessor(ctx, x, Some(base))
     val found = screenCandidates(ctx, prevFc, candidates)
     spec.foreach(ctx.leave)
     found match {
@@ -87,7 +87,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         prevFc.foreach(validate(ctx, member, _))
         result
       case None =>
-        Errors.missingField(x, base, x.field)
+        Errors.unableToResolve(x.pending)
     }
   }
 
@@ -147,7 +147,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   @tailrec
   def targetsSelf(a: EirMember, node: EirExpressionNode): Boolean = node match {
     case s: EirSymbol[_] => isSelf(s) || asMember(s.disambiguation).exists(sharedBase(a, _))
-    case f: EirFieldAccessor => targetsSelf(a, f.target)
+    case f: EirScopedSymbol[_] => targetsSelf(a, f.target)
     case p: EirPostfixExpression => targetsSelf(a, p.target)
     case _ => false
   }
@@ -516,7 +516,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case _ => false
       }
       case _ : EirArrayReference => false
-      case _ : EirFieldAccessor => ???
+      case _ : EirScopedSymbol[_] => ???
       case _ => true
     }
   }
@@ -560,7 +560,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case Some((m, ty)) =>
         x.disambiguation = Some(ty)
         prevFc.foreach(x => validate(ctx, m, x))
-        ty
+        ty match {
+          case t: EirLambdaType => t
+          case t: EirSpecializable => ctx.getTemplatedType(t, x.types.map(visit(ctx, _)))
+        }
       case None => Errors.missingType(x)
     }
   }
@@ -700,7 +703,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def makeMemberCall(target: EirExpressionNode, field: String, args: List[EirExpressionNode] = Nil): EirFunctionCall = {
     val f = EirFunctionCall(Some(target), null, args, Nil)
-    f.target = EirFieldAccessor(Some(f), target, field)
+    val s = EirScopedSymbol(target, null)(Some(f))
+    s.pending = EirSymbol(Some(s), List(field))
+    f.target = s
     f
   }
 

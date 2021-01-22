@@ -42,7 +42,7 @@ trait EirVisitor[Context, Value] {
       case x: EirTemplatedType => visitTemplatedType(ctx, x)
       case x: EirLambdaType => visitLambdaType(ctx, x)
       case x: EirTernaryOperator => visitTernaryOperator(ctx, x)
-      case x: EirFieldAccessor => visitFieldAccessor(ctx, x)
+      case x: EirScopedSymbol[_] => visitScopedSymbol(ctx, x)
       case x: EirArrayReference => visitArrayReference(ctx, x)
       case x: EirIfElse => visitIfElse(ctx, x)
       case x: EirNew => visitNew(ctx, x)
@@ -96,7 +96,7 @@ trait EirVisitor[Context, Value] {
 
   def visitArrayReference(ctx: Context, x: EirArrayReference): Value
 
-  def visitFieldAccessor(ctx: Context, x: EirFieldAccessor): Value
+  def visitScopedSymbol[A <: EirNode](ctx: Context, x: EirScopedSymbol[A]): Value
 
   def visitTernaryOperator(ctx: Context, x: EirTernaryOperator): Value
 

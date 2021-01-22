@@ -65,6 +65,10 @@ struct array : public hashable {
     PUParray(p, buffer.get(), n);
   }
 
+  // TODO implement this? idk...
+  template<class... Args>
+  static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape, const T& value);
+
  private:
   static buffer_t allocate(const std::size_t& n) {
     if (n == 0) {
@@ -75,6 +79,16 @@ struct array : public hashable {
     }
   }
 };
+
+template <>
+template <>
+std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(const std::tuple<int, int>& shape, const double& value) {
+  std::array<std::size_t, 2> s = { (std::size_t)std::get<0>(shape), (std::size_t)std::get<1>(shape) };
+  auto a = std::make_shared<array<double, 2>>(s);
+  std::fill(a->begin(), a->end(), value);
+  return a;
+}
+
 }
 
 #endif
