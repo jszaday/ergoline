@@ -163,18 +163,13 @@ object Find {
 
   def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): Seq[T] = {
     symbol.qualifiedName match {
-      case last :: Nil =>
+      case last +: Nil =>
         val found = anywhereAccessible(symbol, last).toSeq
         found.collect{ case t: T => t }
-      case init :+ last =>
-        var namespace = anywhereAccessible(symbol, init.head)
-        for (mid <- init.tail) {
-          namespace = namespace.flatMap(child[EirNamedNode](_, withName(mid).and(symbol.canAccess)))
+      case head :: tail =>
+        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail)).toSeq.collect {
+          case t: T => t
         }
-        namespace.flatMap(child[T](_, withName(last).and(symbol.canAccess)).map({
-          case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[T]
-          case x => x
-        })).toSeq
     }
   }
 
@@ -183,10 +178,19 @@ object Find {
     iterable.map(uniqueResolution[T])
   }
 
-  def resolutionWithin[T <: EirNode](within: EirNode, node: EirResolvable[T]): Seq[T] = {
-    Nil
+  private def qualified(usage: EirNode, scope: EirNamedNode, names: List[String]): Seq[EirNamedNode] = {
+    if (names.nonEmpty) {
+      val last = names.init.foldRight(Iterable(scope))((name, curr) => {
+        curr.headOption.view.flatMap(child[EirNamedNode](_, withName(name).and(usage.canAccess)))
+      })
+      last.flatMap(child(_, withName(names.last).and(usage.canAccess)).map({
+        case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[EirNamedNode]
+        case x => x
+      })).toSeq
+    } else {
+      Seq(scope)
+    }
   }
-
 
   def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
     asClassLike(Find.uniqueResolution[EirType](resolvable))
@@ -248,9 +252,12 @@ object Find {
 
   private def accessibleMember(base: EirType, x: EirScopedSymbol[_]): View[EirMember] =
     x.pending match {
-      // TODO add support for FQN here? Meow.
-      case EirSymbol(_, s +: Nil) => accessibleMember(base, x, s)
-      case _ => ???
+      case EirSymbol(_, head :: rest) => accessibleMember(base, x, head).flatMap(qualified(x, _, rest)).collect {
+        case m: EirMember => m
+      }
+      // TODO add support for this
+      case s: EirSpecializedSymbol => Errors.unableToResolve(s)
+      case _ => Errors.unreachable()
     }
 
   def accessibleMember(base: EirType, ctx: EirNode, field: String): View[EirMember] = {
