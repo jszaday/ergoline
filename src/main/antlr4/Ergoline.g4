@@ -158,7 +158,8 @@ expressionList
     ;
 
 identifierExpression
-    :   fqn specialization?
+    :   fqn specialization ('::' fqn)?
+    |   fqn
     ;
 
 selfExpression
@@ -320,9 +321,13 @@ specTypeList
     :   (specializationElement ',')* specializationElement
     ;
 
+partialSpec
+    :   Less (specializationElement ',')* fqn Less specTypeList
+    ;
+
 specialization
     :   Less specTypeList Greater
-    |   Less (type ',')* fqn Less specTypeList LeftShift
+    |   partialSpec LeftShift
     ;
 
 proxySuffix
