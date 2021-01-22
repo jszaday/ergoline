@@ -16,5 +16,5 @@ class array<A, N: int = 1> {
     @system def getOrNone(idx: int): option<A>;
 
     @system(alias = "ergoline::fill")
-    static def fill(idx: *shape, value: A): array<A, N>;
+    static def fill(idx: shape, value: A): array<A, N>;
 }
