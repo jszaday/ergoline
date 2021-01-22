@@ -158,8 +158,8 @@ expressionList
     ;
 
 identifierExpression
-    :   fqn specialization ('::' fqn)?
-    |   fqn
+    :   fqn Less qualEndSpecList identifierExpression
+    |   fqn specialization?
     ;
 
 selfExpression
@@ -317,17 +317,22 @@ specializationElement
     |   constant
     ;
 
-specTypeList
+startSpecList
     :   (specializationElement ',')* specializationElement
     ;
 
-partialSpec
-    :   Less (specializationElement ',')* fqn Less specTypeList
+endSpecList
+    :   init=startSpecList Greater
+    |   init=startSpecList Less last=startSpecList RightShift
+    ;
+
+qualEndSpecList
+    :   init=startSpecList '>::'
+    |   init=startSpecList Less last=startSpecList '>>::'
     ;
 
 specialization
-    :   Less specTypeList Greater
-    |   partialSpec LeftShift
+    :   Less endSpecList
     ;
 
 proxySuffix
@@ -345,8 +350,8 @@ lambdaType
     ;
 
 type
-    :   basicType
-    |   tupleType
+    :   tupleType
+    |   basicType
     |   lambdaType
     ;
 
@@ -423,8 +428,10 @@ Ellipses: '...';
 Greater: '>' ;
 Less: '<' ;
 
-RightShift: Less Less ;
-LeftShift: Greater Greater ;
+LeftShift: Less Less ;
+
+RightShift: Greater Greater ;
+
 
 LParen : '(' ;
 RParen : ')' ;

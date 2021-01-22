@@ -680,13 +680,16 @@ case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader,
 case class EirSpecializedSymbol(var parent: Option[EirNode],
                                 var symbol: EirResolvable[EirNamedNode with EirSpecializable],
                                 var types: List[EirResolvable[EirType]])
-  extends EirExpressionNode with EirSpecialization {
+  extends EirExpressionNode with EirResolvable[EirNamedNode with EirSpecializable] with EirSpecialization {
   override def children: Iterable[EirNode] = symbol +: types
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     AstManipulation.updateWithin(types, oldNode, newNode).map(types = _).isDefined ||
       ((symbol == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](symbol = _, newNode))
   }
+
+  override def resolve(): Seq[EirNamedNode with EirSpecializable] = Nil
+  override def resolved: Boolean = false
 }
 
 case class EirIfElse(var parent: Option[EirNode], var test: EirExpressionNode,

@@ -183,6 +183,11 @@ object Find {
     iterable.map(uniqueResolution[T])
   }
 
+  def resolutionWithin[T <: EirNode](within: EirNode, node: EirResolvable[T]): Seq[T] = {
+    Nil
+  }
+
+
   def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
     asClassLike(Find.uniqueResolution[EirType](resolvable))
 
@@ -243,9 +248,12 @@ object Find {
     })
   }
 
-  private def accessibleMember(base: EirType, x: EirFieldAccessor): View[EirMember] = {
+  private def accessibleMember(base: EirType, x: EirFieldAccessor): View[EirMember] =
+    accessibleMember(base, x, x.field)
+
+  def accessibleMember(base: EirType, ctx: EirNode, field: String): View[EirMember] = {
     // TODO check parent classes as well!
-    child[EirMember](asClassLike(base), withName(x.field).and(x.canAccess(_)))
+    child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
   object FindSyntax {

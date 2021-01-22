@@ -61,10 +61,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def autoApply(ctx: TypeCheckContext, target: EirExpressionNode, args: List[EirResolvable[EirType]]): Boolean = {
-    (args.length == 1) && visit(ctx, target).canAssignTo(visit(ctx, args.head))
-  }
-
   def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
     (x match {
       case x: EirTemplatedType => visit(ctx, x)
@@ -83,7 +79,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     val candidates = Find.resolveAccessor(ctx, base, x)
-    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
+    val found = screenCandidates(ctx, prevFc, candidates)
     spec.foreach(ctx.leave)
     found match {
       case Some((member, result)) =>
@@ -174,16 +170,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
-    val target = visit(ctx, call.target) match {
-      case EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike =>
-        // TODO cycle this back into testing routine, use makeMemberFunction
-        val accessor = EirFieldAccessor(Some(call), call.target, "apply")
-        call.target.parent = Some(accessor)
-        call.target = accessor
-        // call.target.disambiguation = Some(accessor)
-        return visit(ctx, call)
-      case ty => ty
-    }
+    val target = visit(ctx, call.target)
     val ours = call.args.map(visit(ctx, _))
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
@@ -271,12 +258,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
-  def screenCandidates(ctx: TypeCheckContext, args: Option[List[EirResolvable[EirType]]], candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
-    val ours = args.map(_.map(visit(ctx, _)))
+  def screenCandidates(ctx: TypeCheckContext, args: Option[EirExpressionNode],
+                       candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
     val results = candidates.flatMap(pair => {
       val (candidate, member) = pair
       val innerSpec = handleSpecialization(ctx, member)
-      val found = (member, ours) match {
+      val found = (member, getArguments(ctx, args)) match {
+        case (EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike, Some(_)) =>
+          // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
+          val spec = Option(member).to[EirTemplatedType].flatMap(handleSpecialization(ctx, _))
+          val candidates = Find.accessibleMember(Find.asClassLike(member), args.get, "apply")
+          val found = screenCandidates(ctx, args, candidates.view.zip(candidates.map(visit(ctx, _))))
+          spec.foreach(ctx.leave)
+          found
         case (t : EirLambdaType, Some(ours)) =>
           val theirs = applyFuncArgs(ctx, candidate, t.from)
           if (argumentsMatch(ours, theirs)) {
@@ -317,7 +311,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }
     }
     val candidates = resolved.view.zip(resolved.view.map(visit(ctx, _)))
-    val found = screenCandidates(ctx, getArguments(ctx, prevFc), candidates)
+    val found = screenCandidates(ctx, prevFc, candidates)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))
     prevFc
@@ -556,29 +550,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   final case class TypeCheckException(message: String) extends Exception(message)
 
-  def visitSpecializedFunction(ctx: TypeCheckContext, f: EirFunction, x: EirSpecialization): EirType = {
-    if (f.templateArgs.length != x.types.length) {
-      error(ctx, x, "template length mismatch")
-    }
-    val enter = ctx.specialize(f, x)
-    val result = visitFunction(ctx, f)
-    result.from = result.from.map(visit(ctx, _))
-    result.to = visit(ctx, result.to)
-    result.templateArgs = Nil
-    ctx.leave(enter)
-    result
-  }
-
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
-    // TODO iterate through overloads
-    val specializable = Find.uniqueResolution(x.symbol)
-    specializable.asInstanceOf[Any] match {
-      case c : EirClassLike if c.templateArgs.length == x.types.length => EirTemplatedType(Some(x), c, x.types)
-      // TODO this only works because of a bug with Find.child wherein it ignores the requested type... womp womp
-      case EirMember(_, f : EirFunction, _) => visitSpecializedFunction(ctx, f, x)
-      case f: EirFunction => visitSpecializedFunction(ctx, f, x)
-      case _ => error(ctx, x, "i'm still stupid")
-      }
+    val prevFc: Option[EirFunctionCall] =
+      ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
+    // TODO this should probably return templated types
+    val candidates = x.symbol.resolve()
+    val found = screenCandidates(ctx, prevFc, candidates.view.zip(candidates.map(visit(ctx, _))))
+    found match {
+      case Some((m, ty)) =>
+        x.disambiguation = Some(ty)
+        prevFc.foreach(x => validate(ctx, m, x))
+        ty
+      case None => Errors.missingType(x)
+    }
   }
 
   override def visitIfElse(ctx: TypeCheckContext, x: EirIfElse): EirType = {
@@ -605,7 +589,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
-    val found = screenCandidates(ctx, getArguments(ctx, Some(x)), candidates.zip(candidates.map(visit(ctx, _))))
+    val found = screenCandidates(ctx, Some(x), candidates.zip(candidates.map(visit(ctx, _))))
     x.disambiguation = found.map(_._2)
     spec.foreach(ctx.leave)
     found match {
