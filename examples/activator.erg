@@ -3,7 +3,7 @@ package examples;
 import ergoline::_;
 
 @main class activator {
-    var count: int;
+    var count: int = 0;
 
     @entry def activator() {
         self@activate(new lion());
