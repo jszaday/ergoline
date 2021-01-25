@@ -318,4 +318,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitConstantFacade(context: UnparseContext, facade: EirConstantFacade): String = visit(context, facade.value)
+
+  override def visitWhen(ctx: UnparseContext, x: EirSdagWhen): String = {
+    "when " + x.patterns.map(p => s"${visit(ctx, p._1)}(${visit(ctx, p._2)})").mkString(", ") + {
+      x.condition.map(visit(ctx, _)).map(" if " + _).getOrElse("")
+    } + s" => ${visit(ctx, x.body)}"
+  }
 }

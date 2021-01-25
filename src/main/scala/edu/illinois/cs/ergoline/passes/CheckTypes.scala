@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
@@ -761,4 +761,22 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitConstantFacade(context: TypeCheckContext, facade: EirConstantFacade): EirType = facade
+
+  override def visitWhen(ctx: TypeCheckContext, x: EirSdagWhen): EirType = {
+    for ((i, p) <- x.patterns) {
+      // TODO ensure that target is mailbox
+      ctx.goal.push({
+        visit(ctx, i) match {
+          case x: EirLambdaType => visit(ctx, x.from.toTupleType(None))
+          case _ => Errors.missingType(i)
+      }})
+      visit(ctx, p)
+    }
+    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
+    val condTy = x.condition.map(visit(ctx, _))
+    if (!condTy.forall(_.canAssignTo(boolTy))) {
+      Errors.cannotCast(x.condition.get, condTy.get, boolTy)
+    }
+    visit(ctx, x.body)
+  }
 }

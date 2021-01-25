@@ -14,7 +14,8 @@ namespace ergoline {
 
 template <typename... Ts>
 struct mailbox {
-  using value_t = std::shared_ptr<std::tuple<Ts...>>;
+  using tuple_t = std::tuple<Ts...>;
+  using value_t = std::shared_ptr<tuple_t>;
   struct request {
     virtual bool stale() = 0;
     virtual bool ready() = 0;
@@ -35,10 +36,13 @@ struct mailbox {
       } else if ((*it)->accepts(value)) {
         (*it)->fulfill(value);
         it = requests_.erase(it);
+        return;
       } else {
         it++;
       }
     }
+    // if nobody accepted the value, save it
+    values_.push_back(value);
   }
 
   bool req(const request_t& req) {
@@ -81,13 +85,14 @@ struct to_thread : public mailbox<Ts...>::request {
   to_thread(const CthThread& th, const cond_t& cond)
       : th_(th), cond_(cond), value_(nullptr) {}
 
+  value_t value() { return value_; }
   bool stale() override { return th_ == nullptr; }
   bool ready() override { return (bool)value_; }
   bool accepts(const value_t& value) override { return !cond_ || cond_(value); }
   void fulfill(const value_t& value) override {
     CmiAssert(!stale());
     value_ = value;
-    CthAwaken(th_);
+    if (th_ != CthSelf()) CthAwaken(th_);
     th_ = nullptr;
   }
 };

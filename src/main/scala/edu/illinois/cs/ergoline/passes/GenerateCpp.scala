@@ -597,10 +597,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val entryOnly = member.exists(_.isEntryOnly) && ctx.proxy.isEmpty
     val system = member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined
     val abstractMember = !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
-    if (entryOnly || system || abstractMember) {
+    val langCi = ctx.language == "ci"
+    if ((!langCi && entryOnly) || system || abstractMember) {
       return
     }
-    val langCi = ctx.language == "ci"
     val asyncCi = langCi && isMember && member.flatMap(_.annotation("async")).isDefined
     val isConstructor = member.exists(_.isConstructor)
     val overrides = Option.when(isMember && member.exists(_.isOverride))(" override")
@@ -1190,4 +1190,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTypeAlias(ctx: CodeGenerationContext, x: EirTypeAlias): Unit = ()
   override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = ()
   override def visitConstantFacade(context: CodeGenerationContext, facade: EirConstantFacade): Unit = visit(context, facade.value)
+
+  override def visitWhen(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
+    // TODO impl this
+    if (x.patterns.length != 1) ???
+    x.patterns.foreach({
+      case (symbol, patterns) => ctx << "{" << {
+        val target = assertValid[EirFunction](ctx.resolve(symbol)).parent.to[EirMember].getOrElse(???)
+        val (name, tys) = GenerateProxies.mailboxName(ctx, target)
+        ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ", "}>>(CthSelf());"
+        ctx << s"this->$name.req(__request__);"
+        ctx << "while (!__request__->ready()) CthSuspend();"
+        ctx << s"auto& __value__ = *(__request__->value());"
+      } << {
+        visitPatternDecl(ctx, patterns, "__value__").split(n)
+      } << {
+        ctx.ignoreNext("{")
+        ctx << x.body
+      }
+    })
+  }
 }

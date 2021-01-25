@@ -1,0 +1,60 @@
+package examples;
+
+import ergoline::_;
+
+@main class main {
+    var count: int = 0;
+    val n: int;
+
+    @entry def main(args: array<string>) {
+        n = 4;
+        new sdagtest@array1d(n, n, n, self@);
+    }
+
+    @entry def tally() {
+        count += 1;
+
+        if (count >= n) {
+            println("done");
+            exit();
+        }
+    }
+}
+
+class sdagtest {
+    val mainProxy: main@;
+    val numIts: int;
+    val n: int;
+
+    @entry def sdagtest(=n: int, =numIts: int, =mainProxy: main@) {
+        self[@]run();
+    }
+
+    @mailbox def receive(it: int, from: int);
+
+    @threaded @entry def run() {
+        val idx = self[@]index();
+        val numNbrs = 2;
+        val left = (idx + n - 1) % n;
+        val right = (idx + 1) % n;
+
+        println(`[${idx}] has neighbors ${left} and ${right}.`);
+
+        for (var it = 0; it < numIts; it += 1) {
+            self@[left].receive(it, idx);
+            self@[right].receive(it, idx);
+        }
+
+        println(`[${idx}] sent ${numIts * 2} values.`);
+
+        for (var it = 0; it < numIts; it += 1) {
+            for (var i = 0; i < numNbrs; i += 1) {
+                when receive(_, from) => {
+                    println(`[${idx}] received (${from}, ${it}).`);
+                }
+            }
+        }
+
+        mainProxy.tally();
+    }
+}

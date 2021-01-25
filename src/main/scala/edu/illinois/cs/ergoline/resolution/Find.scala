@@ -117,6 +117,7 @@ object Find {
     case _: EirNamespace => true
     case _: EirImport => true
     case _: EirMatchCase => true
+    case _: EirSdagWhen => true
     case _ => false
   }
 
