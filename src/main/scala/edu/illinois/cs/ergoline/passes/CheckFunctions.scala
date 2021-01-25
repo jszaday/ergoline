@@ -41,9 +41,10 @@ object CheckFunctions {
     val overloads = Find.overloads(function)
     val member = function.parent.to[EirMember]
     val system = member.getOrElse(function).annotation("system")
+    val mailbox = member.exists(_.isMailbox)
     val hasBody = function.body.isDefined
 
-    if (system.isDefined) {
+    if (system.isDefined || mailbox) {
       if (hasBody) Errors.systemFnHasBody(function)
     } else if (!hasBody && !member.exists(_.base.isAbstract)) {
       Errors.bodyLessFunction(function)

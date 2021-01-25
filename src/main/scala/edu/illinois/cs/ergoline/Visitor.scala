@@ -670,4 +670,16 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       EirLiteral(parent, EirLiteralTypes.Character, ctx.CharacterConstant().getText)
     }
   }
+
+  override def visitWhenStatement(ctx: WhenStatementContext): EirNode = {
+    enter(EirSdagWhen(null, null, null)(parent), (n: EirSdagWhen) => {
+      val fns = ctx.whenFnList().whenFn().asScala
+      n.patterns = fns.toList.map(x => (
+        visitAs[EirSymbol[EirNamedNode]](x.identifierExpression()),
+        visitAs[EirPatternList](x.patternList())))
+      n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
+      n.body = Option(ctx.bodyExpr).map(visitAs[EirExpressionNode])
+        .map(AstManipulation.encloseNodes(_)).getOrElse(visitAs[EirBlock](ctx.block()))
+    })
+  }
 }

@@ -291,8 +291,11 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   extends EirNamedNode {
   var isOverride: Boolean = false
   var isStatic: Boolean = false
-  var isEntryOnly: Boolean = false
   var counterpart: Option[EirMember] = None
+  private var entryOnly: Boolean = false
+
+  def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
+  def isEntryOnly: Boolean = entryOnly || isMailbox
 
   def isImplOnly: Boolean =
     member match {
@@ -302,7 +305,7 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
     }
 
   def makeEntryOnly(): Unit = {
-    isEntryOnly = true
+    entryOnly = true
     counterpart.foreach(_.makeEntryOnly())
   }
 
@@ -328,7 +331,7 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 
   // TODO also ensure return type is "unit" unless a/sync or local
   def isEntry: Boolean = member match {
-    case _: EirFunction => annotations.exists(_.name == "entry")
+    case _: EirFunction => isMailbox || annotations.exists(_.name == "entry")
     case _ => false
   }
 
@@ -807,6 +810,16 @@ case class EirTypeAlias(var name: String, var templateArgs: List[EirTemplateArgu
 
 case class EirConstantFacade(var value: EirLiteral)(var parent: Option[EirNode]) extends EirType {
   override def children: Iterable[EirNode] = List(value)
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+case class EirSdagWhen(var patterns: List[(EirSymbol[EirNamedNode], EirPatternList)],
+                       var condition: Option[EirExpressionNode], var body: EirBlock)(var parent: Option[EirNode])
+  extends EirNode with EirScope {
+  override def children: Iterable[EirNode] = patterns.map(_._1) ++ declarations ++ condition :+ body
+
+  def declarations: List[EirDeclaration] = patterns.flatMap(_._2.declarations)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }

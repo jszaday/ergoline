@@ -43,7 +43,7 @@ statement
     ;
 
 whenStatement
-    :   'when' whenFnList ('if' condition=expression)? LambdaArrow (block | expression ';')
+    :   'when' whenFnList ('if' condition=expression)? LambdaArrow (block | bodyExpr=expression ';')
     ;
 
 whenFnList
