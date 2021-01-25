@@ -52,6 +52,8 @@ struct mailbox {
         req->fulfill(*it);
         it = values_.erase(it);
         return true;
+      } else {
+        it++;
       }
     }
     requests_.push_back(req);
@@ -67,8 +69,9 @@ struct mailbox {
 namespace requests {
 template <typename... Ts>
 struct to_thread : public mailbox<Ts...>::request {
+  using tuple_t = typename mailbox<Ts...>::tuple_t;
   using value_t = typename mailbox<Ts...>::value_t;
-  using cond_t = std::function<bool(const value_t&)>;
+  using cond_t = std::function<bool(const tuple_t&)>;
 
  private:
   cond_t cond_;
@@ -92,7 +95,7 @@ struct to_thread : public mailbox<Ts...>::request {
   value_t value() { return value_; }
   bool stale() override { return th_ == nullptr; }
   bool ready() override { return (bool)value_; }
-  bool accepts(const value_t& value) override { return !cond_ || cond_(value); }
+  bool accepts(const value_t& value) override { return !cond_ || cond_(*value); }
   void fulfill(const value_t& value) override {
     CmiAssert(!stale() && "refulfillment of fulfilled request");
     value_ = value;

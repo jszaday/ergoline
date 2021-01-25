@@ -49,7 +49,7 @@ class sdagtest {
 
         for (var it = 0; it < numIts; it += 1) {
             for (var i = 0; i < numNbrs; i += 1) {
-                when receive(_, from) => {
+                when receive(_ == it, from) => {
                     println(`[${idx}] received (${from}, ${it}).`);
                 }
             }

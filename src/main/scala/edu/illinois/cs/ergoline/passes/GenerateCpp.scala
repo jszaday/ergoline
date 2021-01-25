@@ -2,13 +2,14 @@ package edu.illinois.cs.ergoline.passes
 
 import java.io.File
 import java.nio.file.Paths
+
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.annotation.tailrec
@@ -1194,12 +1195,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitWhen(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
     // TODO impl this
-    if (x.patterns.length != 1) ???
+    if (x.patterns.length != 1 || x.condition.isDefined) ???
     x.patterns.foreach({
       case (symbol, patterns) => ctx << "{" << {
-        val target = assertValid[EirFunction](ctx.resolve(symbol)).parent.to[EirMember].getOrElse(???)
-        val (name, tys) = GenerateProxies.mailboxName(ctx, target)
-        ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ", "}>>(CthSelf());"
+        val f = assertValid[EirFunction](ctx.resolve(symbol))
+        val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
+        val tys = declTys.map(ctx.typeFor(_, Some(x)))
+        val name = GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
+        val conditions = visitPatternCond(ctx, patterns, ctx.temporary,  Some(ctx.resolve(declTys.toTupleType(None)))).mkString(" && ")
+        ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ", "}>>(CthSelf()" << {
+          if (conditions.nonEmpty) ", " + {
+            s"[&](const decltype($name)::tuple_t& ${ctx.temporary}) { return $conditions; }"
+          } else ""
+        } << ");"
         ctx << s"this->$name.req(__request__);"
         ctx << "while (!__request__->ready()) CthSuspend();"
         ctx << s"auto& __value__ = *(__request__->value());"
