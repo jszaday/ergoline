@@ -46,7 +46,7 @@ struct mailbox {
   }
 
   bool req(const request_t& req) {
-    CmiAssert(!req->stale());
+    CmiAssert(!req->stale() && "attempt to fulfill stale request");
     for (auto it = values_.begin(); it != values_.end();) {
       if (req->accepts(*it)) {
         req->fulfill(*it);
@@ -59,7 +59,7 @@ struct mailbox {
   }
 
   void pup(PUP::er& p) {
-    CmiAssert(requests_.empty());
+    CmiAssert(requests_.empty() && "pup'ing of mailbox with outstanding requests");
     p | values_;
   }
 };
@@ -76,6 +76,10 @@ struct to_thread : public mailbox<Ts...>::request {
   CthThread th_;
 
  public:
+#ifdef CMK_ERROR_CHECKING
+  ~to_thread() { CmiAssert(stale() && "deletion of unfulfilled request"); }
+#endif
+
   to_thread() {}
 
   to_thread(const CthThread& th) : th_(th), value_(nullptr) {
@@ -90,7 +94,7 @@ struct to_thread : public mailbox<Ts...>::request {
   bool ready() override { return (bool)value_; }
   bool accepts(const value_t& value) override { return !cond_ || cond_(value); }
   void fulfill(const value_t& value) override {
-    CmiAssert(!stale());
+    CmiAssert(!stale() && "refulfillment of fulfilled request");
     value_ = value;
     if (th_ != CthSelf()) CthAwaken(th_);
     th_ = nullptr;
