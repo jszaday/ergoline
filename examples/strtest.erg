@@ -1,0 +1,19 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class strtest {
+    @entry def strtest() {
+        val n = 16;
+        val a = new array<string, 1>(n);
+        a[0] = "0";
+        for (var i = 1; i < n; i += 1) {
+            a[i] = a[i - 1] + ` ${i}`;
+        }
+        for (var i = 0; i < n; i += 1) {
+            println(a[i]);
+        }
+        exit();
+    }
+}

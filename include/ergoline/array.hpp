@@ -17,7 +17,9 @@ struct array : public hashable {
 
   array() {}
 
-  array(const shape_t& shape_) : shape(shape_) { buffer = allocate(size()); }
+  array(const shape_t& shape_, bool init = true) : shape(shape_) {
+    buffer = allocate(size(), init);
+  }
 
   template <class... Args>
   array(T* buffer_, Args... args)
@@ -34,11 +36,11 @@ struct array : public hashable {
   inline T* end() { return buffer.get() + size(); }
 
   std::size_t size() {
-    if (N == 0)
+    if (N == 0) {
       return 0;
-    else if (N == 1)
+    } else if (N == 1) {
       return shape[0];
-    else {
+    } else {
       auto tmp = shape[0];
       for (auto i = 1; i < N; i++) {
         tmp *= shape[1];
@@ -66,29 +68,37 @@ struct array : public hashable {
   }
 
   // TODO implement this? idk...
-  template<class... Args>
-  static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape, const T& value);
+  template <class... Args>
+  static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape,
+                                           const T& value);
 
  private:
-  static buffer_t allocate(const std::size_t& n) {
+  static buffer_t allocate(const std::size_t& n, bool init) {
     if (n == 0) {
       return buffer_t(nullptr);
     } else {
-      return buffer_t(static_cast<T*>(malloc(sizeof(T) * n)),
-                      [](void* p) { free(p); });
+      auto b = buffer_t(static_cast<T*>(malloc(sizeof(T) * n)),
+                        [](void* p) { free(p); });
+      if (init) {
+        for (auto i = 0; i < n; i++) {
+          new (&(b.get())[i]) T();
+        }
+      }
+      return b;
     }
   }
 };
 
 template <>
 template <>
-std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(const std::tuple<int, int>& shape, const double& value) {
-  std::array<std::size_t, 2> s = { (std::size_t)std::get<0>(shape), (std::size_t)std::get<1>(shape) };
-  auto a = std::make_shared<array<double, 2>>(s);
+std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(
+    const std::tuple<int, int>& shape, const double& value) {
+  std::array<std::size_t, 2> s = {(std::size_t)std::get<0>(shape),
+                                  (std::size_t)std::get<1>(shape)};
+  auto a = std::make_shared<array<double, 2>>(s, false);
   std::fill(a->begin(), a->end(), value);
   return a;
 }
-
 }
 
 #endif
