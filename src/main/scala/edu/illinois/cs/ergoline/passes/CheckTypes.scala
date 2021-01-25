@@ -674,9 +674,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitExpressionPattern(ctx: TypeCheckContext, x: EirExpressionPattern): EirType = {
     val goal = ctx.goal.pop()
-    val ours = visit(ctx, x.conditions.head)
-    if (ours.canAssignTo(goal)) null
-    else Errors.cannotCast(x, ours, goal)
+    // TODO -- make this more reliable
+    x.decl.declaredType = goal
+    val ours = visit(ctx, x.expression)
+    if (ours.canAssignTo(globals.boolType)) null
+    else Errors.cannotCast(x, ours, globals.boolType)
   }
 
   @tailrec def hasField(x: EirType, field: String): Boolean = {

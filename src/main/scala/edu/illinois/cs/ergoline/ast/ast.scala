@@ -740,9 +740,11 @@ case class EirPatternList(var parent: Option[EirNode], var patterns: List[EirPat
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirExpressionPattern(var parent: Option[EirNode], var expression: EirExpressionNode) extends EirPattern {
+case class EirExpressionPattern(var parent: Option[EirNode], var expression: EirExpressionNode) extends EirPattern with EirScope {
+  val decl : EirDeclaration = EirDeclaration(Some(this), isFinal = true, "_", EirPlaceholder(None, None), None)
   override def declarations: List[EirDeclaration] = Nil
   override def conditions: List[EirExpressionNode] = List(expression)
+  override def children: Iterable[EirNode] = super.children ++ List(decl)
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 

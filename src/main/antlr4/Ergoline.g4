@@ -61,6 +61,7 @@ patternList
 pattern
     :   Identifier (':' (tupleType | basicType)?)?
     |   constant
+    |   expression
     |   '(' patternList ')'
     ;
 

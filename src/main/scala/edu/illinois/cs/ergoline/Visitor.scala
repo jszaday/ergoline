@@ -405,7 +405,14 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       })
     } else if (ctx.constant() != null) {
       enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {
-        e.expression = visitAs[EirExpressionNode](ctx.constant())
+        e.expression = enter(EirBinaryExpression(parent, null, "==", null), (b: EirBinaryExpression) => {
+          b.lhs = EirSymbol[EirNamedNode](parent, List("_"))
+          b.rhs = visitAs[EirExpressionNode](ctx.constant())
+        })
+      })
+    } else if (ctx.expression() != null) {
+      enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {
+        e.expression = visitAs[EirExpressionNode](ctx.expression())
       })
     } else {
       super.visit(ctx)

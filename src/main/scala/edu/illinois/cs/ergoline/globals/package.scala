@@ -42,6 +42,8 @@ package object globals {
 
   def stringType: EirType = typeFor(EirLiteralTypes.String)
 
+  def boolType: EirType = typeFor(EirLiteralTypes.Boolean)
+
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
 
   def operatorToFunction(op : String): Option[String] = {

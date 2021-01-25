@@ -1007,7 +1007,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         Option.when(parent.resolve(t).isPointer)(n).toList
       case e: EirExpressionPattern =>
         val ctx = parent.makeSubContext()
-        (ctx << current << " == " << e.expression).toString.split(n).toList
+        ctx.putReplacement("_", current)
+        (ctx << e.expression).toString.split(n).toList
     }
   }
 
