@@ -1,14 +1,15 @@
 package examples;
 
 import ergoline::_;
+import ck;
 
 @main class main {
     var count: int = 0;
     val n: int;
 
-    @entry def main(args: array<string>) {
-        n = 4;
-        new sdagtest@array1d(n, n, n, self@);
+    @entry def main() {
+        n = ck::numPes() * 4;
+        new sdagtest@array1d(n, n, n * 4, self@);
     }
 
     @entry def tally() {
