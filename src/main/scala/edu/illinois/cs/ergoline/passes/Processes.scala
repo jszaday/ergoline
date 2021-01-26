@@ -116,7 +116,7 @@ object Processes {
     assert(!globals.strict || sorted.hasValidOrder)
     val toDecl = sorted.namespacePartitioned
     ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;", "#include <ergoline/function.hpp> // ;")
-    ctx << a.map(GenerateCpp.forwardDecl(ctx, _))
+    a.foreach(GenerateCpp.forwardDecl(ctx, _))
     toDecl.foreach({
       case (namespace, classes) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {

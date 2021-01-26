@@ -102,10 +102,6 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
 
-  def appendSemi(): Unit = {
-    if (current.nonEmpty && !current.endsWith(";")) this << ";"
-  }
-
   def <<(ctx: CodeGenerationContext): CodeGenerationContext = ctx
 
   def <<(node: EirNode)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
@@ -155,8 +151,22 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   def <<(unit: Unit): CodeGenerationContext = this
 
-  private def isControl(s: Char): Boolean = {
-    s == '(' || s == ')' || s == ':' || s == '.'
+  private def endLine(isFor: Boolean, s: Option[Char]): Boolean = {
+    s match {
+      case Some(';') => !isFor
+      case Some('{' | '}') => true
+      case _ => false
+    }
+  }
+
+  private def seekUnbalanced(s: String): Int = {
+    if (s.contains('\"')) {
+      0
+    } else {
+      val left = s.count(_ == '{')
+      val right = s.count(_ == '}')
+      left - right
+    }
   }
 
   def append(value: String): CodeGenerationContext = {
@@ -164,32 +174,21 @@ class CodeGenerationContext(val language: String = "cpp") {
     this
   }
 
+  private def needsSpace(c: Option[Char]): Boolean = {
+    // val control = List('(', ')', '{', '}', '[', ']', '<', '>', ',', '.', ':', ';')
+    c.exists(c => c.isLetterOrDigit || c == '_')
+  }
+
   def <<(value: String): CodeGenerationContext = {
     if (ignores.headOption.contains(value)) {
       ignores.pop()
-      return this
-    }
-    if (value.isEmpty) {
-      return this
-    } else if (value.startsWith("{") || value.endsWith("{")) {
-      val curr = current.toString()
-      lines +:= curr + (if (curr.isEmpty || curr.endsWith(" ")) "" else " ") + value
-      current.clear()
-    } else if (value.startsWith("}") || value.endsWith("}")) {
-      if (current.nonEmpty) {
+    } else if (value.nonEmpty) {
+      val ns = needsSpace(current.lastOption) && needsSpace(value.headOption)
+      current.append(if (ns) s" $value" else value)
+      if (endLine(current.startsWith("for"), current.lastOption)) {
         lines +:= current.toString()
         current.clear()
       }
-      if (value.nonEmpty) {
-        if (isControl(value.last)) current.append(value)
-        else lines +:= value
-      }
-    } else if ((value.endsWith(";") || value.endsWith(n)) && !current.startsWith("for")) {
-      lines +:= current.toString() + value
-      current.clear()
-    } else if (value.nonEmpty) {
-      if (current.nonEmpty && !current.endsWith(" ") && !(isControl(value.head) || isControl(current.last))) current.append(" ")
-      current.append(value)
     }
     this
   }
@@ -198,7 +197,6 @@ class CodeGenerationContext(val language: String = "cpp") {
     for (value <- values) this << value
     this
   }
-
 
   val maxLineWidth = 120
 
@@ -212,13 +210,13 @@ class CodeGenerationContext(val language: String = "cpp") {
     var numTabs = 0
     def t: String = List.fill(numTabs)(tab).mkString("")
     for (line <- reversed) {
-//      if ((line + t).length >= maxLineWidth) { }
-      if (!line.matches(raw".*?\{.*\}$$")) {
-        if (line.endsWith("}") || line.endsWith("};") || line.startsWith("}")) numTabs = Math.max(numTabs - 1, 0)
-      }
+      val count = seekUnbalanced(line).sign
+      if (count < 0) numTabs = Math.max(numTabs + count, 0)
       output.append(t).append(line).append(n)
-      if (line.endsWith("{")) numTabs += 1
+      if (count > 0) numTabs += count
     }
     output.toString()
   }
+
+  def last: Char = current.toString().trim.lastOption.orElse(lines.lastOption.flatMap(_.trim.lastOption)).getOrElse('\u0000')
 }

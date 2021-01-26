@@ -82,11 +82,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 //    super.visitNamespace(ctx, node)
 //  }
 
-  def forwardDecl(ctx: CodeGenerationContext, x: EirProxy): String = {
-    val ns = x.namespaces.toList
-    (ns.map(ns => s"${n}namespace ${ctx.nameFor(ns)} {") ++ {
-      Seq(s"struct ${ctx.nameFor(x)};")
-    } ++ ns.map(_ => "}")).mkString(n)
+  def forwardDecl(ctx: CodeGenerationContext, x: EirProxy): Unit = {
+    x.namespaces.foreach(ns =>
+      ctx << s"namespace" << ctx.nameFor(ns) << "{" << "struct" << ctx.nameFor(x) << ";" << "}")
   }
 
   override def error(ctx: CodeGenerationContext, node : EirNode): Unit = ()
@@ -169,7 +167,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val str = () => {
       val subCtx = ctx.makeSubContext()
       subCtx << expr
-      subCtx.toString
+      subCtx.toString.trim
     }
     if (ours.isTransient) {
       Errors.cannotSerialize(expr, ours)
@@ -349,7 +347,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case f: EirFunction => ctx.resolve(f.returnType)
           case _ => Errors.missingType(disambiguated)
         }
-        ctx << "(([&](){ " << ctx.typeFor(retTy) << ctx.temporary << ";"
+        ctx << "(([&](){" << ctx.typeFor(retTy) << ctx.temporary << ";"
       }
       val isPointer = x.target match {
         // TODO make this more robust
@@ -372,7 +370,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         visitArguments(ctx)(Some(disambiguated), x.args)
       } << ")"
       if (isAsync) {
-        ctx << "; return" << ctx.temporary << "; })())"
+        ctx << "; return" << ctx.temporary << ";" << "})())"
       }
     }
   }
@@ -385,7 +383,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
-        ctx << s"for (" <| (declaration, ";") << test << ";" << increment << ")" << x.body
+        ctx << s"for (" <| (declaration, ";") << test << ";" << {
+          increment.foreach(_ => ctx.ignoreNext(";"))
+          increment
+        } << ")" << x.body
       case h: EirForAllHeader =>
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))
         // TODO find a better name than it_
@@ -439,7 +440,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << ctx.typeFor(x.declaredType, Some(x)) << s"${ctx.nameFor(x)}" << x.initialValue.map(_ => "= ") << x.initialValue << ";"
+    ctx << ctx.typeFor(x.declaredType, Some(x)) << s"${ctx.nameFor(x)}" << x.initialValue.map(_ => "=") << x.initialValue << ";"
   }
 
   override def visitTemplateArgument(ctx: CodeGenerationContext, x: EirTemplateArgument): Unit = {
@@ -1105,12 +1106,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitBlock(ctx: CodeGenerationContext, x: EirBlock): Unit = {
-    ctx << "{" << {
-      for (child <- x.children) {
-        ctx << child
-        ctx.appendSemi()
-      }
-    } << "}"
+    ctx << "{"
+    x.children.foreach{
+      case x: EirExpressionNode => ctx << x << ";"
+      case x => ctx << x
+    }
+    ctx << "}"
   }
 
   override def visitNamespace(ctx: CodeGenerationContext, x: EirNamespace): Unit = {
@@ -1139,13 +1140,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitAssignment(ctx: CodeGenerationContext, x: EirAssignment): Unit = {
     x.lval match {
-      case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x
-      case _ => ctx << x.lval << x.op << x.rval
+      case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x << ";"
+      case _ => ctx << x.lval << x.op << x.rval << ";"
     }
   }
 
   override def visitReturn(ctx: CodeGenerationContext, x: EirReturn): Unit = {
-    ctx << "return" << x.expression
+    ctx << "return" << x.expression << ";"
   }
 
   override def visitAwait(ctx: CodeGenerationContext, x: EirAwait): Unit = {
