@@ -62,7 +62,7 @@ struct array : public hashable {
     p | shape;
     auto n = this->size();
     if (p.isUnpacking()) {
-      buffer = allocate(n);
+      buffer = allocate(n, false);
     }
     PUParray(p, buffer.get(), n);
   }

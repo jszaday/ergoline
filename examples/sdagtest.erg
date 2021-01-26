@@ -22,35 +22,36 @@ import ergoline::_;
 }
 
 class sdagtest {
+    val neighbors: array<int, 1>;
     val mainProxy: main@;
     val numIts: int;
     val n: int;
 
     @entry def sdagtest(=n: int, =numIts: int, =mainProxy: main@) {
+        // TODO enable [ (idx + n - 1) % n, (idx + 1) % n ]
+        val idx = self[@]index();
+        neighbors = new array<int, 1>(2);
+        neighbors[0] = (idx + n - 1) % n;
+        neighbors[1] = (idx + 1) % n;
         self[@]run();
     }
 
     @mailbox def receive(it: int, from: int);
 
     @threaded @entry def run() {
+        // TODO shorten self[@]index()
         val idx = self[@]index();
-        val numNbrs = 2;
-        val left = (idx + n - 1) % n;
-        val right = (idx + 1) % n;
-
-        println(`[${idx}] has neighbors ${left} and ${right}.`);
 
         for (var it = 0; it < numIts; it += 1) {
-            self@[left].receive(it, idx);
-            self@[right].receive(it, idx);
+            for (var i = 0; i < neighbors.size(); i += 1) {
+                self@[neighbors[i]].receive(it, idx);
+            }
         }
 
-        println(`[${idx}] sent ${numIts * 2} values.`);
-
         for (var it = 0; it < numIts; it += 1) {
-            for (var i = 0; i < numNbrs; i += 1) {
-                when receive(_ == it, from) => {
-                    println(`[${idx}] received (${from}, ${it}).`);
+            for (var i = 0; i < neighbors.size(); i += 1) {
+                when receive(_ == it, _ == neighbors[i]) => {
+                    println(`[${idx}] received value from ${neighbors[i]} for ${it}.`);
                 }
             }
         }
