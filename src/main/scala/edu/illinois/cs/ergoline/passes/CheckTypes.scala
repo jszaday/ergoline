@@ -642,8 +642,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     ctx.goal.pushAll(theirs.reverse)
     val ours = x.patterns.map(visit(ctx, _))
-    if (ours.length != theirs.length) Errors.invalidTupleIndices(EirTupleType(None, theirs), ours)
-    else null
+    if ((ours.isEmpty && theirs.headOption.contains(globals.unitType)) || ours.length == theirs.length) null
+    else Errors.invalidTupleIndices(EirTupleType(None, theirs), ours)
   }
 
   override def visitTupleType(ctx: TypeCheckContext, x: types.EirTupleType): EirType = {
@@ -769,7 +769,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // TODO ensure that target is mailbox
       ctx.goal.push({
         visit(ctx, i) match {
-          case x: EirLambdaType => visit(ctx, x.from.toTupleType(None))
+          case x: EirLambdaType => visit(ctx, x.from.toTupleType(allowUnit = true)(None))
           case _ => Errors.missingType(i)
       }})
       visit(ctx, p)

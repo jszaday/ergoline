@@ -371,7 +371,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         x.rhs = visitAs[EirExpressionNode](ctx.constExpression())
       })
     } else {
-      ctx.typeList().toList.toTupleType(parent)
+      ctx.typeList().toList.toTupleType(allowUnit = false)(parent)
     }
   }
 
@@ -420,8 +420,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitPatternList(ctx: PatternListContext): EirPatternList = {
+    val patterns = Option(ctx).map(_.pattern()).map(_.asScala.toList)
     enter(EirPatternList(parent, null), (p : EirPatternList) => {
-      p.patterns = ctx.pattern().asScala.map(visitAs[EirPattern]).toList
+      p.patterns = patterns.map(_.map(visitAs[EirPattern])).getOrElse(Nil)
     })
   }
 
@@ -683,7 +684,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       val fns = ctx.whenFnList().whenFn().asScala
       n.patterns = fns.toList.map(x => (
         visitAs[EirSymbol[EirNamedNode]](x.identifierExpression()),
-        visitAs[EirPatternList](x.patternList())))
+        Option(x.patternList()).map(visitAs[EirPatternList]).getOrElse(EirPatternList(parent, Nil))))
       n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
       n.body = Option(ctx.bodyExpr).map(visitAs[EirExpressionNode])
         .map(AstManipulation.encloseNodes(_)).getOrElse(visitAs[EirBlock](ctx.block()))
