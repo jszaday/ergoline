@@ -137,9 +137,9 @@ package object util {
     }
 
     implicit class RichResolvableTypeIterable(types: Iterable[EirResolvable[EirType]]) {
-      def toTupleType(implicit parent: Option[EirNode]): EirResolvable[EirType] =
+      def toTupleType(allowUnit: Boolean = false)(implicit parent: Option[EirNode]): EirResolvable[EirType] =
         types.toList match {
-          case Nil => throw new RuntimeException("please use unit type")
+          case Nil => if (allowUnit) globals.unitType else throw new RuntimeException("please use unit type")
           case element :: Nil => element
           case x => EirTupleType(parent, x)
         }

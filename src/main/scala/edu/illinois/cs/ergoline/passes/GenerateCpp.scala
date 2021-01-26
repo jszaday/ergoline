@@ -1202,7 +1202,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
-        val conditions = visitPatternCond(ctx, patterns, ctx.temporary,  Some(ctx.resolve(declTys.toTupleType(None)))).mkString(" && ")
+        val conditions = visitPatternCond(ctx, patterns, ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ", "}>>(CthSelf()" << {
           if (conditions.nonEmpty) ", " + {
             s"[&](const decltype($name)::tuple_t& ${ctx.temporary}) { return $conditions; }"

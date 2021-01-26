@@ -92,7 +92,7 @@ object Errors {
   }
 
   def invalidTupleIndices(tuple: EirTupleType, nodes: Iterable[EirNode]): Nothing = {
-    exit(format(nodes.head, "cannot use %s as indices for %s", nodes, tuple))
+    exit(format(nodes.headOption.orNull, "cannot use %s as indices for %s", nodes, tuple))
   }
 
   def invalidConstExpr(expr: EirNode): Nothing = {
@@ -132,7 +132,7 @@ object Errors {
   }
 
   def cannotParse(tree: ParseTree): Nothing = {
-    exit(format(null, "could not parse %s (a(n) %s)", tree.getText, tree.getClass.getName))
+    exit(format(null, "could not parse %s (a(n) %s)", Option(tree).map(_.getText).getOrElse("null"), Option(tree).map(_.getClass.getName).getOrElse("null")))
   }
 
   def systemFnHasBody(f: EirFunction): Nothing = {

@@ -59,7 +59,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   }
 
   private def indexType: Option[EirType] = {
-    indices.map(_.toTupleType(Some(this))).to[EirType]
+    indices.map(_.toTupleType()(Some(this))).to[EirType]
   }
 
   private def genElementMembers(): List[EirMember] = {

@@ -185,7 +185,7 @@ class TypeCheckContext {
       val (init, last) = (s.templateArgs.init, s.templateArgs.last)
       if (last.isPack) {
         init.zip(sp.types) :+ {
-          (last, sp.types.slice(init.length, sp.types.length).toTupleType(None))
+          (last, sp.types.slice(init.length, sp.types.length).toTupleType(allowUnit = true)(None))
         }
       } else {
         (init :+ last).zip(sp.types)
