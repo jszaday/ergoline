@@ -187,8 +187,9 @@ class CodeGenerationContext(val language: String = "cpp") {
       current.append(if (ns) s" $value" else value)
       if (endLine(current.startsWith("for"), current.lastOption)) {
         val curr = current.toString()
-        val dl = curr.startsWith(")") && lines.lastOption.contains("}")
-        if (dl) {
+        if (curr == "}" && lines.lastOption.exists(_.endsWith("{"))) {
+          lines = lines.init :+ (lines.last + "}")
+        } else if (curr.startsWith(")") && lines.lastOption.contains("}")) {
           lines = lines.init :+ ("}" + curr)
         } else {
           lines :+= curr
@@ -206,6 +207,11 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   val maxLineWidth = 120
 
+  private def skip(s: String): Boolean = {
+    val ptn = raw"namespace\s+([_a-zA-Z0-9:]+)\{\}"
+    s.matches(ptn)
+  }
+
   override def toString: String = {
     if (current.nonEmpty) {
       lines :+= current.toString()
@@ -217,7 +223,7 @@ class CodeGenerationContext(val language: String = "cpp") {
     for (line <- lines) {
       val count = seekUnbalanced(line).sign
       if (count < 0) numTabs = Math.max(numTabs + count, 0)
-      output.append(t).append(line).append(n)
+      if (!skip(line)) output.append(t).append(line).append(n)
       if (count > 0) numTabs += count
     }
     output.toString()

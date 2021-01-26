@@ -922,7 +922,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def makeIndex(ctx: CodeGenerationContext, args: List[EirExpressionNode]): Unit = {
-    ctx << "{ (std::size_t) " << (args, ", (std::size_t) ") << "}"
+    ctx << "{ (std::size_t) " << (args, ", (std::size_t) ") << "})"
   }
 
   override def visitNew(ctx: CodeGenerationContext, x: EirNew): Unit = {
@@ -940,7 +940,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {
           case Some(n) =>
-            ctx << "ergoline::array<" << ctx.typeFor(arrayElementType(t), Some(x)) << "," << n.toString << ">(" << makeIndex(ctx, args) << ")"
+            ctx << "ergoline::array<" << ctx.typeFor(arrayElementType(t), Some(x)) << "," << n.toString << ">(" << makeIndex(ctx, args)
           case None => visitArguments(ctx)(x.disambiguation, args)
         }
         ctx<< ")"
@@ -1206,9 +1206,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val conditions = visitPatternCond(ctx, patterns, ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ","}>>(CthSelf()" << {
           if (conditions.nonEmpty) "," + {
-            s"[&](const decltype($name)::tuple_t& ${ctx.temporary}) { return $conditions; }"
-          } else ""
-        } << ");"
+            s"[&](const decltype($name)::tuple_t& ${ctx.temporary}) { return $conditions; });"
+          } else ");"
+        }
         ctx << s"this->$name.req(__request__);"
         ctx << "while (!__request__->ready()) CthSuspend();"
         ctx << s"auto& __value__ = *(__request__->value());"
