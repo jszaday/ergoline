@@ -186,7 +186,13 @@ class CodeGenerationContext(val language: String = "cpp") {
       val ns = needsSpace(current.lastOption) && needsSpace(value.headOption)
       current.append(if (ns) s" $value" else value)
       if (endLine(current.startsWith("for"), current.lastOption)) {
-        lines +:= current.toString()
+        val curr = current.toString()
+        val dl = curr.startsWith(")") && lines.lastOption.contains("}")
+        if (dl) {
+          lines = lines.init :+ ("}" + curr)
+        } else {
+          lines :+= curr
+        }
         current.clear()
       }
     }
@@ -202,14 +208,13 @@ class CodeGenerationContext(val language: String = "cpp") {
 
   override def toString: String = {
     if (current.nonEmpty) {
-      lines +:= current.toString()
+      lines :+= current.toString()
       current.clear()
     }
-    val reversed = lines.reverse
     val output = new StringBuilder
     var numTabs = 0
     def t: String = List.fill(numTabs)(tab).mkString("")
-    for (line <- reversed) {
+    for (line <- lines) {
       val count = seekUnbalanced(line).sign
       if (count < 0) numTabs = Math.max(numTabs + count, 0)
       output.append(t).append(line).append(n)
