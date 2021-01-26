@@ -19,6 +19,7 @@ class CodeGenerationContext(val language: String = "cpp") {
   private val _pointerOverrides: mutable.Set[EirNode] = mutable.Set()
   private val _proxies: mutable.Stack[EirProxy] = new mutable.Stack[EirProxy]
   private var _ctx : TypeCheckContext = new TypeCheckContext
+  private var _replacements = Map[String, String]()
 
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
@@ -74,9 +75,14 @@ class CodeGenerationContext(val language: String = "cpp") {
   def ignoreNext(s: String): Unit = ignores.push(s)
 
   def nameFor(node: EirNode, usage: Option[EirNode] = None): String = {
-    usage
+    val name = usage
       .map(GenerateCpp.qualifiedNameFor(this, _)(node))
       .getOrElse(GenerateCpp.nameFor(this, node))
+    _replacements.getOrElse(name, name)
+  }
+
+  def putReplacement(from: String, to: String): Unit = {
+    _replacements += (from -> to)
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {

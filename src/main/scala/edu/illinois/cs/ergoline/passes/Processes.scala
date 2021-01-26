@@ -22,6 +22,7 @@ object Processes {
     "utility",
     "vector",
     "ergoline/array.hpp",
+    "ergoline/sdag.hpp",
     "#include \"generate.decl.h\" // ;"
   )
 

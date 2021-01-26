@@ -39,6 +39,19 @@ statement
     |   returnStatement
     |   classDeclaration
     |   topLevelDeclaration
+    |   whenStatement
+    ;
+
+whenStatement
+    :   'when' whenFnList ('if' condition=expression)? LambdaArrow (block | bodyExpr=expression ';')
+    ;
+
+whenFnList
+    :   (whenFn ',')* whenFn
+    ;
+
+whenFn
+    :   identifierExpression '(' patternList? ')'
     ;
 
 patternList
@@ -48,6 +61,7 @@ patternList
 pattern
     :   Identifier (':' (tupleType | basicType)?)?
     |   constant
+    |   expression
     |   '(' patternList ')'
     ;
 
@@ -225,7 +239,7 @@ unaryOperator
     ;
 
 awaitExpression
-    :   'await' postfixExpression
+    :    AwaitKwd postfixExpression
     ;
 
 newExpression
@@ -397,6 +411,7 @@ CollectiveKeyword
     |   'group'
     ;
 
+AwaitKwd : 'await';
 VariableKeyword : 'var' ;
 ValueKeyword : 'val' ;
 AbstractKwd : 'abstract';

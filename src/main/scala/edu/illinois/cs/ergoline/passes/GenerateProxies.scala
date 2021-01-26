@@ -76,7 +76,11 @@ object GenerateProxies {
     GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "{" << {
-      ctx << "void pup(PUP::er &p)" << "{" << pupperFor((ctx, x, "p"))("impl_", x.base) << "}"; ()
+      ctx << "void pup(PUP::er &p)" << "{" << {
+        pupperFor((ctx, x, "p"))("impl_", x.base)
+      } << {
+        x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1).map("p | " + _ + ";")
+      } << "}"; ()
     } << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))
@@ -187,6 +191,7 @@ object GenerateProxies {
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
+      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, m)
       case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable " << visitFunctionBody(ctx, f) << ")())"
@@ -197,6 +202,31 @@ object GenerateProxies {
     }
   }
 
+  def mailboxName(ctx: CodeGenerationContext, name: String, types: List[String]): String = {
+    // TODO impl this
+    name + "_mailbox_"
+  }
+
+  def mailboxName(ctx: CodeGenerationContext, x: EirMember): (String, List[String]) = {
+    val f = assertValid[EirFunction](x.member)
+    val name = ctx.nameFor(f)
+    val tys = f.functionArgs.map(_.declaredType).map(ctx.typeFor(_, Some(x)))
+    (mailboxName(ctx, name, tys), tys)
+  }
+
+  def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
+    val (name, tys) = mailboxName(ctx, x)
+    ctx << s"ergoline::mailbox<${tys mkString ", "}> $name;"
+  }
+
+  def makeMailboxBody(ctx: CodeGenerationContext, x: EirMember): Unit = {
+    val f = assertValid[EirFunction](x.member)
+    val args = f.functionArgs.map(ctx.nameFor(_))
+    val name = mailboxName(ctx, x)._1
+    ctx << s"auto __value__ = std::make_shared<decltype($name)::tuple_t>(std::make_tuple(" << (args, ",") << "));"
+    ctx << s"$name.put(__value__);"
+  }
+
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
       val proxy = x.parent.to[EirProxy]
       val isConstructor = x.isConstructor
@@ -205,6 +235,7 @@ object GenerateProxies {
       val isMain = proxy.exists(_.isMain)
       val isAsync = x.annotation("async").isDefined
       val args = f.functionArgs
+      if (x.isMailbox) makeMailboxDecl(ctx, x)
       if (isAsync) ctx << "void"
       else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {

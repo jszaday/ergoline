@@ -405,7 +405,14 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       })
     } else if (ctx.constant() != null) {
       enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {
-        e.expression = visitAs[EirExpressionNode](ctx.constant())
+        e.expression = enter(EirBinaryExpression(parent, null, "==", null), (b: EirBinaryExpression) => {
+          b.lhs = EirSymbol[EirNamedNode](parent, List("_"))
+          b.rhs = visitAs[EirExpressionNode](ctx.constant())
+        })
+      })
+    } else if (ctx.expression() != null) {
+      enter(EirExpressionPattern(parent, null), (e: EirExpressionPattern) => {
+        e.expression = visitAs[EirExpressionNode](ctx.expression())
       })
     } else {
       super.visit(ctx)
@@ -669,5 +676,17 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       assert(ctx.CharacterConstant() != null)
       EirLiteral(parent, EirLiteralTypes.Character, ctx.CharacterConstant().getText)
     }
+  }
+
+  override def visitWhenStatement(ctx: WhenStatementContext): EirNode = {
+    enter(EirSdagWhen(null, null, null)(parent), (n: EirSdagWhen) => {
+      val fns = ctx.whenFnList().whenFn().asScala
+      n.patterns = fns.toList.map(x => (
+        visitAs[EirSymbol[EirNamedNode]](x.identifierExpression()),
+        visitAs[EirPatternList](x.patternList())))
+      n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
+      n.body = Option(ctx.bodyExpr).map(visitAs[EirExpressionNode])
+        .map(AstManipulation.encloseNodes(_)).getOrElse(visitAs[EirBlock](ctx.block()))
+    })
   }
 }
