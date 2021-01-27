@@ -1,8 +1,8 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.Errors
@@ -29,6 +29,33 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   def namespaces: Seq[EirNamespace] = Find.ancestors(base).collect({
     case n : EirNamespace => n
   })
+
+  var internalMembers: List[EirMember] = Nil
+
+  def mkValueContribute(): EirMember = {
+    val m = EirMember(Some(this), null, EirAccessibility.Public)
+    m.annotations +:= EirAnnotation("system", Map())
+    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
+    val (from, to) = (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
+    val (fromExp, toExp) = (EirPlaceholder(None, Some(from)), EirPlaceholder(None, Some(to)))
+    f.templateArgs = List(from, to)
+    f.functionArgs = List(
+      EirFunctionArgument(Some(f), "value", fromExp, isExpansion = false, isSelfAssigning = false),
+      EirFunctionArgument(Some(f), "reducer", EirLambdaType(None, List(toExp, fromExp), toExp), isExpansion = false, isSelfAssigning = false),
+      EirFunctionArgument(Some(f), "callback", EirLambdaType(None, List(toExp), globals.unitType), isExpansion = false, isSelfAssigning = false))
+    m.member = f
+    m
+  }
+
+  def mkUnitContribute(): EirMember = {
+    val m = EirMember(Some(this), null, EirAccessibility.Public)
+    m.annotations +:= EirAnnotation("system", Map())
+    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
+    f.functionArgs = List(
+      EirFunctionArgument(Some(f), "callback", EirLambdaType(None, List(globals.unitType), globals.unitType), isExpansion = false, isSelfAssigning = false))
+    m.member = f
+    m
+  }
 
   // replace "self" with "selfProxy"
   // TODO use clone
@@ -65,8 +92,10 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   private def genElementMembers(): List[EirMember] = {
     val idx = indexType.get
     val parent = ProxyManager.collectiveFor(this).get
-    List(util.makeMemberFunction(this, "parent", Nil, parent, isConst = true),
-      util.makeMemberFunction(this, "index", Nil, idx, isConst = true))
+    List(
+      util.makeMemberFunction(this, "parent", Nil, parent, isConst = true),
+      util.makeMemberFunction(this, "index", Nil, idx, isConst = true),
+      mkUnitContribute(), mkValueContribute())
   }
 
   private def genCollectiveMembers(): List[EirMember] = {
@@ -88,13 +117,16 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   }
 
   override def members: List[EirMember] = {
-    val fromKind =
-      if (isElement) genElementMembers()
-      else if (collective.isDefined) genCollectiveMembers()
-      else Nil
-    fromKind ++ base.members
-      .filter(x => validMember(x) && (singleton || !x.isConstructor))
-      .map(updateMember)
+    if (internalMembers.isEmpty) {
+      val fromKind =
+        if (isElement) genElementMembers()
+        else if (collective.isDefined) genCollectiveMembers()
+        else Nil
+      internalMembers = fromKind ++ base.members
+        .filter(x => validMember(x) && (singleton || !x.isConstructor))
+        .map(updateMember)
+    }
+    internalMembers
   }
 
   def singleton: Boolean = isElement || collective.isEmpty

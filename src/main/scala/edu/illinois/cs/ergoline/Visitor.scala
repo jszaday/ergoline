@@ -478,7 +478,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         e.lhs = visitAs[EirExpressionNode](children.head)
         e.rhs = visitAs[EirExpressionNode](children.last)
       })
-    } else throw new RuntimeException("how did I get here?")
+    } else {
+      Errors.cannotParse(ctx)
+    }
   }
 
   private def pop[T](): T = parents.pop().asInstanceOf[T]
