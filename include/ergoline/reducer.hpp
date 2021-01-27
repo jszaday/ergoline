@@ -8,6 +8,8 @@
 #include <charm++.h>
 
 namespace ergoline {
+// TODO make this return bool
+//      true means unregister the function, false means keep it
 using reducer_fn_t = std::function<void(int, void*)>;
 
 namespace {
@@ -46,14 +48,15 @@ using Requires = PUP::Requires<B>;
 }
 
 class reducer {
-  CkReduction::reducerType type_;
   CkCallback cb_;
+  CMK_REFNUM_TYPE flag_;
+  CkReduction::reducerType type_;
 
  public:
   reducer() {}
-  reducer(const reducer& r) : cb_(r.cb_), type_(r.type_) {}
-  reducer(const CkReduction::reducerType& ty, const reducer_fn_t& action)
-      : type_(ty) {
+  reducer(const reducer& r) : cb_(r.cb_), type_(r.type_), flag_(r.flag_) {}
+  reducer(const CkReduction::reducerType& ty, const reducer_fn_t& action, CMK_REFNUM_TYPE flag = (CMK_REFNUM_TYPE)-1)
+      : type_(ty), flag_(flag) {
     auto id = register_reducer(action);
     new (&cb_) CkCallback(&reduction_client_fn, reinterpret_cast<void*>(id));
   }
@@ -65,28 +68,29 @@ class reducer {
     auto size = PUP::size(args);
     auto buf = new char[size];
     PUP::toMemBuf(args, buf, size);
-    t->contribute(size, buf, type_, cb_);
+    t->contribute(size, buf, type_, cb_, flag_);
     delete[] buf;
   }
 
   template <typename T, typename Value>
   void contribute(T* t, const Value& value) {
-    t->contribute(sizeof(Value), &value, type_, cb_);
+    t->contribute(sizeof(Value), &value, type_, cb_, flag_);
   }
 
   template <typename T>
   void contribute(T* t, int size, void* data) {
-    t->contribute(size, data, type_, cb_);
+    t->contribute(size, data, type_, cb_, flag_);
   }
 
   template <typename T>
   void contribute(T* t) {
-    t->contribute(cb_);
+    t->contribute(cb_, flag_);
   }
 
   virtual void pup(PUP::er& p) {
-    p | type_;
     p | cb_;
+    p | flag_;
+    p | type_;
   }
 };
 }
