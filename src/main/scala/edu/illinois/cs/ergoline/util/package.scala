@@ -12,6 +12,13 @@ package object util {
 
   import EirUtilitySyntax.RichEirNode
 
+  def addExplicitSelf(base: EirType, ty: EirType): EirType = {
+    ty match {
+      case EirLambdaType(parent, from, to, args) => EirLambdaType(parent, base +: from, to, args)
+      case _ => Errors.incorrectType(ty, EirLambdaType.getClass)
+    }
+  }
+
   def makeMemberFunction(parent: EirClassLike, name: String,
                          args: List[EirResolvable[EirType]],
                          retTy: EirResolvable[EirType], isConst: Boolean): EirMember = {

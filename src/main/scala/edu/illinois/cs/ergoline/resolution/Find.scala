@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichIntOption, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited, addExplicitSelf}
 
 import scala.collection.View
 import scala.reflect.ClassTag
@@ -197,15 +197,28 @@ object Find {
   def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
     asClassLike(Find.uniqueResolution[EirType](resolvable))
 
-  def asClassLike(ty: EirType): EirClassLike = ty match {
-    case c: EirClassLike => c
-    case t: EirTemplatedType => asClassLike(t.base)
-    case _ => Errors.incorrectType(ty, classOf[EirClassLike])
+  def asClassLike(ty: EirType): EirClassLike = tryClassLike(ty) match {
+    case Some(c) => c
+    case None => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  def resolveAccessor(ctx: TypeCheckContext, accessor: EirScopedSymbol[_], base: Option[EirType]): View[(EirMember, EirType)] = {
-    def helper(x: EirMember) = (x, CheckTypes.visit(ctx, x))
-    val cls = asClassLike(base.getOrElse(CheckTypes.visit(ctx, accessor.target)))
+  def tryClassLike(ty: EirNode): Option[EirClassLike] = ty match {
+    case c: EirClassLike => Some(c)
+    case t: EirTemplatedType => Some(asClassLike(t.base))
+    case _ => None
+  }
+
+  def resolveAccessor(ctx: TypeCheckContext, accessor: EirScopedSymbol[_], _base: Option[EirType]): View[(EirMember, EirType)] = {
+    val base = _base.getOrElse(CheckTypes.visit(ctx, accessor.target))
+    def helper(x: EirMember) = {
+      (accessor.isStatic, x.isStatic) match {
+        case (true, true) | (false, false) => (x, CheckTypes.visit(ctx, x))
+        case (true, false) if x.member.isInstanceOf[EirFunction] =>
+          (x, addExplicitSelf(base, CheckTypes.visit(ctx, x)))
+        case _ => ???
+      }
+    }
+    val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
       sweepInherited(ctx, cls, other => {

@@ -6,12 +6,14 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.resolution.Find.{parentOf, tryClassLike}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
+import scala.reflect.ClassTag
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -295,22 +297,35 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     args.map(_.map(visit(ctx, _)))
   }
 
+  private def zipWithVisit(ctx: TypeCheckContext, ns: Iterable[EirNamedNode]): Iterable[(EirNamedNode, EirType)] = {
+    ns.view.zip(ns.view.map(visit(ctx, _)))
+  }
+
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
     val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
-    val resolved = {
-      val resolved = value.resolve()
-      if (resolved.isEmpty && self.isDefined) {
+    val candidates = self match {
+      case Some(name) =>
         ctx.ancestor[EirMember] match {
-          case Some(m) =>
-            m.selfDeclarations.filter(n => self.contains(n.name))
+          case Some(m) => zipWithVisit(ctx, m.selfDeclarations.filter(_.name == name))
           case _ => Nil
         }
-      } else {
-        resolved
-      }
+      case None =>
+        val (init, last) = (value.qualifiedName.init, value.qualifiedName.last)
+        if (init.nonEmpty) {
+          val parent = EirSymbol[EirNamedNode](value.parent, init).resolve().headOption
+          val asCls = parent.flatMap(tryClassLike)
+          if (asCls.isDefined) {
+            val accessor = EirScopedSymbol(null, EirSymbol(value.parent, List(last)))(value.parent)
+            accessor.isStatic = true
+            Find.resolveAccessor(ctx, accessor, asCls)
+          } else {
+            zipWithVisit(ctx, value.resolve())
+          }
+        } else {
+          zipWithVisit(ctx, value.resolve())
+        }
     }
-    val candidates = resolved.view.zip(resolved.view.map(visit(ctx, _)))
     val found = screenCandidates(ctx, prevFc, candidates)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))
