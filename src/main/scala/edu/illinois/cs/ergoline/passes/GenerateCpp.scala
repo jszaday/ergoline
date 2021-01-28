@@ -252,6 +252,40 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def visitCallback(ctx: CodeGenerationContext, target: EirExpressionNode, isReduction: Boolean): Unit = {
+    target match {
+      case EirScopedSymbol(_proxy, _field) =>
+        val proxy = _proxy.foundType.to[EirProxy]
+        val found = asMember(Some(disambiguate(ctx, target)))
+        val field = Option(_field).to[EirSymbol[_]].flatMap(_.qualifiedName.lastOption)
+        if (proxy.isDefined && found.exists(_.isEntry)) {
+          ctx << "CkCallback("
+          if (isReduction) {
+            ctx << s"CkReductionTarget(${proxy.get.baseName}," << field << ")"
+          } else {
+            ctx << s"CkIndex_${proxy.get.baseName}::" << field << "(" << {
+              // TODO take types and flattening into consideration!!
+              val n = found.map(_.member).to[EirFunction].map(_.functionArgs.length).getOrElse(0)
+              (List.fill(n)("0"), ",")
+            } << ")"
+          }
+          ctx << "," << _proxy << ")"
+        } else {
+          Errors.expectedCallback(target)
+        }
+      case _ => Errors.expectedCallback(target)
+    }
+  }
+
+  def visitReducer(ctx: CodeGenerationContext, _target: EirExpressionNode): Unit = {
+    val target = asMember(Some(disambiguate(ctx, _target)))
+    val annotation = target.flatMap(_.annotation("system")).flatMap(_("reducer"))
+    annotation match {
+      case Some(l@EirLiteral(_, EirLiteralTypes.String, _)) => ctx << l.stripped
+      case _ => Errors.expectedReducer(_target)
+    }
+  }
+
   def visitSystemCall(ctx: CodeGenerationContext, target: EirExpressionNode,
                       disambiguated: EirNode, args: List[EirExpressionNode]): Unit = {
     val base = target match {
@@ -266,6 +300,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val cast = system("cast").exists(_.toBoolean)
     val name = system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
     disambiguated.asInstanceOf[EirNamedNode] match {
+      case m@EirMember(Some(_: EirProxy), _, _) if m.name == "contribute" =>
+        ctx << "ergoline::contribute(this," << {
+          visitCallback(ctx, args match {
+            case List(value, reducer, target) =>
+              ctx << value << "," << visitReducer(ctx, reducer) << ","
+              target
+            case List(target) => target
+            case _ => Errors.unreachable()
+          }, isReduction = true)
+        } << ")"
       case _ : EirMember if proxy.isDefined =>
         name match {
           case "index" =>

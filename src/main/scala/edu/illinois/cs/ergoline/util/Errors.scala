@@ -174,4 +174,12 @@ object Errors {
   def expectedParameterPack(expansion: EirPackExpansion): Nothing = {
     exit(format(expansion, "expected %s to be a parameter pack", expansion))
   }
+
+  def expectedCallback(node: EirNode): Nothing = {
+    exit(format(node, "unsure how to use %s as a callback", node))
+  }
+
+  def expectedReducer(node: EirNode): Nothing = {
+    exit(format(node, "unsure how to use %s as a reducer", node))
+  }
 }

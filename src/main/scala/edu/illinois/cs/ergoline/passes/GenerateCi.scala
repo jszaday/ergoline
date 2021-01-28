@@ -85,12 +85,15 @@ object GenerateCi {
   }
 
   def attributesFor(m: EirMember): String = {
-    m.annotation("threaded").map(x => "[" + x.name + "]").getOrElse("")
+    val attributes =
+      Option.unless(m.isConstructor || m.hasOverloads)("reductiontarget") ++
+      m.annotation("threaded").map(_.name)
+    if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }
 
   def visit(ctx: CiUnparseContext, proxy: EirProxy, f: EirMember): Unit = {
     if (proxy.isMain && f.isConstructor) {
-      ctx << s"entry [nokeep]" << proxy.baseName << "(CkArgMsg* msg);"
+      ctx << s"entry [nokeep] " << proxy.baseName << "(CkArgMsg* msg);"
     } else {
       ctx << "entry" << attributesFor(f)
       GenerateCpp.visitFunction(ctx, assertValid[EirFunction](f.member), isMember = true)
