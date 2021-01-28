@@ -293,6 +293,11 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   var isStatic: Boolean = false
   var counterpart: Option[EirMember] = None
   private var entryOnly: Boolean = false
+  private var _hasOverloads: Boolean = false
+
+  def hasOverloads_=(yes: Boolean): Unit = _hasOverloads = yes
+  def hasOverloads: Boolean = _hasOverloads || counterpart.exists(_.hasOverloads)
+
 
   def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox

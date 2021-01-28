@@ -50,6 +50,8 @@ object CheckFunctions {
       Errors.bodyLessFunction(function)
     }
 
+    member.foreach(_.hasOverloads = overloads.nonEmpty)
+
     overloads
       .filter(sharedArgs(ctx, function, _))
       .foreach(Errors.ambiguousOverload(function, _))

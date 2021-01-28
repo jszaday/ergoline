@@ -4,21 +4,14 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    var count: int = 0;
-    val n: int;
-
     @entry def main() {
-        n = ck::numPes() * 4;
+        val n = ck::numPes() * 4;
         new sdagtest@array1d(n, n, n * 4, self@);
     }
 
-    @entry def tally() {
-        count += 1;
-
-        if (count >= n) {
-            println("done");
-            exit();
-        }
+    @entry def done(count: int) {
+        println(`done with count ${count}`);
+        exit();
     }
 }
 
@@ -61,6 +54,7 @@ class sdagtest {
             }
         }
 
-        mainProxy.tally();
+        // TODO enable inference of template args
+        self[@]contribute<int, int>(idx, int::plus, mainProxy.done);
     }
 }
