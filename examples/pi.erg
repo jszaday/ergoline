@@ -8,32 +8,23 @@ import ck;
 
 @main class main {
     val numSteps: int;
-    var checkIns: int;
-    var runningSum: double;
 
     @entry def main(args: array<string>) {
         numSteps = args.size() > 1 ? args[1].toInt() : 16;
-        runningSum = 0.0;
         val numPes: int = ck::numPes();
         if (numSteps < (numPes * 4)) {
             numSteps = numPes * 4;
         }
         if (numSteps % numPes != 0) {
-            println("expected an evenly divisible number of steps.");
-            exit();
+            abort("expected an evenly divisible number of steps.");
         }
         println(`running ${numSteps} steps of pi computation on ${numPes} PEs`);
         new pi@array1d(numPes, self@, numSteps / numPes);
     }
 
-    @entry def checkIn(partialSum : double) {
-        checkIns += 1;
-        runningSum += partialSum;
-
-        if (checkIns >= ck::numPes()) {
-            println(`result = ${runningSum / numSteps}`);
-            exit();
-        }
+    @entry def done(sum : double) {
+        println(`result = ${sum / numSteps}`);
+        exit();
     }
 }
 
@@ -59,6 +50,7 @@ class pi {
             sum += 4.0 / (1.0 + x * x);
         }
 
-        mainProxy.checkIn(sum);
+        // TODO enable inference of template args
+        self[@]contribute<double, double>(sum, double::plus, mainProxy.done);
     }
 }

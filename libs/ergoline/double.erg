@@ -1,7 +1,9 @@
 package ergoline;
 
 @system class double {
-    @system def plus(other: double): double;
+    @system(reducer="CkReduction::sum_double")
+    def plus(other: double): double;
+
     @system def minus(other: double): double;
     @system def times(other: double): double;
     @system def div(other: double): double;
