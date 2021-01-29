@@ -1246,18 +1246,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val f = assertValid[EirFunction](ctx.resolve(symbol))
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
-        val name = GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
-        val conditions = visitPatternCond(ctx, patterns, ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
-        ctx << s"auto __request__ = std::make_shared<ergoline::requests::to_thread<${tys mkString ","}>>(CthSelf()" << {
-          if (conditions.nonEmpty) "," + {
-            s"[&](const decltype($name)::tuple_t& ${ctx.temporary}) { return $conditions; });"
-          } else ");"
+        val name = "this->" + GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
+        val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
+        ctx << "const auto __self__ = CthSelf();"
+        ctx << s"typename decltype($name)::value_t __value__;"
+        ctx << s"auto __request__ = $name.make_request([&](decltype(__value__) __recvd__) {"
+        ctx << "__value__ = __recvd__;"
+        ctx << "CthAwaken(__self__);"
+        ctx << "return true;" << "},"
+        ctx << {
+          if (conditions.nonEmpty) {
+            s"[&](const decltype(__value__) ${ctx.temporary}) { return $conditions; });"
+          } else "nullptr);"
         }
-        ctx << s"this->$name.req(__request__);"
-        ctx << "while (!__request__->ready()) CthSuspend();"
-        ctx << s"auto& __value__ = *(__request__->value());"
+        ctx << s"$name.put(__request__);"
+        ctx << "CthSuspend();"
       } << {
-        visitPatternDecl(ctx, patterns, "__value__").split(n)
+        visitPatternDecl(ctx, patterns, "*__value__").split(n)
       } << {
         ctx.ignoreNext("{")
         ctx << x.body

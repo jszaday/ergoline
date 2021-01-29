@@ -31,11 +31,8 @@ struct request : public request_base_,
   using predicate_t = std::function<bool(const value_t&)>;
   using reject_t = std::function<void(void)>;
 
-  action_t act_;
-  predicate_t pred_;
-
   request(const action_t& act, const predicate_t& pred)
-      : act_(act), pred_(pred) {}
+      : act_(act), pred_(pred), stale_(false) {}
 
   bool accepts(const value_t& val) { return !pred_ || pred_(val); }
 
@@ -48,12 +45,19 @@ struct request : public request_base_,
     }
   }
 
+  bool stale() { return stale_; }
   virtual void cancel() = 0;
   virtual std::pair<reject_t, value_t> query() = 0;
+
+protected:
+  action_t act_;
+  predicate_t pred_;
+  bool stale_;
 };
 
 template <typename... Ts>
 struct mailbox {
+  using tuple_t = std::tuple<Ts...>;
   using value_t = typename request<Ts...>::value_t;
   using request_t = std::shared_ptr<request<Ts...>>;
 
@@ -76,6 +80,8 @@ struct mailbox {
   }
 
   void put(request_t req) {
+    if (req->stale()) return;
+
     requests_.push_back(req);
 
     for (auto it = values_.begin(); it != values_.end(); it++) {
@@ -106,6 +112,11 @@ struct mailbox {
     }
   }
 
+  void pup(PUP::er& p) {
+    CkAssert(requests_.empty());
+    p | values_;
+  }
+
  private:
   struct mboxreq : public request<Ts...> {
     mailbox<Ts...>* src_;
@@ -115,6 +126,7 @@ struct mailbox {
         : src_(src), request<Ts...>(act, pred) {}
 
     virtual void cancel() override {
+      this->stale_ = true;
       src_->invalidate(this->shared_from_this());
     }
 
