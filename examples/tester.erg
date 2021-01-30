@@ -10,11 +10,7 @@ import ck;
 
     @threaded @entry def test(n: int) {
         val sz = n * 1000;
-        val arr = new array<double, 1>(sz);
-
-        for (var i = 0; i < sz; i += 1) {
-            arr[i] = 2.0;
-        }
+        val arr = array<double, 1>::fill(sz, 2.0);
 
         val tst = new tester@();
         val start = ck::wallTime();

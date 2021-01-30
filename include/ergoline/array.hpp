@@ -72,6 +72,9 @@ struct array : public hashable {
   static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape,
                                            const T& value);
 
+  static std::shared_ptr<array<T, 1>> fill(const int& shape,
+                                           const T& value);
+
  private:
   static buffer_t allocate(const std::size_t& n, bool init) {
     if (n == 0) {
@@ -96,6 +99,15 @@ std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(
   std::array<std::size_t, 2> s = {(std::size_t)std::get<0>(shape),
                                   (std::size_t)std::get<1>(shape)};
   auto a = std::make_shared<array<double, 2>>(s, false);
+  std::fill(a->begin(), a->end(), value);
+  return a;
+}
+
+template <>
+std::shared_ptr<array<double, 1>> array<double, 1>::fill(
+    const int& shape, const double& value) {
+  std::array<std::size_t, 1> s = { (std::size_t) shape };
+  auto a = std::make_shared<array<double, 1>>(s, false);
   std::fill(a->begin(), a->end(), value);
   return a;
 }
