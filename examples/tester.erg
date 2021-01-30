@@ -1,0 +1,63 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def main() {
+        self@test(100);
+    }
+
+    @threaded @entry def test(n: int) {
+        val sz = n * 1000;
+        val arr = new array<double, 1>(sz);
+
+        for (var i = 0; i < sz; i += 1) {
+            arr[i] = 2.0;
+        }
+
+        val tst = new tester@();
+        val start = ck::wallTime();
+
+        tst.run(n);
+        for (var i = 0; i < n; i += 1) {
+            tst.mailbox1(i, arr);
+            tst.mailbox2(i, arr);
+        }
+        
+        ck::awaitQuiescence();
+        val mid = ck::wallTime();
+
+        for (var i = 0; i < n; i += 1) {
+            tst.input(i, arr);
+        }
+
+        ck::awaitQuiescence();
+        val end = ck::wallTime();
+
+        println(`time for mailboxes ${mid - start}`);
+        println(`time for plain ol' inputs ${end - mid}`);
+
+        exit();
+    }
+}
+
+class tester {
+    @entry def tester() {}
+
+    @threaded @entry def run(n: int) {
+        for (var i = 0; i < n; i += 1) {
+            when mailbox1(_ == i, _),
+                 mailbox2(_ == i, _) => {
+                // does nothing
+            }
+        }
+    }
+
+    @mailbox def mailbox1(it: int, arr: array<double, 1>);
+    @mailbox def mailbox2(it: int, arr: array<double, 1>);
+
+    @entry def input(it: int, arr: array<double, 1>) {
+        // also does nothing
+    }
+}
