@@ -49,7 +49,6 @@ struct request : public request_base_,
   virtual void cancel() = 0;
   virtual std::pair<reject_t, value_t> query() = 0;
 
-protected:
   action_t act_;
   predicate_t pred_;
   bool stale_;
@@ -205,6 +204,14 @@ struct compound_request<request<Ts...>, request<Us...>>
     }, (!l.second || !r.second) ? nullptr : make_value(*l.second, *r.second));
   }
 };
+
+template <typename Action, typename Predicate, typename... As, typename... Bs>
+std::shared_ptr<compound_request<request<As...>, request<Bs...>>>
+join(const std::shared_ptr<request<As...>>& a, const std::shared_ptr<request<Bs...>>& b,
+     const Action& action, const Predicate& predicate) {
+  return std::make_shared<compound_request<request<As...>, request<Bs...>>>(std::make_pair(a, b), action, predicate);
+}
+
 }
 
 #endif

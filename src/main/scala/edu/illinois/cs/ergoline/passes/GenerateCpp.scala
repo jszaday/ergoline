@@ -1042,12 +1042,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirIdentifierPattern(_, "_", t) =>
         parentType match {
           case None => Errors.missingType(x)
+            // TODO use a more reliable comparison here!
           case Some(u) if t == u => Nil
           case _ =>
+            // println(s"comparing $parentType and $t, where ${parentType.contains(t)}")
             // TODO this needs to inherit substitutions
             //      (when such things are added)
-            val ctx = parent.makeSubContext()
-            List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
+//            val ctx = parent.makeSubContext()
+//            List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
+            Nil
         }
       case EirIdentifierPattern(_, n, t) =>
         Option.when(parent.resolve(t).isPointer)(n).toList
@@ -1238,9 +1241,60 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = ()
   override def visitConstantFacade(context: CodeGenerationContext, facade: EirConstantFacade): Unit = visit(context, facade.value)
 
+  def makeCompoundRequest(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
+    ctx << "{"
+    ctx << "const auto __self__ = CthSelf();"
+    val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
+    val triples = x.patterns.zipWithIndex.map {
+      case ((symbol, patterns), i) =>
+        val f = assertValid[EirFunction](ctx.resolve(symbol))
+        val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
+        val tys = declTys.map(ctx.typeFor(_, Some(x)))
+        val name = GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
+        val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
+        val valueTy = s"decltype($name)::value_t"
+        ctx << s"auto __request_${i}__ = this->$name.make_request(nullptr," << {
+          if (conditions.nonEmpty) {
+            s"[&]($valueTy ${ctx.temporary}) { return $conditions; });"
+          } else "nullptr);"
+        }
+        (tys, name, s"__request_${i}__")
+    }
+    ctx << "std::shared_ptr<std::tuple<" << {
+      triples.flatMap(_._1) mkString ","
+    } << ">> __value__;"
+    ctx << "auto __compound__ ="
+    val len = x.patterns.length
+    ctx << x.patterns.tail.indices.foldRight(s"__request_0__")((i, s) => {
+      s"ergoline::join($s,__request_${i + 1}__," + {
+        if (i < (len - 2)) {
+          "nullptr,nullptr)"
+        } else ""
+      }
+    })
+    ctx << "[&](decltype(__value__) __recvd__) {"
+    ctx << "__value__ = __recvd__;"
+    ctx << "CthAwaken(__self__);"
+    ctx << "return true;" << "}, nullptr);"
+    triples.foreach{
+      case (_, mbox, req) => ctx << s"this->$mbox.put($req);"
+    }
+    ctx << "CthSuspend();"
+    ctx << {
+      visitPatternDecl(ctx, patterns, "*__value__").split(n)
+    } << {
+      ctx.ignoreNext("{")
+      ctx << x.body
+    }
+  }
+
   override def visitWhen(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
     // TODO impl this
-    if (x.patterns.length != 1 || x.condition.isDefined) ???
+    if (x.condition.isDefined) ???
+    if (x.patterns.length > 1) {
+      makeCompoundRequest(ctx, x)
+      return
+    }
     x.patterns.foreach({
       case (symbol, patterns) => ctx << "{" << {
         val f = assertValid[EirFunction](ctx.resolve(symbol))

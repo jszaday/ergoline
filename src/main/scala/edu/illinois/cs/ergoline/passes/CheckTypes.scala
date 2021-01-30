@@ -780,6 +780,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitConstantFacade(context: TypeCheckContext, facade: EirConstantFacade): EirType = facade
 
   override def visitWhen(ctx: TypeCheckContext, x: EirSdagWhen): EirType = {
+    Find.parentOf[EirMember](x).foreach(_.makeEntryOnly())
     for ((i, p) <- x.patterns) {
       // TODO ensure that target is mailbox
       ctx.goal.push({

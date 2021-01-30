@@ -2,9 +2,12 @@ package ck;
 
 import ergoline::int;
 import ergoline::double;
+import ergoline::unit;
 
 /* Returns the elapsed wall time since the start of execution. */
 @system(alias="CkWallTimer") def wallTime(): double;
+
+@system(alias="CkWaitQD") def awaitQuiescence(): unit;
 
 /* Charm++ recognizes two logical machine entities: “node” and PE (processing element).
  * The following functions provide basic information about such logical machine that a Charm++ program runs on.

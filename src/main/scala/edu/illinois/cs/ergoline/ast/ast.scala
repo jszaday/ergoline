@@ -819,6 +819,13 @@ case class EirConstantFacade(var value: EirLiteral)(var parent: Option[EirNode])
   override def children: Iterable[EirNode] = List(value)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case EirConstantFacade(other) => value.equivalentTo(other)
+      case _ => false
+    }
+  }
 }
 
 case class EirSdagWhen(var patterns: List[(EirSymbol[EirNamedNode], EirPatternList)],
