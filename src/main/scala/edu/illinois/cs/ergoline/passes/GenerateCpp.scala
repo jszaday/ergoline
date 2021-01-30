@@ -63,6 +63,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case t: EirType => Find.asClassLike(t).isTransient
         }
       }
+
+      def equivalentTo(theirs: EirResolvable[EirType]): Boolean = {
+        (Find.uniqueResolution(self), Find.uniqueResolution(theirs)) match {
+          case (EirTemplatedType(_, ourBase, ourArgs), EirTemplatedType(_, theirBase, theirArgs)) =>
+            ourBase.equivalentTo(theirBase) && (ourArgs.length == theirArgs.length) &&
+              ourArgs.zip(theirArgs).forall(x => x._1.equivalentTo(x._2))
+          case (x, y) => x == y
+        }
+      }
     }
   }
 
@@ -1043,14 +1052,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         parentType match {
           case None => Errors.missingType(x)
             // TODO use a more reliable comparison here!
-          case Some(u) if t == u => Nil
+          case Some(u) if t.equivalentTo(u) => Nil
           case _ =>
-            // println(s"comparing $parentType and $t, where ${parentType.contains(t)}")
             // TODO this needs to inherit substitutions
             //      (when such things are added)
-//            val ctx = parent.makeSubContext()
-//            List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
-            Nil
+            val ctx = parent.makeSubContext()
+            List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
         }
       case EirIdentifierPattern(_, n, t) =>
         Option.when(parent.resolve(t).isPointer)(n).toList
