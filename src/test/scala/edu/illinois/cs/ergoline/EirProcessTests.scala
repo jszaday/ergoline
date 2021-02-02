@@ -23,9 +23,15 @@ class EirProcessTests extends FunSuite {
   def test(f: File): Unit = {
     val out1 = os.proc("java", "-jar", "ergc.jar", f.getCanonicalPath, "-o", tmp / "a.out").call().out.text()
     println(out1)
-    println("starting process...")
+   println("starting process...")
     val out2 = charmc.map(_ => os.proc(tmp / "a.out", "16", "+p1", "++local").call(cwd = wd).out.text())
     out2.foreach(println(_))
+    println("(moving .cc file...)\n")
+    try {
+      os.move.over(wd / "generate.cc", wd / f.getName.replace("erg", "cc"))
+    } catch {
+      case throwable: Throwable => println(throwable)
+    }
   }
 
   test("compile examples") {
