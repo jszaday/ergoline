@@ -9,6 +9,7 @@ import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
 import edu.illinois.cs.ergoline.util.Errors
 
+import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
 
 
@@ -21,25 +22,32 @@ object Driver extends App {
     System.exit(0)
   }
   // get the options from the command-line args
-  var (options, files) = args.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
-  if (files.isEmpty) helpMessage()
+  var (options, files) = args.toList.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
+
+  if (options.contains("-h")|| files.isEmpty) helpMessage()
+  else if (options.contains("--debug")) Errors.useDebugAction()
+
   globals.strict = options.contains("-Wall")
   globals.verbose = options.contains("--verbose")
+
   val out = {
     val idx = options.indexOf("-o")
+    val hasOutput = idx >= 0 && idx < (options.length - 1)
     val opt =
-      Option.when(idx >= 0 && idx < (options.length - 1))("-o " + options(idx + 1)).getOrElse("-o a.out")
-    opt.foreach(_ => {
+      Option.when(hasOutput)("-o " + options(idx + 1)).getOrElse("-o a.out")
+    if (hasOutput) {
       options = options.patch(idx, Nil, 2)
-    })
+    }
     opt
   }
+
+  options = options.filterNot(_ startsWith "--") ++
+    Properties.envOrElse("CFLAGS", "").split(raw"\s+")
+
   val inclDir =
     "\"" + Modules.ergolineHome.map(_.resolve("include"))
       .getOrElse(Errors.unableToResolve("ERGOLINE_HOME"))
       .toRealPath().toString + "\""
-  if (options.contains("-h")) helpMessage()
-  else if (options.contains("--debug")) Errors.useDebugAction()
   val start = Modules.currTimeMs
   // open each specified file
   val modules: Iterable[EirNode] =
