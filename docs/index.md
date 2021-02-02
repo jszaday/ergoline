@@ -1,7 +1,7 @@
 # Introduction to Ergoline
-Ergoline requires features from the master branch of Charm++, accessible at `CHARM_HOME`. Ensure that `ERG_HOME` is set to the base directory of this repository. To get started with it, you will need either an installation of Java and a release `.JAR` file or SBT toolchain (we test with SBT1.4.2 and JDK8+). 
+Ergoline requires features from the master branch of Charm++, accessible at `CHARM_HOME`. Ensure that `ERG_HOME` is set to the base directory of this repository. To get started with it, you will need either a Java installation and a pre-built `ergc.jar` file (available as a CI artifact) or an SBT toolchain (we test with SBT1.4.2 and JDK8+). 
 
-Running `sbt "run <.erg file>"` will compile files via SBT. As for Java, we recommend aliasing `ergc` with your `.JAR` file (e.g. `alias ergc="java -jar $ERG_HOME/bin/erg.jar"`); this enables straightforward command-line issuances such as `ergc <.erg file>`. Note, the compiler will search `ERG_CLASSPATH` for modules.
+Running `sbt "run <.erg file>"` will compile files via SBT. As for using a Jarfile, we recommend aliasing `ergc` via `alias ergc="java -jar $ERG_HOME/ergc.jar"`. This enables straightforward commands such as `ergc <.erg file>`. One can manually build a Jarfile using `sbt assembly`. Note, the compiler will search `ERG_CLASSPATH` for modules.
 
 ## Types
 Ergoline has both native and object types. Tuples and lambda types are native, first-class citizens. Native types correspond to standard C/C++ types, and object types to instantiations of classes. Additionally, users may generate wrappers for C/C++ structs/classes into Ergoline as native types via the `@system` annotation (see `libs/ergoline` for examples). Finally, there are various proxy-types that will be discussed later.
