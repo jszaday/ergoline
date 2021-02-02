@@ -13,3 +13,8 @@ enablePlugins(Antlr4Plugin)
 antlr4PackageName in Antlr4 := Some("edu.illinois.cs.ergoline")
 antlr4GenListener in Antlr4 := false
 antlr4GenVisitor in Antlr4 := true
+
+// specify the name of the resulting jar
+assemblyOutputPath in assembly := baseDirectory.value / "ergc.jar"
+// skip the test during assembly
+test in assembly := {}

@@ -5,31 +5,76 @@ import java.nio.file.Paths
 
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
 import edu.illinois.cs.ergoline.passes.Processes
-import edu.illinois.cs.ergoline.resolution.Modules.load
+import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
 
 
 object Driver extends App {
+  private def helpMessage(): Unit = {
+    print("""| ergoline compiler, pre-alpha version
+             | --debug    print additional (compilation) error information
+             | --verbose  print additional information
+             |""".stripMargin)
+    System.exit(0)
+  }
   // get the options from the command-line args
-  val (options, files) = args.partition(x => x startsWith "-")
+  var (options, files) = args.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
+  if (files.isEmpty) helpMessage()
   globals.strict = options.contains("-Wall")
   globals.verbose = options.contains("--verbose")
-  if (options.contains("--debug")) Errors.useDebugAction()
+  val out = {
+    val idx = options.indexOf("-o")
+    val opt =
+      Option.when(idx >= 0 && idx < (options.length - 1))("-o " + options(idx + 1)).getOrElse("-o a.out")
+    opt.foreach(_ => {
+      options = options.patch(idx, Nil, 2)
+    })
+    opt
+  }
+  val inclDir =
+    "\"" + Modules.ergolineHome.map(_.resolve("include"))
+      .getOrElse(Errors.unableToResolve("ERGOLINE_HOME"))
+      .toRealPath().toString + "\""
+  if (options.contains("-h")) helpMessage()
+  else if (options.contains("--debug")) Errors.useDebugAction()
+  val start = Modules.currTimeMs
   // open each specified file
   val modules: Iterable[EirNode] =
     files.map(Paths.get(_)).map(x => load(x.toFile, EirGlobalNamespace))
-  // resolve all the symbols :)
-//  modules.foreach(x => Processes.onLoad(x.scope.get))
-  // visit each file
-//  modules.foreach(x => println(x.unparse))
 
-  val cpp = new PrintWriter(new File("generate.cc" ))
+  val cpp = new PrintWriter(new File("generate.cc"))
   cpp.write(Processes.generateCpp().mkString(n))
   cpp.close()
 
-  val ci = new PrintWriter(new File("generate.ci" ))
+  val ci = new PrintWriter(new File("generate.ci"))
   ci.write(Processes.generateCi())
   ci.close()
+
+  val codegen = Modules.currTimeMs
+  println(s"ergoline compilation:\t${codegen - start}ms")
+
+  try {
+    val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
+    println(s"$$ $cmd")
+    os.proc(cmd.split(raw"\s+")).call()
+  } catch {
+    case throwable: Throwable => println(throwable + " (is CHARM_HOME set?)")
+  }
+
+  val charmxi = Modules.currTimeMs
+  println(s"charmxi compilation:\t${charmxi - codegen}ms")
+
+  try {
+    val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} $out -I$inclDir generate.cc"
+    println(s"$$ $cmd")
+    os.proc(cmd.split(raw"\s+")).call()
+  } catch {
+    case throwable: Throwable => println(throwable + " (is CHARM_HOME set?)")
+  }
+
+  val cxx = Modules.currTimeMs
+  println(s"c++ compilation:\t${cxx - charmxi}ms")
 }

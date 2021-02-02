@@ -18,13 +18,23 @@ object Modules {
   val packageFile = "package.erg"
   val homePathEnv = "ERG_HOME"
   val searchPathEnv = "ERG_CLASSPATH"
-  val coreModules: Path =
-    Paths.get(Properties.envOrElse(homePathEnv, "."))
-      .resolve("libs")
+  val ergolineHome =
+    Option(Properties.envOrElse(homePathEnv, ".")).map(Paths.get(_)).find(Files.isDirectory(_))
+  val coreModules: Path = ergolineHome
+    .map(_.resolve("libs"))
+    .getOrElse(Errors.unableToResolve(ergolineHome.toString))
   val searchPathDefaults: Seq[Path] = Seq(coreModules, Paths.get("."))
   val searchPath: Seq[Path] = (searchPathDefaults ++
     Properties.envOrNone(searchPathEnv).toIterable
       .flatMap(_.split(pathSeparator)).map(Paths.get(_))).filter(Files.exists(_))
+
+  def charmHome: Option[Path] =
+    Properties.envOrNone("CHARM_HOME")
+      .map(Paths.get(_)).find(Files.isDirectory(_))
+
+  def charmc: Option[Path] = charmHome
+    .map(_.resolve("bin").resolve("charmc"))
+    .find(Files.isExecutable)
 
   val loadedFiles: mutable.Map[File, EirNamedNode] = mutable.Map()
   val fileSiblings: mutable.Map[EirNode, List[EirNode]] = mutable.Map()
@@ -111,7 +121,7 @@ object Modules {
     (Runtime.getRuntime.totalMemory -  Runtime.getRuntime.freeMemory) / (1024 * 1024)
   }
 
-  private def currTimeMs: Long = System.currentTimeMillis()
+  def currTimeMs: Long = System.currentTimeMillis()
 
   def load(f: File, scope: EirScope): EirNamedNode = {
     val file = f.getCanonicalFile

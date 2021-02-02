@@ -35,4 +35,6 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         name: cpp-sources
-        path: ${{ github.workspace }}/*.cc
+        path: |
+          ${{ github.workspace }}/*.cc
+          ${{ github.workspace }}/ergc.jar
