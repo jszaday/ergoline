@@ -6,6 +6,31 @@
 #include "util.hpp"
 
 namespace ergoline {
+
+template <typename T>
+inline typename std::enable_if<
+    std::is_constructible<T, PUP::reconstruct>::value>::type
+reconstruct(T* p) {
+  ::new (p) T(PUP::reconstruct());
+}
+
+template <typename T>
+inline typename std::enable_if<
+    std::is_constructible<T, CkMigrateMessage*>::value &&
+    !std::is_constructible<T, PUP::reconstruct>::value>::type
+reconstruct(T* p) {
+  ::new (p) T(nullptr);
+}
+
+template <typename T>
+inline typename std::enable_if<
+    !std::is_constructible<T, PUP::reconstruct>::value &&
+    !std::is_constructible<T, CkMigrateMessage*>::value &&
+    std::is_default_constructible<T>::value>::type
+reconstruct(T* p) {
+  ::new (p) T();
+}
+
 struct hashable {
   virtual std::size_t hash() = 0;
 };
