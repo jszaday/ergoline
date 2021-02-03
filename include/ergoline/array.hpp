@@ -24,7 +24,7 @@ struct array : public hashable {
   }
 
   template <class... Args>
-  array(const source_t& src_, buffer_t* buffer_, Args... args)
+  array(const source_t& src_, buffer_t buffer_, Args... args)
       : source(src_), buffer(buffer_), shape{args...} {}
 
   array(const std::shared_ptr<T>& buffer_, const shape_t& shape_)
@@ -37,8 +37,8 @@ struct array : public hashable {
 
   inline T& operator[](std::size_t idx) { return buffer[idx]; }
 
-  inline T* begin() { return buffer; }
-  inline T* end() { return buffer + size(); }
+  inline buffer_t begin() { return buffer; }
+  inline buffer_t end() { return buffer + size(); }
 
   // TODO make constexpr
   inline std::size_t size() {

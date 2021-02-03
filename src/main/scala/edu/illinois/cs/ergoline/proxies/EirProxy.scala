@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
@@ -128,6 +129,9 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     }
     internalMembers
   }
+
+  def ordinalFor(node: EirNode): Option[Int] = asMember(Some(node)).flatMap(ordinalFor)
+  def ordinalFor(member: EirMember): Option[Int] = member.counterpart.flatMap(_.ordinal)
 
   def singleton: Boolean = isElement || collective.isEmpty
 

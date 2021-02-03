@@ -30,14 +30,16 @@ object GenerateProxies {
     } << s"}"
   }
 
-  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, numImpls: Int): Unit = {
+  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, impls: List[EirMember]): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
     val nArgs = args.map(ctx.nameFor(_)).mkString(", ")
     // TODO support non-void returns?
     ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
-        (0 until numImpls).map(x => s"case $x: { p$x.$name($nArgs); break; }") ++
+        impls.zipWithIndex.map {
+          case (m, x) => s"case $x: { p$x.${ctx.nameFor(m)}($nArgs); break; }"
+        } ++
         List("default: { CkAbort(\"abstract proxy unable to find match\"); }", "}", "}")
     }
   }
@@ -57,14 +59,16 @@ object GenerateProxies {
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = ctx.nameFor(x)
-    val impls = x.derived.map(ctx.nameFor(_)).toList
+    val impls = x.derived.toList
+    val implNames = impls.map(ctx.nameFor(_))
     ctx << s"struct $name: public ergoline::hashable" << "{" << s"int handle;" << {
-        impls.zipWithIndex.flatMap({
+      implNames.zipWithIndex.flatMap({
           case (derived, idx) =>
             List(s"$derived p$idx;", s"$name($derived x) : handle($idx), p$idx(x) { }")
         }) ++ List(s"$name() : handle(-1) { }")
     } << visitAbstractPup(ctx, impls.length) << {
-      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member), impls.length))
+      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member),
+        impls.map(y => Find.namedChild[EirMember](Some(y), x.name))))
     } << {
       makeHasher(ctx, impls.length)
     } << "};"
@@ -163,7 +167,7 @@ object GenerateProxies {
         val names = arraySizes(ctx._1, name, ty)
         val index = s"(std::size_t) ${names mkString ", (std::size_t) "}"
         val arrTy = ctx._1.nameFor(t, Some(ctx._2))
-        s"std::make_shared<$arrTy>(${name}_arr, $index)"
+        s"std::make_shared<$arrTy>(std::shared_ptr<void>{}, ${name}_arr, $index)"
       case t if needsCasting(t) => makePointerRhs(ctx)(name, t)
       case _ => name
     }
@@ -191,7 +195,7 @@ object GenerateProxies {
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
-      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, m)
+      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
       case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable" << visitFunctionBody(ctx, f) << ")())"
@@ -202,16 +206,15 @@ object GenerateProxies {
     }
   }
 
-  def mailboxName(ctx: CodeGenerationContext, name: String, types: List[String]): String = {
+  def mailboxName(ctx: CodeGenerationContext, node: EirNode, types: List[String]): String = {
     // TODO impl this
-    name + "_mailbox_"
+    ctx.nameFor(asMember(Some(node)).getOrElse(node)) + "_mailbox_"
   }
 
   def mailboxName(ctx: CodeGenerationContext, x: EirMember): (String, List[String]) = {
     val f = assertValid[EirFunction](x.member)
-    val name = ctx.nameFor(f)
     val tys = f.functionArgs.map(_.declaredType).map(ctx.typeFor(_, Some(x)))
-    (mailboxName(ctx, name, tys), tys)
+    (mailboxName(ctx, x, tys), tys)
   }
 
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {

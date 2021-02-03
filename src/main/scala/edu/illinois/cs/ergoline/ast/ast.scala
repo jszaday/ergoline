@@ -298,6 +298,7 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   def hasOverloads_=(yes: Boolean): Unit = _hasOverloads = yes
   def hasOverloads: Boolean = _hasOverloads || counterpart.exists(_.hasOverloads)
 
+  def ordinal: Option[Int] = parent.to[EirClassLike].map(_.members.indexOf(this)).find(_ >= 0)
 
   def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox

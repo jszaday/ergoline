@@ -69,7 +69,7 @@ object Driver extends App {
     println(s"$$ $cmd")
     os.proc(cmd.split(raw"\s+")).call()
   } catch {
-    case throwable: Throwable => println(throwable + " (is CHARM_HOME set?)")
+    case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
   }
 
   val charmxi = Modules.currTimeMs
@@ -80,7 +80,7 @@ object Driver extends App {
     println(s"$$ $cmd")
     os.proc(cmd.split(raw"\s+")).call()
   } catch {
-    case throwable: Throwable => println(throwable + " (is CHARM_HOME set?)")
+    case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
   }
 
   val cxx = Modules.currTimeMs

@@ -106,7 +106,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitScopedSymbol[A <: EirNode](ctx: CodeGenerationContext, x: EirScopedSymbol[A]): Unit = {
     // TODO handle self applications :3
-    arrayMember(ctx, x.disambiguation) match {
+    val found = disambiguate(ctx, x)
+    arrayMember(ctx, Some(found)) match {
       case Some("size") =>
         arrayDim(ctx, ctx.typeOf(x.target)) match {
           case Some(1) => ctx << x.target << "->shape[0]"
@@ -115,12 +116,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       case _ =>
         val targetTy: EirType = ctx.exprType(x.target)
-        ctx << x.target << fieldAccessorFor(targetTy) << {
-          x.pending match {
-            case EirSymbol(_, s +: Nil) => s
-            case _ => ???
-          }
-        }
+        ctx << x.target << fieldAccessorFor(targetTy) << ctx.nameFor(found)
     }
   }
 
@@ -166,7 +162,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           subCtx << expr
           subCtx.toString.trim
         }
-        ctx << (splitIndex(ctx, a, s"$str->shape"), ",") << "," << s"$str->buffer.get()"
+        ctx << (splitIndex(ctx, a, s"$str->shape"), ",") << "," << s"$str->begin()"
       case (_, _) => castToPuppable(ctx, expr, ours, theirs)
     }
   }
@@ -266,7 +262,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirScopedSymbol(_proxy, _field) =>
         val proxy = _proxy.foundType.to[EirProxy]
         val found = asMember(Some(disambiguate(ctx, target)))
-        val field = Option(_field).to[EirSymbol[_]].flatMap(_.qualifiedName.lastOption)
+        val field = found.map(ctx.nameFor(_)).getOrElse(Errors.unreachable())
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
           if (isReduction) {
@@ -382,7 +378,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitFunctionCall(ctx: CodeGenerationContext, x: EirFunctionCall): Unit = {
     val disambiguated = disambiguate(ctx, x.target)
-    val arrayAccessor = asMember(Some(disambiguated)).collect{
+    val member = asMember(Some(disambiguated))
+//    val shouldPack = member.exists {
+//      case m@EirMember(Some(_: EirProxy), _, _) => m.isEntry || m.isMailbox
+//      case _ => false
+//    }
+    val shouldPack = false
+    val arrayAccessor = member.collect{
       case m: EirMember if isArray(ctx, m.base) => m.name
     }
     // bypass arguments for size (implicit field accessor)
@@ -416,11 +418,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << x.target
       if (isPointer) ctx << ")"
       ctx << visitSpecialization(ctx, x) << "(" << {
+        if (shouldPack) ctx << "ergoline::pack("
         if (isAsync) {
           ctx << ctx.temporary
           if (x.args.nonEmpty) ctx << ","
         }
-        visitArguments(ctx)(Some(disambiguated), x.args)
+        visitArguments(ctx)(Some(disambiguated), x.args) << Option.when(shouldPack)(")")
       } << ")"
       if (isAsync) {
         ctx << "; return" << ctx.temporary << ";" << "})())"
@@ -489,7 +492,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val m = asMember(x.disambiguation)
       if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
     }
-    ctx << ctx.nameFor(x, Some(x))
+    val m = asMember(x.disambiguation) match {
+      case Some(m) if m.isEntryOnly => Some(Find.namedChild[EirMember](ctx.proxy, m.name))
+      case _ => None
+    }
+    ctx << m.map(ctx.nameFor(_)).getOrElse(ctx.nameFor(x, Some(x)))
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
@@ -780,7 +787,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       if (x == "std::size_t" && ctx.language == "ci") "size_t"
       else x
     })
-    val proxy = Some(x).to[EirType].flatMap(ProxyManager.asProxy)
+    val opt = Some(x)
+    val proxy = opt.to[EirType].flatMap(ProxyManager.asProxy)
+        .orElse(asMember(opt).flatMap(_.parent.to[EirProxy]))
     val result = x match {
       case s: EirSymbol[_] =>
         if (CheckTypes.isSelf(s)) {
@@ -788,6 +797,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           // TODO need to use FQN here, symbol is self-context providing
           nameFor(ctx, ctx.resolve(s), includeTemplates, usage.orElse(Some(s)))
+        }
+      case _: EirMember | _: EirFunction if proxy.isDefined =>
+        (x, proxy.flatMap(_.ordinalFor(x))) match {
+          case (x: EirNamedNode, Some(ord)) => s"__${x.name}_${ord}__"
+          case (x: EirNamedNode, _) => x.name
+          case (_, _) => Errors.unreachable()
         }
       case _ if proxy.isDefined =>
         val prefix =
@@ -1254,10 +1269,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
     val triples = x.patterns.zipWithIndex.map {
       case ((symbol, patterns), i) =>
-        val f = assertValid[EirFunction](ctx.resolve(symbol))
+        val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
+        val f = assertValid[EirFunction](m.member)
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
-        val name = GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
+        val name = GenerateProxies.mailboxName(ctx, f, tys)
         val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         val valueTy = s"decltype($name)::value_t"
         ctx << s"auto __request_${i}__ = this->$name.make_request(nullptr," << {
@@ -1304,10 +1320,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     x.patterns.foreach({
       case (symbol, patterns) => ctx << "{" << {
-        val f = assertValid[EirFunction](ctx.resolve(symbol))
+        val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
+        val f = assertValid[EirFunction](m.member)
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
-        val name = "this->" + GenerateProxies.mailboxName(ctx, ctx.nameFor(f), tys)
+        val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
         val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         ctx << "const auto __self__ = CthSelf();"
         ctx << s"typename decltype($name)::value_t __value__;"
