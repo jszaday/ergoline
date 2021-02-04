@@ -139,9 +139,11 @@ object GenerateProxies {
 
   def makeMailboxBody(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val f = assertValid[EirFunction](x.member)
-    val args = f.functionArgs.map(ctx.nameFor(_))
     val name = mailboxName(ctx, x)._1
-    ctx << s"auto __value__ = std::make_shared<decltype($name)::tuple_t>(std::make_tuple(" << (args, ",") << "));"
+    ctx << s"auto __value__ = std::shared_ptr<decltype($name)::tuple_t>(static_cast<decltype($name)::tuple_t*>(malloc(sizeof(decltype($name)::tuple_t))), [](void* ptr) { free(ptr); });"
+    if (f.functionArgs.nonEmpty) {
+      ctx << "ergoline::unpack(__msg__, *__value__);"
+    }
     ctx << s"$name.put(__value__);"
   }
 
@@ -163,8 +165,9 @@ object GenerateProxies {
       val f = assertValid[EirFunction](x.member)
       val isMain = proxy.exists(_.isMain)
       val isAsync = x.annotation("async").isDefined
+      val isMailbox = x.isMailbox
       val args = f.functionArgs
-      if (x.isMailbox) makeMailboxDecl(ctx, x)
+      if (isMailbox) makeMailboxDecl(ctx, x)
       if (isAsync) ctx << "void"
       else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
       ctx << {
@@ -183,7 +186,7 @@ object GenerateProxies {
       } << ")" << "{"
       if (isConstructor && isMain) {
         args.headOption.foreach(x => makeArgsVector(ctx, x.name))
-      } else if (args.nonEmpty || isAsync) {
+      } else if (!isMailbox && (args.nonEmpty || isAsync)) {
         if (isAsync) {
           ctx << ctx.typeFor(f.returnType) << "__future__" << "("  << "PUP::reconstruct{})" << ";"
         }
