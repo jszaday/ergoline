@@ -42,6 +42,17 @@ struct object: public hashable {
 };
 
 template <typename T>
+using is_pupable_t =
+    typename std::enable_if<std::is_base_of<PUP::able, T>::value ||
+                                std::is_base_of<object, T>::value,
+                            std::true_type>::type;
+
+template <typename T>
+inline bool is_bytes() {
+  return PUP::as_bytes<T>::value;
+}
+
+template <typename T>
 inline std::shared_ptr<T> from_pupable(std::shared_ptr<PUP::able> p) {
   std::shared_ptr<T> q = std::dynamic_pointer_cast<T>(p);
   if (p && !q) CkAbort("cannot cast %s to %s", typeid(*p).name(), typeid(T).name());

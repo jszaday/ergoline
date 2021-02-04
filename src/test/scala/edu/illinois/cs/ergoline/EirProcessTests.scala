@@ -14,8 +14,8 @@ import scala.util.Properties
 class EirProcessTests extends FunSuite {
   Errors.useDebugAction()
 
-  def files(path: String = "examples"): Iterable[File] =
-    Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile)
+  def files(path: String = "examples"): List[File] =
+    Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile).toList.sortBy(_.getName)
 
   private val wd = os.pwd
   private val tmp = os.temp.dir()

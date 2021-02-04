@@ -33,12 +33,11 @@ object GenerateProxies {
   def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, impls: List[EirMember]): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
-    val nArgs = args.map(ctx.nameFor(_)).mkString(", ")
     // TODO support non-void returns?
-    ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
+    ctx << s"void $name(" << Option.when(args.nonEmpty)("CkMessage* __msg__") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
         impls.zipWithIndex.map {
-          case (m, x) => s"case $x: { p$x.${ctx.nameFor(m)}($nArgs); break; }"
+          case (m, x) => s"case $x: { p$x.${ctx.nameFor(m)}(__msg__); break; }"
         } ++
         List("default: { CkAbort(\"abstract proxy unable to find match\"); }", "}", "}")
     }
@@ -183,16 +182,6 @@ object GenerateProxies {
     }
   }
 
-  def visitFunctionArguments(ctx: CodeGenerationContext, args: List[EirFunctionArgument]): Unit = {
-    if (args.nonEmpty) {
-      for (arg <- args.init) {
-        visitFunctionArgument(ctx, arg)
-        ctx << ","
-      }
-      visitFunctionArgument(ctx, args.last)
-    }
-  }
-
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
       case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
@@ -249,17 +238,20 @@ object GenerateProxies {
           ctx.nameFor(f)
         }
       } << "(" << {
-        if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
-        else {
-          if (isAsync) {
-            ctx << ctx.typeFor(f.returnType) << ctx.temporary
-            if (args.nonEmpty) ctx << ","
-          }
-          visitFunctionArguments(ctx, args)
+        if (isMain && isConstructor) {
+          ctx << "CkArgMsg* msg";
+        } else {
+          ctx << Option.when(args.nonEmpty || isAsync)("CkMessage* __msg__")
         }
-      } << ")" << "{" << {
-        if (isConstructor && isMain) args.headOption.foreach(x => makeArgsVector(ctx, x.name))
-        else args.foreach(makeSmartPointer(ctx))
+      } << ")" << "{"
+      if (isConstructor && isMain) {
+        args.headOption.foreach(x => makeArgsVector(ctx, x.name))
+      } else if (args.nonEmpty || isAsync) {
+        if (isAsync) {
+          ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
+        }
+        args.foreach(x => ctx << ctx.typeFor(x.declaredType, Some(x)) << x.name << ";")
+        ctx << "ergoline::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
       }
       if (isConstructor) {
         x.counterpart match {
@@ -272,7 +264,7 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << ctx.temporary << ".set("
+          ctx << "__future__.set" << "("
         } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }

@@ -5,21 +5,9 @@
 
 namespace ergoline {
 
-template <typename T>
-using is_pupable_t =
-    typename std::enable_if<std::is_base_of<PUP::able, T>::value ||
-                                std::is_base_of<object, T>::value,
-                            std::true_type>::type;
-
-template <typename T>
-inline bool is_bytes() {
-  return PUP::as_bytes<T>::value;
-}
-
 template <typename T, typename Enable = void>
 struct unpacker {
-  inline static void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                            T& t) {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr, T& t) {
     PUP::fromMem p(curr);
     p | t;
     curr += p.size();
@@ -28,18 +16,23 @@ struct unpacker {
 
 template <typename T>
 inline void unpack(const std::shared_ptr<void>& msg, char*& curr, T& t) {
-  using non_const_t = typename std::remove_cv<T>::type;
-  unpacker<non_const_t>::unpack(msg, curr,
-                                const_cast<non_const_t&>(msg, curr, t));
+  unpacker<T>::impl(msg, curr, t);
+}
+
+template <typename... Ts>
+inline void unpack(const std::shared_ptr<void>& msg, char*& curr,
+                   const std::tuple<Ts...>& t) {
+  unpacker<std::tuple<Ts...>>::impl(msg, curr,
+                                    const_cast<std::tuple<Ts...>&>(t));
 }
 
 template <typename T>
 struct unpacker<std::shared_ptr<T>,
                 typename std::enable_if<is_pupable_t<T>::value>::type> {
-  inline static void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                            std::shared_ptr<T>& t) {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
+                          std::shared_ptr<T>& t) {
     PUP::able* p = nullptr;
-    unpack(msg, curr, p);
+    unpack<PUP::able*>(msg, curr, p);
     t = std::dynamic_pointer_cast<T>(std::shared_ptr<PUP::able>(p));
   }
 };
@@ -47,8 +40,8 @@ struct unpacker<std::shared_ptr<T>,
 template <typename T>
 struct unpacker<std::shared_ptr<T>,
                 typename std::enable_if<!is_pupable_t<T>::value>::type> {
-  inline static void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                            std::shared_ptr<T>& t) {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
+                          std::shared_ptr<T>& t) {
     const auto& is_nullptr = *reinterpret_cast<bool*>(curr);
     curr += sizeof(bool);
     if (is_nullptr) {
@@ -91,25 +84,17 @@ inline void unpack_tuple_impl(const std::shared_ptr<void>& msg, char*& curr,
 }
 
 template <typename... Ts>
-inline void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                   const std::tuple<Ts...>& t) {
-  unpack_tuple_impl<sizeof...(Ts)-1>(msg, curr,
-                                     const_cast<std::tuple<Ts...>&>(t));
-}
-
-template <typename... Ts>
 struct unpacker<std::tuple<Ts...>> {
-  inline static void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                            const std::tuple<Ts...>& t) {
-    unpack_tuple_impl<sizeof...(Ts)-1>(msg, curr,
-                                       const_cast<std::tuple<Ts...>&>(t));
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
+                          std::tuple<Ts...>& t) {
+    unpack_tuple_impl<sizeof...(Ts)-1>(msg, curr, t);
   }
 };
 
 template <typename T, std::size_t N>
 struct unpacker<array<T, N>> {
-  inline static void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                            array<T, N>& t) {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
+                          array<T, N>& t) {
     unpack(msg, curr, t.shape);
     if (is_bytes<T>()) {
       t.source = msg;

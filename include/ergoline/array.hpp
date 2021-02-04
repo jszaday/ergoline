@@ -70,7 +70,11 @@ struct array : public hashable {
     if (p.isUnpacking()) {
       this->alloc(true, true);
     }
-    PUParray(p, buffer, n);
+    if (is_bytes<T>()) {
+      p(buffer, n);
+    } else {
+      PUParray(p, buffer, n);
+    }
   }
 
   // TODO implement this? idk...
