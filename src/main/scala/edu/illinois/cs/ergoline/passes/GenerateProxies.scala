@@ -174,7 +174,7 @@ object GenerateProxies {
         args.headOption.foreach(x => makeArgsVector(ctx, x.name))
       } else if (args.nonEmpty || isAsync) {
         if (isAsync) {
-          ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
+          ctx << ctx.typeFor(f.returnType) << "__future__" << "("  << "PUP::reconstruct{})" << ";"
         }
         args.foreach(x => ctx << ctx.typeFor(x.declaredType, Some(x)) << x.name << ";")
         ctx << "ergoline::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
