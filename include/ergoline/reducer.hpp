@@ -1,12 +1,8 @@
 #ifndef __ERGOLINE_REDUCER_HPP__
 #define __ERGOLINE_REDUCER_HPP__
 
-#include <map>
-#include <memory>
 #include <functional>
-
-#include <charm++.h>
-#include "NDMeshStreamer.h"
+#include "message.hpp"
 
 namespace ergoline {
 
@@ -28,7 +24,7 @@ void contribute(T* t, const Args&... arguments, CkReduction::reducerType ty, con
 
 template <typename T, typename Value>
 void contribute(T* t, const Value& value, CkReduction::reducerType ty, const CkCallback& cb) {
-  if (is_PUPbytes<Value>::value) {
+  if (is_bytes<Value>()) {
     t->contribute(sizeof(Value), &value, ty, cb);
   } else {
     auto val = const_cast<Value&>(value);

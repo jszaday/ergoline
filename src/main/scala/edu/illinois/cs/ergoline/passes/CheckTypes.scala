@@ -608,7 +608,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val spec = handleSpecialization(ctx, base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
     val found = screenCandidates(ctx, Some(x), candidates.zip(candidates.map(visit(ctx, _))))
-    x.disambiguation = found.map(_._2)
+    x.disambiguation = found.map(_._1)
     spec.foreach(ctx.leave)
     found match {
       case Some(_) => base

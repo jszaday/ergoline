@@ -30,14 +30,15 @@ object GenerateProxies {
     } << s"}"
   }
 
-  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, numImpls: Int): Unit = {
+  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, impls: List[EirMember]): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
-    val nArgs = args.map(ctx.nameFor(_)).mkString(", ")
     // TODO support non-void returns?
-    ctx << s"void $name(" << (args, ", ") << ")" << "{" << {
+    ctx << s"void $name(" << Option.when(args.nonEmpty)("CkMessage* __msg__") << ")" << "{" << {
       List(s"switch (handle)", "{") ++
-        (0 until numImpls).map(x => s"case $x: { p$x.$name($nArgs); break; }") ++
+        impls.zipWithIndex.map {
+          case (m, x) => s"case $x: { p$x.${ctx.nameFor(m)}(__msg__); break; }"
+        } ++
         List("default: { CkAbort(\"abstract proxy unable to find match\"); }", "}", "}")
     }
   }
@@ -57,14 +58,16 @@ object GenerateProxies {
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = ctx.nameFor(x)
-    val impls = x.derived.map(ctx.nameFor(_)).toList
-    ctx << s"struct $name: public ergoline::hashable" << "{" << s"int handle;" << {
-        impls.zipWithIndex.flatMap({
+    val impls = x.derived.toList
+    val implNames = impls.map(ctx.nameFor(_))
+    ctx << s"struct $name: public ergoline::hashable, public CProxy" << "{" << s"int handle;" << {
+      implNames.zipWithIndex.flatMap({
           case (derived, idx) =>
             List(s"$derived p$idx;", s"$name($derived x) : handle($idx), p$idx(x) { }")
         }) ++ List(s"$name() : handle(-1) { }")
     } << visitAbstractPup(ctx, impls.length) << {
-      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member), impls.length))
+      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member),
+        impls.map(y => Find.namedChild[EirMember](Some(y), x.name))))
     } << {
       makeHasher(ctx, impls.length)
     } << "};"
@@ -94,34 +97,6 @@ object GenerateProxies {
     ctx << s"for (auto i = 0; i < args->size(); i++) { new (&(*$name)[i]) std::string(msg->argv[i]); }"
   }
 
-  def makePointerRhs(ctx: (CodeGenerationContext, EirNode))(current: String, expected: EirType): String = {
-    expected match {
-      case t: EirTupleType =>
-        "std::make_tuple(" + {
-          t.children.zipWithIndex.map({
-            case (r, idx) =>
-              makePointerRhs(ctx)(s"std::get<$idx>($current)", Find.uniqueResolution(r))
-          }).mkString(", ")
-        } + ")"
-      case t if needsCasting(t) =>
-        s"ergoline::from_pupable<${ctx._1.nameFor(expected, Some(ctx._2))}>($current)"
-      case _ => current
-    }
-  }
-
-  def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
-    val ty: EirType = Find.uniqueResolution(x.declaredType)
-    if (containsArray(ctx, ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
-        unflattenArgument((ctx, x), x.name, ty)
-      } << ";"
-    } else if (needsCasting(ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
-        makePointerRhs((ctx, x))(s"${x.name}_", ty)
-      } << ";"
-    }
-  }
-
   def needsCasting(n: EirNode): Boolean = {
     n match {
       // TODO use specialization
@@ -133,65 +108,9 @@ object GenerateProxies {
     }
   }
 
-  private def arraySizes(ctx: CodeGenerationContext, name: String, t: EirType): List[String] = {
-    val nd = arrayDim(ctx, t).getOrElse(Errors.unreachable())
-    (0 until nd).map(name + "_sz" + _).toList
-  }
-
-  def flattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
-    ty match {
-      case t: EirTupleType if containsArray(ctx._1, t) => t.children.zipWithIndex.map {
-        case (ty, idx) => flattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
-      } mkString ", "
-      case t if isArray(ctx._1, t) =>
-        val names = arraySizes(ctx._1, name, ty)
-        names.map("int " + _).mkString(", ") + s", ${GenerateCpp.typeForEntryArgument(ctx)(arrayElementType(t))}" + {
-          if (ctx._1.language == "ci") s" ${name}_arr[${names mkString " * "}]"
-          else s"* ${name}_arr"
-        }
-      case _ => s"${GenerateCpp.typeForEntryArgument(ctx)(ty)} $name"
-    }
-  }
-
-  def unflattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
-    ty match {
-      case t: EirTupleType if containsArray(ctx._1, t) =>
-        s"std::make_tuple(${t.children.zipWithIndex.map {
-          case (ty, idx) => unflattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
-        } mkString ", "})"
-      case t if isArray(ctx._1, t) =>
-        val names = arraySizes(ctx._1, name, ty)
-        val index = s"(std::size_t) ${names mkString ", (std::size_t) "}"
-        val arrTy = ctx._1.nameFor(t, Some(ctx._2))
-        s"std::make_shared<$arrTy>(${name}_arr, $index)"
-      case t if needsCasting(t) => makePointerRhs(ctx)(name, t)
-      case _ => name
-    }
-  }
-
-  def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
-    val ty = Find.uniqueResolution[EirType](arg.declaredType)
-    if (GenerateCpp.containsArray(ctx, ty)) {
-      ctx << flattenArgument((ctx, arg), arg.name, ty)
-    } else {
-      GenerateCpp.visitFunctionArgument(ctx, arg)
-      if (needsCasting(ty)) ctx.append("_")
-    }
-  }
-
-  def visitFunctionArguments(ctx: CodeGenerationContext, args: List[EirFunctionArgument]): Unit = {
-    if (args.nonEmpty) {
-      for (arg <- args.init) {
-        visitFunctionArgument(ctx, arg)
-        ctx << ","
-      }
-      visitFunctionArgument(ctx, args.last)
-    }
-  }
-
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
     member.counterpart match {
-      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, m)
+      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
       case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable" << visitFunctionBody(ctx, f) << ")())"
@@ -202,16 +121,15 @@ object GenerateProxies {
     }
   }
 
-  def mailboxName(ctx: CodeGenerationContext, name: String, types: List[String]): String = {
+  def mailboxName(ctx: CodeGenerationContext, node: EirNode, types: List[String]): String = {
     // TODO impl this
-    name + "_mailbox_"
+    ctx.nameFor(asMember(Some(node)).getOrElse(node)) + "_mailbox_"
   }
 
   def mailboxName(ctx: CodeGenerationContext, x: EirMember): (String, List[String]) = {
     val f = assertValid[EirFunction](x.member)
-    val name = ctx.nameFor(f)
     val tys = f.functionArgs.map(_.declaredType).map(ctx.typeFor(_, Some(x)))
-    (mailboxName(ctx, name, tys), tys)
+    (mailboxName(ctx, x, tys), tys)
   }
 
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
@@ -225,6 +143,17 @@ object GenerateProxies {
     val name = mailboxName(ctx, x)._1
     ctx << s"auto __value__ = std::make_shared<decltype($name)::tuple_t>(std::make_tuple(" << (args, ",") << "));"
     ctx << s"$name.put(__value__);"
+  }
+
+  def makeParameter(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
+    val ty = ctx.resolve(x.declaredType)
+    val s = ctx.typeFor(x.declaredType, Some(x))
+    if (ty.isPointer) {
+      ctx << s << x.name << ";"
+    } else {
+      ctx << "char" << s"__${x.name}__" << s"[sizeof($s)];"
+      ctx << s"auto& ${x.name} = reinterpret_cast<$s&>(__${x.name}__);"
+    }
   }
 
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
@@ -246,17 +175,20 @@ object GenerateProxies {
           ctx.nameFor(f)
         }
       } << "(" << {
-        if (isMain && isConstructor) { ctx << "CkArgMsg* msg"; () }
-        else {
-          if (isAsync) {
-            ctx << ctx.typeFor(f.returnType) << ctx.temporary
-            if (args.nonEmpty) ctx << ","
-          }
-          visitFunctionArguments(ctx, args)
+        if (isMain && isConstructor) {
+          ctx << "CkArgMsg* msg";
+        } else {
+          ctx << Option.when(args.nonEmpty || isAsync)("CkMessage* __msg__")
         }
-      } << ")" << "{" << {
-        if (isConstructor && isMain) args.headOption.foreach(x => makeArgsVector(ctx, x.name))
-        else args.foreach(makeSmartPointer(ctx))
+      } << ")" << "{"
+      if (isConstructor && isMain) {
+        args.headOption.foreach(x => makeArgsVector(ctx, x.name))
+      } else if (args.nonEmpty || isAsync) {
+        if (isAsync) {
+          ctx << ctx.typeFor(f.returnType) << "__future__" << "("  << "PUP::reconstruct{})" << ";"
+        }
+        args.foreach(makeParameter(ctx, _))
+        ctx << "ergoline::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
       }
       if (isConstructor) {
         x.counterpart match {
@@ -269,7 +201,7 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << ctx.temporary << ".set("
+          ctx << "__future__.set" << "("
         } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }

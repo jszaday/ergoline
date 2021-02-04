@@ -9,33 +9,39 @@ template <typename T, std::size_t N>
 struct array : public hashable {
   static_assert(N >= 0, "dimensionality must be positive");
 
-  using buffer_t = std::shared_ptr<T>;
+  using buffer_t = T*;
+  using source_t = std::shared_ptr<void>;
   using shape_t = std::array<std::size_t, N>;
 
+  source_t source;
   buffer_t buffer;
   shape_t shape;
 
   array() {}
 
   array(const shape_t& shape_, bool init = true) : shape(shape_) {
-    buffer = allocate(size(), init);
+    this->alloc(init, false);
   }
 
   template <class... Args>
-  array(T* buffer_, Args... args)
-      : shape{args...} {
-    buffer = std::shared_ptr<T>(std::shared_ptr<T>{}, buffer_);
-  }
+  array(const source_t& src_, buffer_t buffer_, Args... args)
+      : source(src_), buffer(buffer_), shape{args...} {}
 
   array(const std::shared_ptr<T>& buffer_, const shape_t& shape_)
-      : shape(shape_), buffer(buffer_) {}
+      : source(buffer_), buffer(buffer_.get()), shape(shape_) {}
 
-  inline T& operator[](std::size_t idx) { return (buffer.get())[idx]; }
+  inline void alloc(bool init, bool shallow) {
+    source = allocate(size(), init, shallow);
+    buffer = reinterpret_cast<buffer_t>(source.get());
+  }
 
-  inline T* begin() { return buffer.get(); }
-  inline T* end() { return buffer.get() + size(); }
+  inline T& operator[](std::size_t idx) { return buffer[idx]; }
 
-  std::size_t size() {
+  inline buffer_t begin() { return buffer; }
+  inline buffer_t end() { return buffer + size(); }
+
+  // TODO make constexpr
+  inline std::size_t size() {
     if (N == 0) {
       return 0;
     } else if (N == 1) {
@@ -62,9 +68,13 @@ struct array : public hashable {
     p | shape;
     auto n = this->size();
     if (p.isUnpacking()) {
-      buffer = allocate(n, false);
+      this->alloc(true, true);
     }
-    PUParray(p, buffer.get(), n);
+    if (is_bytes<T>()) {
+      p(buffer, n);
+    } else {
+      PUParray(p, buffer, n);
+    }
   }
 
   // TODO implement this? idk...
@@ -76,18 +86,19 @@ struct array : public hashable {
                                            const T& value);
 
  private:
-  static buffer_t allocate(const std::size_t& n, bool init) {
+  static std::shared_ptr<T> allocate(const std::size_t& n, const bool init, bool shallow) {
     if (n == 0) {
-      return buffer_t(nullptr);
+      return nullptr;
     } else {
-      auto b = buffer_t(static_cast<T*>(malloc(sizeof(T) * n)),
-                        [](void* p) { free(p); });
-      if (init) {
-        for (auto i = 0; i < n; i++) {
-          new (&(b.get())[i]) T();
+      auto p = static_cast<T*>(malloc(sizeof(T) * n));
+      for (auto i = 0; init && i < n; i++) {
+        if (shallow) {
+          reconstruct(p + i);
+        } else {
+          new (p + i) T();
         }
       }
-      return b;
+      return std::shared_ptr<T>(p, [](void* p) { free(p); });
     }
   }
 };
