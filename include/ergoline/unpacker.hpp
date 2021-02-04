@@ -5,8 +5,62 @@
 
 namespace ergoline {
 
+namespace detail {
+template <class T, typename Enable = void>
+struct built_in {
+  enum { value = 0 };
+};
+
+template <class T>
+struct built_in<ck::future<T>> {
+  enum { value = 1 };
+};
+
+template <>
+struct built_in<PUP::able*> {
+  enum { value = 1 };
+};
+
+template <typename T>
+struct built_in<
+    T, typename std::enable_if<std::is_base_of<CProxy, T>::value>::type> {
+  enum { value = 1 };
+};
+
+template <class T, typename Enable = void>
+struct is_pupable {
+  enum { value = 0 };
+};
+
+template <class T>
+struct is_pupable<T,
+  typename std::enable_if<std::is_base_of<PUP::able, T>::value ||
+                          std::is_base_of<ergoline::object, T>::value>::type> {
+  enum { value = 1 };
+};
+
+}
+
+template <typename T>
+inline void unpack(const std::shared_ptr<void>& msg, char*& curr, T& t);
+
+template <typename... Ts>
+inline void unpack(const std::shared_ptr<void>& msg, char*& curr,
+                   const std::tuple<Ts...>& t);
+
 template <typename T, typename Enable = void>
-struct unpacker {
+struct unpacker;
+
+template <typename T>
+struct unpacker<T, typename std::enable_if<PUP::as_bytes<T>::value>::type> {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr, T& t) {
+    t = *reinterpret_cast<T*>(curr);
+    curr += sizeof(T);
+  }
+};
+
+template <typename T>
+struct unpacker<T, typename std::enable_if<detail::built_in<T>::value>::type> {
   inline static void impl(const std::shared_ptr<void>& msg, char*& curr, T& t) {
     PUP::fromMem p(curr);
     p | t;
@@ -15,20 +69,9 @@ struct unpacker {
 };
 
 template <typename T>
-inline void unpack(const std::shared_ptr<void>& msg, char*& curr, T& t) {
-  unpacker<T>::impl(msg, curr, t);
-}
-
-template <typename... Ts>
-inline void unpack(const std::shared_ptr<void>& msg, char*& curr,
-                   const std::tuple<Ts...>& t) {
-  unpacker<std::tuple<Ts...>>::impl(msg, curr,
-                                    const_cast<std::tuple<Ts...>&>(t));
-}
-
-template <typename T>
-struct unpacker<std::shared_ptr<T>,
-                typename std::enable_if<is_pupable_t<T>::value>::type> {
+struct unpacker<
+    std::shared_ptr<T>,
+    typename std::enable_if<detail::is_pupable<T>::value>::type> {
   inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
                           std::shared_ptr<T>& t) {
     PUP::able* p = nullptr;
@@ -38,8 +81,9 @@ struct unpacker<std::shared_ptr<T>,
 };
 
 template <typename T>
-struct unpacker<std::shared_ptr<T>,
-                typename std::enable_if<!is_pupable_t<T>::value>::type> {
+struct unpacker<
+    std::shared_ptr<T>,
+    typename std::enable_if<!detail::is_pupable<T>::value>::type> {
   inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
                           std::shared_ptr<T>& t) {
     const auto& is_nullptr = *reinterpret_cast<bool*>(curr);
@@ -92,9 +136,9 @@ struct unpacker<std::tuple<Ts...>> {
 };
 
 template <typename T, std::size_t N>
-struct unpacker<array<T, N>> {
+struct unpacker<ergoline::array<T, N>> {
   inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
-                          array<T, N>& t) {
+                          ergoline::array<T, N>& t) {
     unpack(msg, curr, t.shape);
     if (is_bytes<T>()) {
       t.source = msg;
@@ -107,6 +151,29 @@ struct unpacker<array<T, N>> {
     }
   }
 };
+
+template <typename T, std::size_t N>
+struct unpacker<std::array<T, N>,
+                typename std::enable_if<PUP::as_bytes<T>::value>::type> {
+  inline static void impl(const std::shared_ptr<void>& msg, char*& curr,
+                          std::array<T, N>& t) {
+    auto start = reinterpret_cast<T*>(curr);
+    std::copy(start, start + N, std::begin(t));
+    curr += sizeof(T) * N;
+  }
+};
+
+template <typename T>
+inline void unpack(const std::shared_ptr<void>& msg, char*& curr, T& t) {
+  unpacker<T>::impl(msg, curr, t);
+}
+
+template <typename... Ts>
+inline void unpack(const std::shared_ptr<void>& msg, char*& curr,
+                   const std::tuple<Ts...>& t) {
+  unpacker<std::tuple<Ts...>>::impl(msg, curr,
+                                    const_cast<std::tuple<Ts...>&>(t));
+}
 }
 
 #endif

@@ -60,7 +60,7 @@ object GenerateProxies {
     val name = ctx.nameFor(x)
     val impls = x.derived.toList
     val implNames = impls.map(ctx.nameFor(_))
-    ctx << s"struct $name: public ergoline::hashable" << "{" << s"int handle;" << {
+    ctx << s"struct $name: public ergoline::hashable, public CProxy" << "{" << s"int handle;" << {
       implNames.zipWithIndex.flatMap({
           case (derived, idx) =>
             List(s"$derived p$idx;", s"$name($derived x) : handle($idx), p$idx(x) { }")
