@@ -143,30 +143,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-//  def flattenArgument(ctx: CodeGenerationContext, expr: EirExpressionNode,
-//                      ours: EirType, theirs: EirType): Unit = {
-//    (theirs, expr) match {
-//      case (a: EirTupleType, b: EirTupleExpression) if containsArray(ctx, a) =>
-//        val list = a.children.map(ctx.resolve).zip(b.expressions)
-//        list.zipWithIndex.foreach {
-//          case ((t, x), i) =>
-//            flattenArgument(ctx, x, ctx.exprType(x), t)
-//            if (i < (list.length - 1)) ctx << ","
-//        }
-//      case (a: EirType, b) if isArray(ctx, a) =>
-//        // TODO do this?
-//        if (!b.isInstanceOf[EirSymbol[_]]) Errors.warn(Errors.format(b,
-//          "warning, trying to split %s into multiple arguments, consider introducing a temporary", b))
-//        val str = {
-//          val subCtx = ctx.makeSubContext()
-//          subCtx << expr
-//          subCtx.toString.trim
-//        }
-//        ctx << (splitIndex(ctx, a, s"$str->shape"), ",") << "," << s"$str->begin()"
-//      case (_, _) => castToPuppable(ctx, expr, ours, theirs)
-//    }
-//  }
-
   def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
                      ours: EirType, theirs: EirType): Unit = {
     val str = () => {
@@ -174,9 +150,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       subCtx << expr
       subCtx.toString.trim
     }
-//    if (containsArray(ctx, theirs)) {
-//      flattenArgument(ctx, expr, ours, theirs)
-//    } else
+
     if (ours.isTransient) {
       Errors.cannotSerialize(expr, ours)
     } else if (GenerateProxies.needsCasting(theirs)) {
@@ -995,10 +969,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .map(ProxyManager.dimensionality)
       .getOrElse(0)
     val args = x.args.drop(numTake)
-//    val args = {
-//      if (moveHeadToLast && x.args.nonEmpty) x.args.tail :+ x.args.head
-//      else x.args
-//    }
     objTy match {
       case _ if proxy.isDefined =>
         ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew("

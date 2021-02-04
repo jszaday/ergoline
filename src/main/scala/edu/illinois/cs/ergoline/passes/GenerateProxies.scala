@@ -97,34 +97,6 @@ object GenerateProxies {
     ctx << s"for (auto i = 0; i < args->size(); i++) { new (&(*$name)[i]) std::string(msg->argv[i]); }"
   }
 
-  def makePointerRhs(ctx: (CodeGenerationContext, EirNode))(current: String, expected: EirType): String = {
-    expected match {
-      case t: EirTupleType =>
-        "std::make_tuple(" + {
-          t.children.zipWithIndex.map({
-            case (r, idx) =>
-              makePointerRhs(ctx)(s"std::get<$idx>($current)", Find.uniqueResolution(r))
-          }).mkString(", ")
-        } + ")"
-      case t if needsCasting(t) =>
-        s"ergoline::from_pupable<${ctx._1.nameFor(expected, Some(ctx._2))}>($current)"
-      case _ => current
-    }
-  }
-
-  def makeSmartPointer(ctx: CodeGenerationContext)(x: EirFunctionArgument): Unit = {
-    val ty: EirType = Find.uniqueResolution(x.declaredType)
-    if (containsArray(ctx, ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
-        unflattenArgument((ctx, x), x.name, ty)
-      } << ";"
-    } else if (needsCasting(ty)) {
-      ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x) << "=" << {
-        makePointerRhs((ctx, x))(s"${x.name}_", ty)
-      } << ";"
-    }
-  }
-
   def needsCasting(n: EirNode): Boolean = {
     n match {
       // TODO use specialization
@@ -133,52 +105,6 @@ object GenerateProxies {
       case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
       case t: EirType => t.isTrait && t.isPointer && !t.isSystem
       case _ => Errors.incorrectType(n, classOf[EirType])
-    }
-  }
-
-  private def arraySizes(ctx: CodeGenerationContext, name: String, t: EirType): List[String] = {
-    val nd = arrayDim(ctx, t).getOrElse(Errors.unreachable())
-    (0 until nd).map(name + "_sz" + _).toList
-  }
-
-  def flattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
-    ty match {
-      case t: EirTupleType if containsArray(ctx._1, t) => t.children.zipWithIndex.map {
-        case (ty, idx) => flattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
-      } mkString ", "
-      case t if isArray(ctx._1, t) =>
-        val names = arraySizes(ctx._1, name, ty)
-        names.map("int " + _).mkString(", ") + s", ${GenerateCpp.typeForEntryArgument(ctx)(arrayElementType(t))}" + {
-          if (ctx._1.language == "ci") s" ${name}_arr[${names mkString " * "}]"
-          else s"* ${name}_arr"
-        }
-      case _ => s"${GenerateCpp.typeForEntryArgument(ctx)(ty)} $name"
-    }
-  }
-
-  def unflattenArgument(ctx: (CodeGenerationContext, EirNode), name: String, ty: EirType): String = {
-    ty match {
-      case t: EirTupleType if containsArray(ctx._1, t) =>
-        s"std::make_tuple(${t.children.zipWithIndex.map {
-          case (ty, idx) => unflattenArgument(ctx, s"${name}_$idx", ctx._1.resolve(ty))
-        } mkString ", "})"
-      case t if isArray(ctx._1, t) =>
-        val names = arraySizes(ctx._1, name, ty)
-        val index = s"(std::size_t) ${names mkString ", (std::size_t) "}"
-        val arrTy = ctx._1.nameFor(t, Some(ctx._2))
-        s"std::make_shared<$arrTy>(std::shared_ptr<void>{}, ${name}_arr, $index)"
-      case t if needsCasting(t) => makePointerRhs(ctx)(name, t)
-      case _ => name
-    }
-  }
-
-  def visitFunctionArgument(ctx: CodeGenerationContext, arg: EirFunctionArgument): Unit = {
-    val ty = Find.uniqueResolution[EirType](arg.declaredType)
-    if (GenerateCpp.containsArray(ctx, ty)) {
-      ctx << flattenArgument((ctx, arg), arg.name, ty)
-    } else {
-      GenerateCpp.visitFunctionArgument(ctx, arg)
-      if (needsCasting(ty)) ctx.append("_")
     }
   }
 
