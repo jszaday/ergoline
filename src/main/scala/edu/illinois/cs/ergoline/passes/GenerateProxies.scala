@@ -145,6 +145,17 @@ object GenerateProxies {
     ctx << s"$name.put(__value__);"
   }
 
+  def makeParameter(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
+    val ty = ctx.resolve(x.declaredType)
+    val s = ctx.typeFor(x.declaredType, Some(x))
+    if (ty.isPointer) {
+      ctx << s << x.name << ";"
+    } else {
+      ctx << "char" << s"__${x.name}__" << s"[sizeof($s)];"
+      ctx << s"auto& ${x.name} = reinterpret_cast<$s&>(__${x.name}__);"
+    }
+  }
+
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
       val proxy = x.parent.to[EirProxy]
       val isConstructor = x.isConstructor
@@ -176,7 +187,7 @@ object GenerateProxies {
         if (isAsync) {
           ctx << ctx.typeFor(f.returnType) << "__future__" << "("  << "PUP::reconstruct{})" << ";"
         }
-        args.foreach(x => ctx << ctx.typeFor(x.declaredType, Some(x)) << x.name << ";")
+        args.foreach(makeParameter(ctx, _))
         ctx << "ergoline::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
       }
       if (isConstructor) {

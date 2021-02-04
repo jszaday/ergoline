@@ -21,6 +21,11 @@ struct built_in<PUP::able*> {
   enum { value = 1 };
 };
 
+template <>
+struct built_in<std::string> {
+  enum { value = 1 };
+};
+
 template <typename T>
 struct built_in<
     T, typename std::enable_if<std::is_base_of<CProxy, T>::value>::type> {
@@ -63,6 +68,7 @@ template <typename T>
 struct unpacker<T, typename std::enable_if<detail::built_in<T>::value>::type> {
   inline static void impl(const std::shared_ptr<void>& msg, char*& curr, T& t) {
     PUP::fromMem p(curr);
+    reconstruct(&t);
     p | t;
     curr += p.size();
   }
@@ -76,7 +82,7 @@ struct unpacker<
                           std::shared_ptr<T>& t) {
     PUP::able* p = nullptr;
     unpack<PUP::able*>(msg, curr, p);
-    t = std::dynamic_pointer_cast<T>(std::shared_ptr<PUP::able>(p));
+    ::new (&t) std::shared_ptr<T>(std::dynamic_pointer_cast<T>(std::shared_ptr<PUP::able>(p)));
   }
 };
 
@@ -89,15 +95,15 @@ struct unpacker<
     const auto& is_nullptr = *reinterpret_cast<bool*>(curr);
     curr += sizeof(bool);
     if (is_nullptr) {
-      t.reset();
+      ::new (&t) std::shared_ptr<T>();
     } else if (is_bytes<T>()) {
-      t = std::shared_ptr<T>(msg, reinterpret_cast<T*>(curr));
+      ::new (&t) std::shared_ptr<T>(msg, reinterpret_cast<T*>(curr));
       curr += sizeof(T);
     } else {
       auto p = static_cast<T*>(malloc(sizeof(T)));
       reconstruct(p);
       unpack(msg, curr, *p);
-      t = std::shared_ptr<T>(p, [](T* p) { free(p); });
+      ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
     }
   }
 };
