@@ -24,52 +24,77 @@ object GenerateProxies {
     } << ns.map(_ => "}")
   }
 
-  def visitAbstractPup(ctx: CodeGenerationContext, numImpls: Int): Unit = {
-    ctx << s"void pup(PUP::er &p)" << "{" << s"p | handle;" << {
-      (0 until numImpls).map(x => s"p | p$x;")
-    } << s"}"
+  def visitAbstractPup(ctx: CodeGenerationContext, indices: List[String]): Unit = {
+    ctx << s"void pup(PUP::er &p)" << "{"
+    ctx << "CProxy::pup(p);"
+    ctx << s"p | __id__;"
+    ctx << "p | __msgType__;"
+    ctx << indices.map(idx => s"p | $idx;")
+    ctx << s"}"
   }
 
-  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction, impls: List[EirMember]): Unit = {
+  def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
     // TODO support non-void returns?
+    // TODO make a helper function that does a "send-thru" operation
     ctx << s"void $name(" << Option.when(args.nonEmpty)("CkMessage* __msg__") << ")" << "{" << {
-      List(s"switch (handle)", "{") ++
-        impls.zipWithIndex.map {
-          case (m, x) => s"case $x: { p$x.${ctx.nameFor(m)}(__msg__); break; }"
-        } ++
-        List("default: { CkAbort(\"abstract proxy unable to find match\"); }", "}", "}")
-    }
+      ctx << "UsrToEnv(__msg__)->setMsgtype(__msgType__);"
+      ctx << "CkSendMsg" << "(" << (name + "_idx__") << ",__msg__,&__id__,0" << ")" << ";"
+    } << "}"
   }
 
-  def makeHasher(ctx: CodeGenerationContext, numImpls: Int): Unit = {
+  def makeHasher(ctx: CodeGenerationContext, indices: List[String]): Unit = {
     ctx << "virtual std::size_t hash() override" << "{"
     ctx << "ergoline::hasher _;"
-    ctx << "switch (handle)" << "{"
-    (0 until numImpls).foreach(x => {
-      ctx << s"case $x: { _ | p$x; break; }"
+    ctx << "_" << "|" << "__id__" << ";"
+    ctx << "//" << "_" << "|" << "__msgType__" << ";"
+    indices.foreach(x => {
+      ctx << "_" << "|" << x << ";"
     })
-    ctx << "default: { CkAbort(\"abstract proxy unable to find match\"); }"
-    ctx << "}"
     ctx << "return _.hash();"
+    ctx << "}"
+  }
+
+  def indexFor(ctx: CodeGenerationContext, proxy: EirProxy, function: EirFunction): String = {
+    /* TODO FQN */ "CkIndex_" + proxy.baseName + "::idx_" + ctx.nameFor(function) + "_CkMessage()"
+  }
+
+  def visitAbstractCons(ctx: CodeGenerationContext, base: EirProxy, derived: EirProxy): Unit = {
+    val tmp = "__derived__"
+    ctx << ctx.nameFor(base) << "(" << "const" << ctx.nameFor(derived, Some(base)) << "&" << tmp << ")"
+    ctx << ":" << "CProxy" << "(" << tmp << ")" << "{"
+    base.members.collect {
+      case m@EirMember(_, f: EirFunction, _) if m.isEntry => derived.members.collectFirst {
+        case n@EirMember(_, g: EirFunction, _) if n.isEntry && (f.name == g.name) && CheckFunctions.sharedArgs(ctx.typeContext, f, g) => (f, g)
+      }
+    }.flatten.foreach {
+      case (f, g) => ctx << (ctx.nameFor(f) + "_idx__") << "=" << indexFor(ctx, derived, g) << ";"
+    }
+    ctx << "__id__" << "=" << tmp << "." << "ckGetChareID()" << ";"
+    ctx << "__msgType__" << "=" << {
+      (derived.isElement, derived.collective) match {
+        case (false, None) => "ForChareMsg"
+        case (_, _) => ???
+      }
+    } << ";"
     ctx << "}"
   }
 
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = ctx.nameFor(x)
     val impls = x.derived.toList
-    val implNames = impls.map(ctx.nameFor(_))
-    ctx << s"struct $name: public ergoline::hashable, public CProxy" << "{" << s"int handle;" << {
-      implNames.zipWithIndex.flatMap({
-          case (derived, idx) =>
-            List(s"$derived p$idx;", s"$name($derived x) : handle($idx), p$idx(x) { }")
-        }) ++ List(s"$name() : handle(-1) { }")
-    } << visitAbstractPup(ctx, impls.length) << {
-      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member),
-        impls.map(y => Find.namedChild[EirMember](Some(y), x.name))))
+    val indices = x.members.map(m => ctx.nameFor(m) + "_idx__")
+    ctx << s"struct $name: public ergoline::hashable, public CProxy" << "{"
+    ctx << "CkChareID" << "__id__" << ";"
+    ctx << "CkEnvelopeType" << "__msgType__" << ";"
+    indices.foreach(idx => ctx << "int" << idx << ";")
+    ctx << name << "(" /* << TODO "PUP::reconstruct" */ << ")" << "{}"
+    impls.collect { case p: EirProxy => p }.foreach(visitAbstractCons(ctx, x, _))
+    ctx << visitAbstractPup(ctx, indices) << {
+      x.members.foreach(x => visitAbstractEntry(ctx, assertValid[EirFunction](x.member)))
     } << {
-      makeHasher(ctx, impls.length)
+      makeHasher(ctx, indices)
     } << "};"
   }
 
