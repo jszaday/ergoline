@@ -237,15 +237,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val field = found.map(ctx.nameFor(_)).getOrElse(Errors.unreachable())
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
-          if (isReduction) {
-            ctx << s"CkReductionTarget(${proxy.get.baseName}," << field << ")"
-          } else {
-            ctx << s"CkIndex_${proxy.get.baseName}::" << field << "(" << {
-              // TODO take types and flattening into consideration!!
-              val n = found.map(_.member).to[EirFunction].map(_.functionArgs.length).getOrElse(0)
-              (List.fill(n)("0"), ",")
-            } << ")"
-          }
+          ctx << GenerateProxies.indexFor(ctx, proxy.get, found.map(_.member).to[EirFunction].get)
           ctx << "," << _proxy << ")"
         } else {
           Errors.expectedCallback(target)

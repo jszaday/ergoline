@@ -41,6 +41,7 @@ struct is_pupable<T,
                           std::is_base_of<ergoline::object, T>::value>::type> {
   enum { value = 1 };
 };
+
 }
 
 #endif

@@ -4,8 +4,7 @@
 #include <map>
 #include <string>
 #include <memory>
-
-#include "unpacker.hpp"
+#include <hypercomm/pup.hpp>
 
 namespace ergoline {
 
@@ -31,7 +30,7 @@ void unpack(void* msg, Args&... args) {
   auto s = hypercomm::serdes::make_unpacker(
     std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); }),
     get_msg_buffer(msg));
-  unpack(s, std::forward_as_tuple(args...));
+  hypercomm::pup(s, std::forward_as_tuple(args...));
 }
 
 template <typename... Args>

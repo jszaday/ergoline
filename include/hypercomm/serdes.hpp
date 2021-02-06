@@ -14,18 +14,22 @@ struct serdes {
   char* current;
   const state_t state;
 
+  inline bool unpacking() { return state == state_t::UNPACKING; }
+
   inline std::size_t size() { return current - start; }
 
-  inline void copy_in(std::size_t size, char* data) {
+  template <typename T>
+  inline void copy(T* data, std::size_t n = 1) {
     switch (state) {
       case PACKING:
-        std::copy(data, data + size, current);
-        current += size;
+        std::copy(reinterpret_cast<char*>(data),
+                  reinterpret_cast<char*>(data) + (n * sizeof(T)), current);
         break;
-      case SIZING:
-        current += size;
+      case UNPACKING:
+        std::copy(current, current + (n * sizeof(T)), reinterpret_cast<char*>(data));
         break;
     }
+    advance<T>();
   }
 
   inline void advance(std::size_t size) { current += size; }
