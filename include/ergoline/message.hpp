@@ -28,9 +28,10 @@ inline char* get_msg_buffer(void* msg) {
 
 template <typename... Args>
 void unpack(void* msg, Args&... args) {
-  auto source = std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); });
-  auto buffer = get_msg_buffer(msg);
-  unpack(source, buffer, std::forward_as_tuple(args...));
+  auto s = hypercomm::serdes::make_unpacker(
+    std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); }),
+    get_msg_buffer(msg));
+  unpack(s, std::forward_as_tuple(args...));
 }
 
 template <typename... Args>
