@@ -15,18 +15,24 @@ inline void pup(serdes& s, T& t);
 template <typename... Ts>
 inline void pup(serdes& s, const std::tuple<Ts...>& t);
 
+template <typename T>
+inline size_t size(const T& t) {
+  auto s = serdes::make_sizer();
+  pup(s, const_cast<T&>(t));
+  return s.size();
+}
+
 template <typename T, typename Enable = void>
 struct puper;
 
 template <typename T>
 struct puper<T, typename std::enable_if<PUP::as_bytes<T>::value>::type> {
-  inline static void impl(serdes& s, T& t) {
-    s.copy(&t);
-  }
+  inline static void impl(serdes& s, T& t) { s.copy(&t); }
 };
 
 template <typename T, std::size_t N>
-struct puper<std::array<T, N>, typename std::enable_if<PUP::as_bytes<T>::value>::type> {
+struct puper<std::array<T, N>,
+             typename std::enable_if<PUP::as_bytes<T>::value>::type> {
   inline static void impl(serdes& s, std::array<T, N>& t) {
     s.copy(t.data(), N);
   }
@@ -57,9 +63,8 @@ struct puper<T, typename std::enable_if<hypercomm::built_in<T>::value>::type> {
 };
 
 template <typename T>
-struct puper<
-    std::shared_ptr<T>,
-    typename std::enable_if<hypercomm::is_pupable<T>::value>::type> {
+struct puper<std::shared_ptr<T>,
+             typename std::enable_if<hypercomm::is_pupable<T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
       PUP::able* p = nullptr;
@@ -74,10 +79,9 @@ struct puper<
 };
 
 template <typename T>
-struct puper<
-    std::shared_ptr<T>,
-    typename std::enable_if<!hypercomm::is_pupable<T>::value>::type> {
-  inline static void impl(serdes& s, std::shared_ptr<T>& t) {
+struct puper<std::shared_ptr<T>,
+             typename std::enable_if<!hypercomm::is_pupable<T>::value>::type> {
+  inline static void unpack(serdes& s, std::shared_ptr<T>& t) {
     const auto& is_nullptr = *reinterpret_cast<bool*>(s.current);
     s.advance<bool>();
     if (is_nullptr) {
@@ -92,6 +96,18 @@ struct puper<
       ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
     }
   }
+
+  inline static void impl(serdes& s, std::shared_ptr<T>& t) {
+    if (s.unpacking()) {
+      unpack(s, t);
+    } else {
+      auto is_nullptr = nullptr == t;
+      pup(s, is_nullptr);
+      if (!is_nullptr) {
+        pup(s, *t);
+      }
+    }
+  }
 };
 
 namespace {
@@ -101,7 +117,7 @@ using Requires = PUP::Requires<B>;
 template <size_t N, typename... Args,
           Requires<(sizeof...(Args) == 0)> = nullptr>
 inline void pup_tuple_impl(const std::shared_ptr<void>&, char*&,
-                              std::tuple<Args...>&) {}
+                           std::tuple<Args...>&) {}
 
 template <size_t N, typename... Args,
           Requires<(sizeof...(Args) > 0 && N == 0)> = nullptr>
@@ -139,8 +155,12 @@ struct puper<ergoline::array<T, N>> {
           pup(s, i);
         }
       }
+    } else if (PUP::as_bytes<T>::value) {
+      s.copy(t.buffer, t.size());
     } else {
-      CkAbort("meow");
+      for (auto& i : t) {
+        pup(s, i);
+      }
     }
   }
 };

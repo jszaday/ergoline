@@ -20,16 +20,18 @@ struct serdes {
 
   template <typename T>
   inline void copy(T* data, std::size_t n = 1) {
+    const auto nBytes = n * sizeof(T);
     switch (state) {
       case PACKING:
         std::copy(reinterpret_cast<char*>(data),
-                  reinterpret_cast<char*>(data) + (n * sizeof(T)), current);
+                  reinterpret_cast<char*>(data) + nBytes, current);
         break;
       case UNPACKING:
-        std::copy(current, current + (n * sizeof(T)), reinterpret_cast<char*>(data));
+        std::copy(current, current + nBytes,
+                  reinterpret_cast<char*>(data));
         break;
     }
-    advance<T>();
+    advance(nBytes);
   }
 
   inline void advance(std::size_t size) { current += size; }
@@ -46,6 +48,24 @@ struct serdes {
         .start = start,
         .current = const_cast<char*>(start),
         .state = UNPACKING,
+    };
+  }
+
+  inline static serdes make_packer(const char* start) {
+    return serdes{
+        .source = nullptr,
+        .start = start,
+        .current = const_cast<char*>(start),
+        .state = PACKING,
+    };
+  }
+
+  inline static serdes make_sizer() {
+    return serdes{
+        .source = nullptr,
+        .start = nullptr,
+        .current = nullptr,
+        .state = SIZING,
     };
   }
 };
