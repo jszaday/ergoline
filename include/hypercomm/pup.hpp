@@ -22,6 +22,25 @@ inline size_t size(const T& t) {
   return s.size();
 }
 
+template <typename T>
+void interpup(PUP::er& p, T& t) {
+  if (typeid(p) == typeid(PUP::fromMem)) {
+    auto mem = static_cast<PUP::fromMem&>(p);
+    auto s = serdes::make_unpacker(nullptr, mem.get_current_pointer());
+    pup(s, t);
+    mem.advance(s.size());
+  } else if (typeid(p) == typeid(PUP::toMem)) {
+    auto mem = static_cast<PUP::toMem&>(p);
+    auto s = serdes::make_packer(mem.get_current_pointer());
+    pup(s, t);
+    mem.advance(s.size());
+  } else if (typeid(p) == typeid(PUP::sizer)) {
+    p(static_cast<char*>(nullptr), size(t));
+  } else {
+    CkAbort("unsure how to convert an %s into a serdes", typeid(p).name());
+  }
+}
+
 template <typename T, typename Enable = void>
 struct puper;
 
