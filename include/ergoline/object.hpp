@@ -75,6 +75,29 @@ struct equal_to<std::shared_ptr<T>,
   }
 };
 
+namespace hash_utils {
+template <class, typename Enable = void>
+struct hash;
+
+template <class T>
+inline void hash_combine(std::size_t& seed, const T& v) {
+  hash<T> hasher;
+  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+template <class T>
+inline std::size_t hash_iterable(const T& t) {
+  std::size_t seed = 0;
+  for (const auto& i : t) {
+    hash_combine(seed, i);
+  }
+  return seed;
+}
+}
+
+template <typename K, typename V>
+using hash_map = std::unordered_map<K, V, hash_utils::hash<K>, equal_to<K>>;
+
 }
 
 #include "hash.hpp"

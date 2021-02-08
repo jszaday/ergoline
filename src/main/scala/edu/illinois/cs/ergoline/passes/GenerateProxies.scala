@@ -105,7 +105,7 @@ object GenerateProxies {
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "{" << {
       ctx << "void pup(PUP::er &p)" << "{" << {
-        pupperFor((ctx, x, "p"))("impl_", x.base)
+        "hypercomm::interpup(p, impl_);"
       } << {
         x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1).map("p | " + _ + ";")
       } << "}"; ()
@@ -120,17 +120,6 @@ object GenerateProxies {
     ctx << "std::array<std::size_t, 1> _argc_ = {(std::size_t) msg->argc};"
     ctx << s"auto $name = std::make_shared<ergoline::array<std::string, 1>>(_argc_);"
     ctx << s"for (auto i = 0; i < args->size(); i++) { new (&(*$name)[i]) std::string(msg->argv[i]); }"
-  }
-
-  def needsCasting(n: EirNode): Boolean = {
-    n match {
-      // TODO use specialization
-      case _: EirTemplateArgument => false
-      case _: EirLambdaType => false
-      case t: EirTupleType => t.children.map(Find.uniqueResolution[EirType]).exists(needsCasting)
-      case t: EirType => t.isTrait && t.isPointer && !t.isSystem
-      case _ => Errors.incorrectType(n, classOf[EirType])
-    }
   }
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
@@ -221,7 +210,7 @@ object GenerateProxies {
       if (isConstructor) {
         x.counterpart match {
           case Some(m) if m.isEntryOnly =>
-            ctx << "this->impl_ = std::make_shared<" << base << ">((CkMigrateMessage *)nullptr);"
+            ctx << "this->impl_ = std::make_shared<" << base << ">(PUP::reconstruct{});"
             makeEntryBody(ctx, x)
             ctx << ";"
           case _ =>

@@ -4,8 +4,7 @@
 #include <map>
 #include <string>
 #include <memory>
-
-#include "unpacker.hpp"
+#include <hypercomm/pup.hpp>
 
 namespace ergoline {
 
@@ -28,17 +27,20 @@ inline char* get_msg_buffer(void* msg) {
 
 template <typename... Args>
 void unpack(void* msg, Args&... args) {
-  auto source = std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); });
-  auto buffer = get_msg_buffer(msg);
-  unpack(source, buffer, std::forward_as_tuple(args...));
+  auto s = hypercomm::serdes::make_unpacker(
+      std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); }),
+      get_msg_buffer(msg));
+  hypercomm::pup(s, std::forward_as_tuple(args...));
 }
 
 template <typename... Args>
 CkMessage* pack(const Args&... _args) {
   auto args = std::forward_as_tuple(const_cast<Args&>(_args)...);
-  auto size = PUP::size(args);
+  auto size = hypercomm::size(args);
   auto msg = CkAllocateMarshallMsg(size);
-  PUP::toMemBuf(args, msg->msgBuf, size);
+  auto packer = hypercomm::serdes::make_packer(msg->msgBuf);
+  hypercomm::pup(packer, args);
+  CkAssert(size == packer.size());
   return msg;
 }
 }

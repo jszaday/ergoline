@@ -40,8 +40,11 @@ struct array : public hashable {
   inline buffer_t begin() { return buffer; }
   inline buffer_t end() { return buffer + size(); }
 
+  inline const buffer_t begin() const { return const_cast<const buffer_t>(buffer); }
+  inline const buffer_t end() const { return const_cast<const buffer_t>(buffer + size()); }
+
   // TODO make constexpr
-  inline std::size_t size() {
+  inline std::size_t size() const {
     if (N == 0) {
       return 0;
     } else if (N == 1) {
@@ -56,25 +59,7 @@ struct array : public hashable {
   }
 
   std::size_t hash() override {
-    hasher h;
-    auto n = this->size();
-    for (auto i = 0; i < n; i++) {
-      h | (*this)[i];
-    }
-    return h.hash();
-  }
-
-  void pup(PUP::er& p) {
-    p | shape;
-    auto n = this->size();
-    if (p.isUnpacking()) {
-      this->alloc(true, true);
-    }
-    if (is_bytes<T>()) {
-      p(buffer, n);
-    } else {
-      PUParray(p, buffer, n);
-    }
+    return hash_utils::hash_iterable(*this);
   }
 
   // TODO implement this? idk...

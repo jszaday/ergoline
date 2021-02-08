@@ -113,7 +113,7 @@ struct mailbox {
 
   void pup(PUP::er& p) {
     CkAssert(requests_.empty());
-    p | values_;
+    hypercomm::interpup(p, values_);
   }
 
  private:

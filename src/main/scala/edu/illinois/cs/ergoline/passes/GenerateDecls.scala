@@ -43,29 +43,21 @@ object GenerateDecls {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.annotation("system").isDefined) return
-    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${ctx.nameFor(x)}" << visitInherits(ctx, x) << "{" << {
-      if (x.isInstanceOf[EirTrait]) {
-        Nil
-      } else if (!x.isTransient) {
+    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${ctx.nameFor(x)}" << visitInherits(ctx, x) << "{"
+    if (!x.isInstanceOf[EirTrait]) {
+      if (!x.isTransient) {
         if (!hasPup(x)) {
-          if (x.templateArgs.isEmpty) ctx << "virtual void pup(PUP::er&) override;"
+          if (x.templateArgs.isEmpty) ctx << "virtual void __pup__(hypercomm::serdes&) override;"
           else makePupper(ctx, x, isMember = true)
         }
         if (!hasHash(x)) makeHasher(ctx, x)
         val parent = x.extendsThis
           .map(Find.uniqueResolution[EirType])
           .map(ctx.nameFor(_, Some(x)))
-          .getOrElse("PUP::able")
-        // TODO PUPable_decl_base_template
-        List(if (x.templateArgs.isEmpty) s"PUPable_decl_inside(${ctx.nameFor(x)});"
-        else s"PUPable_decl_inside_template((${GenerateCpp.nameFor(ctx, x, includeTemplates = true)}));",
-          s"${ctx.nameFor(x)}(CkMigrateMessage *m) : $parent(m) { }") ++
-          Find.traits(x).map(x => s"friend class ${ctx.nameFor(x)};")
-      } else {
-        if (!hasHash(x)) makeHasher(ctx, x)
-        Nil
-      }
-    } << x.members << s"};"
+        ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p => s": $p(__tag__)") << "{}"
+      } else if (!hasHash(x)) makeHasher(ctx, x)
+    }
+    ctx << x.members << s"};"
 
     x.members.collect {
       case m@EirMember(_, _: EirDeclaration, _) if m.isStatic => m
