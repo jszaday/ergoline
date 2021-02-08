@@ -62,19 +62,6 @@ struct array : public hashable {
     return hash_utils::hash_iterable(*this);
   }
 
-  void pup(PUP::er& p) {
-    p | shape;
-    auto n = this->size();
-    if (p.isUnpacking()) {
-      this->alloc(true, true);
-    }
-    if (is_bytes<T>()) {
-      p(buffer, n);
-    } else {
-      PUParray(p, buffer, n);
-    }
-  }
-
   // TODO implement this? idk...
   template <class... Args>
   static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape,

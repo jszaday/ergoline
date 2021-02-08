@@ -5,7 +5,26 @@
 #include <ergoline/future.hpp>
 #include <hypercomm/polymorph.hpp>
 
+#include <deque>
+#include <list>
+
 namespace hypercomm {
+
+template <typename T>
+struct is_list_or_deque {
+  enum { value = false };
+};
+
+template <typename T>
+struct is_list_or_deque<std::list<T>> {
+  enum { value = true };
+};
+
+template <typename T>
+struct is_list_or_deque<std::deque<T>> {
+  enum { value = true };
+};
+
 template <class T, typename Enable = void>
 struct built_in {
   enum { value = 0 };
@@ -39,12 +58,12 @@ struct is_pupable {
 
 template <class T>
 struct is_pupable<T,
-  typename std::enable_if<std::is_base_of<PUP::able, T>::value ||
-                          std::is_base_of<ergoline::object, T>::value ||
-                          std::is_base_of<hypercomm::polymorph, T>::value>::type> {
+                  typename std::enable_if<
+                      std::is_base_of<PUP::able, T>::value ||
+                      std::is_base_of<ergoline::object, T>::value ||
+                      std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   enum { value = 1 };
 };
-
 }
 
 #endif

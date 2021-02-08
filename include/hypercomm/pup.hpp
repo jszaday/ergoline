@@ -80,14 +80,16 @@ struct puper<ergoline::hash_map<K, V>> {
 };
 
 template <typename T>
-struct puper<std::deque<T>> {
-  inline static void impl(serdes& s, std::deque<T>& t) {
+struct puper<T, typename std::enable_if<is_list_or_deque<T>::value>::type> {
+  using value_type = typename T::value_type;
+
+  inline static void impl(serdes& s, T& t) {
     if (s.unpacking()) {
       std::size_t size;
       s.copy(&size);
-      ::new (&t) std::deque<T>(size);
+      ::new (&t) T();
       for (auto i = 0; i < size; i++) {
-        PUP::detail::TemporaryObjectHolder<T> h;
+        PUP::detail::TemporaryObjectHolder<value_type> h;
         pup(s, h.t);
         t.push_back(h.t);
       }
@@ -221,11 +223,6 @@ template <bool B>
 using Requires = PUP::Requires<B>;
 
 template <size_t N, typename... Args,
-          Requires<(sizeof...(Args) == 0)> = nullptr>
-inline void pup_tuple_impl(const std::shared_ptr<void>&, char*&,
-                           std::tuple<Args...>&) {}
-
-template <size_t N, typename... Args,
           Requires<(sizeof...(Args) > 0 && N == 0)> = nullptr>
 inline void pup_tuple_impl(serdes& s, std::tuple<Args...>& t) {
   pup(s, std::get<N>(t));
@@ -240,10 +237,15 @@ inline void pup_tuple_impl(serdes& s, std::tuple<Args...>& t) {
 }
 
 template <typename... Ts>
-struct puper<std::tuple<Ts...>> {
+struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) > 0)>::type> {
   inline static void impl(serdes& s, std::tuple<Ts...>& t) {
     pup_tuple_impl<sizeof...(Ts)-1>(s, t);
   }
+};
+
+template <typename... Ts>
+struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) == 0)>::type> {
+  inline static void impl(serdes& s, std::tuple<Ts...>& t) {}
 };
 
 template <typename T, std::size_t N>
@@ -252,9 +254,15 @@ struct puper<ergoline::array<T, N>> {
     pup(s, t.shape);
 
     if (s.unpacking()) {
+      reconstruct(&t);
       if (PUP::as_bytes<T>::value) {
-        t.source = s.source;
-        t.buffer = reinterpret_cast<T*>(s.current);
+        if (s.source) {
+          t.source = s.source;
+          t.buffer = reinterpret_cast<T*>(s.current);
+        } else {
+          t.alloc(false, false);
+          s.copy(t.buffer, t.size());
+        }
       } else {
         t.alloc(true, true);
         for (auto& i : t) {
