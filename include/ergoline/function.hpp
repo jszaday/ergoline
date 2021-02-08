@@ -6,23 +6,22 @@
 #include <functional>
 #include <unordered_map>
 
-#include "charm++.h"
+#include <hypercomm/polymorph.hpp>
 
 namespace ergoline {
 
-class function_base_: public PUP::able {
+class function_base_: public hypercomm::polymorph {
 public:
   function_base_() { }
-  function_base_(CkMigrateMessage *m) : PUP::able(m) { }
+  function_base_(PUP::reconstruct) { }
   virtual ~function_base_() { }
-  PUPable_abstract(function_base_);
 };
 
 template <typename Ret, typename... Args>
 class function: public function_base_ {
 public:
   function() { }
-  function(CkMigrateMessage *m) : function_base_(m) { }
+  function(PUP::reconstruct m) : function_base_(m) { }
   virtual ~function() { }
   virtual Ret operator()(Args... args) = 0;
 };

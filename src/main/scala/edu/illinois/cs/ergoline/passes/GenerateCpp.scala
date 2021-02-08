@@ -96,6 +96,37 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << s"namespace" << ctx.nameFor(ns) << "{" << "struct" << ctx.nameFor(x) << ";" << "}")
   }
 
+  def registerPolymorphs(ctx: CodeGenerationContext,
+                         checked: Map[EirSpecializable, List[EirSpecialization]],
+                         lambdas: Map[EirNamespace, List[EirLambdaExpression]]): Unit = {
+    val global = Some(EirGlobalNamespace)
+    val puppables = checked.keys.filter({
+      case _: EirProxy => false
+      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
+      case _ => false
+    })
+
+    ctx << "void enroll_polymorphs(void)" << "{"
+    ctx << "hypercomm::detail::initialize();"
+    puppables.foreach(x => {
+      if (x.templateArgs.isEmpty) {
+        ctx << "hypercomm::enroll<" << ctx.nameFor(x, global) << ">" << "()" << ";"
+      } else {
+        checked(x).foreach(y => {
+          ctx.specialize(x, y)
+          ctx << "hypercomm::enroll<" << ctx.nameFor(x, global) << ">" << "()" << ";"
+          ctx.leave(y)
+        })
+      }
+    })
+
+    lambdas.flatMap(_._2).map(x => {
+      ctx << "hypercomm::enroll<" << ctx.nameFor(x, global) << ">" << "()" << ";"
+    })
+
+    ctx << "}"
+  }
+
   override def error(ctx: CodeGenerationContext, node : EirNode): Unit = ()
 
   private def arrayMember(ctx: CodeGenerationContext, x: Option[EirNode]): Option[String] = {
@@ -143,51 +174,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode,
-                     ours: EirType, theirs: EirType): Unit = {
-    val str = () => {
-      val subCtx = ctx.makeSubContext()
-      subCtx << expr
-      subCtx.toString.trim
-    }
-
+  def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode, ours: EirType): Unit = {
     if (ours.isTransient) {
       Errors.cannotSerialize(expr, ours)
-    } else if (GenerateProxies.needsCasting(theirs)) {
-      (theirs, expr) match {
-        case (a: EirTupleType, b: EirTupleExpression) =>
-          ctx << "std::make_tuple(" << {
-            val list = a.children.map(ctx.resolve).zip(b.expressions)
-            list.zipWithIndex.foreach {
-              case ((t, x), i) =>
-                castToPuppable(ctx, x, ctx.exprType(x), t)
-                if (i < (list.length - 1)) ctx << ","
-            }
-          } << ")"
-        case (_: EirTupleType, _) =>
-          val tmp = ctx.temporary
-          ctx << "([](" << ctx.typeFor(ours) << tmp << ")" << "{" << {
-            "return " + toPupable((ctx, expr))(tmp, (ours, theirs)) + ";"
-          } << "})(" << str() << ")"
-        case (_, _) => ctx << toPupable((ctx, expr))(str(), (ours, theirs))
-      }
     } else {
-      ctx << str()
-    }
-  }
-
-  def toPupable(ctx: (CodeGenerationContext, EirExpressionNode))(current: String, types: (EirType, EirType)): String = {
-    // assumes ours, theirs for types
-    types match {
-      case (a: EirTupleType, b: EirTupleType) =>
-        val ours = a.children.map(ctx._1.resolve[EirType])
-        val theirs = b.children.map(ctx._1.resolve[EirType])
-        "std::make_tuple(" + ours.zip(theirs).zipWithIndex.map{
-          case (tys, idx) => toPupable(ctx)(s"std::get<$idx>($current)", tys)
-        }.mkString(",") +")"
-      case (t, _) if t.isTransient => Errors.cannotSerialize(ctx._2, t)
-      case (_, t) if t.isTrait => s"ergoline::to_pupable($current)"
-      case _ => current
+      ctx << expr
     }
   }
 
@@ -196,8 +187,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     (ctx.exprType(t._1), theirs) match {
       case (a: EirProxy, Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << ctx.nameFor(b) << "(" << t._1 << ")"
-      case (a, Some(b)) if isEntryArgument(t._2) =>
-        ctx << castToPuppable(ctx, t._1, a, b)
+      case (a, Some(_)) if isEntryArgument(t._2) =>
+        ctx << castToPuppable(ctx, t._1, a)
       case _ => ctx << t._1
     }
   }
@@ -231,10 +222,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def visitCallback(ctx: CodeGenerationContext, target: EirExpressionNode, isReduction: Boolean): Unit = {
     target match {
-      case EirScopedSymbol(_proxy, _field) =>
+      case EirScopedSymbol(_proxy, _) =>
         val proxy = _proxy.foundType.to[EirProxy]
         val found = asMember(Some(disambiguate(ctx, target)))
-        val field = found.map(ctx.nameFor(_)).getOrElse(Errors.unreachable())
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
           ctx << GenerateProxies.indexFor(ctx, proxy.get, found.map(_.member).to[EirFunction].get)
@@ -485,7 +475,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(",")
       } << {
         val hasPupableParent = x.extendsThis.map(ctx.resolve[EirType]).exists(!_.isTrait)
-        Option.unless(x.isTransient || hasPupableParent)(", public PUP::able")
+        Option.unless(x.isTransient || hasPupableParent)(", public hypercomm::polymorph")
       } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
       }
@@ -500,41 +490,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def pupperFor(ctx: (CodeGenerationContext, EirNode, String))(current: String, ours: EirType): List[String] = {
-    val puper = ctx._3
-    if (GenerateProxies.needsCasting(ours)) ours match {
-      case t: EirTupleType =>
-        t.children
-          .map(ctx._1.resolve[EirType])
-          .zipWithIndex.flatMap{
-          case (t, idx) =>
-            pupperFor(ctx)(s"std::get<$idx>($current)", t)
-        }
-      case _ =>
-        val tmp = {
-          var tmp = ctx._1.temporary
-          while (current == tmp || puper == tmp) tmp += "_"
-          tmp
-        }
-        val typeName = qualifiedNameFor(ctx._1, ctx._2, includeTemplates = true)(ours)
-        List("{",
-          s"PUP::able* $tmp = ($puper.isUnpacking()) ? nullptr : dynamic_cast<PUP::able*>($current.get());",
-          s"$puper(&$tmp);",
-          s"if ($puper.isUnpacking()) $current = std::dynamic_pointer_cast<$typeName>(std::shared_ptr<PUP::able>($tmp));",
-          "}")
-    } else {
-      List(s"$puper | $current;")
-    }
+    List(s"${ctx._3} | $current;")
   }
 
   def makePupper(ctx: CodeGenerationContext, x: EirClassLike, isMember: Boolean = false): Unit = {
     // TODO check to ensure user does not override
     val puper = ctx.temporary
-    val header = if (isMember) s"virtual void pup(PUP::er &$puper) override" else s"void ${ctx.nameFor(x)}::pup(PUP::er &$puper)"
+    val header = if (isMember) s"virtual void __pup__(hypercomm::serdes &$puper) override" else s"void ${ctx.nameFor(x)}::__pup__(hypercomm::serdes &$puper)"
     ctx << header << "{" << {
-      val parents = puppingParents(ctx, x) match {
-        case Nil => List(s"PUP::able::pup($puper);")
-        case ps => ps.map(ctx.nameFor(_)).map(_ + s"::pup($puper);")
-      }
+      val parents = puppingParents(ctx, x).map(ctx.nameFor(_)).map(_ + s"::__pup__($puper);")
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty && !m.isStatic => d
       }).flatMap(d => {
@@ -887,13 +851,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }), ",")
     } << "{ }"
     ctx << s"$name() { }"
-    ctx << s"$name(CkMigrateMessage *m): ergoline::function<${args mkString ","}>(m) { }"
-    ctx << s"PUPable_decl_inside($name);"
-    ctx << "virtual void pup(PUP::er& _) override" << "{"
+    ctx << s"$name(PUP::reconstruct __tag__): ergoline::function<${args mkString ","}>(__tag__) { }"
+    ctx << "virtual void __pup__(hypercomm::serdes& _) override" << "{"
     if (isTransient) {
       ctx << "CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
     } else {
-      ctx << "PUP::able::pup(_);"
       ctx << captures.zip(ctypes).flatMap({
         case (n, t) => pupperFor((ctx, lambda, "_"))(n.name, t)
       })

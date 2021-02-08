@@ -1,19 +1,31 @@
 #ifndef __HYPERCOMM_PUP_HPP__
 #define __HYPERCOMM_PUP_HPP__
 
-#include <ergoline/array.hpp>
 #include <hypercomm/serdes.hpp>
 #include <hypercomm/traits.hpp>
+#include <hypercomm/polymorph.hpp>
+
+#include <ergoline/hash.hpp>
+#include <ergoline/array.hpp>
 
 namespace hypercomm {
 
 using namespace ergoline;
 
 template <typename T>
+inline void pup(serdes& s, const T& t);
+
+template <typename T>
 inline void pup(serdes& s, T& t);
 
 template <typename... Ts>
 inline void pup(serdes& s, const std::tuple<Ts...>& t);
+
+template <typename T>
+inline serdes& operator|(serdes& s, T& t) {
+  pup(s, t);
+  return s;
+}
 
 template <typename T>
 inline size_t size(const T& t) {
@@ -25,12 +37,12 @@ inline size_t size(const T& t) {
 template <typename T>
 void interpup(PUP::er& p, T& t) {
   if (typeid(p) == typeid(PUP::fromMem)) {
-    auto mem = static_cast<PUP::fromMem&>(p);
+    auto& mem = *static_cast<PUP::fromMem*>(&p);
     auto s = serdes::make_unpacker(nullptr, mem.get_current_pointer());
     pup(s, t);
     mem.advance(s.size());
   } else if (typeid(p) == typeid(PUP::toMem)) {
-    auto mem = static_cast<PUP::toMem&>(p);
+    auto& mem = *static_cast<PUP::toMem*>(&p);
     auto s = serdes::make_packer(mem.get_current_pointer());
     pup(s, t);
     mem.advance(s.size());
@@ -43,6 +55,51 @@ void interpup(PUP::er& p, T& t) {
 
 template <typename T, typename Enable = void>
 struct puper;
+
+template <typename K, typename V>
+struct puper<ergoline::hash_map<K, V>> {
+  inline static void impl(serdes& s, ergoline::hash_map<K, V>& t) {
+    if (s.unpacking()) {
+      std::size_t size;
+      s.copy(&size);
+      ::new (&t) ergoline::hash_map<K, V>(size);
+      for (auto i = 0; i < size; i++) {
+        std::tuple<K, V> pair;
+        pup(s, pair);
+        t[std::get<0>(pair)] = std::get<1>(pair);
+      }
+    } else {
+      auto size = t.size();
+      s.copy(&size);
+      for (auto& pair : t) {
+        pup(s, pair.first);
+        pup(s, pair.second);
+      }
+    }
+  }
+};
+
+template <typename T>
+struct puper<std::deque<T>> {
+  inline static void impl(serdes& s, std::deque<T>& t) {
+    if (s.unpacking()) {
+      std::size_t size;
+      s.copy(&size);
+      ::new (&t) std::deque<T>(size);
+      for (auto i = 0; i < size; i++) {
+        PUP::detail::TemporaryObjectHolder<T> h;
+        pup(s, h.t);
+        t.push_back(h.t);
+      }
+    } else {
+      auto size = t.size();
+      s.copy(&size);
+      for (auto& i : t) {
+        pup(s, i);
+      }
+    }
+  }
+};
 
 template <typename T>
 struct puper<T, typename std::enable_if<PUP::as_bytes<T>::value>::type> {
@@ -83,7 +140,7 @@ struct puper<T, typename std::enable_if<hypercomm::built_in<T>::value>::type> {
 
 template <typename T>
 struct puper<std::shared_ptr<T>,
-             typename std::enable_if<hypercomm::is_pupable<T>::value>::type> {
+             typename std::enable_if<std::is_base_of<PUP::able, T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
       PUP::able* p = nullptr;
@@ -93,6 +150,36 @@ struct puper<std::shared_ptr<T>,
     } else {
       auto p = dynamic_cast<PUP::able*>(t.get());
       pup<PUP::able*>(s, p);
+    }
+  }
+};
+
+template <typename T>
+struct puper<std::shared_ptr<T>,
+             typename std::enable_if<std::is_base_of<ergoline::object, T>::value || std::is_base_of<hypercomm::polymorph, T>::value>::type> {
+  inline static void impl(serdes& s, std::shared_ptr<T>& t) {
+    if (s.unpacking()) {
+      bool is_nullptr;
+      s.copy(&is_nullptr);
+      if (!is_nullptr) {
+        hypercomm::polymorph_id_t id;
+        s.copy(&id);
+        auto p = hypercomm::instantiate(id);
+        p->__pup__(s);
+        ::new (&t) std::shared_ptr<T>(std::dynamic_pointer_cast<T>(p));
+      } else {
+        ::new (&t) std::shared_ptr<T>();
+      }
+    } else {
+      auto p = dynamic_cast<hypercomm::polymorph*>(t.get());
+      if (t && (p == nullptr)) CkAbort("could not cast %s to pup'able", typeid(t.get()).name());
+      bool is_nullptr = p == nullptr;
+      s.copy(&is_nullptr);
+      if (!is_nullptr) {
+        auto id = hypercomm::identify(*p);
+        s.copy(&id);
+        p->__pup__(s);
+      }
     }
   }
 };
@@ -183,6 +270,11 @@ struct puper<ergoline::array<T, N>> {
     }
   }
 };
+
+template <typename T>
+inline void pup(serdes& s, const T& t) {
+  puper<T>::impl(s, const_cast<T&>(t));
+}
 
 template <typename T>
 inline void pup(serdes& s, T& t) {

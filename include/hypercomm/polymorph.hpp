@@ -45,6 +45,13 @@ polymorph_id_t enroll(const std::type_index& index, const allocator_t& alloc) {
   return id;
 }
 
+template<typename T>
+inline polymorph_id_t enroll() {
+  return enroll(std::type_index(typeid(T)), []() {
+    return std::make_shared<T>(PUP::reconstruct{});
+  });
+}
+
 inline polymorph_id_t identify(const std::type_index& index) {
   return (CsvAccess(type_registry_))[index];
 }

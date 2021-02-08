@@ -2,6 +2,8 @@
 #define __HYPERCOMM_TRAITS_HPP__
 
 #include <ergoline/object.hpp>
+#include <ergoline/future.hpp>
+#include <hypercomm/polymorph.hpp>
 
 namespace hypercomm {
 template <class T, typename Enable = void>
@@ -10,7 +12,7 @@ struct built_in {
 };
 
 template <class T>
-struct built_in<ck::future<T>> {
+struct built_in<ergoline::future<T>> {
   enum { value = 1 };
 };
 
@@ -38,7 +40,8 @@ struct is_pupable {
 template <class T>
 struct is_pupable<T,
   typename std::enable_if<std::is_base_of<PUP::able, T>::value ||
-                          std::is_base_of<ergoline::object, T>::value>::type> {
+                          std::is_base_of<ergoline::object, T>::value ||
+                          std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   enum { value = 1 };
 };
 

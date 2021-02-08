@@ -46,7 +46,7 @@ object Processes {
 
   // NOTE This will go away once passes are implemented
   def generateCi(): String = {
-    GenerateCi.visitAll(checked, lambdas)
+    GenerateCi.visitAll(checked)
   }
 
   // TODO this logic should be moved into its own file or generate cpp
@@ -135,6 +135,7 @@ object Processes {
     })
     kids.foreach(GenerateCpp.visit(ctx, _))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
+    GenerateCpp.registerPolymorphs(ctx, checked, lambdas)
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",

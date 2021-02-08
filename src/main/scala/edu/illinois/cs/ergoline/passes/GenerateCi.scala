@@ -10,39 +10,12 @@ import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateCi {
 
-  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]],
-                         val lambdas: Map[EirNamespace, List[EirLambdaExpression]]) extends CodeGenerationContext("ci") {
-    val puppables: Iterable[EirSpecializable] = checked.keys.filter({
-      case _: EirProxy => false
-      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
-      case _ => false
-    })
-  }
+  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {}
 
-  def visitPuppables(ctx: CiUnparseContext): Unit = {
-    // TODO this is not nesting aware!
-    val grouped = ctx.puppables.groupBy(Find.parentOf[EirNamespace](_).getOrElse(???))
-    grouped.foreach({
-      case (ns, pupables) =>
-        ctx << s"namespace ${ns.fullyQualifiedName.mkString("::")}" << "{"
-        ctx << ctx.lambdas.getOrElse(ns, Nil).map(ctx.nameFor(_)).map(name => s"PUPable $name;")
-        ctx << pupables.flatMap(x => {
-          if (x.templateArgs.isEmpty) List(s"PUPable ${ctx.nameFor(x, usage=Some(ns))};")
-          else ctx.checked(x).map(y => s"PUPable ${
-            ctx.specialize(x, y)
-            val ret: String = ctx.nameFor(x, usage=Some(ns))
-            ctx.leave(y)
-            ret
-          };")
-        })
-        ctx << "}"
-    })
-  }
-
-  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]], lambdas: Map[EirNamespace, List[EirLambdaExpression]]): String = {
-    val ctx = new CiUnparseContext(checked, lambdas)
+  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
+    val ctx = new CiUnparseContext(checked)
     ctx << "mainmodule generate" << "{"
-    visitPuppables(ctx)
+    ctx << "initnode void enroll_polymorphs(void);"
     ProxyManager.proxies
       .filterNot(x => x.base.isAbstract || x.isElement)
       .map(x => (x.namespaces.toList, x))

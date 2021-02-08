@@ -2,10 +2,10 @@ package ck;
 
 import ergoline::bool;
 
-@system(alias="ck::future") class future<T> {
+@system(alias="ergoline::future",fromHeader="ergoline/future.hpp")
+class future<T> {
     @system def set(t: T);
     @system @sync def get(): T;
     @system(alias="is_ready") def isReady(): bool;
-    @system def release();
-    @system def apply(): future<T>;
+    @system static def apply(): future<T>;
 }

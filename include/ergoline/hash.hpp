@@ -7,7 +7,9 @@
 #include <functional>
 #include <type_traits>
 #include <unordered_map>
+
 #include "charm++.h"
+#include "future.hpp"
 #include "object.hpp"
 
 namespace ergoline {
@@ -15,24 +17,6 @@ namespace hash_utils {
 
 template <bool B>
 using Requires = PUP::Requires<B>;
-
-template <class, typename Enable = void>
-struct hash;
-
-template <class T>
-inline void hash_combine(std::size_t& seed, const T& v) {
-  hash<T> hasher;
-  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
-
-template <class T>
-inline std::size_t hash_iterable(const T& t) {
-  std::size_t seed = 0;
-  for (auto i : t) {
-    hash_combine(seed, i);
-  }
-  return seed;
-}
 
 template <class T>
 struct hash<T,
@@ -82,14 +66,11 @@ struct hash<std::deque<T>> {
 };
 
 template <class T>
-struct hash<ck::future<T>> {
-  std::size_t operator()(const ck::future<T>& t) const {
-    // ADD WHEN PR#3203 IS MERGED
-    // auto handle = t.handle();
-    // std::size_t seed = std::hash<CkFutureID>()(handle.id);
-    // hash_combine(seed, handle.pe);
-    // return seed;
-    return 0;
+struct hash<ergoline::future<T>> {
+  std::size_t operator()(const ergoline::future<T>& t) const {
+    std::size_t seed = std::hash<CkFutureID>()(t.f.id);
+    hash_combine(seed, t.f.pe);
+    return seed;
   }
 };
 
@@ -198,9 +179,6 @@ struct hash<std::tuple<Args...>> {
   }
 };
 }
-
-template <typename K, typename V>
-using hash_map = std::unordered_map<K, V, hash_utils::hash<K>, equal_to<K>>;
 
 template <typename K, typename V>
 inline bool map_contains(const hash_map<K, V>& map, const K& k) {
