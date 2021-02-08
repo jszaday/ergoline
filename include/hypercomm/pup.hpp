@@ -159,19 +159,18 @@ struct puper<std::shared_ptr<T>,
 namespace {
   template <typename T, typename IdentifyFn>
   inline static void pack_ptr(serdes& s, std::shared_ptr<T>& p, const IdentifyFn& f) {
-    auto is_nullptr = p == nullptr;
-    if (is_nullptr) {
+    if (!p) {
       ptr_record rec(nullptr);
-      s.copy(&rec);
+      pup(s, rec);
     } else {
       auto search = s.records.find(p);
       if (search != s.records.end()) {
         ptr_record rec(search->second);
-        s.copy(&rec);
+        pup(s, rec);
       } else {
         auto id = s.records.size();
         ptr_record rec(id, f());
-        s.copy(&rec);
+        pup(s, rec);
         s.records[p] = id;
         pup(s, *p);
       }
@@ -186,13 +185,35 @@ struct puper<polymorph> {
   }
 };
 
+template<>
+struct puper<ptr_record> {
+  inline static void impl(serdes& s, ptr_record& t) {
+    auto ty = reinterpret_cast<std::uint8_t*>(&t.t);
+    s.copy(ty);
+    switch (*ty) {
+      case ptr_record::REFERENCE:
+        pup(s, t.d.reference.id);
+        break;
+      case ptr_record::INSTANCE:
+        pup(s, t.d.instance.id);
+        pup(s, t.d.instance.ty);
+        break;
+      case ptr_record::IGNORE:
+        break;
+      default:
+        CkAbort("unknown record type %d", static_cast<int>(*ty));
+        break;
+    }
+  }
+};
+
 template <typename T>
 struct puper<std::shared_ptr<T>,
              typename std::enable_if<std::is_base_of<ergoline::object, T>::value || std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
       ptr_record rec;
-      s.copy(&rec);
+      pup(s, rec);
       if (rec.is_null()) {
         ::new (&t) std::shared_ptr<T>();
       } else {
@@ -225,7 +246,7 @@ struct puper<std::shared_ptr<T>,
              typename std::enable_if<!hypercomm::is_pupable<T>::value>::type> {
   inline static void unpack(serdes& s, std::shared_ptr<T>& t) {
     ptr_record rec;
-    s.copy(&rec);
+    pup(s, rec);
     if (rec.is_null()) {
       ::new (&t) std::shared_ptr<T>();
     } else if (rec.is_instance()) {
@@ -235,7 +256,6 @@ struct puper<std::shared_ptr<T>,
         s.advance<T>();
       } else {
         auto p = static_cast<T*>(malloc(sizeof(T)));
-        ergoline::reconstruct(p);
         ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
       }
       s.instances[rec.d.instance.id] = t;
@@ -292,14 +312,18 @@ struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) == 0)>::t
 template <typename T, std::size_t N>
 struct puper<ergoline::array<T, N>> {
   inline static void impl(serdes& s, ergoline::array<T, N>& t) {
+    if (s.unpacking()) {
+      reconstruct(&t);
+    }
+
     pup(s, t.shape);
 
     if (s.unpacking()) {
-      reconstruct(&t);
       if (PUP::as_bytes<T>::value) {
         if (s.source) {
           t.source = s.source;
           t.buffer = reinterpret_cast<T*>(s.current);
+          s.advance(sizeof(T) * t.size());
         } else {
           t.alloc(false, false);
           s.copy(t.buffer, t.size());

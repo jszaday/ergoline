@@ -89,8 +89,8 @@ struct ptr_record {
   };
 
   enum type_t: std::uint8_t {
-    IGNORE,
     UNKNOWN,
+    IGNORE,
     REFERENCE,
     INSTANCE
   };
