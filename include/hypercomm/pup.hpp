@@ -156,6 +156,36 @@ struct puper<std::shared_ptr<T>,
   }
 };
 
+namespace {
+  template <typename T, typename IdentifyFn>
+  inline static void pack_ptr(serdes& s, std::shared_ptr<T>& p, const IdentifyFn& f) {
+    auto is_nullptr = p == nullptr;
+    if (is_nullptr) {
+      ptr_record rec(nullptr);
+      s.copy(&rec);
+    } else {
+      auto search = s.records.find(p);
+      if (search != s.records.end()) {
+        ptr_record rec(search->second);
+        s.copy(&rec);
+      } else {
+        auto id = s.records.size();
+        ptr_record rec(id, f());
+        s.copy(&rec);
+        s.records[p] = id;
+        pup(s, *p);
+      }
+    }
+  }
+}
+
+template<>
+struct puper<polymorph> {
+  inline static void impl(serdes& s, polymorph& t) {
+    t.__pup__(s);
+  }
+};
+
 template <typename T>
 struct puper<std::shared_ptr<T>,
              typename std::enable_if<std::is_base_of<ergoline::object, T>::value || std::is_base_of<hypercomm::polymorph, T>::value>::type> {
@@ -180,24 +210,12 @@ struct puper<std::shared_ptr<T>,
       }
     } else {
       auto p = std::dynamic_pointer_cast<polymorph>(t);
+#if CMK_ERROR_CHECKING
       if (t && (p == nullptr)) CkAbort("could not cast %s to pup'able", typeid(t.get()).name());
-      bool is_nullptr = p == nullptr;
-      if (is_nullptr) {
-        ptr_record rec(nullptr);
-        s.copy(&rec);
-      } else {
-        auto search = s.records.find(p);
-        if (search != s.records.end()) {
-          ptr_record rec(search->second);
-          s.copy(&rec);
-        } else {
-          auto id = s.records.size();
-          ptr_record rec(id, hypercomm::identify(*p));
-          s.copy(&rec);
-          s.records[p] = id;
-          p->__pup__(s);
-        }
-      }
+#endif
+      pack_ptr(s, p, [p]() {
+        return hypercomm::identify(*p);
+      });
     }
   }
 };
@@ -206,18 +224,29 @@ template <typename T>
 struct puper<std::shared_ptr<T>,
              typename std::enable_if<!hypercomm::is_pupable<T>::value>::type> {
   inline static void unpack(serdes& s, std::shared_ptr<T>& t) {
-    const auto& is_nullptr = *reinterpret_cast<bool*>(s.current);
-    s.advance<bool>();
-    if (is_nullptr) {
+    ptr_record rec;
+    s.copy(&rec);
+    if (rec.is_null()) {
       ::new (&t) std::shared_ptr<T>();
-    } else if (is_bytes<T>()) {
-      ::new (&t) std::shared_ptr<T>(s.source, reinterpret_cast<T*>(s.current));
-      s.advance<T>();
+    } else if (rec.is_instance()) {
+      if (is_bytes<T>()) {
+        ::new (&t)
+            std::shared_ptr<T>(s.source, reinterpret_cast<T*>(s.current));
+        s.advance<T>();
+      } else {
+        auto p = static_cast<T*>(malloc(sizeof(T)));
+        ergoline::reconstruct(p);
+        ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
+      }
+      s.instances[rec.d.instance.id] = t;
+      if (!is_bytes<T>()) {
+        pup(s, *t);
+      }
+    } else if (rec.is_reference()) {
+      ::new (&t) std::shared_ptr<T>(
+          std::static_pointer_cast<T>(s.instances[rec.d.reference.id].lock()));
     } else {
-      auto p = static_cast<T*>(malloc(sizeof(T)));
-      ergoline::reconstruct(p);
-      pup(s, *p);
-      ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
+      CkAbort("unknown record type %d", static_cast<int>(rec.t));
     }
   }
 
@@ -225,11 +254,7 @@ struct puper<std::shared_ptr<T>,
     if (s.unpacking()) {
       unpack(s, t);
     } else {
-      auto is_nullptr = nullptr == t;
-      pup(s, is_nullptr);
-      if (!is_nullptr) {
-        pup(s, *t);
-      }
+      pack_ptr(s, t, []() { return 0; });
     }
   }
 };
