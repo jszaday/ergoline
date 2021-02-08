@@ -40,8 +40,8 @@ struct array : public hashable {
   inline buffer_t begin() { return buffer; }
   inline buffer_t end() { return buffer + size(); }
 
-  inline const buffer_t begin() const { return const_cast<const buffer_t>(buffer); }
-  inline const buffer_t end() const { return const_cast<const buffer_t>(buffer + size()); }
+  inline const T* begin() const { return const_cast<const buffer_t>(buffer); }
+  inline const T* end() const { return const_cast<const buffer_t>(buffer + size()); }
 
   // TODO make constexpr
   inline std::size_t size() const {

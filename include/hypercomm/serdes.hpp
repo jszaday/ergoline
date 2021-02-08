@@ -99,7 +99,7 @@ struct ptr_record {
   type_t t;
 
   ptr_record(): t(UNKNOWN) {}
-  ptr_record(nullptr_t): t(IGNORE) {}
+  ptr_record(std::nullptr_t): t(IGNORE) {}
   ptr_record(const ptr_id_t &id): t(REFERENCE) { d.reference.id = id; }
   ptr_record(const ptr_id_t &id, const polymorph_id_t& ty): t(INSTANCE) {
     d.instance.id = id;
