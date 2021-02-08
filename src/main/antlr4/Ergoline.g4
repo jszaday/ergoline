@@ -275,7 +275,7 @@ relationalExpression
 
 equalityExpression
     :   relationalExpression
-    |   relationalExpression ('!=' || '==' || '===') equalityExpression
+    |   relationalExpression ('!=' || '==' || '===' || '!==') equalityExpression
     ;
 
 andExpression
