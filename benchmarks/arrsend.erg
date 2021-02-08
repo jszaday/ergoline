@@ -1,0 +1,64 @@
+package benchmarks;
+
+import ergoline::_;
+import ck;
+
+@main class arrsend {
+    val nIters: int;
+    val nElements: int;
+    val hldr: holder;
+    val arr: array<double>;
+    val rcvrs: receiver@array1d;
+
+    @entry def arrsend() {
+        nElements = ck::numPes();
+        nIters = 256;
+        arr = new array<double>(nIters * 512);
+        hldr = new holder(arr);
+        rcvrs = new receiver@array1d(nElements);
+        self@begin();
+    }
+
+    @threaded @entry def begin() {
+        var avgArrTime = 0.0;
+        var avgObjTime = 0.0;
+
+        for (var i = 0; i < (nIters * 2); i += 1) {
+            val isArrIter = (i % 2) == 0;
+            val start = ck::wallTime();
+
+            for (var j = 0; j < nElements; j += 1) {
+                if (isArrIter) {
+                    rcvrs[j].receive(arr);
+                } else {
+                    rcvrs[j].receive(hldr);
+                }
+            }
+
+            ck::awaitQuiescence();
+            val end = ck::wallTime();
+
+            if (isArrIter) {
+                avgArrTime += end - start;
+            } else {
+                avgObjTime += end - start;
+            }
+        }
+
+        println(`on avg, arrays took: ${avgArrTime / nIters}`);
+        println(`on avg, objects took: ${avgObjTime / nIters}`);
+
+        exit();
+    }
+}
+
+class receiver {
+    @entry def receiver() {}
+    @entry def receive(h: holder) {}
+    @entry def receive(a: array<double>) {}
+}
+
+class holder {
+    val arr: array<double>;
+    def holder(=arr: array<double>) {}
+}
