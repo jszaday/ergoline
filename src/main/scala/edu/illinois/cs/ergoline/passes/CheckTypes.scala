@@ -475,7 +475,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
     val op = if (node.op == "!=") "==" else node.op
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
-    if (op == "&&" || op == "||") {
+    if (op == "===" || op == "!==") {
+      val (lhsTy, rhsTy) = (visit(ctx, node.lhs), visit(ctx, node.rhs))
+      if (lhsTy == rhsTy) {
+        return boolTy
+      } else {
+        Errors.unableToUnify(node, lhsTy, rhsTy)
+      }
+    } else if (op == "&&" || op == "||") {
       val (lhsTy, rhsTy) = (visit(ctx, node.lhs), visit(ctx, node.rhs))
       val failure =
         Option.when(!lhsTy.canAssignTo(boolTy))(lhsTy).orElse(

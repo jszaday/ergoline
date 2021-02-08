@@ -32,9 +32,12 @@ import ck;
         val gs = hs[0];
         var i = 16384;
 
+        // "===" is the identity comparator, which checks
+        // whether two variables "point" to the same object
+        assert(gs[0] === gs[1]);
+        assert(gs[0] === hs[1].get());
+
         assert(gs[0].get() == hs[2]);
-        assert(gs[0].get() == gs[1].get());
-        assert(gs[0].get() == hs[1].get().get());
 
         val f = (j: int) => {
             println("lambda function called!");

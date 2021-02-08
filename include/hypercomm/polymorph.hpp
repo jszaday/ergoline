@@ -17,7 +17,6 @@ struct polymorph {
   virtual void __pup__(serdes& s) = 0;
 };
 
-using polymorph_id_t = std::size_t;
 using polymorph_ptr_t = std::shared_ptr<polymorph>;
 using allocator_t = std::function<polymorph_ptr_t(void)>;
 

@@ -161,26 +161,42 @@ struct puper<std::shared_ptr<T>,
              typename std::enable_if<std::is_base_of<ergoline::object, T>::value || std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
-      bool is_nullptr;
-      s.copy(&is_nullptr);
-      if (!is_nullptr) {
-        hypercomm::polymorph_id_t id;
-        s.copy(&id);
-        auto p = hypercomm::instantiate(id);
-        p->__pup__(s);
-        ::new (&t) std::shared_ptr<T>(std::dynamic_pointer_cast<T>(p));
-      } else {
+      ptr_record rec;
+      s.copy(&rec);
+      if (rec.is_null()) {
         ::new (&t) std::shared_ptr<T>();
+      } else {
+        std::shared_ptr<polymorph> p;
+        if (rec.is_instance()) {
+          p = hypercomm::instantiate(rec.d.instance.ty);
+          s.instances[rec.d.instance.id] = p;
+          p->__pup__(s);
+        } else if (rec.is_reference()) {
+          p = std::static_pointer_cast<polymorph>(s.instances[rec.d.reference.id].lock());
+        } else {
+          CkAbort("unknown record type %d", static_cast<int>(rec.t));
+        }
+        ::new (&t) std::shared_ptr<T>(std::dynamic_pointer_cast<T>(p));
       }
     } else {
-      auto p = dynamic_cast<hypercomm::polymorph*>(t.get());
+      auto p = std::dynamic_pointer_cast<polymorph>(t);
       if (t && (p == nullptr)) CkAbort("could not cast %s to pup'able", typeid(t.get()).name());
       bool is_nullptr = p == nullptr;
-      s.copy(&is_nullptr);
-      if (!is_nullptr) {
-        auto id = hypercomm::identify(*p);
-        s.copy(&id);
-        p->__pup__(s);
+      if (is_nullptr) {
+        ptr_record rec(nullptr);
+        s.copy(&rec);
+      } else {
+        auto search = s.records.find(p);
+        if (search != s.records.end()) {
+          ptr_record rec(search->second);
+          s.copy(&rec);
+        } else {
+          auto id = s.records.size();
+          ptr_record rec(id, hypercomm::identify(*p));
+          s.copy(&rec);
+          s.records[p] = id;
+          p->__pup__(s);
+        }
       }
     }
   }

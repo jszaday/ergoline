@@ -642,7 +642,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isSystem = target.forall(_.isSystem)
     ctx << Option.when(isSystem)("(") << x.lhs
     if (isSystem) {
-      ctx << x.op
+      ctx << {
+        if (x.op == "===" || x.op == "!==") x.op.init
+        else x.op
+      }
     } else {
       ctx << "->" << target.to[EirNamedNode].map(_.name) << "("
     }

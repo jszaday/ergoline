@@ -3,8 +3,13 @@
 
 #include <algorithm>
 #include <memory>
+#include <map>
 
 namespace hypercomm {
+
+using ptr_id_t = std::size_t;
+using polymorph_id_t = std::size_t;
+struct ptr_record;
 
 struct serdes {
   enum state_t { SIZING, PACKING, UNPACKING };
@@ -13,6 +18,8 @@ struct serdes {
   const char* start;
   char* current;
   const state_t state;
+  std::map<std::weak_ptr<void>, ptr_id_t, std::owner_less<std::weak_ptr<void>>> records;
+  std::map<ptr_id_t, std::weak_ptr<void>> instances;
 
   inline bool unpacking() { return state == state_t::UNPACKING; }
 
@@ -69,6 +76,41 @@ struct serdes {
     };
   }
 };
+
+struct ptr_record {
+  union data_t {
+    struct s_reference {
+      ptr_id_t id;
+    } reference;
+    struct s_instance {
+      ptr_id_t id;
+      polymorph_id_t ty;
+    } instance;
+  };
+
+  enum type_t: std::uint8_t {
+    IGNORE,
+    UNKNOWN,
+    REFERENCE,
+    INSTANCE
+  };
+
+  data_t d;
+  type_t t;
+
+  ptr_record(): t(UNKNOWN) {}
+  ptr_record(nullptr_t): t(IGNORE) {}
+  ptr_record(const ptr_id_t &id): t(REFERENCE) { d.reference.id = id; }
+  ptr_record(const ptr_id_t &id, const polymorph_id_t& ty): t(INSTANCE) {
+    d.instance.id = id;
+    d.instance.ty = ty;
+  }
+
+  inline bool is_null() const { return t == IGNORE; }
+  inline bool is_instance() const { return t == INSTANCE; }
+  inline bool is_reference() const { return t == REFERENCE; }
+};
+
 }
 
 #endif
