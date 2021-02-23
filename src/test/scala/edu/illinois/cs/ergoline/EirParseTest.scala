@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirTupleType
 import edu.illinois.cs.ergoline.passes.CheckTypes.TypeCheckException
-import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext, UnparseAst}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
@@ -49,6 +49,15 @@ class EirParseTest extends FunSuite {
       case EirBinaryExpression(_, _, "+", EirBinaryExpression(_, _, "*", _)) =>
     }
   }
+
+  test("some slicing stuff") {
+    EirGlobalNamespace.clear()
+    val v = new Visitor
+    val s = "a[:, :1, 1:, :1:2, 1:2:, 1:2:3]"
+    val x = v.visitExpression(parserFromString(s).expression())
+    UnparseAst.visit(x) shouldEqual s
+  }
+
   test("tuple tests") {
     EirGlobalNamespace.clear()
     val v = new Visitor
