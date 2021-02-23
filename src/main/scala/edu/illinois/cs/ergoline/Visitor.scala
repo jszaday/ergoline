@@ -342,6 +342,16 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
+  override def visitSliceExpression(ctx: SliceExpressionContext): EirNode = {
+    Option(ctx.single).map(visitAs[EirExpressionNode]).getOrElse({
+      enter(EirSlice(None, None, None)(parent), (s: EirSlice) => {
+        s.start = Option(ctx.start).map(visitAs[EirExpressionNode])
+        s.step = Option(ctx.step).map(visitAs[EirExpressionNode])
+        s.end = Option(ctx.end).map(visitAs[EirExpressionNode])
+      })
+    })
+  }
+
   override def visitPostfixExpression(ctx: PostfixExpressionContext): EirExpressionNode = {
     if (ctx.Identifier() != null) {
       enter(EirScopedSymbol[EirNode](null, null)(parent), (f: EirScopedSymbol[EirNode]) => {
@@ -351,7 +361,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     } else if (ctx.arrArgs != null) {
       enter(EirArrayReference(parent, null, null), (f: EirArrayReference) => {
         f.target = visitAs[EirExpressionNode](ctx.postfixExpression())
-        f.args = ctx.arrArgs.mapOrEmpty(_.expression, visitAs[EirExpressionNode])
+        f.args = ctx.arrArgs.mapOrEmpty(_.sliceExpression, visitAs[EirExpressionNode])
       })
     } else if (ctx.LParen() != null) {
       enter(EirFunctionCall(parent, null, null, null), (f: EirFunctionCall) => {

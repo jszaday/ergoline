@@ -804,4 +804,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     visit(ctx, x.body)
   }
+
+  override def visitSlice(ctx: TypeCheckContext, x: EirSlice): EirType = ???
 }

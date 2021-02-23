@@ -839,6 +839,12 @@ case class EirSdagWhen(var patterns: List[(EirSymbol[EirNamedNode], EirPatternLi
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
+case class EirSlice(var start: Option[EirExpressionNode], var step: Option[EirExpressionNode], var end: Option[EirExpressionNode])(var parent: Option[EirNode]) extends EirExpressionNode {
+  override def children: Iterable[EirNode] = start ++ step ++ end
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
 //  override def eirType: EirResolvable[EirType] = exprNode.eirType
 //

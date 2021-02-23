@@ -64,9 +64,12 @@ trait EirVisitor[Context, Value] {
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)
       case x: EirTypeAlias => visitTypeAlias(ctx, x)
+      case x: EirSlice => visitSlice(ctx, x)
       case x => error(ctx, x)
     }
   }
+
+  def visitSlice(ctx: Context, x: EirSlice): Value
 
   def visitWhen(ctx: Context, x: EirSdagWhen): Value
   def visitConstantFacade(context: Context, facade: EirConstantFacade): Value

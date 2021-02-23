@@ -324,4 +324,15 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       x.condition.map(visit(ctx, _)).map(" if " + _).getOrElse("")
     } + s" => ${visit(ctx, x.body)}"
   }
+
+  override def visitSlice(ctx: UnparseContext, x: EirSlice): String = {
+    (x.start, x.step, x.end) match {
+      case (None, None, None) => ":"
+      case (Some(x), None, None) => s"${visit(ctx, x)}:"
+      case (Some(x), Some(y), None) => s"${visit(ctx, x)}:${visit(ctx, y)}:"
+      case (Some(x), Some(y), Some(z)) => s"${visit(ctx, x)}:${visit(ctx, y)}:${visit(ctx, z)}"
+      case (None, Some(y), Some(z)) => s":${visit(ctx, y)}:${visit(ctx, z)}"
+      case (None, None, Some(z)) => s":${visit(ctx, z)}"
+    }
+  }
 }

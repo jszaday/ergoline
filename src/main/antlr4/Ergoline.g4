@@ -219,9 +219,18 @@ lambdaExpression
     :   '(' functionArgumentList? ')' LambdaArrow (block | expression)
     ;
 
+sliceExpression
+    :   start=expression? ':' (step=expression ':')? end=expression?
+    |   single=expression
+    ;
+
+sliceExpressionList
+    :   (sliceExpression ',')* sliceExpression
+    ;
+
 postfixExpression
     :   primaryExpression
-    |   postfixExpression '[' arrArgs=expressionList? ']'
+    |   postfixExpression '[' arrArgs=sliceExpressionList ']'
     |   postfixExpression specialization? LParen fnArgs=expressionList? RParen
     |   selfExpression Identifier
     |   postfixExpression '.' Identifier
