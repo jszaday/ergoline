@@ -580,7 +580,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val found = screenCandidates(ctx, prevFc, candidates.view.zip(candidates.map(visit(ctx, _))))
     found match {
       case Some((m, ty)) =>
-        x.disambiguation = Some(ty)
+        x.disambiguation = Some(m)
         prevFc.foreach(x => validate(ctx, m, x))
         ty match {
           case t: EirLambdaType => t

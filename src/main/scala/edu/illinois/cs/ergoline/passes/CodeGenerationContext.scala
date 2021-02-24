@@ -1,8 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -93,10 +94,17 @@ class CodeGenerationContext(val language: String = "cpp") {
     }
   }
 
+  private def makeShared(wrap: Boolean, s: String): String = {
+    if (wrap) s"std::shared_ptr<$s>" else s
+  }
+
   def typeFor(x: EirType, ctx: Option[EirNode]): String = {
     x match {
       case t: EirTupleType => s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
-      case _ => (if (x.isPointer) "std::shared_ptr<%s>" else "%s").format(nameFor(x, ctx))
+      case t: EirTemplatedType if isOption(resolve(t.base)) =>
+        val arg = resolve(t.args.head)
+        makeShared(!arg.isPointer, typeFor(arg, ctx))
+      case _ => makeShared(x.isPointer, nameFor(x, ctx))
     }
   }
 
