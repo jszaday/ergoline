@@ -928,6 +928,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val args = x.args.drop(numTake)
     objTy match {
       case _ if proxy.isDefined =>
+        ctx << "(" << "(" << ctx.nameFor(objTy, Some(x)) << ")"
         ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew("
         if (args.nonEmpty) {
           ctx << "ergoline::pack(" << {
@@ -938,7 +939,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << Option.when(args.nonEmpty)(",")
           ctx << (x.args.slice(0, numTake), ",")
         }
-        ctx << ")"
+        ctx << ")" << ")"
       case t: EirType if t.isPointer =>
         ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {

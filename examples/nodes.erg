@@ -1,0 +1,50 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def main() {
+        (new nodes@nodegroup(new workers@group(self@))).send();
+    }
+
+    @entry def done(i: int) {
+        assert(i == ck::numPes());
+
+        println("[INFO] done, all tests passed.");
+
+        exit();
+    }
+}
+
+class nodes {
+    private val w: workers@group;
+
+    @entry def nodes(=w: workers@group) {}
+
+    @entry def send() {
+        val mine = self[@]index();
+        val start = ck::nodeFirst(mine);
+        val end = start + ck::nodeSize(mine);
+
+        println(`[ND${mine}] sending a message to pes [${start}, ${end}).`);
+
+        for (var i = start; i < end; i += 1) {
+            w[i].recv(mine);
+        }
+    }
+}
+
+class workers {
+    val m: main@;
+
+    @entry def workers(=m: main@) {}
+
+    @entry def recv(i: int) {
+        assert(i == ck::myNode());
+
+        println(`[PE${ck::myPe()}] got the message.`);
+
+        self[@]contribute<int, int>(1, int::plus, m.done);
+    }
+}

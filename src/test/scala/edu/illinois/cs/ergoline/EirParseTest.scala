@@ -53,7 +53,7 @@ class EirParseTest extends FunSuite {
   test("some slicing stuff") {
     EirGlobalNamespace.clear()
     val v = new Visitor
-    val s = "a[:, :1, 1:, :1:2, 1:2:, 1:2:3]"
+    val s = "a[:, :1, 1:, 1:2, :1:2, 1:2:, 1:2:3, :2:]"
     val x = v.visitExpression(parserFromString(s).expression())
     UnparseAst.visit(x) shouldEqual s
   }
