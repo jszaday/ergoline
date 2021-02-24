@@ -928,11 +928,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val args = x.args.drop(numTake)
     objTy match {
       case _ if proxy.isDefined =>
+        ctx << "(" << "(" << ctx.nameFor(objTy, Some(x)) << ")"
         ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew("
         if (args.nonEmpty) {
           ctx << "ergoline::pack(" << {
             visitArguments(ctx)(x.disambiguation, args)
-          } << ")"
+          } << ")" << ")"
         }
         if (numTake > 0) {
           ctx << Option.when(args.nonEmpty)(",")
