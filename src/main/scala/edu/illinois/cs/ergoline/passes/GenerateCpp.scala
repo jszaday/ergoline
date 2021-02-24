@@ -933,13 +933,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (args.nonEmpty) {
           ctx << "ergoline::pack(" << {
             visitArguments(ctx)(x.disambiguation, args)
-          } << ")" << ")"
+          } << ")"
         }
         if (numTake > 0) {
           ctx << Option.when(args.nonEmpty)(",")
           ctx << (x.args.slice(0, numTake), ",")
         }
-        ctx << ")"
+        ctx << ")" << ")"
       case t: EirType if t.isPointer =>
         ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {
