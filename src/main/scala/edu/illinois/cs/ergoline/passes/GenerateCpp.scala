@@ -245,6 +245,38 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def handleOptionMember(ctx: CodeGenerationContext, m: EirMember, base: EirExpressionNode, args: List[EirExpressionNode]): Unit = {
+    val apl = m.name == "apply"
+    val opt = base match {
+      case s: EirScopedSymbol[_] => s.target
+      case _ if apl => base
+      case _ => Errors.unreachable()
+    }
+    val rsv = if (apl) assertValid[EirLambdaType](ctx.typeOf(opt)).to else ctx.typeOf(opt)
+    val ty = ctx.resolve(rsv) match {
+      case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
+      case _ => Errors.unreachable()
+    }
+    val ptr = ty.isPointer
+    m.name match {
+      case "get" => ctx << "(" << Option.unless(ptr)("*") << opt << ")"
+      case "apply" if args.isEmpty => ctx << "nullptr"
+      case "apply" if args.nonEmpty =>
+        if (ptr) ctx << args.head
+        else ctx << "std::make_shared<" << ctx.typeFor(ty, Some(base)) << ">(" << args.head << ")"
+      case "nonEmpty" | "isEmpty" => ctx << "(" << opt << (if (m.name == "nonEmpty") "!=" else "==") << "nullptr" << ")"
+      case _ => ???
+    }
+  }
+
+  def isOption(t: EirType): Boolean =
+    t match {
+      case t: EirClass => (t.name == "option") && (t.parent == globals.ergolineModule)
+      case _ => false
+    }
+
+  def isOption(t: Option[EirNode]): Boolean = t.to[EirType].exists(isOption)
+
   def visitSystemCall(ctx: CodeGenerationContext, target: EirExpressionNode,
                       disambiguated: EirNode, args: List[EirExpressionNode]): Unit = {
     val base = target match {
@@ -292,6 +324,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           }
           case _ => error(ctx, target)
         }
+      case m: EirMember if isOption(disambiguated.parent) => handleOptionMember(ctx, m, target, args)
       case _ : EirMember if static => ctx << s"$name(" << {
         visitArguments(ctx)(Some(disambiguated), base +: args)
       } << ")"

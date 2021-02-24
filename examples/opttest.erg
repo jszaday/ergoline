@@ -1,0 +1,37 @@
+package examples;
+
+import ergoline::_;
+
+class foo {
+    def foo() {}
+
+    def toString(): string {
+        return "foo";
+    }
+}
+
+@main class opttest {
+    @entry def opttest() {
+        val o1 = option<int>(42);
+        val o2 = option<int>();
+
+        check(o1);
+        check(o2);
+
+        val o3 = option<foo>(new foo());
+        val o4 = option<foo>();
+
+        assert(o3.nonEmpty() && o4.isEmpty());
+        println(`gotta' get my ${o3.get()}`);
+
+        exit();
+    }
+
+    def check(o: option<int>) {
+        if (o.nonEmpty()) {
+            println(`optional has value ${o.get()}`);
+        } else {
+            println("optional does not have a value");
+        }
+    }
+}
