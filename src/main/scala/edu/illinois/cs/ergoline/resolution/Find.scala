@@ -28,10 +28,12 @@ object Find {
   def withName[T <: EirNamedNode](name: String): T => Boolean =
     (n: T) => n.name == name
 
-  def descendant(node: EirNode, predicate: EirNode => Option[Boolean]): Iterable[EirNode] = {
-    node.children.zip(node.children.map(predicate)).collect({
-      case (node, Some(x)) => Option.when(x)(node) ++ descendant(node, predicate)
-    }).flatten
+  def descendant(node: EirNode, predicate: EirNode => Option[Boolean], stack: List[EirNode] = Nil): Iterable[EirNode] = {
+    Option.unless(stack.contains(node))({
+      node.children.view.zip(node.children.view.map(predicate)).collect({
+        case (child, Some(x)) => Option.when(x)(child) ++ descendant(child, predicate, stack :+ node)
+      }).flatten
+    }).getOrElse(Nil)
   }
 
   // recursively check all children of a node

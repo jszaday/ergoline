@@ -149,12 +149,8 @@ case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
 
-  var skipType: Boolean = false
-
   // NOTE this _might_ infinitely recurse for self so we skip declType
-  override def children: Iterable[EirNode] = {
-    Option.unless(skipType)(declaredType) ++ initialValue
-  }
+  override def children: Iterable[EirNode] = Iterable(declaredType) ++ initialValue
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
     (initialValue.contains(oldValue) && util.applyOrFalse[EirExpressionNode](x => initialValue = Some(x), newValue)) ||
@@ -201,7 +197,6 @@ object EirClassLike {
     val m = EirMember(parent, null, EirAccessibility.Private)
     val d = EirDeclaration(Some(m), isFinal = true, name, resolvable, None)
     m.member = d
-    d.skipType = true
     m
   }
 }

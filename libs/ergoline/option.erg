@@ -7,5 +7,6 @@ package ergoline;
     @system def nonEmpty(): bool;
     @system def get(): A;
     @system def getOrElse(t: A): A;
+    @system def map<B>(f: (A => B)): option<B>;
     @system def flatMap<B>(f: (A => option<B>)): option<B>;
 }
