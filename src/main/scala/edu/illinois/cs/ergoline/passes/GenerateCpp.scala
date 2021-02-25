@@ -258,13 +258,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => Errors.unreachable()
     }
     val ptr = ty.isPointer
+    val astr = Option.unless(ptr)("*")
+    def wrap(ty: EirType): Option[String] =
+      Option.unless(ty.isPointer)(s"std::make_shared<${ctx.typeFor(ty, Some(base))}>")
     m.name match {
-      case "get" => ctx << "(" << Option.unless(ptr)("*") << opt << ")"
+      case "get" => ctx << "(" << astr << opt << ")"
       case "apply" if args.isEmpty => ctx << "nullptr"
       case "apply" if args.nonEmpty =>
         if (ptr) ctx << args.head
-        else ctx << "std::make_shared<" << ctx.typeFor(ty, Some(base)) << ">(" << args.head << ")"
+        else ctx << wrap(ty) << "(" << args.head << ")"
       case "nonEmpty" | "isEmpty" => ctx << "(" << opt << (if (m.name == "nonEmpty") "!=" else "==") << "nullptr" << ")"
+      case "getOrElse" => ctx << "(" << opt << "?" << astr << opt << ":" << args.head << ")"
+      case "map" | "flatMap" =>
+        val wrapped =
+          Option.when(m.name == "map")(ctx.resolve(assertValid[EirLambdaType](ctx.typeOf(args.head)).to)).flatMap(wrap)
+        ctx << "(" << opt << "?" << wrapped << "((*" << args.head << ")("<< astr << opt << "))" << ":" << "nullptr" << ")"
       case _ => ???
     }
   }
@@ -886,7 +894,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case (n, idx) => s"${n.name}(_$idx)"
       }), ",")
     } << "{ }"
-    ctx << s"$name() { }"
+    //    if () ctx << s"$name() { }"
     ctx << s"$name(PUP::reconstruct __tag__): ergoline::function<${args mkString ","}>(__tag__) { }"
     ctx << "virtual void __pup__(hypercomm::serdes& _) override" << "{"
     if (isTransient) {

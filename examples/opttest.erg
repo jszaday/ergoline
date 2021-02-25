@@ -12,17 +12,21 @@ class foo {
 
 @main class opttest {
     @entry def opttest() {
-        val o1 = option<int>(42);
-        val o2 = option<int>();
+        val o1 = option<foo>(new foo());
+        val o2 = option<foo>();
+        val o3 = o1.map<int>((_: foo) => 42);
+        val o4 = option<int>();
+        val o5 = o1.flatMap<int>((_: foo) => o4);
 
-        check(o1);
-        check(o2);
+        assert(o1.nonEmpty() && o2.isEmpty());
+        println(`gotta' get my ${o1.get()}`);
 
-        val o3 = option<foo>(new foo());
-        val o4 = option<foo>();
+        assert(o3.getOrElse(36) == 42);
+        assert(o4.getOrElse(36) == 36);
 
-        assert(o3.nonEmpty() && o4.isEmpty());
-        println(`gotta' get my ${o3.get()}`);
+        check(o3);
+        check(o4);
+        check(o5);
 
         exit();
     }

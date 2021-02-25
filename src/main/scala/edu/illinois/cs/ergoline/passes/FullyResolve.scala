@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode, EirScopedSymbol}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirImport, EirMember, EirNamedNode, EirNode, EirScopedSymbol}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -32,12 +32,14 @@ object FullyResolve {
     } while (curr.exists(!_.resolved) && curr != prev)
   }
 
-  def seekOthers(node : EirNode): Unit = {
-    node.children.foreach({
-      case _: EirFileSymbol | _: EirPlaceholder[_] | _: EirImport =>
-      case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
-      case child => seekOthers(child)
-    })
+  def seekOthers(node : EirNode, stack: List[EirNode] = Nil): Unit = {
+    if (!stack.contains(node)) {
+      node.children.foreach({
+        case _: EirFileSymbol | _: EirPlaceholder[_] | _: EirImport =>
+        case x: EirResolvable[_] if !x.resolved => fullyResolve(x)
+        case child => seekOthers(child, stack :+ node)
+      })
+    }
   }
 
   def visit(node : EirNode): Unit = {
