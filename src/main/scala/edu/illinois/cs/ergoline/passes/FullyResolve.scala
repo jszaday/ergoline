@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirFileSymbol, EirImport, EirMember, EirNamedNode, EirNode, EirScopedSymbol}
+import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode, EirScopedSymbol}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
