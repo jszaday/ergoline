@@ -6,8 +6,9 @@ import edu.illinois.cs.ergoline.util.Errors
 
 object FullyResolve {
 
-  def seekImports(node : EirNode): Unit = {
-    node.children.foreach({
+  def seekImports(node : EirNode, stack: List[EirNode] = Nil): Unit = {
+    val kids = Option.unless(stack.contains(node))(node.children).getOrElse(Nil)
+    kids.foreach({
       case x: EirImport if !x.resolved => x.resolve()
       case x: EirImport if x.resolved =>
       case x if x.annotation("system").isDefined =>
@@ -15,7 +16,7 @@ object FullyResolve {
         Processes.cppIncludes ++= x.annotation("system")
           .flatMap(_.opts.get("fromHeader").map(_.stripped))
         x
-      case child => seekImports(child)
+      case child => seekImports(child, stack :+ node)
     })
   }
 
