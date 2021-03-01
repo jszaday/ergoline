@@ -54,7 +54,6 @@ class sdagtest {
             }
         }
 
-        // TODO enable inference of template args
-        self[@]contribute<int, int>(idx, int::plus, mainProxy.done);
+        self[@]contribute(idx, int::plus, mainProxy.done);
     }
 }

@@ -262,24 +262,70 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
-  def inferSpecialization(s: EirSpecializable, args: List[EirType]): Option[EirSpecialization] = {
-    None
+  /** Merges two maps of type arguments to types, using unification.
+   *  Propagates unification errors as null to indicate incompatibility
+   */
+  private def merge(a: Map[EirTemplateArgument, EirType], b: Map[EirTemplateArgument, EirType]): Map[EirTemplateArgument, EirType] = {
+    (a.toList ++ b.toList).groupMap(_._1)(_._2).map {
+      case (arg, tys) => arg -> {
+        tys.reduce((a, b) =>
+          Option.when(a != null && b != null)(Find.unionType(a, b).orNull).orNull
+        )
+      }
+    }
+  }
+
+  /** Finds the value of one or more unknown type args using known types
+   *  (Note, there isn't any machine learning going on here...)
+   *
+   * @param ctx type context under which to operate
+   * @param pair pair of unknown and known types
+   * @return a map of learned type args and their values
+   */
+  private def learn(ctx: TypeCheckContext, pair: (EirResolvable[EirType], EirType)): Map[EirTemplateArgument, EirType] = {
+    pair match {
+      case (EirPlaceholder(_, Some(a)), b) => learn(ctx, (a, b))
+      case (a: EirTemplatedType, b: EirTemplatedType) if a.args.length == b.args.length =>
+        (learn(ctx, (a.base, visit(ctx, b.base))) +: a.args.zip(b.args.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
+      case (a: EirLambdaType, b: EirLambdaType) if a.from.length == b.from.length =>
+        (learn(ctx, (a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
+      case (t: EirTemplateArgument, b) => Map(t -> b)
+      case (_: EirProxyType, _: EirProxyType) => ???
+      case _ => Map()
+    }
+  }
+
+  def inferSpecialization(ctx: TypeCheckContext, s: EirSpecializable, args: List[EirType]): Option[EirSpecialization] = {
+    // TODO this does not consider static applications (e.g. option<?>(42))
+    val insights = Option(s).to[EirLambdaType].map(_.from)
+      .filter(_.length == args.length)
+      .map(_.zip(args).map(learn(ctx, _)))
+      .map(_.reduce(merge)).getOrElse(Map())
+
+    val paired = s.templateArgs.map(t => {
+      insights.get(t).orElse(t.defaultValue.map(visit(ctx, _)))
+    })
+
+    Option.when(paired.forall(x => x.isDefined && !x.contains(null)))(
+      EirSyntheticSpecialization(paired.flatten))
   }
 
   def screenCandidates(ctx: TypeCheckContext, argsrc: Option[EirExpressionNode],
                        candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
     val results = candidates.flatMap(pair => {
       val (candidate, member) = pair
+
       val (ispec, args) = handleSpecialization(ctx, member) match {
         case Left(s) =>
           val args = getArguments(ctx, argsrc)
           val sp = args
-            .flatMap(inferSpecialization(s, _))
+            .flatMap(inferSpecialization(ctx, s, _))
             .flatMap(ctx.trySpecialize(s, _))
-            .getOrElse(Errors.missingSpecialization(s))
+            .getOrElse(return None)
           (sp, args)
         case Right(sp) => (sp, getArguments(ctx, argsrc))
       }
+
       val found = (member, args) match {
         case (EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike, Some(_)) =>
           // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
@@ -305,6 +351,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx.leave(ispec)
       found
     })
+
+    // TODO implement some safety here, one must hide the others or it's ambiguous!
     results.headOption
   }
 
