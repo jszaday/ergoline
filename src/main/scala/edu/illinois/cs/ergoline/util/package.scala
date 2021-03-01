@@ -12,9 +12,10 @@ package object util {
 
   import EirUtilitySyntax.RichEirNode
 
-  def addExplicitSelf(base: EirType, ty: EirType): EirType = {
+  def addExplicitSelf(ctx: TypeCheckContext, base: EirType, ty: EirType): EirType = {
     ty match {
-      case EirLambdaType(parent, from, to, args) => EirLambdaType(parent, base +: from, to, args)
+      case EirLambdaType(_, from, to, args) =>
+        ctx.lambdaWith(base +: from.map(_.asInstanceOf[EirType]), to.asInstanceOf[EirType], args)
       case _ => Errors.incorrectType(ty, EirLambdaType.getClass)
     }
   }
