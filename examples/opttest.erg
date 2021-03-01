@@ -14,9 +14,9 @@ class foo {
     @entry def opttest() {
         val o1 = option<foo>(new foo());
         val o2 = option<foo>();
-        val o3 = o1.map<int>((_: foo) => 42);
+        val o3 = o1.map((_: foo) => 42);
         val o4 = option<int>();
-        val o5 = o1.flatMap<int>((_: foo) => o4);
+        val o5 = o1.flatMap((_: foo) => o4);
 
         assert(o1.nonEmpty() && o2.isEmpty());
         println(`gotta' get my ${o1.get()}`);

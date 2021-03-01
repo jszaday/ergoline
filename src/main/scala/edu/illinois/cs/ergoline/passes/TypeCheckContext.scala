@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
@@ -219,4 +219,18 @@ class TypeCheckContext {
   def ancestor[T: Manifest]: Option[T] = stack.collectFirst{ case t: T => t }
 
   def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
+
+  type ResolvableType = EirResolvable[EirType]
+
+  private val lambdaBank: mutable.Map[(List[ResolvableType], ResolvableType, List[EirTemplateArgument]), EirLambdaType] = mutable.Map()
+
+  def lambdaWith(from: List[ResolvableType], to: ResolvableType, args: List[EirTemplateArgument] = Nil): EirLambdaType = {
+    val triple = (from, to, args)
+
+    if (!lambdaBank.contains(triple)) {
+      lambdaBank.put(triple, EirLambdaType(None, from, to, args))
+    }
+
+    lambdaBank(triple)
+  }
 }

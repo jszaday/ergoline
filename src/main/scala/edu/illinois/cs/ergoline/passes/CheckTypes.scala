@@ -111,9 +111,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitLambdaType(ctx: TypeCheckContext, x: types.EirLambdaType): EirType = {
-    x.from = x.from.map(visit(ctx, _))
-    x.to = visit(ctx, x.to)
-    x
+    ctx.lambdaWith(x.from.map(visit(ctx, _)), visit(ctx, x.to), x.templateArgs)
   }
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
@@ -290,6 +288,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (a: EirLambdaType, b: EirLambdaType) if a.from.length == b.from.length =>
         (learn(ctx, (a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
+      case (_: EirSymbol[_] | _: EirSpecializedSymbol, b) => learn(ctx, (Find.uniqueResolution(pair._1), b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _ => Map()
     }
@@ -297,7 +296,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def inferSpecialization(ctx: TypeCheckContext, s: EirSpecializable, args: List[EirType]): Option[EirSpecialization] = {
     // TODO this does not consider static applications (e.g. option<?>(42))
-    val insights = Option(s).to[EirLambdaType].map(_.from)
+    val unknowns = Option(s).to[EirLambdaType].map(_.from)
+    val insights = unknowns
       .filter(_.length == args.length)
       .map(_.zip(args).map(learn(ctx, _)))
       .map(_.reduce(merge)).getOrElse(Map())
@@ -628,9 +628,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitLambdaExpression(ctx: TypeCheckContext, node: EirLambdaExpression): EirType = {
     if (!ctx.lambdas.contains(node)) ctx.lambdas +:= node
-    val retTy = visit(ctx, node.body)
-    if (retTy == null) throw TypeCheckException(s"could not find return type of $node")
-    EirLambdaType(Some(node), node.args.map(visit(ctx, _)), retTy)
+
+    ctx.lambdaWith(node.args.map(visit(ctx, _)), visit(ctx, node.body))
   }
 
   override def visitReturn(ctx: TypeCheckContext, node: EirReturn): EirType = {

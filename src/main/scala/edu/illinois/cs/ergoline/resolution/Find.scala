@@ -216,7 +216,7 @@ object Find {
       (accessor.isStatic, x.isStatic) match {
         case (true, true) | (false, false) => (x, CheckTypes.visit(ctx, x))
         case (true, false) if x.member.isInstanceOf[EirFunction] =>
-          (x, addExplicitSelf(base, CheckTypes.visit(ctx, x)))
+          (x, addExplicitSelf(ctx, base, CheckTypes.visit(ctx, x)))
         case _ => ???
       }
     }

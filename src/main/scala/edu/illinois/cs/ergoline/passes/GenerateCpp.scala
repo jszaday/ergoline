@@ -704,11 +704,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val ours = usage.flatMap(Find.parentOf[EirNamespace])
     val theirs = Find.parentOf[EirNamespace](base)
-    val qualifications: Seq[String] = if (ours != theirs) {
-      (theirs.get.name +: Find.ancestors(theirs.get).collect{
-        case n: EirNamespace => n.name
-      }).reverse
-    } else Nil
+    val qualifications: Seq[String] =
+      theirs match {
+        case Some(theirs) if !ours.contains(theirs) =>
+          (theirs.name +: Find.ancestors(theirs).collect{
+            case n: EirNamespace => n.name
+          }).reverse
+        case _ => Nil
+      }
     (qualifications :+ nameFor(ctx, of, includeTemplates, usage)).mkString("::")
   }
 
