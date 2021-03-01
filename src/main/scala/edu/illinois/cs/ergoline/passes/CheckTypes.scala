@@ -6,14 +6,13 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.{parentOf, tryClassLike}
+import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
-import scala.reflect.ClassTag
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -63,14 +62,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def handleSpecialization(ctx: TypeCheckContext, x : EirType): Option[EirSpecialization] = {
-    (x match {
+  def handleSpecialization(ctx: TypeCheckContext, x : EirType): Either[EirSpecializable, EirSpecialization] = {
+    val base = x match {
       case x: EirTemplatedType => visit(ctx, x)
       case x => x
-    }) match {
-      case x : EirTemplatedType => Some(ctx.specialize(assertValid[EirSpecializable](x.base), x))
-      case x : EirSpecializable if x.templateArgs.nonEmpty => Some(ctx.specialize(x))
-      case _ => None
+    }
+
+    base match {
+      case sp@EirTemplatedType(_, s: EirSpecializable, _) => ctx.trySpecialize(s, sp).toRight(s)
+      case _ : EirTemplatedType => Errors.missingSpecialization(x)
+      case x : EirSpecializable if x.templateArgs.nonEmpty => ctx.trySpecialize(x).toRight(x)
+      case _ => Right(null)
     }
   }
 
@@ -260,18 +262,35 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
-  def screenCandidates(ctx: TypeCheckContext, args: Option[EirExpressionNode],
+  def inferSpecialization(s: EirSpecializable, args: List[EirType]): Option[EirSpecialization] = {
+    None
+  }
+
+  def screenCandidates(ctx: TypeCheckContext, argsrc: Option[EirExpressionNode],
                        candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
     val results = candidates.flatMap(pair => {
       val (candidate, member) = pair
-      val innerSpec = handleSpecialization(ctx, member)
-      val found = (member, getArguments(ctx, args)) match {
+      val (ispec, args) = handleSpecialization(ctx, member) match {
+        case Left(s) =>
+          val args = getArguments(ctx, argsrc)
+          val sp = args
+            .flatMap(inferSpecialization(s, _))
+            .flatMap(ctx.trySpecialize(s, _))
+            .getOrElse(Errors.missingSpecialization(s))
+          (sp, args)
+        case Right(sp) => (sp, getArguments(ctx, argsrc))
+      }
+      val found = (member, args) match {
         case (EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike, Some(_)) =>
           // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
-          val spec = Option(member).to[EirTemplatedType].flatMap(handleSpecialization(ctx, _))
-          val candidates = Find.accessibleMember(Find.asClassLike(member), args.get, "apply")
-          val found = screenCandidates(ctx, args, candidates.view.zip(candidates.map(visit(ctx, _))))
-          spec.foreach(ctx.leave)
+          val sp = Option(member).to[EirTemplatedType].map(s =>
+            handleSpecialization(ctx, s) match {
+              case Left(s) => Errors.missingSpecialization(s)
+              case Right(sp) => sp
+            }).orNull
+          val candidates = Find.accessibleMember(Find.asClassLike(member), argsrc.get, "apply")
+          val found = screenCandidates(ctx, argsrc, candidates.view.zip(candidates.map(visit(ctx, _))))
+          ctx.leave(sp)
           found
         case (t : EirLambdaType, Some(ours)) =>
           val theirs = applyFuncArgs(ctx, candidate, t.from)
@@ -283,7 +302,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case (x, None) => Some(candidate, visit(ctx, x))
         case (_, Some(_)) => None
       }
-      innerSpec.foreach(ctx.leave)
+      ctx.leave(ispec)
       found
     })
     results.headOption
