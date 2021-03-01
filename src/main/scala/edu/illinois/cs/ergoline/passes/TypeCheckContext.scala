@@ -220,9 +220,11 @@ class TypeCheckContext {
 
   def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
 
-  private val lambdaBank: mutable.Map[(List[EirType], EirType, List[EirTemplateArgument]), EirLambdaType] = mutable.Map()
+  type ResolvableType = EirResolvable[EirType]
 
-  def lambdaWith(from: List[EirType], to: EirType, args: List[EirTemplateArgument] = Nil): EirLambdaType = {
+  private val lambdaBank: mutable.Map[(List[ResolvableType], ResolvableType, List[EirTemplateArgument]), EirLambdaType] = mutable.Map()
+
+  def lambdaWith(from: List[ResolvableType], to: ResolvableType, args: List[EirTemplateArgument] = Nil): EirLambdaType = {
     val triple = (from, to, args)
 
     if (!lambdaBank.contains(triple)) {

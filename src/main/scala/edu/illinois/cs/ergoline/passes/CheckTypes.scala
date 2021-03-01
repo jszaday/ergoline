@@ -13,7 +13,6 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
