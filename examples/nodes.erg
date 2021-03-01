@@ -45,6 +45,6 @@ class workers {
 
         println(`[PE${ck::myPe()}] got the message.`);
 
-        self[@]contribute<int, int>(1, int::plus, m.done);
+        self[@]contribute(1, int::plus, m.done);
     }
 }

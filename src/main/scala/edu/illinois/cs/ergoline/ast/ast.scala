@@ -192,6 +192,12 @@ trait EirSpecialization extends EirNode {
   def types: List[EirResolvable[EirType]]
 }
 
+case class EirSyntheticSpecialization(var types: List[EirResolvable[EirType]]) extends EirSpecialization {
+  override var parent: Option[EirNode] = None
+  override def children: Iterable[EirNode] = types
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 object EirClassLike {
   def makeSelfDeclaration(parent: Option[EirClassLike], name: String, resolvable: EirResolvable[EirType]): EirMember = {
     val m = EirMember(parent, null, EirAccessibility.Private)

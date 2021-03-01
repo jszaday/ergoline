@@ -139,22 +139,23 @@ class TypeCheckContext {
     }
   }
 
-  def specialize(s : EirSpecializable): EirSpecialization = {
-    val sp = specialization.find(s.accepts(_)).getOrElse(Errors.missingSpecialization(s))
-    specialize(s, sp)
+  def trySpecialize(s : EirSpecializable): Option[EirSpecialization] = {
+    specialization.find(s.accepts(_)).flatMap(trySpecialize(s, _))
   }
 
-  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = {
-    if (!s.accepts(sp)) {
-      Errors.missingSpecialization(s)
-    } else if (s.sameAs(sp)) {
-      null
-    } else {
-      // TODO this needs to substitute template arguments with
-      //      whatever is currently in the context~!
-      _substitutions +:= (s -> sp)
-      sp
-    }
+  def trySpecialize(s : EirSpecializable, sp : EirSpecialization): Option[EirSpecialization] = {
+    Option.when(s.accepts(sp))({
+      Option.unless(s.sameAs(sp))({
+        // TODO this needs to substitute template arguments with
+        //      whatever is currently in the context~!
+        _substitutions +:= (s -> sp)
+        sp
+      }).orNull
+    })
+  }
+
+  def specialize(s: EirSpecializable, sp: EirSpecialization): EirSpecialization = {
+    trySpecialize(s, sp).getOrElse(Errors.missingSpecialization(sp))
   }
 
   def leave(ours: EirSpecialization): Unit = {

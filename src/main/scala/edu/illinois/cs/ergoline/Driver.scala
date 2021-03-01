@@ -27,6 +27,7 @@ object Driver extends App {
   if (options.contains("-h")|| files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
 
+  val skipCompilation = options.contains("--no-compile")
   globals.strict = options.contains("-Wall")
   globals.verbose = options.contains("--verbose")
 
@@ -64,25 +65,29 @@ object Driver extends App {
   val codegen = Modules.currTimeMs
   println(s"ergoline compilation:\t${codegen - start}ms")
 
-  try {
-    val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
-    println(s"$$ $cmd")
-    os.proc(cmd.split(raw"\s+")).call()
-  } catch {
-    case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
+  if (!skipCompilation) compile()
+
+  private def compile(): Unit = {
+    try {
+      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
+      println(s"$$ $cmd")
+      os.proc(cmd.split(raw"\s+")).call()
+    } catch {
+      case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
+    }
+
+    val charmxi = Modules.currTimeMs
+    println(s"charmxi compilation:\t${charmxi - codegen}ms")
+
+    try {
+      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} $out -I$inclDir generate.cc"
+      println(s"$$ $cmd")
+      os.proc(cmd.split(raw"\s+")).call()
+    } catch {
+      case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
+    }
+
+    val cxx = Modules.currTimeMs
+    println(s"c++ compilation:\t${cxx - charmxi}ms")
   }
-
-  val charmxi = Modules.currTimeMs
-  println(s"charmxi compilation:\t${charmxi - codegen}ms")
-
-  try {
-    val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} $out -I$inclDir generate.cc"
-    println(s"$$ $cmd")
-    os.proc(cmd.split(raw"\s+")).call()
-  } catch {
-    case throwable: Throwable => Errors.exit(throwable + " (is CHARM_HOME set?)")
-  }
-
-  val cxx = Modules.currTimeMs
-  println(s"c++ compilation:\t${cxx - charmxi}ms")
 }
