@@ -31,7 +31,7 @@ class foo {
         exit();
     }
 
-    def check(o: option<int>) {
+    def check<A>(o: option<A>) {
         if (o.nonEmpty()) {
             println(`optional has value ${o.get()}`);
         } else {

@@ -629,7 +629,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val system = member.flatMap(_.annotation("system")).orElse(x.annotation("system")).isDefined
     val abstractMember = !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
-    if ((!langCi && entryOnly) || system || abstractMember) {
+    val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
+    if ((!langCi && entryOnly) || system || abstractMember || isTempl) {
       return
     }
     val asyncCi = langCi && isMember && member.flatMap(_.annotation("async")).isDefined
@@ -641,6 +642,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => ctx.nameFor(x)
     }
     val virtual = Option.when(isMember && !langCi && member.exists(_.isVirtual))("virtual")
+    visitTemplateArgs(ctx, x.templateArgs)
     ctx << virtual
     // TODO add templates when !isMember
     if (asyncCi) {
