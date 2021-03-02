@@ -6,8 +6,15 @@ import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
+import scala.util.Properties
+
+object EirUnparseTests {
+  def t: String = UnparseAst.tab
+  def localize(s: String): String = s.replaceAll("\n", Properties.lineSeparator)
+}
+
 class EirUnparseTests extends FunSuite {
-  import UnparseAst.{tab => t}
+  import EirUnparseTests._
 
   private val genericFunction = "def foo<T>(=bar: T, baz: T): T { }"
   private val parsedFunction = {
@@ -25,7 +32,7 @@ class EirUnparseTests extends FunSuite {
 
   test("namespace and c-style for loop") {
     EirGlobalNamespace.clear()
-    val program =
+    val program = localize (
       s"""namespace foo {
         |@entry def bar(x: int, n: int): unit {
         |${t}for (var y: int = ((x * 2) + 1); (y < n); y += 1) {
@@ -34,6 +41,7 @@ class EirUnparseTests extends FunSuite {
         |}
         |}
         |""".stripMargin
+    )
     val namespace =
       (new Visitor).visitNamespace(parserFromString(program).namespace())
     CheckEnclose(namespace) shouldEqual None

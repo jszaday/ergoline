@@ -345,11 +345,11 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitAwaitMany(ctx: UnparseContext, x: EirAwaitMany): String = {
-    s"await ${if (x.waitAll) "all" else "any"} {$n" + {
+    s"await ${if (x.waitAll) "all" else "any"} {" + {
       ctx.numTabs += 1
-      val res = x.children.map(visit(ctx, _)).mkString(n)
+      val res = visitStatements(ctx, x.children)
       ctx.numTabs -= 1
       res
-    } + s"$n}"
+    } + s"}"
   }
 }
