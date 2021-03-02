@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.util.Properties.{lineSeparator => n}
@@ -39,7 +39,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   import UnparseSyntax.RichOption
 
-  override def error(ctx: UnparseContext, node: EirNode): String = error(ctx, node, "unknown")
+  override def error(ctx: UnparseContext, node: EirNode): String = error(ctx, node, s"unknown error on ${node.getClass.getName}")
 
   def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String = Errors.exit(Errors.format(node, msg))
 
@@ -48,7 +48,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visit(ctx: UnparseContext, node: EirNode): String = {
-    visitAnnotations(ctx, Option(node).map(_.annotations).getOrElse(Nil)) + super.visit(ctx, node)
+    visitAnnotations(ctx, Option(node).map(_.annotations).getOrElse(Nil)) + (
+      node match {
+        case _: EirPlaceholder[_] => "_"
+        case _ => super.visit(ctx, node)
+      }
+    )
   }
 
   def addSemi(x: String): String = {
@@ -155,7 +160,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitFunctionArgument(ctx: UnparseContext, node: EirFunctionArgument): String = {
     val declTy = visit(ctx, node.declaredType)
     val equals = if (node.isSelfAssigning) "=" else ""
-    s"$equals${node.name}: $declTy"
+    val asterisk = if (node.isExpansion) "*" else ""
+    s"$equals${node.name}: $asterisk$declTy"
   }
 
   override def visitAssignment(ctx: UnparseContext, node: EirAssignment): String = {
@@ -320,7 +326,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitConstantFacade(context: UnparseContext, facade: EirConstantFacade): String = visit(context, facade.value)
 
   override def visitWhen(ctx: UnparseContext, x: EirSdagWhen): String = {
-    "when " + x.patterns.map(p => s"${visit(ctx, p._1)}(${visit(ctx, p._2)})").mkString(", ") + {
+    "when " + x.patterns.map(p => s"${visit(ctx, p._1)}${visit(ctx, p._2)}").mkString(", ") + {
       x.condition.map(visit(ctx, _)).map(" if " + _).getOrElse("")
     } + s" => ${visit(ctx, x.body)}"
   }
@@ -336,5 +342,14 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case (None, Some(y), Some(z)) => s":${visit(ctx, y)}:${visit(ctx, z)}"
       case (None, None, Some(z)) => s":${visit(ctx, z)}"
     }
+  }
+
+  override def visitAwaitMany(ctx: UnparseContext, x: EirAwaitMany): String = {
+    s"await ${if (x.waitAll) "all" else "any"} {$n" + {
+      ctx.numTabs += 1
+      val res = x.children.map(visit(ctx, _)).mkString(n)
+      ctx.numTabs -= 1
+      res
+    } + s"$n}"
   }
 }

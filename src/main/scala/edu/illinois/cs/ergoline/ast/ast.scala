@@ -846,6 +846,10 @@ case class EirSlice(var start: Option[EirExpressionNode], var step: Option[EirEx
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
+case class EirAwaitMany(var waitAll: Boolean, var children: List[EirSdagWhen])(var parent: Option[EirNode]) extends EirNode {
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
 //  override def eirType: EirResolvable[EirType] = exprNode.eirType
 //

@@ -56,6 +56,7 @@ trait EirVisitor[Context, Value] {
       case x: EirTupleMultiply => visitTupleMultiply(ctx, x)
       case x: EirConstantFacade => visitConstantFacade(ctx, x)
       case x: EirSdagWhen => visitWhen(ctx, x)
+      case x: EirAwaitMany => visitAwaitMany(ctx, x)
       case x: EirResolvable[_] if x.resolved =>
         val found = Find.uniqueResolution(x)
         if (found == x) error(ctx, found)
@@ -72,6 +73,8 @@ trait EirVisitor[Context, Value] {
   def visitSlice(ctx: Context, x: EirSlice): Value
 
   def visitWhen(ctx: Context, x: EirSdagWhen): Value
+  def visitAwaitMany(ctx: Context, x: EirAwaitMany): Value
+
   def visitConstantFacade(context: Context, facade: EirConstantFacade): Value
   def visitTupleMultiply(context: Context, multiply: types.EirTupleMultiply): Value
 

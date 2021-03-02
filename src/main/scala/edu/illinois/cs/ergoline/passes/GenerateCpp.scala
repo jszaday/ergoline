@@ -1331,4 +1331,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitSlice(ctx: CodeGenerationContext, x: EirSlice): Unit = ???
+
+  override def visitAwaitMany(ctx: CodeGenerationContext, x: EirAwaitMany): Unit = ???
 }
