@@ -9,7 +9,13 @@ import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
 
+object TypeCheckContext {
+  type Context = (Option[EirClassLike], Option[EirSpecialization])
+}
+
 class TypeCheckContext {
+  import TypeCheckContext.Context
+
   object TypeCheckSyntax {
     implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
       // TODO implement this, check upper/lower/type bounds
@@ -49,7 +55,6 @@ class TypeCheckContext {
 
   import TypeCheckSyntax.RichEirSpecializable
 
-  type Context = (Option[EirClassLike], Option[EirSpecialization])
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
   private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
@@ -113,30 +118,14 @@ class TypeCheckContext {
   def cache(n: EirNode, t: EirType): Unit = current.foreach(c => _cache += ((c, n) -> t))
   def avail(n: EirNode): Option[EirType] = current.flatMap(c => _cache.get((c, n)))
 
-  def shouldCheck(s: EirSpecializable, sp: Option[EirSpecialization]): Option[Context] = {
+  def mkCheckContext(s: EirSpecializable, spec: Option[EirSpecialization]): Option[Context] = {
+    val sp = spec.map(makeDistinct)
     val checked = _checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
     Option.unless(checked.contains(ctx))({
       _checked += (s -> (checked :+ ctx))
       ctx
     })
-  }
-
-  def shouldCheck(s: EirSpecializable): Option[Context] = {
-    if (s.annotation("system").isDefined) {
-      None
-    } else if (s.templateArgs.isEmpty) {
-      shouldCheck(s, None)
-    } else {
-      _substitutions
-        .find(x => (x._1, s) match {
-          case (a: EirProxy, b: EirClass) => a.base == b
-          case (a: EirProxy, b: EirTrait) => a.base == b
-          case (a, b) => a == b
-        })
-        .map(x => makeDistinct(x._2))
-        .flatMap(x => shouldCheck(s, Some(x)))
-    }
   }
 
   def trySpecialize(s : EirSpecializable): Option[EirSpecialization] = {
@@ -173,8 +162,6 @@ class TypeCheckContext {
     }
   }
 
-  def hasSubstitution(s: EirSpecializable): Boolean = _substitutions.contains(s)
-
   def templateZipArgs(s: EirSpecializable, sp: EirSpecialization): List[(EirTemplateArgument, EirResolvable[EirType])] = {
     if (sp.types.length < s.templateArgs.length) {
       s.templateArgs.zip(sp.types ++ {
@@ -192,6 +179,17 @@ class TypeCheckContext {
         (init :+ last).zip(sp.types)
       }
     }
+  }
+
+  def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
+    _substitutions
+      .find(x => (x._1, s) match {
+        case (a: EirProxy, b: EirClass) => a.base == b
+        case (a: EirProxy, b: EirTrait) => a.base == b
+        // NOTE EirLambdaExpression does not have template arguments so it's not considered here
+        case (a: EirLambdaType, b: EirFunction) => a.templateArgs == b.templateArgs
+        case (a, b) => a == b
+      }).map(_._2)
   }
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {

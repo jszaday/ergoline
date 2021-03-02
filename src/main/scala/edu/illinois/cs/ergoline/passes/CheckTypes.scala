@@ -243,23 +243,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _ => false
     }
 
-  def applyFuncArgs(ctx: TypeCheckContext, node: EirNode, types: List[EirResolvable[EirType]]): List[EirType] = {
-    val fnArgs = node match {
-      case EirMember(_, f: EirFunction, _) => Some(f.functionArgs)
-      case f: EirFunction => Some(f.functionArgs)
-      case l: EirLambdaExpression => Some(l.args)
-      case _ => None
-    }
-    fnArgs.map(args => args.zip(types.map(visit(ctx, _))).flatMap {
-      case (arg, ty : EirTupleType) if arg.isExpansion => ty.children.map(visit(ctx, _))
-      case (_, ty) => Some(ty)
-    }).getOrElse(visit(ctx, node) match {
-      // NOTE this does not consider expansions?
-      case t: EirLambdaType => t.from.map(visit(ctx, _))
-      case _ => Nil
-    })
-  }
-
   /** Merges two maps of type arguments to types, using unification.
    *  Propagates unification errors as null to indicate incompatibility
    */
@@ -338,16 +321,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           val found = screenCandidates(ctx, argsrc, candidates.view.zip(candidates.map(visit(ctx, _))))
           ctx.leave(sp)
           found
-        case (t : EirLambdaType, Some(ours)) =>
-          val theirs = applyFuncArgs(ctx, candidate, t.from)
-          if (argumentsMatch(ours, theirs)) {
-            Some((candidate, EirLambdaType(t.parent, theirs, visit(ctx, t.to))))
+        case (_ : EirLambdaType, Some(ours)) =>
+          val t = assertValid[EirLambdaType](visit(ctx, candidate))
+          if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
+            // NOTE the double check is necessary here to visit candidate if it hasn't
+            // already been visited... and since visitFunction doesn't resolve its types
+            Some((candidate, t))
           } else {
             None
           }
         case (x, None) => Some(candidate, visit(ctx, x))
         case (_, Some(_)) => None
       }
+
       ctx.leave(ispec)
       found
     })
@@ -461,7 +447,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   // TODO need to check parent classes/traits too
   //      since they may not be reached otherwise
   def visitClassLike(ctx: TypeCheckContext, node: EirClassLike): EirType = {
-    val opt = ctx.shouldCheck(node)
+    val (_, _, opt) = handleSpecializable(ctx, node)
     opt.foreach(subCtx => {
       ctx.start(subCtx)
       CheckClasses.visit(node)
@@ -494,14 +480,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
-  override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
+  def isSystem(parent: Option[EirMember], node: EirNode): Boolean = {
+    parent.exists(isSystem(None, _)) || node.annotation("system").isDefined
+  }
+
+  def handleSpecializable(ctx: TypeCheckContext, s: EirSpecializable): (Boolean, Option[EirMember], Option[TypeCheckContext.Context]) = {
     val member = ctx.immediateAncestor[EirMember]
+    val noArgs = s.templateArgs.isEmpty
+    val spec = if (noArgs) None else ctx.findSubstitution(s)
+    val isDefined = noArgs || spec.isDefined
+    (isDefined, member, {
+      if (isSystem(member, s) || !isDefined) None
+      else ctx.mkCheckContext(s, spec)
+    })
+  }
+
+  override def visitFunction(ctx: TypeCheckContext, node: EirFunction): EirLambdaType = {
+    val (isDefined, member, opt) = handleSpecializable(ctx, node)
     val proxy = member.flatMap(_.parent).to[EirProxy]
-    val opt = (proxy, node.body) match {
-      case (Some(_), None) => None
-      case _ => ctx.shouldCheck(node)
-    }
-    opt.foreach(subCtx => {
+
+    opt
+      .filterNot(_ => proxy.isDefined && node.body.isEmpty)
+      .foreach(subCtx => {
       try {
         CheckFunctions.visit(ctx, node)
         ctx.start(subCtx)
@@ -525,7 +525,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           }
       }
     })
-    EirLambdaType(Some(node), node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
+
+    if (isDefined) {
+      ctx.lambdaWith(expand(ctx, node.functionArgs), visit(ctx, node.returnType))
+    } else {
+      // NOTE expansions are explicitly not known here...
+      //      what should this actually return? a placeholder?
+      ctx.lambdaWith(node.functionArgs.map(_.declaredType), node.returnType, node.templateArgs)
+    }
   }
 
   def annotationsOf(node: EirFunction): List[EirAnnotation] = {
@@ -626,10 +633,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     EirTupleType(Some(node), visit(ctx, node.children).toList)
   }
 
+  private def expand(ctx: TypeCheckContext, args: List[EirFunctionArgument]): List[EirType] = {
+    args.flatMap(arg => {
+      visit(ctx, arg.declaredType) match {
+        case t: EirTupleType if arg.isExpansion => t.children.map(visit(ctx, _))
+        case t => List(t)
+      }
+    })
+  }
+
   override def visitLambdaExpression(ctx: TypeCheckContext, node: EirLambdaExpression): EirType = {
     if (!ctx.lambdas.contains(node)) ctx.lambdas +:= node
 
-    ctx.lambdaWith(node.args.map(visit(ctx, _)), visit(ctx, node.body))
+    ctx.lambdaWith(expand(ctx, node.args), visit(ctx, node.body))
   }
 
   override def visitReturn(ctx: TypeCheckContext, node: EirReturn): EirType = {
@@ -690,7 +706,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitProxy(ctx: TypeCheckContext, node: EirProxy): EirType = {
-    val opt = ctx.shouldCheck(node)
+    val (_, _, opt) = handleSpecializable(ctx, node)
     opt.foreach(subCtx => {
       ctx.start(subCtx)
       val element = ProxyManager.elementFor(node).getOrElse(node)
