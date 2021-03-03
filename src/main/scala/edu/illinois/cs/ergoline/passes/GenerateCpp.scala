@@ -1248,7 +1248,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def makeSentinel(ctx: CodeGenerationContext, all: Boolean): String = {
     val sentinel = "__armin__"
     ctx << "const auto __self__ = CthSelf();"
-    ctx << "ergoline::reqman "<< sentinel << "(" << all.toString << "," << "[&](void){ CthAwaken(__self__); });"
+    ctx << "ergoline::reqman "<< sentinel << "(" << all.toString << ");"
     sentinel
   }
 
@@ -1329,7 +1329,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << x.body
         ctx << ");"
         ctx << s"$name.put(__request__);"
-        ctx << "CthSuspend();"
+        ctx << s"$sentinel.block();"
       } << "}"
     })
   }

@@ -216,44 +216,68 @@ std::shared_ptr<compound_request<request<As...>, request<Bs...>>> join(
 struct reqman {
   using done_fn = std::function<void(void)>;
 
-  reqman(bool all, const done_fn& done) : done_(done), all_(all) {}
+  reqman(bool all): all_(all), sleeper_(nullptr) {}
 
   template <typename... Ts>
   void put(const std::shared_ptr<request<Ts...>>& req,
            const std::function<void(typename request<Ts...>::value_t)>& fn) {
-    req->act_ = [&](typename request<Ts...>::value_t value) {
-      fn(value);
+    req->act_ = [this, req, fn](typename request<Ts...>::value_t value) {
+      if (all_ || actions_.empty()) {
+        const auto search = std::find(requests_.begin(), requests_.end(), req);
+        CkAssert(search != requests_.end());
+        requests_.erase(search);
 
-      auto search = std::find(requests_.begin(), requests_.end(), req);
-      CkAssert(search != requests_.end());
-      requests_.erase(search);
+        actions_.push_back(std::bind(fn, value));
 
-      this->wrap_up_();
+        if (sleeper_ != nullptr) {
+          CthAwaken(sleeper_);
+        }
 
-      return true;
+        return true;
+      } else {
+        return false;
+      }
     };
 
     requests_.push_back(req);
   }
 
- private:
-  void wrap_up_(void) {
-    bool empty = requests_.empty();
-    if (!all_ || empty) {
-      if (!empty) {
-        for (auto& req : requests_) {
-          req->cancel();
-        }
-
-        requests_.clear();
+  void block(void) {
+    do {
+      // if we have no actions to immediately execute
+      if (actions_.empty()) {
+        // denote ourself as the (singleton) sleeper
+        // (there can only be one!)
+        sleeper_ = CthSelf();
+        // then suspend and wait for actions
+        CthSuspend();
       }
-
-      done_();
+      // at this point, we should have something to do
+      CkAssert(!actions_.empty() &&
+        "thread awoken with no pending actions");
+      // so do the thing(s) we have to do (yes)
+      for (auto it = actions_.begin(); it != actions_.end(); ) {
+        (*it)();
+        it = actions_.erase(it);
+      }
+      // at this point, there should be no more things to do
+      CkAssert(actions_.empty());
+      // if we're waiting for every request to be fulfilled...
+      // then go back through~!
+    } while (all_ && !requests_.empty());
+    // otherwise, we're done! clean up any remaining reqs
+    // (i.e. cancel them so they're not fulfilled)
+    for (auto& req : requests_) {
+      req->cancel();
     }
+    requests_.clear();
   }
 
+ private:
   bool all_;
-  done_fn done_;
+  CthThread sleeper_;
+
+  std::vector<std::function<void(void)>> actions_;
   std::vector<std::shared_ptr<request_base_>> requests_;
 };
 }
