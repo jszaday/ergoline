@@ -34,7 +34,7 @@ struct request : public request_base_,
   request(const action_t& act, const predicate_t& pred)
       : act_(act), pred_(pred), stale_(false) {}
 
-  bool accepts(const value_t& val) { return !pred_ || pred_(val); }
+  bool accepts(const value_t& val) { return !stale_ && (!pred_ || pred_(val)); }
 
   bool notify(value_t val) {
     if (accepts(val) && this->act_(val)) {
@@ -45,8 +45,8 @@ struct request : public request_base_,
     }
   }
 
-  bool stale() { return stale_; }
-  virtual std::pair<reject_t, value_t> query() = 0;
+  inline bool stale(void) const { return stale_; }
+  virtual std::pair<reject_t, value_t> query(void) = 0;
 
   action_t act_;
   predicate_t pred_;
@@ -192,6 +192,8 @@ struct compound_request<request<Ts...>, request<Us...>>
   virtual void cancel() override {
     left()->cancel();
     right()->cancel();
+
+    this->stale_ = true;
   }
 
   virtual std::pair<typename request<Ts...>::reject_t, value_t> query()
