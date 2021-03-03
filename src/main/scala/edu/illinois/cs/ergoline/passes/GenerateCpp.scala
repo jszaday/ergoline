@@ -1245,6 +1245,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTupleMultiply(context: CodeGenerationContext, multiply: types.EirTupleMultiply): Unit = ()
   override def visitConstantFacade(context: CodeGenerationContext, facade: EirConstantFacade): Unit = visit(context, facade.value)
 
+  def makeSentinel(ctx: CodeGenerationContext, all: Boolean): String = {
+    val sentinel = "__armin__"
+    ctx << "const auto __self__ = CthSelf();"
+    ctx << "ergoline::reqman "<< sentinel << "(" << all.toString << "," << "[&](void){ CthAwaken(__self__); });"
+    sentinel
+  }
+
   def makeCompoundRequest(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
     ctx << "{"
     ctx << "const auto __self__ = CthSelf();"
@@ -1302,31 +1309,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     x.patterns.foreach({
       case (symbol, patterns) => ctx << "{" << {
+        val sentinel = makeSentinel(ctx, all = true)
         val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
         val f = assertValid[EirFunction](m.member)
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
         val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
-        ctx << "const auto __self__ = CthSelf();"
-        ctx << s"typename decltype($name)::value_t __value__;"
-        ctx << s"auto __request__ = $name.make_request([&](decltype(__value__) __recvd__) {"
-        ctx << "__value__ = __recvd__;"
-        ctx << "CthAwaken(__self__);"
-        ctx << "return true;" << "},"
+        ctx << s"using value_t = typename decltype($name)::value_t;"
+        ctx << s"auto __request__ = $name.make_request(nullptr,"
         ctx << {
           if (conditions.nonEmpty) {
-            s"[&](const decltype(__value__) ${ctx.temporary}) { return $conditions; });"
+            s"[&](const value_t& ${ctx.temporary}) { return $conditions; });"
           } else "nullptr);"
         }
-        ctx << s"$name.put(__request__);"
-        ctx << "CthSuspend();"
-      } << {
+        ctx << sentinel << ".put(__request__," << "[&](value_t __value__)" << "{"
         visitPatternDecl(ctx, patterns, "*__value__").split(n)
-      } << {
         ctx.ignoreNext("{")
         ctx << x.body
-      }
+        ctx << ");"
+        ctx << s"$name.put(__request__);"
+        ctx << "CthSuspend();"
+      } << "}"
     })
   }
 
