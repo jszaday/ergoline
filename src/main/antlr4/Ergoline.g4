@@ -40,10 +40,15 @@ statement
     |   classDeclaration
     |   topLevelDeclaration
     |   whenStatement
+    |   awaitManyStatement
     ;
 
 whenStatement
     :   'when' whenFnList ('if' condition=expression)? LambdaArrow (block | bodyExpr=expression ';')
+    ;
+
+awaitManyStatement
+    :   AwaitKwd (AnyKwd || AllKwd) '{' (whenStatement+) '}'
     ;
 
 whenFnList
@@ -421,6 +426,9 @@ CollectiveKeyword
     ;
 
 AwaitKwd : 'await';
+AnyKwd : 'any';
+AllKwd : 'all';
+
 VariableKeyword : 'var' ;
 ValueKeyword : 'val' ;
 AbstractKwd : 'abstract';

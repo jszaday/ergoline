@@ -606,6 +606,13 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     pop()
   }
 
+  override def visitAwaitManyStatement(ctx: AwaitManyStatementContext): EirAwaitMany = {
+    val waitAll = ctx.AllKwd() != null
+    enter(EirAwaitMany(waitAll, Nil)(parent), (x: EirAwaitMany) => {
+      x.children = ctx.mapOrEmpty(_.whenStatement, visitAs[EirSdagWhen])
+    })
+  }
+
   def specializationToList(ctx: ParseTree): List[EirResolvable[EirType]] = {
     ctx match {
       case null => Nil
@@ -699,7 +706,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         Option(x.patternList()).map(visitAs[EirPatternList]).getOrElse(EirPatternList(parent, Nil))))
       n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
       n.body = Option(ctx.bodyExpr).map(visitAs[EirExpressionNode])
-        .map(AstManipulation.encloseNodes(_)).getOrElse(visitAs[EirBlock](ctx.block()))
+        .map(AstManipulation.encloseNodes(_)(addReturn = true)).getOrElse(visitAs[EirBlock](ctx.block()))
     })
   }
 }

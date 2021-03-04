@@ -18,9 +18,9 @@
 
 namespace ergoline {
 
-namespace {
-struct request_base_ {};
-}
+struct request_base_ {
+  virtual void cancel() = 0;
+};
 
 template <typename... Ts>
 struct request : public request_base_,
@@ -34,7 +34,7 @@ struct request : public request_base_,
   request(const action_t& act, const predicate_t& pred)
       : act_(act), pred_(pred), stale_(false) {}
 
-  bool accepts(const value_t& val) { return !pred_ || pred_(val); }
+  bool accepts(const value_t& val) { return !stale_ && (!pred_ || pred_(val)); }
 
   bool notify(value_t val) {
     if (accepts(val) && this->act_(val)) {
@@ -45,9 +45,8 @@ struct request : public request_base_,
     }
   }
 
-  bool stale() { return stale_; }
-  virtual void cancel() = 0;
-  virtual std::pair<reject_t, value_t> query() = 0;
+  inline bool stale(void) const { return stale_; }
+  virtual std::pair<reject_t, value_t> query(void) = 0;
 
   action_t act_;
   predicate_t pred_;
@@ -193,6 +192,8 @@ struct compound_request<request<Ts...>, request<Us...>>
   virtual void cancel() override {
     left()->cancel();
     right()->cancel();
+
+    this->stale_ = true;
   }
 
   virtual std::pair<typename request<Ts...>::reject_t, value_t> query()
@@ -206,12 +207,81 @@ struct compound_request<request<Ts...>, request<Us...>>
 };
 
 template <typename Action, typename Predicate, typename... As, typename... Bs>
-std::shared_ptr<compound_request<request<As...>, request<Bs...>>>
-join(const std::shared_ptr<request<As...>>& a, const std::shared_ptr<request<Bs...>>& b,
-     const Action& action, const Predicate& predicate) {
-  return std::make_shared<compound_request<request<As...>, request<Bs...>>>(std::make_pair(a, b), action, predicate);
+std::shared_ptr<compound_request<request<As...>, request<Bs...>>> join(
+    const std::shared_ptr<request<As...>>& a,
+    const std::shared_ptr<request<Bs...>>& b, const Action& action,
+    const Predicate& predicate) {
+  return std::make_shared<compound_request<request<As...>, request<Bs...>>>(
+      std::make_pair(a, b), action, predicate);
 }
 
+struct reqman {
+  using done_fn = std::function<void(void)>;
+
+  reqman(bool all): all_(all), sleeper_(nullptr) {}
+
+  template <typename... Ts>
+  void put(const std::shared_ptr<request<Ts...>>& req,
+           const std::function<void(typename request<Ts...>::value_t)>& fn) {
+    req->act_ = [this, req, fn](typename request<Ts...>::value_t value) {
+      if (all_ || actions_.empty()) {
+        const auto search = std::find(requests_.begin(), requests_.end(), req);
+        CkAssert(search != requests_.end());
+        requests_.erase(search);
+
+        actions_.push_back(std::bind(fn, value));
+
+        if (sleeper_ != nullptr) {
+          CthAwaken(sleeper_);
+        }
+
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    requests_.push_back(req);
+  }
+
+  void block(void) {
+    do {
+      // if we have no actions to immediately execute
+      if (actions_.empty()) {
+        // denote ourself as the (singleton) sleeper
+        // (there can only be one!)
+        sleeper_ = CthSelf();
+        // then suspend and wait for actions
+        CthSuspend();
+      }
+      // at this point, we should have something to do
+      CkAssert(!actions_.empty() &&
+        "thread awoken with no pending actions");
+      // so do the thing(s) we have to do (yes)
+      for (auto it = actions_.begin(); it != actions_.end(); ) {
+        (*it)();
+        it = actions_.erase(it);
+      }
+      // at this point, there should be no more things to do
+      CkAssert(actions_.empty());
+      // if we're waiting for every request to be fulfilled...
+      // then go back through~!
+    } while (all_ && !requests_.empty());
+    // otherwise, we're done! clean up any remaining reqs
+    // (i.e. cancel them so they're not fulfilled)
+    for (auto& req : requests_) {
+      req->cancel();
+    }
+    requests_.clear();
+  }
+
+ private:
+  bool all_;
+  CthThread sleeper_;
+
+  std::vector<std::function<void(void)>> actions_;
+  std::vector<std::shared_ptr<request_base_>> requests_;
+};
 }
 
 #endif

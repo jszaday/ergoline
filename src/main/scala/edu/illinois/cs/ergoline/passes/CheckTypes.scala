@@ -888,4 +888,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitSlice(ctx: TypeCheckContext, x: EirSlice): EirType = ???
+
+  override def visitAwaitMany(ctx: TypeCheckContext, x: EirAwaitMany): EirType = {
+    x.children.foreach(visit(ctx, _))
+
+    globals.unitType
+  }
 }
