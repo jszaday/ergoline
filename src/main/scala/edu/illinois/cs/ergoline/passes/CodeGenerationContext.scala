@@ -22,9 +22,15 @@ class CodeGenerationContext(val language: String = "cpp") {
   private var _ctx : TypeCheckContext = new TypeCheckContext
   private var _replacements = Map[String, String]()
 
+  private var _sentinels = new mutable.Stack[(Boolean, String)]
+
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
   def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
+
+  def pushSentinel(s: (Boolean, String)): Unit = _sentinels.push(s)
+  def popSentinel(s: (Boolean, String)): Unit = assert(s == _sentinels.pop())
+  def peekSentinel(): Option[(Boolean, String)] = _sentinels.headOption
 
   def updateProxy(proxy: EirProxy): Unit = {
     if (_proxies.headOption.contains(proxy)) {

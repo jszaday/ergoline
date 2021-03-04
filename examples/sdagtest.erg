@@ -31,6 +31,7 @@ class sdagtest {
         self[@]poke();
     }
 
+    @mailbox def fake();
     @mailbox def poke();
     @mailbox def receive(it: int, from: int);
 
@@ -38,7 +39,10 @@ class sdagtest {
         // TODO shorten self[@]index()
         val idx = self[@]index();
 
-        when poke() => println(`[${idx}] has been poked!`);
+        await any {
+            when poke() => println(`[${idx}] has been poked!`);
+            when fake() => abort("you shouldn't see this!");
+        }
 
         for (var it = 0; it < numIts; it += 1) {
             for (var i = 0; i < neighbors.size(); i += 1) {
