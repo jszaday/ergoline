@@ -95,7 +95,7 @@ struct mailbox {
   value_t query(const request<Ts...>* req) {
     for (auto it = values_.begin(); it != values_.end(); it++) {
       if (req->accepts(*it)) {
-        auto val = *it;
+        value_t val(*it);
         values_.erase(it);
         return val;
       }
@@ -169,7 +169,7 @@ struct compound_request<request<Ts...>, request<Us...>>
         if (this->notify(copy)) {
           return true;
         } else {
-          b->reject(res);
+          b->reject(std::move(res));
         }
       }
       return false;
@@ -196,14 +196,6 @@ struct compound_request<request<Ts...>, request<Us...>>
 
   inline lreq_t& left(void) { return requests_.first; }
   inline rreq_t& right(void) { return requests_.second; }
-
-  virtual bool accepts(const value_t& val) const override {
-    // auto& ts = *(reinterpret_cast<std::tuple<Ts...>*>(val.get()));
-    // auto& us =
-    // *(reinterpret_cast<std::tuple<Us...>*>(&std::get<sizeof...(Ts)>(*val)));
-    // TODO implement this
-    return true;
-  }
 
   virtual void cancel(void) override {
     left()->cancel();
