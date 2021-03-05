@@ -37,6 +37,8 @@ import ck;
             val end = ck::wallTime();
             avgMlbx += mid - start;
             avgInpt += end - mid;
+
+            println(`done with iteration ${it + 1} out of ${nReps}`);
         }
 
         println(`time for mailboxes ${avgMlbx / n}`);
@@ -50,7 +52,7 @@ class tester {
     @entry def tester() {}
 
     @threaded @entry def run(n: int) {
-        for (var i = 0; i < n; i += 1) {
+        @overlap for (var i = 0; i < n; i += 1) {
             when mailbox1(_ == i, _),
                  mailbox2(_ == i, _) => {
                 // does nothing

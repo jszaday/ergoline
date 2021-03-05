@@ -144,7 +144,8 @@ struct compound_request;
 template <typename... Ts, typename... Us>
 struct compound_request<request<Ts...>, request<Us...>>
     : public request<Ts..., Us...> {
-  using value_t = typename request<Ts..., Us...>::value_t;
+  using parent_t = request<Ts..., Us...>;
+  using value_t = typename parent_t::value_t;
   using lreq_t = std::shared_ptr<request<Ts...>>;
   using rreq_t = std::shared_ptr<request<Us...>>;
   using pair_t = std::pair<lreq_t, rreq_t>;

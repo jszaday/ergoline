@@ -1266,54 +1266,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     pair
   }
 
-  def makeCompoundRequest(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
-    ctx << "{"
-    ctx << "const auto __self__ = CthSelf();"
-    val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
-    val triples = x.patterns.zipWithIndex.map {
-      case ((symbol, patterns), i) =>
-        val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
-        val f = assertValid[EirFunction](m.member)
-        val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
-        val tys = declTys.map(ctx.typeFor(_, Some(x)))
-        val name = GenerateProxies.mailboxName(ctx, f, tys)
-        val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
-        val valueTy = s"decltype($name)::value_t"
-        ctx << s"auto __request_${i}__ = this->$name.make_request(nullptr," << {
-          if (conditions.nonEmpty) {
-            s"[&]($valueTy ${ctx.temporary}) { return $conditions; });"
-          } else "nullptr);"
-        }
-        (tys, name, s"__request_${i}__")
-    }
-    ctx << "std::shared_ptr<std::tuple<" << {
-      triples.flatMap(_._1) mkString ","
-    } << ">> __value__;"
-    ctx << "auto __compound__ ="
-    val len = x.patterns.length
-    ctx << x.patterns.tail.indices.foldRight(s"__request_0__")((i, s) => {
-      s"ergoline::join($s,__request_${i + 1}__," + {
-        if (i < (len - 2)) {
-          "nullptr,nullptr)"
-        } else ""
-      }
-    })
-    ctx << "[&](decltype(__value__) __recvd__) {"
-    ctx << "__value__ = __recvd__;"
-    ctx << "CthAwaken(__self__);"
-    ctx << "return true;" << "}, nullptr);"
-    triples.foreach{
-      case (_, mbox, req) => ctx << s"this->$mbox.put($req);"
-    }
-    ctx << "CthSuspend();"
-    ctx << {
-      visitPatternDecl(ctx, patterns, "*__value__").split(n)
-    } << {
-      ctx.ignoreNext("{")
-      ctx << x.body
-    }
-  }
-
   @tailrec
   def canReuseSentinel(x: Option[EirNode]): Boolean = {
     x match {
@@ -1328,38 +1280,56 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitWhen(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
     // TODO impl this
     if (x.condition.isDefined) ???
-    if (x.patterns.length > 1) {
-      makeCompoundRequest(ctx, x)
-      return
-    }
     val peeked = ctx.peekSentinel().filter(_ => canReuseSentinel(x.parent))
     val sentinel = peeked
       // only use an existing sentinel when its directly above us (for now)
       // todo eventually add a way to chain to parent
       .getOrElse({ makeSentinel(ctx, all = true) })
     if (peeked.isDefined) ctx << "{"
-    x.patterns.foreach({
-      case (symbol, patterns) =>
+    val compound = x.patterns.length > 1
+    var reqs: List[String] = Nil
+    x.patterns.zipWithIndex.foreach({
+      case ((symbol, patterns), i) =>
         val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
         val f = assertValid[EirFunction](m.member)
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
         val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
-        ctx << s"using value_t = typename decltype($name)::value_t;"
-        ctx << s"auto __request__ = $name.make_request(nullptr,"
+        val ty = s"__req${i}_val__"
+        val req = s"__req${i}__"
+        ctx << s"using $ty = typename decltype($name)::value_t;"
+        ctx << s"auto $req = $name.make_request(nullptr,"
         ctx << {
           if (conditions.nonEmpty) {
-            s"[=](const value_t& ${ctx.temporary}) { return $conditions; });"
+            s"[=](const $ty& ${ctx.temporary}) { return $conditions; });"
           } else "nullptr);"
         }
-        ctx << s"${sentinel._2}.put(__request__," << "[=](value_t __value__)" << "{"
-        visitPatternDecl(ctx, patterns, "*__value__").split(n)
-        ctx.ignoreNext("{")
-        ctx << x.body
-        ctx << ");"
-        ctx << s"$name.put(__request__);"
+        if (!compound) {
+          ctx << s"${sentinel._2}.put($req," << s"[=]($ty __value__)" << "{"
+          visitPatternDecl(ctx, patterns, "*__value__").split(n)
+          ctx.ignoreNext("{")
+          ctx << x.body
+          ctx << ");"
+        }
+        reqs :+= s"$name.put($req);"
     })
+    if (compound) {
+      ctx << "auto __compound__ ="
+      ctx << x.patterns.tail.indices.foldRight(s"__req0__")((i, s) => {
+        s"ergoline::join($s,__req${i + 1}__,nullptr,nullptr)"
+      })
+      ctx << ";"
+      val ty = "__compound_ty__"
+      ctx << s"using $ty = typename decltype(__compound__)::element_type;"
+      val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
+      ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t __value__)" << "{"
+      visitPatternDecl(ctx, patterns, "*__value__").split(n)
+      ctx.ignoreNext("{")
+      ctx << x.body
+      ctx << ");"
+    }
+    reqs.foreach(ctx << _)
     if (peeked.isEmpty) {
       ctx << s"${sentinel._2}.block();"
       ctx.popSentinel(sentinel)
