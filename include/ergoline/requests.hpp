@@ -19,7 +19,7 @@
 namespace ergoline {
 
 struct request_base_ {
-  virtual void cancel() = 0;
+  virtual void cancel(void) = 0;
 };
 
 template <typename... Ts>
@@ -45,10 +45,9 @@ struct request : public request_base_ {
     }
   }
 
-  inline bool stale(void) const { return stale_; }
-
-  virtual void reject(value_t&& val) = 0;
   virtual value_t query(void) = 0;
+  virtual void reject(value_t&& val) = 0;
+  inline bool stale(void) const { return stale_; }
 
   action_t act_;
   predicate_t pred_;
@@ -89,9 +88,8 @@ struct mailbox {
       }
     }
 
+    std::static_pointer_cast<mboxreq>(req)->inserted_ = true;
     requests_.push_back(req);
-
-    std::dynamic_pointer_cast<mboxreq>(req)->inserted_ = true;
   }
 
   value_t query(const request<Ts...>* req) {
@@ -128,11 +126,14 @@ struct mailbox {
         : src_(src), request<Ts...>(act, pred), inserted_(false) {}
 
     virtual void cancel(void) override {
-      this->stale_ = true;
-
-      if (inserted_) {
+      // if this request was put into a recv queue
+      // and wasn't already cancelled
+      if (this->inserted_ && !this->stale_) {
+        // then remove it from the recv queue
         src_->invalidate(this);
       }
+
+      this->stale_ = true;
     }
 
     virtual value_t query(void) override { return src_->query(this); }
