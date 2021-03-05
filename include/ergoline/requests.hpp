@@ -23,20 +23,20 @@ struct request_base_ {
 };
 
 template <typename... Ts>
-struct request : public request_base_,
-                 public std::enable_shared_from_this<request<Ts...>> {
+struct request : public request_base_ {
   using value_t = std::shared_ptr<std::tuple<Ts...>>;
   using request_t = std::shared_ptr<request<Ts...>>;
-  using action_t = std::function<bool(value_t)>;
+  using action_t = std::function<bool(value_t&)>;
   using predicate_t = std::function<bool(const value_t&)>;
-  using reject_t = std::function<void(void)>;
 
   request(const action_t& act, const predicate_t& pred)
       : act_(act), pred_(pred), stale_(false) {}
 
-  bool accepts(const value_t& val) { return !stale_ && (!pred_ || pred_(val)); }
+  virtual bool accepts(const value_t& val) const {
+    return !stale_ && (!pred_ || pred_(val));
+  }
 
-  bool notify(value_t val) {
+  bool notify(value_t& val) {
     if (accepts(val) && this->act_(val)) {
       this->cancel();
       return true;
@@ -46,7 +46,9 @@ struct request : public request_base_,
   }
 
   inline bool stale(void) const { return stale_; }
-  virtual std::pair<reject_t, value_t> query(void) = 0;
+
+  virtual void reject(value_t&& val) = 0;
+  virtual value_t query(void) = 0;
 
   action_t act_;
   predicate_t pred_;
@@ -62,14 +64,14 @@ struct mailbox {
   std::list<value_t> values_;
   std::list<request_t> requests_;
 
-  void put(value_t val) {
+  void put(value_t&& val) {
     for (auto& req : requests_) {
       if (req->notify(val)) {
         return;
       }
     }
 
-    values_.push_back(val);
+    values_.emplace_back(std::forward<value_t>(val));
   }
 
   request_t make_request(const typename request<Ts...>::action_t& act,
@@ -77,37 +79,38 @@ struct mailbox {
     return std::make_shared<mboxreq>(this, act, pred);
   }
 
-  void put(request_t req) {
+  void put(const request_t& req) {
     if (req->stale()) return;
+
+    for (auto it = values_.begin(); it != values_.end(); it++) {
+      if (req->notify(*it)) {
+        values_.erase(it);
+        return;
+      }
+    }
 
     requests_.push_back(req);
 
+    std::dynamic_pointer_cast<mboxreq>(req)->inserted_ = true;
+  }
+
+  value_t query(const request<Ts...>* req) {
     for (auto it = values_.begin(); it != values_.end(); it++) {
-      auto& val = *it;
-
-      if (req->notify(val)) {
+      if (req->accepts(*it)) {
+        auto val = *it;
         values_.erase(it);
-        break;
+        return val;
       }
     }
+    return nullptr;
   }
 
-  typename decltype(values_)::iterator query(request_t req) {
-    auto it = values_.begin();
-    for (; it != values_.end(); it++) {
-      auto& val = *it;
-      if (req->accepts(val)) {
-        break;
-      }
-    }
-    return it;
-  }
-
-  void invalidate(request_t req) {
-    auto it = std::find(requests_.begin(), requests_.end(), req);
-    if (it != requests_.end()) {
-      requests_.erase(it);
-    }
+  void invalidate(const request<Ts...>* theirs) {
+    auto it = std::find_if(
+        requests_.begin(), requests_.end(),
+        [&](const request_t& ours) { return ours.get() == theirs; });
+    CkAssert(it != requests_.end());
+    requests_.erase(it);
   }
 
   void pup(PUP::er& p) {
@@ -118,22 +121,24 @@ struct mailbox {
  private:
   struct mboxreq : public request<Ts...> {
     mailbox<Ts...>* src_;
+    bool inserted_;
 
     mboxreq(mailbox<Ts...>* src, const typename request<Ts...>::action_t& act,
             const typename request<Ts...>::predicate_t& pred)
-        : src_(src), request<Ts...>(act, pred) {}
+        : src_(src), request<Ts...>(act, pred), inserted_(false) {}
 
-    virtual void cancel() override {
+    virtual void cancel(void) override {
       this->stale_ = true;
-      src_->invalidate(this->shared_from_this());
+
+      if (inserted_) {
+        src_->invalidate(this);
+      }
     }
 
-    virtual std::pair<typename request<Ts...>::reject_t, value_t> query()
-        override {
-      auto it = src_->query(this->shared_from_this());
-      auto val = (it == src_->values_.end()) ? nullptr : *it;
-      if (it != src_->values_.end()) src_->values_.erase(it);
-      return std::make_pair([&]() { src_->values_.push_back(val); }, val);
+    virtual value_t query(void) override { return src_->query(this); }
+
+    virtual void reject(value_t&& val) override {
+      src_->values_.emplace_back(std::forward<value_t>(val));
     }
   };
 };
@@ -156,14 +161,15 @@ struct compound_request<request<Ts...>, request<Us...>>
   void set_action(std::shared_ptr<request<As...>>& a,
                   std::shared_ptr<request<Bs...>>& b,
                   const Concatenator& concat) {
-    a->act_ = [&](typename request<As...>::value_t val) {
+    a->act_ = [=](typename request<As...>::value_t& val) {
       auto res = b->query();
-      if (res.second) {
-        if (this->notify(concat(*val, *res.second))) {
+      if (res) {
+        auto copy = concat(*val, *res);
+        if (this->notify(copy)) {
           return true;
+        } else {
+          b->reject(res);
         }
-
-        res.first();
       }
       return false;
     };
@@ -187,23 +193,47 @@ struct compound_request<request<Ts...>, request<Us...>>
                });
   }
 
-  inline lreq_t left() const { return requests_.first; }
-  inline rreq_t right() const { return requests_.second; }
+  inline lreq_t& left(void) { return requests_.first; }
+  inline rreq_t& right(void) { return requests_.second; }
 
-  virtual void cancel() override {
+  virtual bool accepts(const value_t& val) const override {
+    // auto& ts = *(reinterpret_cast<std::tuple<Ts...>*>(val.get()));
+    // auto& us =
+    // *(reinterpret_cast<std::tuple<Us...>*>(&std::get<sizeof...(Ts)>(*val)));
+    // TODO implement this
+    return true;
+  }
+
+  virtual void cancel(void) override {
     left()->cancel();
     right()->cancel();
 
     this->stale_ = true;
   }
 
-  virtual std::pair<typename request<Ts...>::reject_t, value_t> query()
-      override {
-    auto l = left()->query(), r = right()->query();
-    return std::make_pair([&]() {
-      l.first();
-      r.first();
-    }, (!l.second || !r.second) ? nullptr : make_value(*l.second, *r.second));
+  virtual value_t query(void) override {
+    auto l = left()->query();
+    auto r = right()->query();
+
+    if (l != nullptr && r == nullptr) {
+      left()->reject(std::move(l));
+      return nullptr;
+    } else if (l == nullptr && r != nullptr) {
+      right()->reject(std::move(r));
+      return nullptr;
+    } else {
+      return make_value(*l, *r);
+    }
+  }
+
+  virtual void reject(value_t&& val) override {
+    auto ts = reinterpret_cast<std::tuple<Ts...>*>(val.get());
+    auto us =
+        reinterpret_cast<std::tuple<Us...>*>(&std::get<sizeof...(Ts)>(*val));
+    auto l = std::shared_ptr<std::tuple<Ts...>>(val, ts);
+    left()->reject(std::move(l));
+    auto r = std::shared_ptr<std::tuple<Us...>>(val, us);
+    right()->reject(std::move(r));
   }
 };
 
@@ -219,26 +249,27 @@ std::shared_ptr<compound_request<request<As...>, request<Bs...>>> join(
 struct reqman {
   using done_fn = std::function<void(void)>;
 
-  reqman(bool all): all_(all), sleeper_(nullptr) {}
+  reqman(bool all) : all_(all), sleeper_(nullptr) {}
 
   template <typename... Ts>
   void put(const std::shared_ptr<request<Ts...>>& req,
-           const std::function<void(typename request<Ts...>::value_t)>& fn) {
-    req->act_ = [=](typename request<Ts...>::value_t value) {
+           const std::function<void(typename request<Ts...>::value_t&&)>& fn) {
+    req->act_ = [this, req, fn](typename request<Ts...>::value_t& value) {
       if (!requests_.empty()) {
         if (all_) {
-          const auto search = std::find(requests_.begin(), requests_.end(), req);
+          const auto search =
+              std::find(requests_.begin(), requests_.end(), req);
           CkAssert(search != requests_.end());
           requests_.erase(search);
         } else {
-          for (auto it = requests_.begin(); it != requests_.end();) {            
+          for (auto it = requests_.begin(); it != requests_.end();) {
             (*it)->cancel();
 
             it = requests_.erase(it);
           }
         }
 
-        fn(value);
+        fn(std::move(value));
 
         if (sleeper_ && requests_.empty()) {
           CthAwaken(sleeper_);

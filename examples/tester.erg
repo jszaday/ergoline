@@ -53,10 +53,9 @@ class tester {
 
     @threaded @entry def run(n: int) {
         @overlap for (var i = 0; i < n; i += 1) {
-            when mailbox1(_ == i, _),
-                 mailbox2(_ == i, _) => {
-                // does nothing
-            }
+            // TODO make a compound req
+            when mailbox1(_ == i, _) => {}
+            when mailbox2(_ == i, _) => {}
         }
     }
 

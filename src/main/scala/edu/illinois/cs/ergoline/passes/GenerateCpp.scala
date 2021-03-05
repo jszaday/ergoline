@@ -1259,7 +1259,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val pair = (all, sentinel)
 
     ctx << "{"
-    ctx << "const auto __self__ = CthSelf();"
     ctx << "ergoline::reqman "<< sentinel << "(" << all.toString << ");"
 
     ctx.pushSentinel(pair)
@@ -1270,9 +1269,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def canReuseSentinel(x: Option[EirNode]): Boolean = {
     x match {
       case Some(x: EirForLoop) => x.annotation("overlap").isDefined
-      case Some(x: EirAwaitMany) => true
-      case Some(x: EirBlock) if x.children.length == 1 =>
-        canReuseSentinel(x.parent)
+      case Some(_: EirAwaitMany) => true
+      case Some(x: EirBlock) => canReuseSentinel(x.parent)
       case _ => false
     }
   }
@@ -1306,7 +1304,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           } else "nullptr);"
         }
         if (!compound) {
-          ctx << s"${sentinel._2}.put($req," << s"[=]($ty __value__)" << "{"
+          ctx << s"${sentinel._2}.put($req," << s"[=]($ty&& __value__)" << "{"
           visitPatternDecl(ctx, patterns, "*__value__").split(n)
           ctx.ignoreNext("{")
           ctx << x.body
@@ -1323,7 +1321,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val ty = "__compound_ty__"
       ctx << s"using $ty = typename decltype(__compound__)::element_type;"
       val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
-      ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t __value__)" << "{"
+      ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t&& __value__)" << "{"
       visitPatternDecl(ctx, patterns, "*__value__").split(n)
       ctx.ignoreNext("{")
       ctx << x.body

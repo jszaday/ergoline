@@ -152,11 +152,14 @@ object GenerateProxies {
   def makeMailboxBody(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val f = assertValid[EirFunction](x.member)
     val name = mailboxName(ctx, x)._1
-    ctx << s"auto __value__ = std::shared_ptr<decltype($name)::tuple_t>(static_cast<decltype($name)::tuple_t*>(malloc(sizeof(decltype($name)::tuple_t))), [](void* ptr) { free(ptr); });"
+    ctx << s"using tuple_t = typename decltype($name)::tuple_t;"
+    ctx << s"auto __value__ = std::shared_ptr<tuple_t>(static_cast<tuple_t*>(malloc(sizeof(tuple_t))), [](tuple_t* x)" << "{"
+    ctx << "x->~tuple_t();"
+    ctx << "free(static_cast<void*>(x));" << "}" << ");"
     if (f.functionArgs.nonEmpty) {
       ctx << "ergoline::unpack(__msg__, *__value__);"
     }
-    ctx << s"$name.put(__value__);"
+    ctx << s"$name.put(std::move(__value__));"
   }
 
   def makeParameter(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
