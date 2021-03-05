@@ -223,15 +223,23 @@ struct reqman {
   template <typename... Ts>
   void put(const std::shared_ptr<request<Ts...>>& req,
            const std::function<void(typename request<Ts...>::value_t)>& fn) {
-    req->act_ = [this, req, fn](typename request<Ts...>::value_t value) {
-      if (all_ || actions_.empty()) {
-        const auto search = std::find(requests_.begin(), requests_.end(), req);
-        CkAssert(search != requests_.end());
-        requests_.erase(search);
+    req->act_ = [=](typename request<Ts...>::value_t value) {
+      if (!requests_.empty()) {
+        if (all_) {
+          const auto search = std::find(requests_.begin(), requests_.end(), req);
+          CkAssert(search != requests_.end());
+          requests_.erase(search);
+        } else {
+          for (auto it = requests_.begin(); it != requests_.end();) {            
+            (*it)->cancel();
 
-        actions_.push_back(std::bind(fn, value));
+            it = requests_.erase(it);
+          }
+        }
 
-        if (sleeper_ != nullptr) {
+        fn(value);
+
+        if (sleeper_ && requests_.empty()) {
           CthAwaken(sleeper_);
         }
 
@@ -245,34 +253,13 @@ struct reqman {
   }
 
   void block(void) {
-    do {
-      // if we have no actions to immediately execute
-      if (actions_.empty()) {
-        // denote ourself as the (singleton) sleeper
-        // (there can only be one!)
-        sleeper_ = CthSelf();
-        // then suspend and wait for actions
-        CthSuspend();
-      }
-      // at this point, we should have something to do
-      CkAssert(!actions_.empty() &&
-        "thread awoken with no pending actions");
-      // so do the thing(s) we have to do (yes)
-      for (auto it = actions_.begin(); it != actions_.end(); ) {
-        (*it)();
-        it = actions_.erase(it);
-      }
-      // at this point, there should be no more things to do
-      CkAssert(actions_.empty());
-      // if we're waiting for every request to be fulfilled...
-      // then go back through~!
-    } while (all_ && !requests_.empty());
-    // otherwise, we're done! clean up any remaining reqs
-    // (i.e. cancel them so they're not fulfilled)
-    for (auto& req : requests_) {
-      req->cancel();
+    CkAssert(sleeper_ == nullptr);
+
+    sleeper_ = CthSelf();
+    while (!requests_.empty()) {
+      CthSuspend();
     }
-    requests_.clear();
+    sleeper_ = nullptr;
   }
 
  private:

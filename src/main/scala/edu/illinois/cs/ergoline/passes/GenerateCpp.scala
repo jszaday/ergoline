@@ -432,6 +432,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitForLoop(ctx: CodeGenerationContext, x: EirForLoop): Unit = {
+    val overlap = Option.when(!canReuseSentinel(x.parent))(x).flatMap(_.annotation("overlap"))
+    val senti = overlap.map(_ => { makeSentinel(ctx, all = true) })
+
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
         ctx << s"for (" <| (declaration, ";") << test << ";" << {
@@ -458,6 +461,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << x.body << "}"
       case _ => Errors.unreachable()
     }
+
+    senti.foreach(s => {
+      ctx << s"${s._2}.block();"
+      ctx << "}"
+      ctx.popSentinel(s)
+    })
   }
 
   override def visitWhileLoop(ctx: CodeGenerationContext, x: EirWhileLoop): Unit = {
@@ -1247,9 +1256,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   private def makeSentinel(ctx: CodeGenerationContext, all: Boolean): (Boolean, String) = {
     val sentinel = "__armin__"
+    val pair = (all, sentinel)
+
+    ctx << "{"
     ctx << "const auto __self__ = CthSelf();"
     ctx << "ergoline::reqman "<< sentinel << "(" << all.toString << ");"
-    (all, sentinel)
+
+    ctx.pushSentinel(pair)
+    pair
   }
 
   def makeCompoundRequest(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
@@ -1300,6 +1314,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  @tailrec
+  def canReuseSentinel(x: Option[EirNode]): Boolean = {
+    x match {
+      case Some(x: EirForLoop) => x.annotation("overlap").isDefined
+      case Some(x: EirAwaitMany) => true
+      case Some(x: EirBlock) if x.children.length == 1 =>
+        canReuseSentinel(x.parent)
+      case _ => false
+    }
+  }
+
   override def visitWhen(ctx: CodeGenerationContext, x: EirSdagWhen): Unit = {
     // TODO impl this
     if (x.condition.isDefined) ???
@@ -1307,17 +1332,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       makeCompoundRequest(ctx, x)
       return
     }
-    ctx << "{"
-    val peeked = ctx.peekSentinel()
-    val (waitAll, sentinel) = peeked
+    val peeked = ctx.peekSentinel().filter(_ => canReuseSentinel(x.parent))
+    val sentinel = peeked
       // only use an existing sentinel when its directly above us (for now)
       // todo eventually add a way to chain to parent
-      .filter(_ => x.parent.exists(_.isInstanceOf[EirAwaitMany]))
-      .getOrElse({
-        val tmp = makeSentinel(ctx, all = true)
-        ctx.pushSentinel(tmp)
-        tmp
-      })
+      .getOrElse({ makeSentinel(ctx, all = true) })
+    if (peeked.isDefined) ctx << "{"
     x.patterns.foreach({
       case (symbol, patterns) =>
         val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
@@ -1330,10 +1350,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << s"auto __request__ = $name.make_request(nullptr,"
         ctx << {
           if (conditions.nonEmpty) {
-            s"[&](const value_t& ${ctx.temporary}) { return $conditions; });"
+            s"[=](const value_t& ${ctx.temporary}) { return $conditions; });"
           } else "nullptr);"
         }
-        ctx << s"$sentinel.put(__request__," << "[&](value_t __value__)" << "{"
+        ctx << s"${sentinel._2}.put(__request__," << "[=](value_t __value__)" << "{"
         visitPatternDecl(ctx, patterns, "*__value__").split(n)
         ctx.ignoreNext("{")
         ctx << x.body
@@ -1341,8 +1361,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << s"$name.put(__request__);"
     })
     if (peeked.isEmpty) {
-      ctx << s"$sentinel.block();"
-      ctx.popSentinel((waitAll, sentinel))
+      ctx << s"${sentinel._2}.block();"
+      ctx.popSentinel(sentinel)
     }
     ctx << "}"
   }
@@ -1350,12 +1370,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitSlice(ctx: CodeGenerationContext, x: EirSlice): Unit = ???
 
   override def visitAwaitMany(ctx: CodeGenerationContext, x: EirAwaitMany): Unit = {
-    ctx << "{"
-    val sentinel = makeSentinel(ctx, all = x.waitAll)
-    ctx.pushSentinel(sentinel)
+    val peeked = ctx.peekSentinel().filter(_ => canReuseSentinel(x.parent))
+    val sentinel = peeked.getOrElse({ makeSentinel(ctx, all = x.waitAll) })
     x.children.foreach(visit(ctx, _))
-    ctx << s"${sentinel._2}.block();"
-    ctx.popSentinel(sentinel)
-    ctx << "}"
+    if (peeked.isEmpty) {
+      ctx << s"${sentinel._2}.block();"
+      ctx << "}"
+      ctx.popSentinel(sentinel)
+    }
   }
 }

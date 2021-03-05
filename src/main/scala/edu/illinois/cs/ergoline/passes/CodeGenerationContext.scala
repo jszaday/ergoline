@@ -29,7 +29,7 @@ class CodeGenerationContext(val language: String = "cpp") {
   def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
 
   def pushSentinel(s: (Boolean, String)): Unit = _sentinels.push(s)
-  def popSentinel(s: (Boolean, String)): Unit = assert(s == _sentinels.pop())
+  def popSentinel(s: (Boolean, String)): Unit = assert(s.eq(_sentinels.pop()))
   def peekSentinel(): Option[(Boolean, String)] = _sentinels.headOption
 
   def updateProxy(proxy: EirProxy): Unit = {
