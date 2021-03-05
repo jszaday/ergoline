@@ -10,29 +10,39 @@ import ck;
 
     @threaded @entry def test(n: int) {
         val sz = n * 1000;
+        val nReps = n / 10 + 1;
         val arr = array<double, 1>::fill(sz, 2.0);
 
         val tst = new tester@();
-        val start = ck::wallTime();
 
-        tst.run(n);
-        for (var i = 0; i < n; i += 1) {
-            tst.mailbox1(i, arr);
-            tst.mailbox2(i, arr);
+        var avgMlbx = 0.0;
+        var avgInpt = 0.0;
+
+        for (var it = 0; it < nReps; it += 1) {
+            tst.run(n);
+
+            val start = ck::wallTime();
+            for (var i = 0; i < n; i += 1) {
+                tst.mailbox1(i, arr);
+                tst.mailbox2(i, arr);
+            }
+            ck::awaitQuiescence();
+            
+            val mid = ck::wallTime();
+            for (var i = 0; i < n; i += 1) {
+                tst.input(i, arr);
+            }
+            ck::awaitQuiescence();
+            
+            val end = ck::wallTime();
+            avgMlbx += mid - start;
+            avgInpt += end - mid;
+
+            println(`done with iteration ${it + 1} out of ${nReps}`);
         }
-        
-        ck::awaitQuiescence();
-        val mid = ck::wallTime();
 
-        for (var i = 0; i < n; i += 1) {
-            tst.input(i, arr);
-        }
-
-        ck::awaitQuiescence();
-        val end = ck::wallTime();
-
-        println(`time for mailboxes ${mid - start}`);
-        println(`time for plain ol' inputs ${end - mid}`);
+        println(`time for mailboxes ${avgMlbx / n}`);
+        println(`time for plain ol' inputs ${avgInpt / n}`);
 
         exit();
     }
@@ -42,11 +52,9 @@ class tester {
     @entry def tester() {}
 
     @threaded @entry def run(n: int) {
-        for (var i = 0; i < n; i += 1) {
+        @overlap for (var i = 0; i < n; i += 1) {
             when mailbox1(_ == i, _),
-                 mailbox2(_ == i, _) => {
-                // does nothing
-            }
+                 mailbox2(_ == i, _) => {}
         }
     }
 

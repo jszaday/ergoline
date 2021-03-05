@@ -50,8 +50,8 @@ class sdagtest {
             }
         }
 
-        for (var it = 0; it < numIts; it += 1) {
-            for (var i = 0; i < neighbors.size(); i += 1) {
+        @overlap for (var it = 0; it < numIts; it += 1) {
+            @overlap for (var i = 0; i < neighbors.size(); i += 1) {
                 when receive(_ == it, _ == neighbors[i]) => {
                     println(`[${idx}] received value from ${neighbors[i]} for ${it}.`);
                 }

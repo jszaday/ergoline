@@ -276,9 +276,15 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitStatement(ctx: StatementContext): EirNode = {
+    enter(visitInnerStatement(ctx.innerStatement()), (node: EirNode) => {
+      node.annotations ++= visitAnnotationList(ctx.annotation())
+    })
+  }
+
+  override def visitInnerStatement(ctx: InnerStatementContext): EirNode = {
     if (ctx.assignment() != null) visit(ctx.assignment())
     else if (ctx.expression() != null) visit(ctx.expression())
-    else super.visitStatement(ctx)
+    else super.visitInnerStatement(ctx)
   }
 
   override def visitIfThenElse(ctx: IfThenElseContext): EirIfElse = {

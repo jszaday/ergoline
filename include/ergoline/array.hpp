@@ -17,7 +17,7 @@ struct array : public hashable {
   buffer_t buffer;
   shape_t shape;
 
-  array() {}
+  array(void) = default;
 
   array(const shape_t& shape_, bool init = true) : shape(shape_) {
     this->alloc(init, false);
@@ -83,7 +83,10 @@ struct array : public hashable {
           new (p + i) T();
         }
       }
-      return std::shared_ptr<T>(p, [](void* p) { free(p); });
+      return std::shared_ptr<T>(p, [n](T* p) {
+        for (std::size_t i = 0; i < n; i++) { p[i].~T(); }
+        free(p);
+      });
     }
   }
 };

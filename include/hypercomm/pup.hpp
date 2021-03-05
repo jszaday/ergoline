@@ -256,7 +256,10 @@ struct puper<std::shared_ptr<T>,
         s.advance<T>();
       } else {
         auto p = static_cast<T*>(malloc(sizeof(T)));
-        ::new (&t) std::shared_ptr<T>(p, [](T* p) { free(p); });
+        ::new (&t) std::shared_ptr<T>(p, [](T* p) {
+          p->~T();
+          free(p);
+        });
       }
       s.instances[rec.d.instance.id] = t;
       if (!is_bytes<T>()) {

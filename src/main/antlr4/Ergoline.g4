@@ -28,6 +28,10 @@ usingStatement
     ;
 
 statement
+    :   annotation* innerStatement
+    ;
+
+innerStatement
     :   assignment ';'
     |   block
     |   forLoop
