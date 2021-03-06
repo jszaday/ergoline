@@ -55,7 +55,9 @@ object GenerateProxies {
   }
 
   def indexFor(ctx: CodeGenerationContext, proxy: EirProxy, function: EirFunction): String = {
-    /* TODO FQN */ "CkIndex_" + proxy.baseName + "::idx_" + ctx.nameFor(function) + "_CkMessage()"
+    /* TODO FQN */ "CkIndex_" + proxy.baseName + "::idx_" + ctx.nameFor(function) + "_" + {
+      if (function.functionArgs.nonEmpty) "CkMessage" else "void"
+    } + "()"
   }
 
   def visitAbstractCons(ctx: CodeGenerationContext, base: EirProxy, derived: EirProxy): Unit = {

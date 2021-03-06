@@ -763,6 +763,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     ctx.getTupleType(visit(ctx, children))
   }
 
+  def sameTypes(ctx: TypeCheckContext, a: EirType, b: EirType): Boolean = {
+    (a == b) || ((a, b) match {
+      case (EirTemplatedType(_, b1, as1), EirTemplatedType(_, b2, as2)) if as1.length == as2.length =>
+        sameTypes(ctx, visit(ctx, Find.uniqueResolution(b1)), visit(ctx, Find.uniqueResolution(b2))) &&
+          as1.map(visit(ctx, _)).zip(as2.map(visit(ctx, _))).forall(x => sameTypes(ctx, x._1, x._2))
+      case _ => false
+    })
+  }
+
   override def visitIdentifierPattern(ctx: TypeCheckContext, x: EirIdentifierPattern): EirType = {
     val goal = ctx.goal.pop()
     val found = x.ty match {
@@ -772,6 +781,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // -or- ours can assign to theirs
       case t => Find.uniqueResolution(t)
      }
+    x.needsCasting = !sameTypes(ctx, goal, found)
     x.ty = found
     found
   }

@@ -8,19 +8,28 @@ def rand(): double {
     return 0.0;
 }
 
+@system(fromHeader="cmath")
+def sqrt(value: double): double;
+
 @main class cannon {
     var startTime: double;
     var endTime: double;
 
     @entry def cannon(args: array<string>) {
         val alpha = 1.0;
-        val nBlocks = ck::numPes();
-        val blockSize = nBlocks * 32;
+        val np = ck::numPes();
+        val npPerDim = sqrt(np.toDouble()).toInt();
+        val nbPerDim = ((np > 1) && (npPerDim == 1)) ? 2 : npPerDim;
+        val nb = nbPerDim * nbPerDim;
+        val blockSize = nb * 32;
         val blockShape = (blockSize, blockSize);
 
-        val a = new block@array2d(nBlocks, nBlocks, self@, blockShape, nBlocks, false);
-        val b = new block@array2d(nBlocks, nBlocks, self@, blockShape, nBlocks, false);
-        val c = new block@array2d(nBlocks, nBlocks, self@, blockShape, nBlocks, false);
+        println(`matmul starting with a ${nbPerDim} x ${nbPerDim} mesh on ${np} pes`);
+        println(`each block contains ${blockSize} x ${blockSize} values`);
+
+        val a = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
+        val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
+        val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
 
         startTime = ck::wallTime();
         a.sendData(c, true);
@@ -30,7 +39,8 @@ def rand(): double {
 
     @entry def done() {
         endTime = ck::wallTime();
-
+        println(`matmul finished in ${(endTime - startTime) * 1000.0} ms`);
+        exit();
     }
 }
 
@@ -64,7 +74,7 @@ class block {
         if (sendA) {
             dest[(idx[0] - idx[1] + nBlocks) % nBlocks, idx[1]].inputA(0, data);
         } else {
-            dest[idx[0], (idx[1] - idx[0] + nBlocks) % nBlocks].inputA(0, data);
+            dest[idx[0], (idx[1] - idx[0] + nBlocks) % nBlocks].inputB(0, data);
         }
     }
 
