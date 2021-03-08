@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirTy
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
+import edu.illinois.cs.ergoline.passes.Processes.ctx
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -12,17 +13,20 @@ import edu.illinois.cs.ergoline.util.Errors
 import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
 
-class CodeGenerationContext(val language: String = "cpp") {
+class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   var lines: List[String] = Nil
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
   val current: StringBuilder = new StringBuilder
   private val _pointerOverrides: mutable.Set[EirNode] = mutable.Set()
   private val _proxies: mutable.Stack[EirProxy] = new mutable.Stack[EirProxy]
-  private var _ctx : TypeCheckContext = new TypeCheckContext
   private var _replacements = Map[String, String]()
 
   private var _sentinels = new mutable.Stack[(Boolean, String)]
+
+  def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
+  def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
+    tyCtx.lambdas.groupBy(x => Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x)))
 
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
@@ -46,14 +50,13 @@ class CodeGenerationContext(val language: String = "cpp") {
   def proxy: Option[EirProxy] = _proxies.headOption
 
   def makeSubContext(): CodeGenerationContext = {
-    val subCtx = new CodeGenerationContext(language)
+    val subCtx = new CodeGenerationContext(language, tyCtx)
     // TODO do something smarter here
     subCtx._proxies.pushAll(_proxies.reverse)
-    subCtx._ctx = _ctx
     subCtx
   }
 
-  def typeContext: TypeCheckContext = _ctx
+  def typeContext: TypeCheckContext = tyCtx
 
   def typeOf(n: EirNode): EirType = {
     n match {
@@ -69,12 +72,12 @@ class CodeGenerationContext(val language: String = "cpp") {
     case _ => Errors.invalidConstExpr(n)
   }
 
-  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = _ctx.specialize(s, sp)
+  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = tyCtx.specialize(s, sp)
 
-  def leave(ours: EirSpecialization): Unit = _ctx.leave(ours)
+  def leave(ours: EirSpecialization): Unit = tyCtx.leave(ours)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
-    _ctx.hasSubstitution(t).map(CheckTypes.visit(_ctx, _))
+    tyCtx.hasSubstitution(t).map(CheckTypes.visit(tyCtx, _))
   }
 
   def temporary: String = "_"

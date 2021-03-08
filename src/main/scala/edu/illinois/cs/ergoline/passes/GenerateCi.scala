@@ -10,10 +10,10 @@ import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateCi {
 
-  class CiUnparseContext(val checked: Map[EirSpecializable, List[EirSpecialization]]) extends CodeGenerationContext("ci") {}
+  class CiUnparseContext(override val tyCtx: TypeCheckContext) extends CodeGenerationContext("ci", tyCtx) {}
 
-  def visitAll(checked: Map[EirSpecializable, List[EirSpecialization]]): String = {
-    val ctx = new CiUnparseContext(checked)
+  def visitAll(tyCtx: TypeCheckContext): String = {
+    val ctx = new CiUnparseContext(tyCtx)
     ctx << "mainmodule generate" << "{"
     ctx << "initnode void enroll_polymorphs(void);"
     ProxyManager.proxies

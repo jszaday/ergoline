@@ -87,10 +87,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << s"namespace" << ctx.nameFor(ns) << "{" << "struct" << ctx.nameFor(x) << ";" << "}")
   }
 
-  def registerPolymorphs(ctx: CodeGenerationContext,
-                         checked: Map[EirSpecializable, List[EirSpecialization]],
-                         lambdas: Map[EirNamespace, List[EirLambdaExpression]]): Unit = {
+  def registerPolymorphs(ctx: CodeGenerationContext): Unit = {
     val global = Some(EirGlobalNamespace)
+    val checked = ctx.checked
     val puppables = checked.keys.filter({
       case _: EirProxy => false
       case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
@@ -111,7 +110,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     })
 
-    lambdas.flatMap(_._2).map(x => {
+    ctx.lambdas.flatMap(_._2).map(x => {
       ctx << "hypercomm::enroll<" << ctx.nameFor(x, global) << ">" << "()" << ";"
     })
 
