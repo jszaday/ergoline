@@ -8,9 +8,10 @@ import edu.illinois.cs.ergoline.passes.Processes.ctx
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.Properties.{lineSeparator => n}
 
 class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
@@ -76,9 +77,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def leave(ours: EirSpecialization): Unit = tyCtx.leave(ours)
 
-  def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
-    tyCtx.hasSubstitution(t).map(CheckTypes.visit(tyCtx, _))
-  }
+  def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = tyCtx.hasSubstitution(t)
 
   def temporary: String = "_"
 
@@ -96,10 +95,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
-    resolve[EirNode](x) match {
-      case t: EirTemplateArgument => nameFor(t, ctx)
-      case t: EirType => typeFor(t, ctx)
-      case n: EirNode => Errors.incorrectType(n, classOf[EirType])
+    Find.tryResolve[EirNode](x) match {
+      case Some(t: EirTemplateArgument) => nameFor(t, ctx)
+      case Some(t: EirType) => typeFor(t, ctx)
+      case _ => typeFor(typeOf(x), ctx)
     }
   }
 

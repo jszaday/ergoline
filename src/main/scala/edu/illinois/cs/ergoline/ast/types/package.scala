@@ -81,7 +81,7 @@ package object types {
     override def resolved: Boolean = _resolved.isDefined
 
     override def resolve(): List[EirType] = {
-      if (_resolved.isEmpty) _resolved = Some(ProxyManager.proxyFor(this))
+//      if (_resolved.isEmpty) _resolved = Some(ProxyManager.proxyFor(this))
       _resolved.toList
     }
   }

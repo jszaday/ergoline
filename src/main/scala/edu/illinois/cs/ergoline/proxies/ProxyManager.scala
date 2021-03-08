@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast.EirClassLike
 import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
@@ -78,17 +79,16 @@ object ProxyManager {
     }
   }
 
-  def proxyFor(t: EirProxyType): EirType = {
+  def proxyFor(ctx: TypeCheckContext, t: EirProxyType): EirType = {
     val collective = t.collective.getOrElse("")
-    val resolved = Find.uniqueResolution(t.base)
+    val resolved = CheckTypes.visit(ctx, t.base)
     val base = resolved match {
-      case t: EirTemplatedType =>
-        assertValid[EirClassLike](Find.uniqueResolution(t.base))
+      case t: EirTemplatedType => assertValid[EirClassLike](t.base)
       case c: EirClassLike => c
       case _ => Errors.unableToResolve(t)
     }
     val templateArgs = resolved match {
-      case t: EirTemplatedType => t.args.map(Find.uniqueResolution[EirType])
+      case t: EirTemplatedType => t.args.map(assertValid[EirType])
       case _ if base.templateArgs.isEmpty => Nil
       case _ => Errors.missingSpecialization(base)
     }

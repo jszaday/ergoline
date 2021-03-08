@@ -257,7 +257,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitSpecializedSymbol(ctx: UnparseContext, x: EirSpecializedSymbol): String = {
-    nameFor(ctx, x.symbol) + visitSpecialization(ctx, x)
+    nameFor(ctx, x.base) + visitSpecialization(ctx, x)
   }
 
   override def visitIfElse(ctx: UnparseContext, x: EirIfElse): String = {

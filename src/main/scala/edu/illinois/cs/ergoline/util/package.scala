@@ -69,7 +69,7 @@ package object util {
   def assertValid[T](value: EirNode)(implicit manifest: Manifest[T]): T = {
     Option(value) match {
       case Some(x: T) => x
-      case _ => Errors.incorrectType(value, manifest.getClass)
+      case _ => Errors.incorrectType(value, manifest.runtimeClass)
     }
   }
 

@@ -116,18 +116,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
     val base: EirSpecializable = assertValid[EirSpecializable](Find.uniqueResolution(x.base))
+
     val spec = ctx.specialize(base, x)
+    val tys = Option(spec).map(_.types).getOrElse(x.args).map(visit(ctx, _))
     visit(ctx, base)
     ctx.leave(spec)
     // visit our base
     base match {
-      case c : EirClassLike => ctx.getTemplatedType(c, x.args.map(visit(ctx, _)))
+      case c : EirClassLike => ctx.getTemplatedType(c, tys)
       case _ => error(ctx, x, s"unsure how to specialize ${x.base}")
     }
   }
 
   override def visitProxyType(ctx: TypeCheckContext, x: types.EirProxyType): EirType = {
-    visit(ctx, ProxyManager.proxyFor(x))
+    visit(ctx, ProxyManager.proxyFor(ctx, x))
   }
 
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
@@ -451,7 +453,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val (_, _, opt) = handleSpecializable(ctx, node)
     opt.foreach(subCtx => {
       ctx.start(subCtx)
-      CheckClasses.visit(node)
+      CheckClasses.visit(ctx, node)
       node.members.foreach(visit(ctx, _))
       node.inherited.foreach(visit(ctx, _))
       if (node.annotation("main").isDefined) {
@@ -659,7 +661,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     // TODO this should probably return templated types
-    val candidates = x.symbol.resolve()
+    val candidates = x.base.resolve().collect { case n: EirNamedNode => n }
     val found = screenCandidates(ctx, prevFc, candidates.view.zip(candidates.map(visit(ctx, _))))
     found match {
       case Some((m, ty)) =>
@@ -667,7 +669,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         prevFc.foreach(x => validate(ctx, m, x))
         ty match {
           case t: EirLambdaType => t
-          case t: EirSpecializable => ctx.getTemplatedType(t, x.types.map(visit(ctx, _)))
+          case t: EirSpecializable => visit(ctx, EirTemplatedType(Some(x), t, x.types))
         }
       case None => Errors.missingType(x)
     }

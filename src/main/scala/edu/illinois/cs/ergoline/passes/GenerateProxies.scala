@@ -165,7 +165,7 @@ object GenerateProxies {
   }
 
   def makeParameter(ctx: CodeGenerationContext, x: EirFunctionArgument): Unit = {
-    val ty = ctx.resolve(x.declaredType)
+    val ty = ctx.typeOf(x.declaredType)
     val s = ctx.typeFor(x.declaredType, Some(x))
     if (ty.isPointer) {
       ctx << s << x.name << ";"
@@ -222,7 +222,7 @@ object GenerateProxies {
       } else {
         if (isAsync) {
           ctx << "__future__.set" << "("
-        } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
+        } else if (ctx.typeOf(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
         makeEntryBody(ctx, x)

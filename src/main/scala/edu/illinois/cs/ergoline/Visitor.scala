@@ -398,7 +398,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
     val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {
-      val templatedType = EirTemplatedType(parent, base, templates)
+      val templatedType = EirSpecializedSymbol(parent, base.asInstanceOf[EirResolvable[EirNamedType]], templates)
       base.parent = Some(templatedType)
       base = templatedType
     }
@@ -465,8 +465,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     EirSymbol[T](parent, List(identifier.getText))
   }
 
-  def symbolizeType(identifiers: java.util.List[TerminalNode]): EirResolvable[EirType] = {
-    EirSymbol[EirNamedType](parent, identifiers.toStringList)
+  def symbolizeType(identifiers: java.util.List[TerminalNode]): EirResolvable[EirNamedNode with EirType] = {
+    EirSymbol[EirNamedNode with EirType](parent, identifiers.toStringList)
   }
 
   override def visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): EirExpressionNode = visitBinaryExpression(ctx)
@@ -636,9 +636,9 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     val last = (specs.lastOption, end) match {
       case (Some(a), Some(b)) =>
         // TODO use symbol here?
-        enter(EirTemplatedType(parent, null, null), (t: EirTemplatedType) => {
-          t.base = visitAs[EirResolvable[EirType]](a)
-          t.args = specializationToList(b)
+        enter(EirSpecializedSymbol(parent, null, null), (t: EirSpecializedSymbol) => {
+          t.base = visitAs[EirResolvable[EirNamedNode with EirType]](a)
+          t.types = specializationToList(b)
         })
       case (Some(a), None) => visitAs[EirResolvable[EirType]](a)
       case _ => Errors.cannotParse(start)
@@ -650,8 +650,8 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     val curr = Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
       case Some(spec) =>
         enter(EirSpecializedSymbol(parent, null, null), (s : EirSpecializedSymbol) => {
+          s.base = symbolize[EirNamedNode](ctx.fqn().Identifier())
           s.types = specializationToList(spec)
-          s.symbol = symbolize[EirNamedNode with EirSpecializable](ctx.fqn().Identifier())
         })
       case None => symbolize[EirNamedNode](ctx.fqn().Identifier())
     }

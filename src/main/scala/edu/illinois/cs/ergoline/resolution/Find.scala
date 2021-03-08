@@ -62,20 +62,28 @@ object Find {
     }
   }
 
-  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
+  def tryResolve[T <: EirNode](x: EirResolvable[T]): Option[T] = {
     val found = x.resolve()
-    assert(!globals.strict || found.length == found.distinct.length)
+    if (globals.strict && found.length != found.distinct.length) {
+      Errors.unableToResolve(x)
+    }
     found match {
-      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => f.asInstanceOf[T]
-      case head :: _ if !globals.strict => head
+      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => Some(f.asInstanceOf[T])
+      case head :: _ if !globals.strict => Some(head)
       // check to ensure unique resolution
       case head :: rest if globals.strict =>
         val all: List[T] = head +: rest
         if (all.length != all.distinct.length) Errors.warn(s"repeated resolutions of $x")
         if (all.length > 1) Errors.warn(s"potential ambiguity, selected $head from $all")
-        head
-      case _ => Errors.unableToResolve(x)
+        Some(head)
+      case _ => None
     }
+  }
+
+  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
+    tryResolve(x).getOrElse({
+      Errors.unableToResolve(x)
+    })
   }
 
   def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {

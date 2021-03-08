@@ -36,9 +36,10 @@ class TypeCheckContext {
       }
 
       def sameAs(specialization: EirSpecialization): Boolean = {
-        val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
-        val theirs = Find.uniqueResolution[EirType](specialization.types)
-        ours.zip(theirs).forall(t => t._1 == t._2)
+//        val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
+//        val theirs = Find.uniqueResolution[EirType](specialization.types)
+//        ours.zip(theirs).forall(t => t._1 == t._2)
+        false
       }
     }
   }
@@ -112,6 +113,7 @@ class TypeCheckContext {
     val sp = spec.map(makeDistinct)
     val checked = _checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
+    assert(s.templateArgs.isEmpty || spec.isDefined)
     Option.unless(checked.contains(ctx))({
       _checked += (s -> (checked :+ ctx))
       ctx
