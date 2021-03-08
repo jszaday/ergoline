@@ -1057,6 +1057,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             val ctx = parent.makeSubContext()
             List(if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n)
         }
+      case _: EirIdentifierPattern => Nil
       case e: EirExpressionPattern =>
         val ctx = parent.makeSubContext()
         ctx.putReplacement("_", current)
