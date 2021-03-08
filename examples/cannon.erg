@@ -3,13 +3,25 @@ package examples;
 import ergoline::_;
 import ck;
 
-def rand(): double {
-    // todo implement me!
-    return 0.0;
-}
+@system(fromHeader="rand48_replacement.h")
+def drand48(): double;
 
 @system(fromHeader="cmath")
 def sqrt(value: double): double;
+
+def dgemm(a: array<double, 2>, b: array<double, 2>, c: array<double, 2>) {
+    val m = a.shape[0];
+    val n = b.shape[1];
+    assert(a.shape[1] == b.shape[0]);
+    assert(c.shape[0] == m && c.shape[1] == n);
+    for (var i = 0; i < m; i += 1) {
+        for (var j = 0; j < n; j += 1) {
+            for (var k = 0; k < m; k += 1) {
+                c[i, k] += a[i, j] * b[j, k];
+            }
+        }
+    }
+}
 
 @main class cannon {
     var startTime: double;
@@ -21,14 +33,14 @@ def sqrt(value: double): double;
         val npPerDim = sqrt(np.toDouble()).toInt();
         val nbPerDim = ((np > 1) && (npPerDim == 1)) ? 2 : npPerDim;
         val nb = nbPerDim * nbPerDim;
-        val blockSize = nb * 32;
+        val blockSize = (args.size() > 1 ? args[1].toInt() : 128) / nbPerDim;
         val blockShape = (blockSize, blockSize);
 
         println(`matmul starting with a ${nbPerDim} x ${nbPerDim} mesh on ${np} pes`);
         println(`each block contains ${blockSize} x ${blockSize} values`);
 
-        val a = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
-        val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
+        val a = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
+        val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
         val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
 
         startTime = ck::wallTime();
@@ -55,9 +67,10 @@ class block {
         if (randInit) {
             // TODO add support for tuple expansion~! (*shape)
             data = new array<double, 2>(shape[0], shape[1]);
+
             for (var i = 0; i < shape[0]; i += 1) {
                 for (var j = 0; j < shape[1]; j += 1) {
-                    data[i, j] = rand();
+                    data[i, j] = drand48();
                 }
             }
         } else {
@@ -84,7 +97,7 @@ class block {
         @overlap for (var block = 0; block < nBlocks; block += 1) {
             when inputA(_ == block, blockA: array<double, 2>),
                  inputB(_ == block, blockB: array<double, 2>) => {
-                // TODO do dgemm
+                dgemm(blockA, blockB, data);
 
                 if ((block + 1) < nBlocks) {
                     self@[(idx[0] + 1) % nBlocks, idx[1]].inputA(block + 1, blockA);
