@@ -52,7 +52,7 @@ object GenerateDecls {
         }
         if (!hasHash(x)) makeHasher(ctx, x)
         val parent = x.extendsThis
-          .map(Find.uniqueResolution[EirType])
+          .map(ctx.typeOf)
           .map(ctx.nameFor(_, Some(x)))
         ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p => s": $p(__tag__)") << "{}"
       } else if (!hasHash(x)) makeHasher(ctx, x)

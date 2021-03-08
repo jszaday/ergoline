@@ -79,6 +79,10 @@ object Errors {
     exit(format(resolvable, "unable to resolve %s", resolvable))
   }
 
+  def unableToResolve(resolvable: Iterable[EirResolvable[_]]): Nothing = {
+    exit(format(resolvable.headOption.orNull, "unable to resolve %s", resolvable.map(nameFor) mkString ","))
+  }
+
   def unableToResolve(s: String): Nothing = {
     exit(format(null, "unable to resolve %s", s))
   }

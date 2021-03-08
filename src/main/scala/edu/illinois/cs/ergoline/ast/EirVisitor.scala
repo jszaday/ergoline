@@ -4,6 +4,8 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
+import scala.reflect.ClassTag
+
 trait EirVisitor[Context, Value] {
   def error(ctx: Context, node : EirNode): Value = {
     throw new RuntimeException(s"unable to visit $node in context $ctx")
@@ -15,7 +17,6 @@ trait EirVisitor[Context, Value] {
 
   def visit(ctx: Context, node: EirNode): Value = {
     node match {
-      case x: EirSpecializedSymbol => visitSpecializedSymbol(ctx, x)
       case x: EirBlock => visitBlock(ctx, x)
       case x: EirNamespace => visitNamespace(ctx, x)
       case x: EirDeclaration => visitDeclaration(ctx, x)
@@ -32,6 +33,8 @@ trait EirVisitor[Context, Value] {
       case x: EirLambdaExpression => visitLambdaExpression(ctx, x)
       case x: EirReturn => visitReturn(ctx, x)
       case x: EirSymbol[_] => visitSymbol(ctx, x)
+      case x: EirScopedSymbol[_] => visitScopedSymbol(ctx, x)
+      case x: EirSpecializedSymbol[_] => visitSpecializedSymbol(ctx, x)
       case x: EirLiteral => visitLiteral(ctx, x)
       case x: EirForLoop => visitForLoop(ctx, x)
       case x: EirWhileLoop => visitWhileLoop(ctx, x)
@@ -42,7 +45,6 @@ trait EirVisitor[Context, Value] {
       case x: EirTemplatedType => visitTemplatedType(ctx, x)
       case x: EirLambdaType => visitLambdaType(ctx, x)
       case x: EirTernaryOperator => visitTernaryOperator(ctx, x)
-      case x: EirScopedSymbol[_] => visitScopedSymbol(ctx, x)
       case x: EirArrayReference => visitArrayReference(ctx, x)
       case x: EirIfElse => visitIfElse(ctx, x)
       case x: EirNew => visitNew(ctx, x)
@@ -100,7 +102,7 @@ trait EirVisitor[Context, Value] {
 //  def visitDefault(ctx: Context, x: EirNode): Value
 
 //  def visitGlobalNamespace(ctx: Context, x: Value
-  def visitSpecializedSymbol(ctx: Context, x: EirSpecializedSymbol): Value
+  def visitSpecializedSymbol(ctx: Context, x: EirSpecializedSymbol[_]): Value
 
   def visitArrayReference(ctx: Context, x: EirArrayReference): Value
 

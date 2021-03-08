@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.TypeCheckContext
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 import scala.collection.View
+import scala.reflect.ClassTag
 
 package object util {
 
@@ -79,7 +80,7 @@ package object util {
     }).toSeq
   }
 
-  def applyOrFalse[T <: EirNode : Manifest](function: T => Unit, value: EirNode): Boolean = {
+  def applyOrFalse[T <: EirNode : ClassTag](function: T => Unit, value: EirNode): Boolean = {
     value.isValid[T].map(function).isDefined
   }
 
@@ -114,10 +115,10 @@ package object util {
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 
-      def findChild[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
+      def findChild[T <: EirNode : ClassTag](predicate: T => Boolean): Iterable[T] =
         Find.child[T](node, predicate)
 
-      def isValid[T : Manifest]: Option[T] = node match {
+      def isValid[T : ClassTag]: Option[T] = node match {
         case t : T => Some(t)
         case _ => None
       }
@@ -131,7 +132,7 @@ package object util {
     }
 
     implicit class RichOption(option: Option[_]) {
-      def to[T: Manifest]: Option[T] = option match {
+      def to[T](implicit manifest: Manifest[T]): Option[T] = option match {
         case Some(t: T) => Some(t)
         case _ => None
       }

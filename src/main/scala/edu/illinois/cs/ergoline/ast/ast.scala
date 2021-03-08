@@ -1,7 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
 import java.io.File
-
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -12,7 +11,7 @@ import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{globals, util}
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
+import scala.reflect.{ClassTag, classTag}
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
@@ -260,7 +259,7 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
-  extends EirType with EirNamedNode {
+  extends EirNamedNode with EirResolvable[EirType] {
   var lowerBound: Option[EirResolvable[EirType]] = None
   var upperBound: Option[EirResolvable[EirType]] = None
   var defaultValue: Option[EirResolvable[EirType]] = None
@@ -272,6 +271,10 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = false
+
+  override def resolve(): Seq[EirType] = Nil
+
+  override def resolved: Boolean = false
 }
 
 case class EirClass(var parent: Option[EirNode], var members: List[EirMember],
@@ -510,7 +513,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
       case _ => Some(false)
     }
     Find.descendant(body, predicate)
-      .map(x => Find.uniqueResolution(x.asInstanceOf[EirResolvable[EirNamedNode]]))
+      .map(x => Find.typedResolve[EirNamedNode](x.asInstanceOf[EirResolvable[EirNamedNode]]))
       .toList.distinct.sortBy(_.name)
   }
 
@@ -580,20 +583,22 @@ object EirLiteralTypes extends Enumeration {
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
   extends EirExpressionNode with EirResolvable[T] {
 
-  private var _resolved : Seq[T] = Nil
+  private var _resolved : Seq[EirNamedNode] = Nil
 
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 
-  override def resolve(): Seq[T] = {
+  override def resolve(): Seq[EirNamedNode] = {
     if (_resolved.isEmpty) {
-      _resolved = Find.fromSymbol[T](this).toSeq
+      _resolved = Find.fromSymbol(this)
     }
     _resolved
   }
 
-  def candidates: Seq[T] = resolve()
+  val needsType: Boolean = {
+    classTag[T].runtimeClass.isAssignableFrom(classOf[EirType])
+  }
 
   override def resolved: Boolean = _resolved.nonEmpty
 }
@@ -687,18 +692,18 @@ case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader,
   }
 }
 
-case class EirSpecializedSymbol(var parent: Option[EirNode],
-                                var base: EirResolvable[EirNamedNode],
+case class EirSpecializedSymbol[A <: EirNode : ClassTag](var parent: Option[EirNode],
+                                var base: EirResolvable[A],
                                 var types: List[EirResolvable[EirType]])
-  extends EirExpressionNode with EirResolvable[EirType] with EirSpecialization {
+  extends EirExpressionNode with EirResolvable[A] with EirSpecialization {
   override def children: Iterable[EirNode] = base +: types
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     AstManipulation.updateWithin(types, oldNode, newNode).map(types = _).isDefined ||
-      ((base == oldNode) && util.applyOrFalse[EirResolvable[EirNamedNode]](base = _, newNode))
+      ((base == oldNode) && util.applyOrFalse[EirResolvable[A]](base = _, newNode))
   }
 
-  override def resolve(): Seq[EirType] = Nil
+  override def resolve(): Seq[A] = Nil
 
   override def resolved: Boolean = false
 }
@@ -786,20 +791,20 @@ case class EirInterpolatedString(var children: List[EirExpressionNode])(var pare
 }
 
 case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode]) extends EirResolvable[EirType] {
-  private var _resolved: Option[EirTemplateArgument] = None
+  private var _resolved: Seq[EirTemplateArgument] = Nil
 
-  override def resolve(): Seq[EirType] = {
+  override def resolve(): Seq[EirNode] = {
     if (_resolved.isEmpty) {
       val symbol = EirSymbol[EirNamedNode with EirType](parent, fqn)
-      _resolved = symbol.resolve().headOption.to[EirTemplateArgument]
+      _resolved = symbol.resolve().collect{ case t: EirTemplateArgument => t }
       if (!_resolved.forall(_.isPack)) {
         Errors.expectedParameterPack(this)
       }
     }
-    _resolved.toSeq
+    _resolved
   }
 
-  override def resolved: Boolean = _resolved.isDefined
+  override def resolved: Boolean = _resolved.nonEmpty
   override def children: Iterable[EirNode] = Nil
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 }
@@ -810,11 +815,11 @@ case class EirTypeAlias(var name: String, var templateArgs: List[EirTemplateArgu
 
   override def resolved: Boolean = value.resolved
 
-  override def resolve(): List[EirType] = {
+  override def resolve(): Seq[EirNode] = {
     if (templateArgs.nonEmpty) {
       ???
     } else {
-      value.resolve().toList
+      Seq(value)
     }
   }
 

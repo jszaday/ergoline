@@ -62,7 +62,7 @@ object CheckConstructors {
   }
 
   private def canAssignHelper(ctx: TypeCheckContext, x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
-    val tys = List(x, y).map(x => if (ctx == null) Find.uniqueResolution(x) else CheckTypes.visit(ctx, x))
+    val tys = List(x, y).map(x => if (ctx == null) Find.typedResolve[EirType](x) else CheckTypes.visit(ctx, x))
     tys.head.canAssignTo(tys.last)
   }
 

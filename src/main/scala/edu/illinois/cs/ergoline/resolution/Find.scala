@@ -1,12 +1,13 @@
 package edu.illinois.cs.ergoline.resolution
 
+import com.sun.tools.javac.code.TypeTag
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichIntOption, RichOption}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, extractFunction, sweepInherited, addExplicitSelf}
+import edu.illinois.cs.ergoline.util.{Errors, addExplicitSelf, assertValid, extractFunction, sweepInherited}
 
 import scala.collection.View
 import scala.reflect.ClassTag
@@ -62,17 +63,17 @@ object Find {
     }
   }
 
-  def tryResolve[T <: EirNode](x: EirResolvable[T]): Option[T] = {
+  def tryResolve(x: EirResolvable[_]): Option[EirNode] = {
     val found = x.resolve()
     if (globals.strict && found.length != found.distinct.length) {
       Errors.unableToResolve(x)
     }
     found match {
-      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => Some(f.asInstanceOf[T])
+      case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => Some(f)
       case head :: _ if !globals.strict => Some(head)
       // check to ensure unique resolution
       case head :: rest if globals.strict =>
-        val all: List[T] = head +: rest
+        val all: List[EirNode] = head +: rest
         if (all.length != all.distinct.length) Errors.warn(s"repeated resolutions of $x")
         if (all.length > 1) Errors.warn(s"potential ambiguity, selected $head from $all")
         Some(head)
@@ -80,14 +81,20 @@ object Find {
     }
   }
 
-  def uniqueResolution[T <: EirNode](x: EirResolvable[T]): T = {
+  def uniqueResolution(x: EirResolvable[_]): EirNode = {
     tryResolve(x).getOrElse({
       Errors.unableToResolve(x)
     })
   }
 
+  def typedResolve[A <: EirNode : Manifest](x: EirResolvable[_]): A = {
+     x.resolve()
+      .collectFirst({ case a: A => a })
+      .getOrElse({ Errors.unableToResolve(x) })
+  }
+
   def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {
-    val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.uniqueResolution(rY))
+    val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.typedResolve(rY))
     oY.map(unionType(x, _)) match {
       case Some(x) => x
       case None => Some(x)
@@ -173,21 +180,18 @@ object Find {
     }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): Seq[T] = {
-    symbol.qualifiedName match {
+  def fromSymbol(symbol: EirSymbol[_]): Seq[EirNamedNode] = {
+    (symbol.qualifiedName match {
       case last +: Nil =>
-        val found = anywhereAccessible(symbol, last).toSeq
-        found.collect{ case t: T => t }
+        anywhereAccessible(symbol, last)
       case head :: tail =>
-        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail)).toSeq.collect {
-          case t: T => t
-        }
-    }
+        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail))
+    }).toSeq
   }
 
   // TODO use this!!
-  def uniqueResolution[T <: EirNode](iterable: Iterable[EirResolvable[T]]): Iterable[T] = {
-    iterable.map(uniqueResolution[T])
+  def uniqueResolution[T <: EirNode : Manifest](iterable: Iterable[EirResolvable[T]]): Iterable[T] = {
+    iterable.map(typedResolve[T])
   }
 
   private def qualified(usage: EirNode, scope: EirNamedNode, names: List[String]): Seq[EirNamedNode] = {
@@ -204,9 +208,6 @@ object Find {
     }
   }
 
-  def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
-    asClassLike(Find.uniqueResolution[EirType](resolvable))
-
   def asClassLike(ty: EirType): EirClassLike = tryClassLike(ty) match {
     case Some(c) => c
     case None => Errors.incorrectType(ty, classOf[EirClassLike])
@@ -214,7 +215,7 @@ object Find {
 
   def tryClassLike(ty: EirNode): Option[EirClassLike] = ty match {
     case c: EirClassLike => Some(c)
-    case t: EirTemplatedType => Some(asClassLike(t.base))
+    case t: EirTemplatedType => Option(t.base).to[EirType].map(asClassLike)
     case _ => None
   }
 
@@ -263,11 +264,11 @@ object Find {
 
   private def _traits(x: EirClassLike): Iterable[EirType] = {
     x.inherited.flatMap(x => {
-      val res = uniqueResolution(x)
+      val res = typedResolve[EirType](x)
       val base = res match {
         case t: EirClassLike => t
         case t: EirTemplatedType =>
-          val res = assertValid[EirClassLike](uniqueResolution(t.base))
+          val res = typedResolve[EirClassLike](t.base)
           if (res.inherited.nonEmpty) ???
           res
       }
@@ -281,7 +282,7 @@ object Find {
         case m: EirMember => m
       }
       // TODO add support for this
-      case s: EirSpecializedSymbol => Errors.unableToResolve(s)
+      case s: EirSpecializedSymbol[_] => Errors.unableToResolve(s)
       case _ => Errors.unreachable()
     }
 

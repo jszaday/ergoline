@@ -8,7 +8,7 @@ import edu.illinois.cs.ergoline.util.AstManipulation
 package object types {
 
   trait EirType extends EirResolvable[EirType] {
-    override def resolve(): List[EirType] = List(this)
+    override def resolve(): Seq[EirNode] = Seq(this)
 
     override def resolved: Boolean = true
   }

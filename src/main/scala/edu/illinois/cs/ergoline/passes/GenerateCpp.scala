@@ -53,7 +53,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     implicit class RichEirResolvable[T <: EirNode](self: EirResolvable[T]) {
       def isTransient: Boolean = {
-        val x = Find.uniqueResolution[EirNode](self)
+        val x = Find.typedResolve[EirNode](self)
         x match {
           case t: EirTupleType => t.children.exists(_.isTransient)
           // TODO use specialization?
@@ -346,7 +346,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def disambiguate(ctx: CodeGenerationContext, x: EirExpressionNode): EirNode = {
     x.disambiguation.getOrElse(x match {
-      case x: EirResolvable[_] => ctx.resolve(x)
+      case x: EirResolvable[_] => ctx.resolve[EirNode](x)
       case x => x
     })
   }
@@ -392,7 +392,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
       val isPointer = x.target match {
         // TODO make this more robust
-        case s: EirSymbol[_] => ctx.resolve(s) match {
+        case s: EirSymbol[_] => ctx.resolve[EirNode](s) match {
           case _: EirDeclaration => true
           case EirMember(_, _: EirDeclaration, _) => true
           case _: EirFunctionArgument => true
@@ -1119,7 +1119,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  override def visitSpecializedSymbol(ctx: CodeGenerationContext, x: EirSpecializedSymbol): Unit = {
+  override def visitSpecializedSymbol(ctx: CodeGenerationContext, x: EirSpecializedSymbol[_]): Unit = {
     val base = ctx.typeOf(x.base)
     ctx << ctx.nameFor(base) << visitSpecialization(ctx, x)
   }

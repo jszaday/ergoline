@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline.proxies
 import edu.illinois.cs.ergoline.ast.EirClassLike
 import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.util.matching.Regex
@@ -21,7 +21,7 @@ object ProxyManager {
 
   private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
   private var _elements: Map[EirProxy, EirProxy] = Map()
-  private var _types: Map[(EirProxy, List[EirType]), EirType] = Map()
+  private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] = Map()
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
@@ -50,7 +50,7 @@ object ProxyManager {
   def collectiveFor(t: EirProxy): Option[EirProxy] =
     Option.when(t.isElement)(_proxies.get((t.collective.get, t.base))).flatten
 
-  private def typeFor(p: EirProxy, args: List[EirType]): EirType = {
+  private def typeFor(p: EirProxy, args: List[EirResolvable[EirType]]): EirType = {
     if (args.isEmpty) p
     else if (_types.contains((p, args))) _types((p, args))
     else {
@@ -62,19 +62,19 @@ object ProxyManager {
 
   def proxyType(p: EirProxy): EirType = {
     assert(p.collective.isEmpty)
-    typeFor(p, p.templateArgs.map(Find.uniqueResolution(_)))
+    typeFor(p, p.templateArgs)
   }
 
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case Some(e) => typeFor(e, e.templateArgs)
       case None => Errors.missingType(p)
     }
   }
 
   def collectiveType(p: EirProxy): EirType = {
     collectiveFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case Some(e) => typeFor(e, e.templateArgs)
       case None => Errors.missingType(p)
     }
   }

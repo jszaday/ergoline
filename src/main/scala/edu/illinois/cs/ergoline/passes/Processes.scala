@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
@@ -55,7 +56,9 @@ object Processes {
         var placed: List[EirClassLike] = Nil
         while (unplaced.nonEmpty) {
           val idx = unplaced.indexWhere(
-            !_.inherited.map(Find.asClassLike).exists(unplaced.contains(_)))
+            !_.inherited
+              .map(Find.typedResolve[EirType])
+              .map(Find.asClassLike).exists(unplaced.contains(_)))
           placed :+= unplaced(idx)
           unplaced = unplaced.patch(idx, Nil, 1)
         }

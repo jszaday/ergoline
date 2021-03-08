@@ -38,7 +38,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     m.annotations +:= EirAnnotation("system", Map())
     val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
     val (from, to) = (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
-    val (fromExp, toExp) = (EirPlaceholder(None, Some(from)), EirPlaceholder(None, Some(to)))
+    val (fromExp, toExp) = (EirPlaceholder[EirType](None, Some(from)), EirPlaceholder[EirType](None, Some(to)))
     f.templateArgs = List(from, to)
     f.functionArgs = List(
       EirFunctionArgument(Some(f), "value", fromExp, isExpansion = false, isSelfAssigning = false),

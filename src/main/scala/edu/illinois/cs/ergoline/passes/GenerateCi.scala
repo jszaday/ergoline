@@ -30,7 +30,7 @@ object GenerateCi {
   def makeChareSpecializations(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     val kind = visitChareType(proxy.isMain, proxy.collective)
     val specializations = ctx.checked.getOrElse(proxy, Nil).map(
-      _.types.map(Find.uniqueResolution[EirType])
+      _.types.map(ctx.typeOf)
     ) // NOTE we might want to consider putting .distinct here?
       //      (but it shouldn't be necessary)
     specializations.foreach(sp => {

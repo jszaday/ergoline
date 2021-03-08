@@ -22,7 +22,7 @@ object TypeCompatibility {
       case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
         x.inherited.exists(_.canAssignTo(y))
       case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
-        Find.uniqueResolution(x.base).canAssignTo(y)
+        x.base.canAssignTo(y)
       case (x: EirConstantFacade, y: EirConstantFacade) => x.value.equivalentTo(y.value)
       case _ => false
     })
@@ -30,11 +30,17 @@ object TypeCompatibility {
 
   implicit class RichEirResolvable[T <: EirType](ours: EirResolvable[T]) {
     def canAssignTo(theirs: EirResolvable[T]): Boolean = {
-      Find.uniqueResolution(ours).canAssignTo(Find.uniqueResolution(theirs))
+      (ours, theirs) match {
+        case (a: EirType, b: EirType) => a.canAssignTo(b)
+        case _ => Errors.unableToResolve(Seq(ours, theirs))
+      }
     }
 
-    def canAssignTo(eirType: EirType): Boolean = {
-      Find.uniqueResolution(ours).canAssignTo(eirType)
+    def canAssignTo(b: EirType): Boolean = {
+      ours match {
+        case a: EirType => a.canAssignTo(b)
+        case _ => Errors.unableToResolve(ours)
+      }
     }
   }
 }

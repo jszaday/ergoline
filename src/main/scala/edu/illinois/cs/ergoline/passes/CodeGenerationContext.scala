@@ -45,8 +45,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def resolve[T <: EirNode](resolvable: EirResolvable[T]): T =
-    Find.uniqueResolution(resolvable)
+  def resolve[T <: EirNode : Manifest](x: EirResolvable[T]): T = Find.typedResolve(x)
 
   def proxy: Option[EirProxy] = _proxies.headOption
 
@@ -69,7 +68,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def eval2const(n: EirNode): EirLiteral = n match {
     case e: EirExpressionNode => CheckTypes.evaluateConstExpr(typeContext, e)
     case c: EirConstantFacade => c.value
-    case r: EirResolvable[_] => eval2const(resolve(r))
+    case r: EirResolvable[_] => eval2const(resolve[EirNode](r))
     case _ => Errors.invalidConstExpr(n)
   }
 
@@ -95,7 +94,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
-    Find.tryResolve[EirNode](x) match {
+    Find.tryResolve(x) match {
       case Some(t: EirTemplateArgument) => nameFor(t, ctx)
       case Some(t: EirType) => typeFor(t, ctx)
       case _ => typeFor(typeOf(x), ctx)

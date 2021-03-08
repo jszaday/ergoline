@@ -27,7 +27,8 @@ object CheckClasses {
       case t : EirTrait => visitTrait(t)
     }
 
-    node.inherited.foreach(checkParentClass(node, _))
+    node.inherited.foreach(x =>
+      checkParentClass(ctx, node, CheckTypes.visit(ctx, x)))
 
     checked +:= node
   }
@@ -36,12 +37,12 @@ object CheckClasses {
     throw ClassCheckException(node, message)
   }
 
-  def addDerived(a: EirClassLike, b: EirClassLike): Unit = {
-    b.inherited.foreach(x => addDerived(a, asClassLike(x)))
+  def addDerived(ctx: TypeCheckContext, a: EirClassLike, b: EirClassLike): Unit = {
+    b.inherited.map(CheckTypes.visit(ctx, _)).foreach(x => addDerived(ctx, a, asClassLike(x)))
     b.derived = b.derived + a
   }
 
-  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType]): Unit = {
+  def checkParentClass(ctx: TypeCheckContext, node: EirClassLike, candidate: EirType): Unit = {
     val resolved = asClassLike(candidate)
     node match {
       case _: EirTrait if !resolved.isInstanceOf[EirTrait] =>
@@ -53,12 +54,12 @@ object CheckClasses {
     if (resolved.isDescendantOf(node)) {
       Errors.invalidParentClass(node, resolved, "circular relationship.")
     }
-    val others = node.inherited.filterNot(_ == candidate).map(asClassLike)
-    val found = others.find(x => x == resolved || x.isDescendantOf(resolved))
+    val others = node.inherited.map(CheckTypes.visit(ctx, _)).filterNot(_ == candidate).map(asClassLike)
+    val found = others.find(x => x == resolved)
     if (found.isDefined) {
       Errors.invalidParentClass(node, resolved, s"already implemented by ${found.get.name}.")
     }
-    addDerived(node, resolved)
+    addDerived(ctx, node, resolved)
     // NOTE typechecking is used to catch mismatches in our parents' template specialization
     //      i.e. missing/wrong number of arguments
   }

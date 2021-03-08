@@ -13,6 +13,7 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
+import scala.reflect.ClassTag
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -203,7 +204,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case t: EirTemplatedType =>
         val iterableTy = globals.iterableType
         val iteratorTy = globals.iteratorType
-        val base = Find.uniqueResolution(t.base)
+        val base = visit(ctx, t.base)
         if (base.canAssignTo(iterableTy)) {
           h.expression = makeMemberCall(h.expression, "iter")
           visit(ctx, h.expression)
@@ -267,13 +268,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
    */
   private def learn(ctx: TypeCheckContext, pair: (EirResolvable[EirType], EirType)): Map[EirTemplateArgument, EirType] = {
     pair match {
-      case (EirPlaceholder(_, Some(a)), b) => learn(ctx, (a, b))
+      case (EirPlaceholder(_, Some(a)), b) => learn(ctx, (visit(ctx, a), b))
       case (a: EirTemplatedType, b: EirTemplatedType) if a.args.length == b.args.length =>
         (learn(ctx, (a.base, visit(ctx, b.base))) +: a.args.zip(b.args.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
       case (a: EirLambdaType, b: EirLambdaType) if a.from.length == b.from.length =>
         (learn(ctx, (a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
-      case (_: EirSymbol[_] | _: EirSpecializedSymbol, b) => learn(ctx, (Find.uniqueResolution(pair._1), b))
+      case (_: EirSymbol[_] | _: EirSpecializedSymbol[_], b) => learn(ctx, (visit(ctx, pair._1), b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _ => Map()
     }
@@ -354,13 +355,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def zipWithVisit(ctx: TypeCheckContext, ns: Iterable[EirNamedNode]): Iterable[(EirNamedNode, EirType)] = {
-    ns.view.zip(ns.view.map(visit(ctx, _)))
+    val all = ns.view.toList
+    all.zip(all.map(visit(ctx, _))).view
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
     val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
-    val candidates = self match {
+    val candidates = (self match {
       case Some(name) =>
         ctx.ancestor[EirMember] match {
           case Some(m) => zipWithVisit(ctx, m.selfDeclarations.filter(_.name == name))
@@ -369,7 +371,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case None =>
         val (init, last) = (value.qualifiedName.init, value.qualifiedName.last)
         if (init.nonEmpty) {
-          val parent = EirSymbol[EirNamedNode](value.parent, init).resolve().headOption
+          val parent = Find.tryResolve(EirSymbol[EirNamedNode](value.parent, init))
           val asCls = parent.flatMap(tryClassLike)
           if (asCls.isDefined) {
             val accessor = EirScopedSymbol(null, EirSymbol(value.parent, List(last)))(value.parent)
@@ -381,8 +383,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         } else {
           zipWithVisit(ctx, value.resolve())
         }
-    }
-    val found = screenCandidates(ctx, prevFc, candidates)
+    }).toList
+    val filtered = if (value.needsType) candidates.filter({
+      case (_: EirType | _: EirResolvable[_], _) => true
+      case _ => false
+    }) else candidates
+    val found = screenCandidates(ctx, prevFc, filtered)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))
     prevFc
@@ -657,7 +663,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   final case class TypeCheckException(message: String) extends Exception(message)
 
-  override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol): EirType = {
+  override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol[_]): EirType = {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     // TODO this should probably return templated types
@@ -669,7 +675,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         prevFc.foreach(x => validate(ctx, m, x))
         ty match {
           case t: EirLambdaType => t
-          case t: EirSpecializable => visit(ctx, EirTemplatedType(Some(x), t, x.types))
+          case t: EirSpecializable => visit(ctx, EirTemplatedType(Some(x.asInstanceOf[EirNode]), t, x.types))
         }
       case None => Errors.missingType(x)
     }
@@ -756,20 +762,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTupleType(ctx: TypeCheckContext, x: types.EirTupleType): EirType = {
     val children = x.children.flatMap{
       case x: EirPackExpansion =>
-        val found = x.resolve().headOption.getOrElse(Errors.unableToResolve(x))
-        visit(ctx, found) match {
-          case EirTupleType(_, ts) => ts
+        visit(ctx, x) match {
+          case EirTupleType(_, ts) => ts.map(visit(ctx, _))
           case t => List(t)
         }
-      case x => List(x)
+      case x => List(visit(ctx, x))
     }
-    ctx.getTupleType(visit(ctx, children))
+    ctx.getTupleType(children)
   }
 
   def sameTypes(ctx: TypeCheckContext, a: EirType, b: EirType): Boolean = {
     (a == b) || ((a, b) match {
       case (EirTemplatedType(_, b1, as1), EirTemplatedType(_, b2, as2)) if as1.length == as2.length =>
-        sameTypes(ctx, visit(ctx, Find.uniqueResolution(b1)), visit(ctx, Find.uniqueResolution(b2))) &&
+        sameTypes(ctx, visit(ctx, b1), visit(ctx, b2)) &&
           as1.map(visit(ctx, _)).zip(as2.map(visit(ctx, _))).forall(x => sameTypes(ctx, x._1, x._2))
       case _ => false
     })
@@ -782,7 +787,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // TODO add type-checking to verify:
       //      both goal/theirs and ours are pointer types
       // -or- ours can assign to theirs
-      case t => Find.uniqueResolution(t)
+      case t => visit(ctx, t)
      }
     x.needsCasting = !sameTypes(ctx, goal, found)
     x.ty = found
@@ -798,9 +803,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else Errors.cannotCast(x, ours, globals.boolType)
   }
 
-  @tailrec def hasField(x: EirType, field: String): Boolean = {
+  @tailrec def hasField(ctx: TypeCheckContext, x: EirType, field: String): Boolean = {
     x match {
-      case t: EirTemplatedType => hasField(Find.uniqueResolution(t.base), field)
+      case t: EirTemplatedType => hasField(ctx, visit(ctx, t.base), field)
       case c: EirClassLike => c.members.exists(_.name == field)
     }
   }
@@ -812,7 +817,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
       Errors.expectedSync(x, f)
     }
-    if (x.target.foundType.exists(hasField(_, "release"))) {
+    if (x.target.foundType.exists(hasField(ctx, _, "release"))) {
       val f = makeMemberCall(x.target, "release")
       x.release = Some(f)
       visit(ctx, f)
@@ -846,14 +851,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTypeAlias(ctx: TypeCheckContext, x: EirTypeAlias): EirType = {
-    visit(ctx, x.resolve().headOption.getOrElse(Errors.unableToResolve(x.value)))
+    visit(ctx, Find.uniqueResolution(x))
   }
 
   def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {
-    x.resolve().headOption.collect {
-      case y: EirConstantFacade => y.value
-      case x: EirTemplateArgument => valueWithin(ctx, visit(ctx, x))
-    }.getOrElse(Errors.unableToResolve(x))
+    assertValid[EirConstantFacade](visit(ctx, x)).value
   }
 
   def evaluateConstExpr(ctx: TypeCheckContext, expr: EirExpressionNode): EirLiteral = {
