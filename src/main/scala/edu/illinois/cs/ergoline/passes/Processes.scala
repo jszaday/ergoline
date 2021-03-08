@@ -27,10 +27,6 @@ object Processes {
     "#include \"generate.decl.h\" // ;"
   )
 
-  def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
-    ctx.lambdas.groupBy(x => Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x)))
-  def checked: Map[EirSpecializable, List[EirSpecialization]] = ctx.checked
-
   def onLoad(node : EirNode): Unit = {
     val all = node +: Modules.fileSiblings.getOrElse(node, Nil)
 
@@ -46,7 +42,7 @@ object Processes {
 
   // NOTE This will go away once passes are implemented
   def generateCi(): String = {
-    GenerateCi.visitAll(checked)
+    GenerateCi.visitAll(ctx)
   }
 
   // TODO this logic should be moved into its own file or generate cpp
@@ -108,10 +104,11 @@ object Processes {
   // TODO this logic should be moved into GenerateCpp
   // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
-    val ctx: CodeGenerationContext = new CodeGenerationContext
+    val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
     val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
-    val sorted = checked.keys.collect({
+
+    val sorted = ctx.checked.keys.collect({
       case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
     }).toList.dependenceSort()
     assert(!globals.strict || sorted.hasValidOrder)
@@ -127,7 +124,7 @@ object Processes {
     ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
     a.foreach(GenerateProxies.visitProxy(ctx, _))
     kids.foreach(GenerateDecls.visit(ctx, _))
-    lambdas.foreach({
+    ctx.lambdas.foreach({
       case (namespace, lambdas) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
           lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
@@ -135,7 +132,7 @@ object Processes {
     })
     kids.foreach(GenerateCpp.visit(ctx, _))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
-    GenerateCpp.registerPolymorphs(ctx, checked, lambdas)
+    GenerateCpp.registerPolymorphs(ctx)
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",

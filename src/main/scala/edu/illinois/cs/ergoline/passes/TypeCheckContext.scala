@@ -23,26 +23,16 @@ class TypeCheckContext {
     }
 
     implicit class RichEirSpecializable(specializable: EirSpecializable) {
-      def accepts(specialization: EirSpecialization): Boolean = {
+      def accepts(specialization: EirSpecialization): List[Option[EirResolvable[EirType]]] = {
         val ours = specializable.templateArgs
         val theirs = specialization.types
         val n = math.max(ours.length, theirs.length)
-        var i = 0
-        while (i < n) {
-          if (i >= theirs.length) {
-            if (!ours(i).hasDefaultValue) {
-              return false
-            }
-          } else if (i >= ours.length) {
-            if (!ours.lastOption.exists(t => t.isPack && t.accepts(theirs(i)))) {
-              return false
-            }
-          } else if (!ours(i).accepts(theirs(i))) {
-            return false
-          }
-          i += 1
-        }
-        true
+
+        (0 until n).map({
+          case i if i >= theirs.length => ours(i).defaultValue
+          case i if i >= ours.length => ours.lastOption.filter(t => t.isPack && t.accepts(theirs(i))).map(_ => theirs(i))
+          case i => Option(theirs(i)).filter(ours(i).accepts(_))
+        }).toList
       }
 
       def sameAs(specialization: EirSpecialization): Boolean = {
@@ -129,11 +119,18 @@ class TypeCheckContext {
   }
 
   def trySpecialize(s : EirSpecializable): Option[EirSpecialization] = {
-    specialization.find(s.accepts(_)).flatMap(trySpecialize(s, _))
+    specialization.flatMap(trySpecialize(s, _))
   }
 
-  def trySpecialize(s : EirSpecializable, sp : EirSpecialization): Option[EirSpecialization] = {
-    Option.when(s.accepts(sp))({
+  def synthesize(types: List[EirResolvable[EirType]]): EirSpecialization = {
+    EirSyntheticSpecialization(types)
+  }
+
+  def trySpecialize(s : EirSpecializable, spec : EirSpecialization): Option[EirSpecialization] = {
+    val types = s.accepts(spec)
+    Option.when(types.forall(_.isDefined))({
+      val sp = Option.when(types.length == spec.types.length)(spec)
+                     .getOrElse({ synthesize(types.map(_.get)) })
       Option.unless(s.sameAs(sp))({
         // TODO this needs to substitute template arguments with
         //      whatever is currently in the context~!

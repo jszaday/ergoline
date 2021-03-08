@@ -289,8 +289,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       insights.get(t).orElse(t.defaultValue.map(visit(ctx, _)))
     })
 
-    Option.when(paired.forall(x => x.isDefined && !x.contains(null)))(
-      EirSyntheticSpecialization(paired.flatten))
+    Option.when(paired.forall(x =>
+      x.isDefined && !x.contains(null)
+    ))(ctx.synthesize(paired.flatten))
   }
 
   def screenCandidates(ctx: TypeCheckContext, argsrc: Option[EirExpressionNode],
