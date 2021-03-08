@@ -63,15 +63,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case t: EirType => Find.asClassLike(t).isTransient
         }
       }
-
-      def equivalentTo(theirs: EirResolvable[EirType]): Boolean = {
-        (Find.uniqueResolution(self), Find.uniqueResolution(theirs)) match {
-          case (EirTemplatedType(_, ourBase, ourArgs), EirTemplatedType(_, theirBase, theirArgs)) =>
-            ourBase.equivalentTo(theirBase) && (ourArgs.length == theirArgs.length) &&
-              ourArgs.zip(theirArgs).forall(x => x._1.equivalentTo(x._2))
-          case (x, y) => x == y
-        }
-      }
     }
   }
 
@@ -983,7 +974,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val args = x.args.drop(numTake)
     objTy match {
       case _ if proxy.isDefined =>
-        ctx << "(" << "(" << ctx.nameFor(objTy, Some(x)) << ")"
+        ctx << "(" << ctx.nameFor(objTy, Some(x)) << "("
         ctx << ctx.nameFor(objTy, Some(x)) << s"::ckNew("
         if (args.nonEmpty) {
           ctx << "ergoline::pack(" << {
@@ -994,7 +985,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << Option.when(args.nonEmpty)(",")
           ctx << (x.args.slice(0, numTake), ",")
         }
-        ctx << ")" << ")"
+        ctx << ")" << ")" << ")"
       case t: EirType if t.isPointer =>
         ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">("
         arrayDim(ctx, t) match {
@@ -1028,7 +1019,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case i@EirIdentifierPattern(_, n, t) if n != "_" =>
         val ty = ctx.resolve(t)
         ctx.ignoreNext(";")
-        if (ty.isPointer) ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current);"
+        if (ty.isPointer && i.needsCasting) ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current);"
         else ctx << i.declarations.head << s" = $current;"
       case i: EirIdentifierPattern =>
         if (i.name != "_") Errors.missingType(x)
@@ -1054,19 +1045,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             case (p, idx) => visitPatternCond(parent, p, s"std::get<$idx>($current)", typeAt(parent, parentType, idx))
           }
       }
-      case EirIdentifierPattern(_, "_", t) =>
+      case i@EirIdentifierPattern(_, n, t) if parent.resolve(t).isPointer =>
+        val wildcard = n == "_"
         parentType match {
           case None => Errors.missingType(x)
             // TODO use a more reliable comparison here!
-          case Some(u) if t.equivalentTo(u) => Nil
+          case Some(u) if !i.needsCasting => Nil
           case _ =>
             // TODO this needs to inherit substitutions
             //      (when such things are added)
             val ctx = parent.makeSubContext()
-            List(s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)")
+            List(if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n)
         }
-      case EirIdentifierPattern(_, n, t) =>
-        Option.when(parent.resolve(t).isPointer)(n).toList
+      case _: EirIdentifierPattern => Nil
       case e: EirExpressionPattern =>
         val ctx = parent.makeSubContext()
         ctx.putReplacement("_", current)
@@ -1305,7 +1296,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         if (!compound) {
           ctx << s"${sentinel._2}.put($req," << s"[=]($ty&& __value__)" << "{"
-          visitPatternDecl(ctx, patterns, "*__value__").split(n)
+          ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
           ctx.ignoreNext("{")
           ctx << x.body
           ctx << ");"
@@ -1322,7 +1313,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << s"using $ty = typename decltype(__compound__)::element_type;"
       val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
       ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t&& __value__)" << "{"
-      visitPatternDecl(ctx, patterns, "*__value__").split(n)
+      ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
       ctx.ignoreNext("{")
       ctx << x.body
       ctx << ");"

@@ -53,7 +53,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     m.annotations +:= EirAnnotation("system", Map())
     val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
     f.functionArgs = List(
-      EirFunctionArgument(Some(f), "callback", EirLambdaType(None, List(globals.unitType), globals.unitType), isExpansion = false, isSelfAssigning = false))
+      EirFunctionArgument(Some(f), "callback", EirLambdaType(None, Nil, globals.unitType), isExpansion = false, isSelfAssigning = false))
     m.member = f
     m
   }

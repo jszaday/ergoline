@@ -756,7 +756,7 @@ case class EirExpressionPattern(var parent: Option[EirNode], var expression: Eir
 }
 
 case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, private var _ty: EirResolvable[EirType]) extends EirPattern {
-  private val declaration = EirDeclaration(Some(this),isFinal = true, name, _ty, None)
+  private val declaration = EirDeclaration(Some(this), isFinal = true, name, _ty, None)
   if (_ty != null) _ty.parent = Some(declaration)
 
   def ty: EirResolvable[EirType] = _ty
@@ -765,6 +765,9 @@ case class EirIdentifierPattern(var parent: Option[EirNode], var name: String, p
     _ty = ty
     _ty.parent = Some(declaration)
   }
+
+  // TODO make context-specific
+  var needsCasting = false
 
   override def declarations: List[EirDeclaration] = Option.when(name != "_")(declaration).toList
   override def conditions: List[EirExpressionNode] = Nil

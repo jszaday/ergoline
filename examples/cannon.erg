@@ -1,0 +1,111 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@system(fromHeader="rand48_replacement.h")
+def drand48(): double;
+
+@system(fromHeader="cmath")
+def sqrt(value: double): double;
+
+def dgemm(a: array<double, 2>, b: array<double, 2>, c: array<double, 2>) {
+    val m = a.shape[0];
+    val n = b.shape[1];
+    assert(a.shape[1] == b.shape[0]);
+    assert(c.shape[0] == m && c.shape[1] == n);
+    for (var i = 0; i < m; i += 1) {
+        for (var j = 0; j < n; j += 1) {
+            for (var k = 0; k < m; k += 1) {
+                c[i, k] += a[i, j] * b[j, k];
+            }
+        }
+    }
+}
+
+@main class cannon {
+    var startTime: double;
+    var endTime: double;
+
+    @entry def cannon(args: array<string>) {
+        val alpha = 1.0;
+        val np = ck::numPes();
+        val npPerDim = sqrt(np.toDouble()).toInt();
+        val nbPerDim = ((np > 1) && (npPerDim == 1)) ? 2 : npPerDim;
+        val nb = nbPerDim * nbPerDim;
+        val blockSize = (args.size() > 1 ? args[1].toInt() : 128) / nbPerDim;
+        val blockShape = (blockSize, blockSize);
+
+        println(`matmul starting with a ${nbPerDim} x ${nbPerDim} mesh on ${np} pes`);
+        println(`each block contains ${blockSize} x ${blockSize} values`);
+
+        val a = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
+        val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
+        val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
+
+        startTime = ck::wallTime();
+        a.sendData(c, true);
+        b.sendData(c, false);
+        c.run(alpha);
+    }
+
+    @entry def done() {
+        endTime = ck::wallTime();
+        println(`matmul finished in ${(endTime - startTime) * 1000.0} ms`);
+        exit();
+    }
+}
+
+class block {
+    val shape: (int, int);
+    val nBlocks: int;
+    val data: array<double, 2>;
+    val mainProxy: cannon@;
+
+    @entry def block(=mainProxy: cannon@, =shape: (int, int),
+                     =nBlocks: int, randInit: bool) {
+        if (randInit) {
+            // TODO add support for tuple expansion~! (*shape)
+            data = new array<double, 2>(shape[0], shape[1]);
+
+            for (var i = 0; i < shape[0]; i += 1) {
+                for (var j = 0; j < shape[1]; j += 1) {
+                    data[i, j] = drand48();
+                }
+            }
+        } else {
+            data = array<double, 2>::fill(shape, 0.0);
+        }
+    }
+
+    @mailbox def inputA(block: int, arr: array<double, 2>);
+    @mailbox def inputB(block: int, arr: array<double, 2>);
+
+    @entry def sendData(dest: block@array2d, sendA: bool) {
+        val idx = self[@]index();
+
+        if (sendA) {
+            dest[(idx[0] - idx[1] + nBlocks) % nBlocks, idx[1]].inputA(0, data);
+        } else {
+            dest[idx[0], (idx[1] - idx[0] + nBlocks) % nBlocks].inputB(0, data);
+        }
+    }
+
+    @threaded @entry def run(alpha: double) {
+        val idx = self[@]index();
+
+        @overlap for (var block = 0; block < nBlocks; block += 1) {
+            when inputA(_ == block, blockA: array<double, 2>),
+                 inputB(_ == block, blockB: array<double, 2>) => {
+                dgemm(blockA, blockB, data);
+
+                if ((block + 1) < nBlocks) {
+                    self@[(idx[0] + 1) % nBlocks, idx[1]].inputA(block + 1, blockA);
+                    self@[idx[0], (idx[1] + 1) % nBlocks].inputB(block + 1, blockB);
+                }
+            }
+        }
+
+        self[@]contribute(mainProxy.done);
+    }
+}

@@ -59,8 +59,7 @@ object GenerateCi {
 
   def attributesFor(p: EirProxy, m: EirMember): String = {
     val attributes =
-      Option.unless(m.isConstructor || m.hasOverloads)("reductiontarget") ++
-        Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
+      Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
       m.annotation("threaded").map(_.name)
     if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }
