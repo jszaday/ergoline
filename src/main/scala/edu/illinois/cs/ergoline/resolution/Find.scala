@@ -78,7 +78,7 @@ object Find {
     }
   }
 
-  def unionResolvable(x: EirType, rY: EirResolvable[EirType]): Option[EirType] = {
+  def unionResolvable(x: EirType, rY: EirResolvable[EirType])(implicit ctx: TypeCheckContext): Option[EirType] = {
     val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.uniqueResolution(rY))
     oY.map(unionType(x, _)) match {
       case Some(x) => x
@@ -86,9 +86,9 @@ object Find {
     }
   }
 
-  def unionType(types: EirType*): Option[EirType] = unionType(types)
+  def unionType(types: EirType*)(implicit ctx: TypeCheckContext): Option[EirType] = unionType(types)
 
-  def unionType(types: Iterable[EirType]): Option[EirType] = {
+  def unionType(types: Iterable[EirType])(implicit ctx: TypeCheckContext): Option[EirType] = {
     val distinct = types.toList.distinct
     distinct.tail.foldRight(distinct.headOption)((x, oY) => oY match {
       case Some(y) => unionType(x, y)
@@ -96,7 +96,7 @@ object Find {
     })
   }
 
-  def unionType(x: EirType, y: EirType): Option[EirType] = {
+  def unionType(x: EirType, y: EirType)(implicit ctx: TypeCheckContext): Option[EirType] = {
     if (x == y) Some(x)
     else if (x.canAssignTo(y)) Some(y)
     else Some(x).filter(y.canAssignTo)
@@ -210,13 +210,13 @@ object Find {
     case _ => None
   }
 
-  def resolveAccessor(ctx: TypeCheckContext, accessor: EirScopedSymbol[_], _base: Option[EirType]): View[(EirMember, EirType)] = {
-    val base = _base.getOrElse(CheckTypes.visit(ctx, accessor.target))
+  def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(implicit ctx: TypeCheckContext): View[(EirMember, EirType)] = {
+    val base = _base.getOrElse(CheckTypes.visit(accessor.target))
     def helper(x: EirMember) = {
       (accessor.isStatic, x.isStatic) match {
-        case (true, true) | (false, false) => (x, CheckTypes.visit(ctx, x))
+        case (true, true) | (false, false) => (x, CheckTypes.visit(x))
         case (true, false) if x.member.isInstanceOf[EirFunction] =>
-          (x, addExplicitSelf(ctx, base, CheckTypes.visit(ctx, x)))
+          (x, addExplicitSelf(ctx, base, CheckTypes.visit(x)))
         case _ => ???
       }
     }
@@ -225,7 +225,7 @@ object Find {
     imm.map(helper) ++ {
       sweepInherited(ctx, cls, other => {
         // TODO filter if overridden?
-        resolveAccessor(ctx, accessor, Some(other))
+        resolveAccessor(accessor, Some(other))
       })
     }
   }

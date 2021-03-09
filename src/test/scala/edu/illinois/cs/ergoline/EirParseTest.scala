@@ -115,14 +115,14 @@ class EirParseTest extends FunSuite {
   test("type-check ternary operator") {
     EirGlobalNamespace.clear()
     val v = new Visitor
-    val t = new TypeCheckContext
+    implicit val ctx: TypeCheckContext = new TypeCheckContext
     val a = v.visitExpression(parserFromString("1 < 2 ? 1 : 2").expression())
     val b = v.visitExpression(parserFromString("1 ? 1 : 2").expression())
     val c = v.visitExpression(parserFromString("1 < 2 ? \"potato\" : 2").expression())
-    CheckTypes.visit(t, a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
+    CheckTypes.visit(a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
     // cannot use non-boolean as test
-    assertThrows[EirException](CheckTypes.visit(t, b))
+    assertThrows[EirException](CheckTypes.visit(b))
     // must be able to unify expressions' types
-    assertThrows[EirException](CheckTypes.visit(t, c))
+    assertThrows[EirException](CheckTypes.visit(c))
   }
 }

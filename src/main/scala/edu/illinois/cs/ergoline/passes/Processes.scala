@@ -34,8 +34,8 @@ object Processes {
       FullyResolve.visit(x)
 
       x match {
-        case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
-        case _ => CheckTypes.visit(ctx, x)
+        case n : EirNamespace => CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(ctx)
+        case _ => CheckTypes.visit(x)(ctx)
       }
     }
   }
@@ -118,7 +118,7 @@ object Processes {
     toDecl.foreach({
       case (namespace, classes) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          classes.foreach(GenerateCpp.forwardDecl(ctx, _))
+          classes.foreach(GenerateCpp.forwardDecl(_)(ctx))
         } << "}"
     })
     ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
@@ -130,7 +130,7 @@ object Processes {
           lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
         } << "}"
     })
-    kids.foreach(GenerateCpp.visit(ctx, _))
+    kids.foreach(GenerateCpp.visit(_)(ctx))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
     GenerateCpp.registerPolymorphs(ctx)
     ctx << List(

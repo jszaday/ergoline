@@ -19,11 +19,11 @@ object CheckClasses {
    * - ensure parent classes' constructor is called
    * - ensure traits do not have constructors or declarations
    */
-  def visit(node: EirClassLike): Unit = {
+  def visit(ctx: TypeCheckContext, node: EirClassLike): Unit = {
     if (checked.contains(node)) return
 
     node match {
-      case c : EirClass => visitClass(c)
+      case c : EirClass => visitClass(ctx, c)
       case t : EirTrait => visitTrait(t)
     }
 
@@ -72,7 +72,7 @@ object CheckClasses {
     })
   }
 
-  def visitClass(node : EirClass): Unit = {
-    CheckConstructors.checkConstructors(node)
+  def visitClass(ctx: TypeCheckContext, node : EirClass): Unit = {
+    CheckConstructors.checkConstructors(ctx, node)
   }
 }

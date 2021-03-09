@@ -61,12 +61,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def typeOf(n: EirNode): EirType = {
     n match {
       case x: EirExpressionNode => exprType(x)
-      case x => CheckTypes.visit(typeContext, x)
+      case x => CheckTypes.visit(x)(typeContext)
     }
   }
 
   def eval2const(n: EirNode): EirLiteral = n match {
-    case e: EirExpressionNode => CheckTypes.evaluateConstExpr(typeContext, e)
+    case e: EirExpressionNode => CheckTypes.evaluateConstExpr(e)(typeContext)
     case c: EirConstantFacade => c.value
     case r: EirResolvable[_] => eval2const(resolve(r))
     case _ => Errors.invalidConstExpr(n)
@@ -77,7 +77,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def leave(ours: EirSpecialization): Unit = tyCtx.leave(ours)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
-    tyCtx.hasSubstitution(t).map(CheckTypes.visit(tyCtx, _))
+    tyCtx.hasSubstitution(t).map(CheckTypes.visit(_)(tyCtx))
   }
 
   def temporary: String = "_"

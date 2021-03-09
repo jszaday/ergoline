@@ -51,7 +51,7 @@ object GenerateCi {
 
   def visit(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     // TODO bring template args into consideration
-    GenerateCpp.visitTemplateArgs(ctx, proxy.templateArgs)
+    GenerateCpp.visitTemplateArgs(proxy.templateArgs)(ctx)
     ctx << visitChareType(proxy.isMain, proxy.collective) << proxy.baseName << "{" << {
       proxy.membersToGen.foreach(visit(ctx, proxy, _))
     } << "};"
@@ -69,7 +69,7 @@ object GenerateCi {
       ctx << s"entry [nokeep] " << p.baseName << "(CkArgMsg* msg);"
     } else {
       ctx << "entry" << attributesFor(p, f)
-      GenerateCpp.visitFunction(ctx, assertValid[EirFunction](f.member), isMember = true)
+      GenerateCpp.visitFunction(assertValid[EirFunction](f.member), isMember = true)(ctx)
     }
   }
 

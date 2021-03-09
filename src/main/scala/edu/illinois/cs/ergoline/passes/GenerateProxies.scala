@@ -10,7 +10,7 @@ import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 object GenerateProxies {
 
-  implicit val visitor: (CodeGenerationContext, EirNode) => Unit = GenerateCpp.visit
+  implicit val visitor: (CodeGenerationContext, EirNode) => Unit = (ctx, x) => GenerateCpp.visit(x)(ctx)
 
   def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val ns = x.namespaces.toList
@@ -101,7 +101,7 @@ object GenerateProxies {
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val base = ctx.nameFor(x.base)
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
-    GenerateCpp.visitTemplateArgs(ctx, x.templateArgs)
+    GenerateCpp.visitTemplateArgs(x.templateArgs)(ctx)
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "{" << {
       ctx << "void pup(PUP::er &p)" << "{" << {
@@ -127,7 +127,7 @@ object GenerateProxies {
       case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
       case Some(m@EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
-          ctx << "(([&](void) mutable" << visitFunctionBody(ctx, f) << ")())"
+          ctx << "(([&](void) mutable" << visitFunctionBody(f)(ctx) << ")())"
         } else {
           ctx << s"this->impl_->${ctx.nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
         }
