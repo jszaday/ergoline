@@ -5,6 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.resolution.Find.asClassLike
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object CheckClasses {
 
@@ -27,7 +28,7 @@ object CheckClasses {
       case t : EirTrait => visitTrait(t)
     }
 
-    node.inherited.foreach(checkParentClass(node, _))
+    node.inherited.foreach(checkParentClass(node, _)(ctx))
 
     checked +:= node
   }
@@ -41,7 +42,8 @@ object CheckClasses {
     b.derived = b.derived + a
   }
 
-  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType]): Unit = {
+  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType])
+                      (implicit ctx: TypeCheckContext): Unit = {
     val resolved = asClassLike(candidate)
     node match {
       case _: EirTrait if !resolved.isInstanceOf[EirTrait] =>

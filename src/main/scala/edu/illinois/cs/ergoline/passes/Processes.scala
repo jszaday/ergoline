@@ -6,6 +6,7 @@ import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClas
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object Processes {
   private var ctx = new TypeCheckContext

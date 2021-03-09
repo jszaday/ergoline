@@ -893,7 +893,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
     val condTy = x.condition.map(visit(_))
-    if (!condTy.forall(_.canAssignTo(boolTy)(ctx))) {
+    if (!condTy.forall(_.canAssignTo(boolTy))) {
       Errors.cannotCast(x.condition.get, condTy.get, boolTy)
     }
     visit(x.body)

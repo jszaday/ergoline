@@ -63,19 +63,16 @@ class EirParseTest extends FunSuite {
   test("await many and when statements") {
     EirGlobalNamespace.clear()
     val v = new Visitor
-    val s =
-      s"""await all {
-        |${t}when foo(x), bar(y) if x != y => 2 * x + y ;
-        |}
-        |""".stripMargin
-    val x = v.visitAwaitManyStatement(parserFromString(s).awaitManyStatement())
-    UnparseAst.visit(x) shouldEqual localize (
-      s"""await all {
-        |${t}when foo(x: _), bar(y: _) if (x != y) => {
-        |$t${t}return ((2 * x) + y);
-        |$t}
-        |}""".stripMargin
+    val s = localize (
+     s"""await all {
+         |${t}when foo(x: _), bar(y: _) if (x != y) => {
+         |$t${t}return ((2 * x) + y);
+         |$t}
+         |}""".stripMargin
     )
+    val x = v.visitAwaitManyStatement(parserFromString(s).awaitManyStatement())
+    val res = localize(UnparseAst.visit(x))
+    s shouldEqual res
   }
 
   test("tuple tests") {

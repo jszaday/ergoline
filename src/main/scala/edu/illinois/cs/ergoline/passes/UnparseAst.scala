@@ -327,7 +327,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitWhen(x: EirSdagWhen)(implicit ctx: UnparseContext): String = {
     "when " + x.patterns.map(p => s"${visit(p._1)}${visit(p._2)}").mkString(", ") + {
-      x.condition.map(visit(_)).map(" if " + _).getOrElse("")
+      x.condition.map(visitExpression(_)).map(" if " + _).getOrElse("")
     } + s" => ${visit(x.body)}"
   }
 

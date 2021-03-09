@@ -10,6 +10,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, Ri
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.annotation.tailrec

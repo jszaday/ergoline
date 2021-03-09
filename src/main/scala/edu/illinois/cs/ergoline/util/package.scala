@@ -5,8 +5,10 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.TypeCheckContext
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 import scala.collection.View
+import scala.reflect.{ClassTag, classTag}
 
 package object util {
 
@@ -16,7 +18,7 @@ package object util {
     ty match {
       case EirLambdaType(_, from, to, args) =>
         ctx.lambdaWith(base +: from, to, args)
-      case _ => Errors.incorrectType(ty, EirLambdaType.getClass)
+      case _ => Errors.incorrectType(ty, classTag[EirLambdaType])
     }
   }
 
@@ -66,10 +68,10 @@ package object util {
     }
   }
 
-  def assertValid[T](value: EirNode)(implicit manifest: Manifest[T]): T = {
+  def assertValid[T : ClassTag](value: EirNode): T = {
     Option(value) match {
       case Some(x: T) => x
-      case _ => Errors.incorrectType(value, manifest.getClass)
+      case _ => Errors.incorrectType(value, classTag[T])
     }
   }
 

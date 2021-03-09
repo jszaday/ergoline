@@ -4,13 +4,14 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirTy
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirConstantFacade}
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 object TypeCompatibility {
 
-  private def checkSubclass(a: EirClassLike, b: EirClassLike)(implicit ctx: TypeCheckContext): Boolean = {
-    a.inherited.map(CheckTypes.visit(_)).map({
-      case t: EirTemplatedType => assertValid[EirClassLike](t.base)
+  private def checkSubclass(a: EirClassLike, b: EirClassLike): Boolean = {
+    a.inherited.map(Find.uniqueResolution[EirType]).map({
+      case t: EirTemplatedType =>
+        assertValid[EirClassLike](Find.uniqueResolution[EirType](t.base))
       case c: EirClassLike => c
     }).collect({
       case c: EirClassLike => c
@@ -18,7 +19,7 @@ object TypeCompatibility {
   }
 
   implicit class RichEirClassLike(self: EirClassLike) {
-    def isDescendantOf(other: EirClassLike)(implicit ctx: TypeCheckContext): Boolean = {
+    def isDescendantOf(other: EirClassLike): Boolean = {
       (self, other) match {
         case (a: EirProxy, b: EirProxy) =>
           (a.isElement == b.isElement) &&
@@ -31,7 +32,7 @@ object TypeCompatibility {
 
   implicit class RichEirType(ours: EirType) {
 
-    def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean = (ours == theirs) || ((ours, theirs) match {
+    def canAssignTo(theirs: EirType): Boolean = (ours == theirs) || ((ours, theirs) match {
       case (x: EirTemplatedType, y: EirTemplatedType) =>
         // TODO add checking for default arguments
         x.base.canAssignTo(y.base) && (x.args.length == y.args.length) && x.args.zip(y.args).forall{
@@ -53,19 +54,16 @@ object TypeCompatibility {
   }
 
   implicit class RichEirResolvable[T <: EirType](ours: EirResolvable[T]) {
-    def canAssignTo(theirs: EirResolvable[T])(implicit ctx: TypeCheckContext): Boolean = {
-      val a :: b :: Nil = List(ours, theirs).map {
-        case t: EirType => t
-        case t => CheckTypes.visit(t)
-      }
+    // A resolver must be able to resolve an unspecialized specializable for it to be used here!!
+    // For example, EirSymbol(..., "foo") must resolve to foo even if when it's declared as ``trait foo<A> ...``
+    def canAssignTo(theirs: EirResolvable[T]): Boolean = {
+      val (a, b) = (Find.uniqueResolution(ours), Find.uniqueResolution(theirs))
       a.canAssignTo(b)
     }
 
-    def canAssignTo(b: EirType)(implicit ctx: TypeCheckContext): Boolean = {
-      ours match {
-        case a: EirType => a.canAssignTo(b)
-        case a => CheckTypes.visit(a).canAssignTo(b)
-      }
+    def canAssignTo(b: EirType): Boolean = {
+      val a = Find.uniqueResolution(ours)
+      a.canAssignTo(b)
     }
   }
 }

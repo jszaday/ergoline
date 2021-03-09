@@ -233,15 +233,6 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
-  def isDescendantOf(other: EirClassLike): Boolean = {
-    inherited.map({
-      case t: EirTemplatedType => Find.uniqueResolution(t.base)
-      case t => Find.uniqueResolution(t)
-    }).collect({
-      case c: EirClassLike => c
-    }).exists(x => { x == other || x.isDescendantOf(other)})
-  }
-
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
