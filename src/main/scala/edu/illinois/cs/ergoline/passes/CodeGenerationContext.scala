@@ -46,7 +46,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def resolve[T <: EirNode : Manifest](x: EirResolvable[T]): T = Find.typedResolve(x)(manifest[T], tyCtx)
+  def resolve[T <: EirNode : Manifest](x: EirResolvable[T]): T = Find.uniqueResolution[T](tyCtx, x)
 
   def proxy: Option[EirProxy] = _proxies.headOption
 
@@ -59,12 +59,27 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def typeContext: TypeCheckContext = tyCtx
 
+  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
+
   def typeOf(n: EirNode): EirType = {
-    def getType(x: EirNode) = CheckTypes.visit(typeContext, x)
+    def getType(x: EirNode): EirType = {
+      try {
+        CheckTypes.visit(typeContext, x)
+      } catch {
+        case _: MissingSpecializationException =>
+          x match {
+            case t: EirType => t
+            case x: EirResolvable[_] => Find.safeResolve(tyCtx, x).collectFirst { case t: EirType => t }.getOrElse(
+              ???
+            )
+            case _ => ???
+          }
+      }
+    }
 
     n match {
-      case x: EirSymbolLike[_] if x.needsType => getType(x)
       case x: EirExpressionNode => exprType(x)
+      case x: EirSymbolLike[_] if x.needsType => getType(x)
       case x => getType(x)
     }
   }
@@ -101,13 +116,8 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     Find.tryResolve(x)(tyCtx).orElse(Option(x).collect{case t: EirTemplateArgument => t}) match {
       case Some(t: EirTemplateArgument) => nameFor(t, ctx)
       case Some(t: EirType) => typeFor(t, ctx)
-      case _ =>
-        try {
-          typeFor(typeOf(x), ctx)
-        } catch {
-          case _: MissingSpecializationException => nameFor(x, ctx)
-        }
-      }
+      case _ => typeFor(typeOf(x), ctx)
+    }
   }
 
   private def makeShared(wrap: Boolean, s: String): String = {
@@ -118,13 +128,11 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     x match {
       case t: EirTupleType => s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
       case t: EirTemplatedType if isOption(resolve(t.base)) =>
-        val arg = resolve(t.args.head)
+        val arg = typeOf(t.args.head)
         makeShared(!arg.isPointer, typeFor(arg, ctx))
       case _ => makeShared(x.isPointer, nameFor(x, ctx))
     }
   }
-
-  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
 
   def <<(ctx: CodeGenerationContext): CodeGenerationContext = ctx
 

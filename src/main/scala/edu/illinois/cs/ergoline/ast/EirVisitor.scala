@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.passes.{CodeGenerationContext, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
@@ -60,7 +61,11 @@ trait EirVisitor[Context, Value] {
       case x: EirSdagWhen => visitWhen(ctx, x)
       case x: EirAwaitMany => visitAwaitMany(ctx, x)
       case x: EirResolvable[_] if x.resolved =>
-        val found = Find.uniqueResolution(x)
+        val found = Find.uniqueResolution[EirNode](ctx match {
+          case t: TypeCheckContext => t
+          case c: CodeGenerationContext => c.tyCtx
+          case _ => null
+        }, x)
         if (found == x) error(ctx, found)
         else visit(ctx, found)
       case x: EirAwait => visitAwait(ctx, x)

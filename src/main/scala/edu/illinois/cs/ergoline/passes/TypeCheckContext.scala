@@ -35,11 +35,10 @@ class TypeCheckContext {
         }).toList
       }
 
-      def sameAs(specialization: EirSpecialization): Boolean = {
-//        val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
-//        val theirs = Find.uniqueResolution[EirType](specialization.types)
-//        ours.zip(theirs).forall(t => t._1 == t._2)
-        false
+      def sameAs(specialization: EirSpecialization)(implicit ctx: TypeCheckContext): Boolean = {
+        val ours = specializable.templateArgs
+        val theirs = Find.uniqueResolution[EirNode](specialization.types)
+        ours.zip(theirs).forall(t => t._1 == t._2)
       }
     }
   }
@@ -48,7 +47,7 @@ class TypeCheckContext {
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
-  private var _substitutions: List[(EirSpecializable, EirSpecialization)] = List()
+  private val _substitutions: mutable.Stack[(EirSpecializable, EirSpecialization)] = new mutable.Stack
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
@@ -125,10 +124,10 @@ class TypeCheckContext {
     Option.when(types.forall(_.isDefined))({
       val sp = Option.when(types.length == spec.types.length)(spec)
                      .getOrElse({ synthesize(types.map(_.get)) })
-      Option.unless(s.sameAs(sp))({
+      Option.unless(s.sameAs(sp)(this))({
         // TODO this needs to substitute template arguments with
         //      whatever is currently in the context~!
-        _substitutions +:= (s -> sp)
+        _substitutions.push(s -> sp)
         sp
       }).orNull
     })
@@ -140,8 +139,8 @@ class TypeCheckContext {
 
   def leave(ours: EirSpecialization): Unit = {
     if (ours != null) {
-      val first = _substitutions.indexWhere(_._1 == ours)
-      _substitutions = _substitutions.patch(first, Nil, 1)
+      assert(_substitutions.headOption.exists(x => ours == x._2))
+      _substitutions.pop()
     }
   }
 
@@ -184,11 +183,12 @@ class TypeCheckContext {
   }
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirResolvable[EirType]] = {
-    _substitutions.reverse.flatMap({
+    val germane = _substitutions.flatMap({
       case (s, sp) => templateZipArgs(s, sp)
-    }).collectFirst({
+    }).collect{
       case (arg, ty) if arg == t => ty
-    })
+    }
+    germane.reverse.headOption
   }
 
   def leaveWith(t: EirType): EirType = {

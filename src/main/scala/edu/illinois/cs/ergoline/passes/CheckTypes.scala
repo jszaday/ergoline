@@ -277,7 +277,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         (learn((a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn)).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
       case (_: EirSymbol[_] | _: EirSpecializedSymbol[_], b) => learn(({
-        Find.typedResolve[EirResolvable[EirType]](pair._1)
+        Find.uniqueResolution[EirResolvable[EirType]](ctx, pair._1)
       }, b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _ => Map()
@@ -309,20 +309,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val results = list.map(pair => {
       val (candidate, member) = pair
 
-      val (ispec, args) = handleSpecialization(ctx, member) match {
+      val ispec = handleSpecialization(ctx, member) match {
         case Left(s) =>
           val args = getArguments(ctx, argsrc)
           val sp = args
             .flatMap(inferSpecialization(s, _))
             .flatMap(ctx.trySpecialize(s, _))
-            .getOrElse(return None)
-          (sp, args)
-        case Right(sp) => (sp, getArguments(ctx, argsrc))
+          sp.map((_, args))
+        case Right(sp) => Some((sp, getArguments(ctx, argsrc)))
       }
 
-      assert(argsrc.nonEmpty || args.isEmpty)
-
-      val found = (member, args) match {
+      val found = ispec.flatMap(is => (member, is._2) match {
         case (EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike, Some(_)) =>
           // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
           val sp = Option(member).to[EirTemplatedType].map(s =>
@@ -345,18 +342,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           }
         case (x, None) => Some(candidate, visit(ctx, x))
         case (_, Some(_)) => None
-      }
+      })
 
-      assert(args.nonEmpty || found.isDefined)
-
-      ctx.leave(ispec)
+      ispec.foreach(x => ctx.leave(x._1))
       found
     })
 
     // TODO implement some safety here, one must hide the others or it's ambiguous!
-    val found = results.find(_.isDefined).flatten
-    assert(argsrc.isDefined || list.isEmpty || found.isDefined)
-    found
+    results.flatten.headOption
   }
 
   def getArguments(ctx: TypeCheckContext, opt: Option[EirExpressionNode]): Option[List[EirType]] = {
@@ -703,10 +696,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _ => false
     }) else resolved).toList
     val candidates = filtered.zip(filtered.map(visit(ctx, _)))
-    var found = screenCandidates(ctx, prevFc, candidates)
-    if (found.isEmpty && prevFc.isEmpty) {
-      found = candidates.headOption
-    }
+    val found = screenCandidates(ctx, prevFc, candidates)
     found match {
       case Some((m, ty)) =>
         x.disambiguation = Some(m)
@@ -896,7 +886,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTypeAlias(ctx: TypeCheckContext, x: EirTypeAlias): EirType = {
-    visit(ctx, Find.uniqueResolution(x))
+    visit(ctx, Find.uniqueResolution[EirType](ctx, x))
   }
 
   def valueWithin(ctx: TypeCheckContext, x: EirResolvable[_]): EirLiteral = {

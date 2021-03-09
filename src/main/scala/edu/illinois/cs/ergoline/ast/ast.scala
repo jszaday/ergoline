@@ -497,7 +497,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
   def captures: List[EirNamedNode] = {
     val predicate = (x: EirNode) => x match {
       case s: EirSymbol[_] =>
-        val resolution = Find.uniqueResolution(s)
+        val resolution = Find.uniqueResolution[EirNode](null, s)
         Some(resolution match {
           case f: EirFunctionArgument => !f.parent.contains(this)
           case d: EirDeclaration => !Find.ancestors(d).contains(this)
@@ -507,7 +507,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
       case _ => Some(false)
     }
     Find.descendant(body, predicate)
-      .map(x => Find.typedResolve(x.asInstanceOf[EirResolvable[EirNamedNode]])(manifest[EirNamedNode], null))
+      .map(x => Find.uniqueResolution[EirNamedNode](null, x.asInstanceOf[EirResolvable[EirNamedNode]]))
       .toList.distinct.sortBy(_.name)
   }
 

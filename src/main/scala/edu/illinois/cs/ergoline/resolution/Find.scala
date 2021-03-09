@@ -57,7 +57,7 @@ object Find {
     node.children.view.collect {
       case n: EirNamedNode if n.name == name => n
     }.map {
-      case r: EirResolvable[_] if !r.resolved => Find.uniqueResolution(r)
+      case r: EirResolvable[_] if !r.resolved => Find.uniqueResolution[EirNode](null, r)
       case n => n
     }.collectFirst {
       case t: T => t
@@ -65,10 +65,8 @@ object Find {
   }
 
   def tryResolve(x: EirResolvable[_])(implicit tyCtx: TypeCheckContext): Option[EirNode] = {
-    val found = tryTypedResolve(x)(manifest[EirNode], tyCtx)
-    if (globals.strict && found.length != found.distinct.length) {
-      Errors.unableToResolve(x)
-    }
+    val found = typedResolve(x)(manifest[EirNode], tyCtx)
+    if (found.isEmpty) return None
     found match {
       case (f: EirFunctionArgument) :: _ if f.isSelfAssigning => Some(f)
       case head :: _ if !globals.strict => Some(head)
@@ -82,35 +80,47 @@ object Find {
     }
   }
 
-  def uniqueResolution(x: EirResolvable[_]): EirNode = {
-    tryResolve(x)(null).getOrElse({
+  def uniqueResolution[A <: EirNode : Manifest](ctx: TypeCheckContext, x: EirResolvable[_]): A = {
+    typedResolve[A](x)(manifest[A], ctx).headOption.getOrElse({
       Errors.unableToResolve(x)
     })
   }
 
-  private def tryTypedResolve[A <: EirNode](x: EirResolvable[_])(implicit manifest: Manifest[A], tyCtx: TypeCheckContext): Seq[A] = {
-    try {
-      (x match {
-        case t: EirProxyType => Seq(ProxyManager.proxyFor(tyCtx, t))
-        case s: EirSymbolLike[_] => fromSymbol(s)
-        case _ => x.resolve()
-      }).collect { case a: A => a }
-    } catch {
-      case _: MissingSpecializationException => Nil
-    }
-  }
-
-  def typedResolve[A <: EirNode](x: EirResolvable[_])(implicit manifest: Manifest[A], tyCtx: TypeCheckContext): A = {
-    tryTypedResolve(x).headOption.getOrElse({
-      Errors.unableToResolve(x)
-    })
+  def typedResolve[A <: EirNode](x: EirResolvable[_])(implicit manifest: Manifest[A], tyCtx: TypeCheckContext): Seq[A] = {
+    (x match {
+      case t: EirProxyType => Seq(ProxyManager.proxyFor(tyCtx, t))
+      case s: EirSymbolLike[_] => fromSymbol(s)
+      case _ => x.resolve()
+    }).collect { case a: A => a }
   }
 
   def unionResolvable(x: EirType, rY: EirResolvable[EirType])(implicit tyCtx: TypeCheckContext): Option[EirType] = {
-    val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(Find.typedResolve(rY))
-    oY.map(unionType(x, _)) match {
+    Find.typedResolve[EirType](rY)
+        .headOption.map(y => unionType(x, y)) match {
       case Some(x) => x
       case None => Some(x)
+    }
+  }
+
+  private def correspond(ctx: TypeCheckContext, s: EirSpecializedSymbol[_], base: EirSpecializable, specs: List[EirSpecialization]): Seq[EirType] = {
+    Nil
+  }
+
+  def safeResolve(tyCtx: TypeCheckContext, x: EirResolvable[_]): Seq[EirNode] = {
+    x match {
+      case s: EirSpecializedSymbol[_] =>
+        val base: Option[EirSpecializable] =
+          s.disambiguation.to[EirSpecializable]
+            .orElse(safeResolve(tyCtx, s.base).collectFirst { case s: EirSpecializable => s })
+
+        (base, base.flatMap(tyCtx.checked.get(_))) match {
+          case (Some(base), Some(head :: Nil)) => Seq(tyCtx.getTemplatedType(base, head.types.map(assertValid[EirType])))
+          case (Some(base), Some(specs)) if specs.length > 1 => correspond(tyCtx, s, base, specs)
+          case (Some(base), None) => Seq(makeTemplateType(base, s)(tyCtx))
+          case _ => ???
+        }
+      case s: EirSymbol[_] => fromSymbol(s)(tyCtx)
+      case _ => typedResolve(x)(manifest[EirNode], tyCtx)
     }
   }
 
@@ -193,26 +203,28 @@ object Find {
     }).map(_.asInstanceOf[EirNamedNode])
   }
 
-  def fromSymbol(s: EirSymbolLike[_])(implicit tyCtx: TypeCheckContext): Seq[EirNode] = {
-    val rslvd = {
-     s match {
-        case s if s.disambiguation.isDefined => s.disambiguation.toSeq
-        case symbol: EirSymbol[_] => fromSymbol(symbol)
-        case _ => Nil
+  private def makeTemplateType(x: EirNode, sp: EirSpecializedSymbol[_])
+                              (implicit tyCtx: TypeCheckContext): EirTemplatedType = {
+    EirTemplatedType(None, assertValid[EirResolvable[EirType]](x), {
+      x match {
+        case s: EirSpecializable if s.templateArgs.length > sp.types.length =>
+          sp.types ++ s.templateArgs.slice(sp.types.length, s.templateArgs.length).flatMap(_.defaultValue)
+        case _ => sp.types
       }
-    }
+    })
+  }
+
+  def fromSymbol(s: EirSymbolLike[_])(implicit tyCtx: TypeCheckContext): Seq[EirNode] = {
     s match {
-      case _: EirSymbol[_] | _: EirScopedSymbol[_] => rslvd
-      case EirSpecializedSymbol(_, _, types) =>
-        if (tyCtx == null) rslvd.map(x => EirTemplatedType(None, assertValid[EirResolvable[EirType]](x), {
-          x match {
-            case s: EirSpecializable if s.templateArgs.length > types.length => types ++ s.templateArgs.slice(types.length, s.templateArgs.length)
-            case _ => types
-          }
-        }))
-        else rslvd.map(x => tyCtx.getTemplatedType(assertValid[EirSpecializable](x), types.map(CheckTypes.visit(tyCtx, _))))
-      case s if s.disambiguation.isDefined => s.disambiguation.collect { case n: EirNamedNode => n }.toSeq
-      case _ => ???
+      case sp: EirSpecializedSymbol[_] =>
+        val base = sp.disambiguation match {
+          case Some(s) => Seq(s)
+          case None => fromSymbol(sp.base)
+        }
+        base.map(makeTemplateType(_, sp))
+      case symbol: EirSymbol[_] => fromSymbol(symbol)
+//      case s if s.disambiguation.isDefined => s.disambiguation.toSeq
+      case _ => Nil
     }
   }
 
@@ -227,7 +239,7 @@ object Find {
 
   // TODO use this!!
   def uniqueResolution[T <: EirNode : Manifest](iterable: Iterable[EirResolvable[T]])(implicit tyCtx: TypeCheckContext): Iterable[T] = {
-    iterable.map(typedResolve[T])
+    iterable.map(x => typedResolve[T](x).headOption.getOrElse(Errors.unableToResolve(x)))
   }
 
   private def qualified(usage: EirNode, scope: EirNamedNode, names: List[String])(implicit tyCtx: TypeCheckContext): Seq[EirNamedNode] = {
@@ -300,11 +312,11 @@ object Find {
 
   private def _traits(x: EirClassLike)(implicit tyCtx: TypeCheckContext): Iterable[EirType] = {
     x.inherited.flatMap(x => {
-      val res = typedResolve[EirType](x)
+      val res = uniqueResolution[EirType](tyCtx, x)
       val base = res match {
         case t: EirClassLike => t
         case t: EirTemplatedType =>
-          val res = typedResolve[EirClassLike](t.base)
+          val res = uniqueResolution[EirClassLike](tyCtx, t.base)
           if (res.inherited.nonEmpty) ???
           res
       }

@@ -55,7 +55,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     implicit class RichEirResolvable[T <: EirNode](self: EirResolvable[T]) {
       def isTransient()(implicit tyCtx: TypeCheckContext): Boolean = {
-        val x = Find.typedResolve(self)(manifest[EirNode], tyCtx)
+        val x = Find.uniqueResolution[EirNode](tyCtx, self)
         x match {
           case t: EirTupleType => t.children.exists(_.isTransient())
           // TODO use specialization?
@@ -498,7 +498,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
-    ctx << ctx.typeFor(x.declaredType, Some(x)) << s"${ctx.nameFor(x)}" << x.initialValue.map(_ => "=") << x.initialValue << ";"
+    val ty = ctx.typeFor(x.declaredType, Some(x))
+    ctx << ty << s"${ctx.nameFor(x)}" << x.initialValue.map(_ => "=") << x.initialValue << ";"
   }
 
   override def visitTemplateArgument(ctx: CodeGenerationContext, x: EirTemplateArgument): Unit = {
@@ -711,7 +712,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val theirs = Find.parentOf[EirNamespace](base)
     val qualifications: Seq[String] =
       (of, theirs) match {
-        case (_: EirConstantFacade, _) => Nil
+        case (_: EirConstantFacade | _: EirTemplateArgument, _) => Nil
         case (_, Some(theirs)) if !ours.contains(theirs) =>
           (theirs.name +: Find.ancestors(theirs).collect{
             case n: EirNamespace => n.name

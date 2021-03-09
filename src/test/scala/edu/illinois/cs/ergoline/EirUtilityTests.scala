@@ -33,8 +33,9 @@ class EirUtilityTests extends FunSuite {
 
   test("symbol resolution") {
     val foo = Modules.load("package foo ; class bar { val other : bar ; }")
-    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _ => true).headOption
-    symbol.flatMap(Find.fromSymbol(_)(null).headOption) should matchPattern {
+    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _ => true).toList
+    val rslvd = symbol.map(Find.uniqueResolution[EirClass](null, _))
+    rslvd.headOption should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>
     }
   }
@@ -58,7 +59,7 @@ class EirUtilityTests extends FunSuite {
     val foo = Modules.load("package foo ; def bar(): unit { { val baz : unit = (); } baz; }")
     val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _.qualifiedName == List("baz"))
     assertThrows[EirException]({
-      symbol.foreach(Find.uniqueResolution(_))
+      symbol.foreach(Find.uniqueResolution[EirNode](null, _))
     })
   }
 }

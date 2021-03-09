@@ -64,7 +64,7 @@ object Processes {
         while (unplaced.nonEmpty) {
           val idx = unplaced.indexWhere(
             !_.inherited
-              .map(Find.typedResolve[EirType])
+              .map(Find.uniqueResolution[EirType](null, _))
               .map(Find.asClassLike).exists(unplaced.contains(_)))
           placed :+= unplaced(idx)
           unplaced = unplaced.patch(idx, Nil, 1)
