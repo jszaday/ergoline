@@ -88,6 +88,7 @@ object Find {
 
   def typedResolve[A <: EirNode](x: EirResolvable[_])(implicit manifest: Manifest[A], tyCtx: TypeCheckContext): Seq[A] = {
     (x match {
+      case t: EirTemplateArgument => Seq(t)
       case t: EirProxyType => Seq(ProxyManager.proxyFor(tyCtx, t))
       case s: EirSymbolLike[_] => fromSymbol(s)
       case _ => x.resolve()

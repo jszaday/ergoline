@@ -60,14 +60,13 @@ trait EirVisitor[Context, Value] {
       case x: EirConstantFacade => visitConstantFacade(ctx, x)
       case x: EirSdagWhen => visitWhen(ctx, x)
       case x: EirAwaitMany => visitAwaitMany(ctx, x)
-      case x: EirResolvable[_] if x.resolved =>
+      case x: EirResolvable[_] =>
         val found = Find.uniqueResolution[EirNode](ctx match {
           case t: TypeCheckContext => t
           case c: CodeGenerationContext => c.tyCtx
           case _ => null
         }, x)
-        if (found == x) error(ctx, found)
-        else visit(ctx, found)
+        if (found == x) error(ctx, found) else visit(ctx, found)
       case x: EirAwait => visitAwait(ctx, x)
       case x: EirUserNode => x.accept(ctx, this)
       case null => error(ctx, null)

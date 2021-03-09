@@ -777,7 +777,7 @@ case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode]) 
   override def resolve(): Seq[EirNode] = {
     if (_resolved.isEmpty) {
       val symbol = EirSymbol[EirNamedNode with EirType](parent, fqn)
-      _resolved = symbol.resolve().collect{ case t: EirTemplateArgument => t }
+      _resolved = Find.fromSymbol(symbol)(null).collect{ case t: EirTemplateArgument => t }
       if (!_resolved.forall(_.isPack)) {
         Errors.expectedParameterPack(this)
       }
