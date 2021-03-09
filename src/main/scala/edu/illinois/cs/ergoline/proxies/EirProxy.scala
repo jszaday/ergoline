@@ -153,16 +153,6 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
 //  override def templateArgs: List[EirTemplateArgument] = Nil
 //  override def templateArgs_=(x: List[EirTemplateArgument]): Unit = ()
 
-  override def isDescendantOf(other: EirClassLike): Boolean = {
-    other match {
-      case proxy: EirProxy =>
-        (proxy.isElement == this.isElement) &&
-          (proxy.collective == this.collective) &&
-          base.isDescendantOf(proxy.base)
-      case _ => false
-    }
-  }
-
   // TODO this may have to be changed eventually
   //     (if it's inaccessible it's not a problem)
   override def name: String = base.name

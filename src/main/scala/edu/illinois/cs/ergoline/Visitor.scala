@@ -398,7 +398,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
     val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {
-      val templatedType = EirSpecializedSymbol[EirNamedType](parent, base.asInstanceOf[EirResolvable[EirNamedType]], templates)
+      val templatedType = EirSpecializedSymbol[EirType with EirNamedNode](parent, base.asInstanceOf[EirSymbolLike[EirType with EirNamedNode]], templates)
       base.parent = Some(templatedType)
       base = templatedType
     }
@@ -638,7 +638,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
         // TODO use symbol here?
         enter(EirSpecializedSymbol[EirType](parent, null, null),
           (t: EirSpecializedSymbol[EirType])  => {
-          t.base = visitAs[EirResolvable[EirType]](a)
+          t.base = visitAs[EirSymbolLike[EirType]](a)
           t.types = specializationToList(b)
         })
       case (Some(a), None) => visitAs[EirResolvable[EirType]](a)

@@ -5,7 +5,7 @@
 
 namespace ergoline {
 
-template <typename T, std::size_t N>
+template <typename T, std::size_t N = 1>
 struct array : public hashable {
   static_assert(N >= 0, "dimensionality must be positive");
 

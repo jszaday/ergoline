@@ -3,8 +3,9 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.passes.TypeCheckContext
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 import scala.collection.View
 import scala.reflect.ClassTag
@@ -33,11 +34,12 @@ package object util {
     m
   }
 
-  def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
-    Find.uniqueResolution(resolvable) match {
-      case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
-      case c: EirClassLike => (c, None)
-      case _ => Errors.unableToResolve(resolvable)
+  def resolveToPair(ctx: TypeCheckContext, symbol: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
+    val ty = CheckTypes.visit(ctx, symbol)
+    ty match {
+      case t: EirTemplatedType => (assertValid[EirClassLike](t.base), Some(t))
+      case t: EirClassLike => (t, None)
+      case _ => Errors.unableToResolve(symbol)
     }
   }
 
@@ -49,11 +51,11 @@ package object util {
 
   def sweepInherited[T](ctx: TypeCheckContext, base: EirClassLike,
                         f: EirClassLike => View[T]): View[T] = {
-    base.inherited.view.map(resolveToPair).flatMap {
+    base.inherited.view.map(resolveToPair(ctx, _)).flatMap {
       case (a, None) => f(a)
       case (a, Some(sp)) =>
         val spec = ctx.specialize(a, sp)
-        val found = f(a)
+        val found = f(a).toList
         ctx.leave(spec)
         found
     }
@@ -84,13 +86,13 @@ package object util {
     value.isValid[T].map(function).isDefined
   }
 
-  def validAccessibility(a: EirClassLike, b: EirClassLike): EirAccessibility = {
+  def validAccessibility(a: EirClassLike, b: EirClassLike)(implicit ctx: TypeCheckContext): EirAccessibility = {
     if (a == b) EirAccessibility.Private
     else if (a.isDescendantOf(b)) EirAccessibility.Protected
     else EirAccessibility.Public
   }
 
-  private def xCanAccessY(x: EirNode, y: EirNode): Boolean = {
+  private def xCanAccessY(x: EirNode, y: EirNode)(implicit ctx: TypeCheckContext): Boolean = {
     y match {
       case _ : EirTemplateArgument => Find.commonAncestor(x, y) == y.parent
       case m : EirMember if m.accessibility == EirAccessibility.Public => true
@@ -111,7 +113,7 @@ package object util {
   object EirUtilitySyntax {
 
     implicit class RichEirNode(node: EirNode) {
-      def canAccess(other: EirNode): Boolean = xCanAccessY(node, other)
+      def canAccess(other: EirNode)(implicit ctx: TypeCheckContext): Boolean = xCanAccessY(node, other)
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 

@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.CheckTypes.{MissingSelfException, MissingSpecializationException}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
 import edu.illinois.cs.ergoline.passes.Processes.ctx
@@ -45,7 +46,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def resolve[T <: EirNode : Manifest](x: EirResolvable[T]): T = Find.typedResolve(x)
+  def resolve[T <: EirNode : Manifest](x: EirResolvable[T]): T = Find.typedResolve(x)(manifest[T], tyCtx)
 
   def proxy: Option[EirProxy] = _proxies.headOption
 
@@ -59,9 +60,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def typeContext: TypeCheckContext = tyCtx
 
   def typeOf(n: EirNode): EirType = {
+    def getType(x: EirNode) = CheckTypes.visit(typeContext, x)
+
     n match {
+      case x: EirSymbolLike[_] if x.needsType => getType(x)
       case x: EirExpressionNode => exprType(x)
-      case x => CheckTypes.visit(typeContext, x)
+      case x => getType(x)
     }
   }
 
@@ -94,11 +98,16 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   }
 
   def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
-    Find.tryResolve(x) match {
+    Find.tryResolve(x)(tyCtx).orElse(Option(x).collect{case t: EirTemplateArgument => t}) match {
       case Some(t: EirTemplateArgument) => nameFor(t, ctx)
       case Some(t: EirType) => typeFor(t, ctx)
-      case _ => typeFor(typeOf(x), ctx)
-    }
+      case _ =>
+        try {
+          typeFor(typeOf(x), ctx)
+        } catch {
+          case _: MissingSpecializationException => nameFor(x, ctx)
+        }
+      }
   }
 
   private def makeShared(wrap: Boolean, s: String): String = {

@@ -19,7 +19,7 @@ object CheckFunctions {
     (a.templateArgs.isEmpty && b.templateArgs.isEmpty) && {
       val as = CheckTypes.visit(ctx, a.functionArgs)
       val bs = CheckTypes.visit(ctx, b.functionArgs)
-      CheckTypes.argumentsMatch(as, bs, exact = true)
+      CheckTypes.argumentsMatch(as, bs, exact = true)(ctx)
     }
   }
 
@@ -38,6 +38,7 @@ object CheckFunctions {
 
   // TODO check self-assigning arguments?
   def visit(ctx: TypeCheckContext, function: EirFunction): Unit = {
+    implicit val tyCtx = ctx
     val overloads = Find.overloads(function)
     val member = function.parent.to[EirMember]
     val system = member.getOrElse(function).annotation("system")

@@ -3,13 +3,16 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.CheckTypes.MissingSpecializationException
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object Processes {
   private var ctx = new TypeCheckContext
+  private implicit val tyCtx = ctx
 
   def reset(): Unit = {
     ctx = new TypeCheckContext
@@ -34,9 +37,13 @@ object Processes {
     for (x <- all) {
       FullyResolve.visit(x)
 
-      x match {
-        case n : EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
-        case _ => CheckTypes.visit(ctx, x)
+      try {
+        x match {
+          case n: EirNamespace => CheckTypes.visit(ctx, n.children.filterNot(_.isInstanceOf[EirFileSymbol]))
+          case _ => CheckTypes.visit(ctx, x)
+        }
+      } catch {
+        case mse: MissingSpecializationException => Errors.missingSpecialization(mse)
       }
     }
   }

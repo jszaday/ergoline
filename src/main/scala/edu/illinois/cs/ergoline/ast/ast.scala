@@ -1,13 +1,14 @@
 package edu.illinois.cs.ergoline.ast
 
 import java.io.File
+
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import edu.illinois.cs.ergoline.{globals, util}
 
 import scala.collection.mutable
@@ -232,15 +233,6 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
-  def isDescendantOf(other: EirClassLike): Boolean = {
-    inherited.map({
-      case t: EirTemplatedType => Find.uniqueResolution(t.base)
-      case t => Find.uniqueResolution(t)
-    }).collect({
-      case c: EirClassLike => c
-    }).exists(x => { x == other || x.isDescendantOf(other)})
-  }
-
   def member(name: String): Option[EirMember] = members.find(_.name == name)
 
   override def children: List[EirNode] = templateArgs ++ extendsThis ++ implementsThese ++ members
@@ -256,6 +248,8 @@ trait EirClassLike extends EirNode with EirScope with EirNamedNode with EirType 
       AstManipulation.updateWithin(implementsThese, oldValue, newValue).map(implementsThese = _).isDefined ||
       AstManipulation.updateWithin(members, oldValue, newValue).map(members = _).isDefined
   }
+
+  override def resolved: Boolean = true
 }
 
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
@@ -513,7 +507,7 @@ case class EirLambdaExpression(var parent: Option[EirNode], var args: List[EirFu
       case _ => Some(false)
     }
     Find.descendant(body, predicate)
-      .map(x => Find.typedResolve[EirNamedNode](x.asInstanceOf[EirResolvable[EirNamedNode]]))
+      .map(x => Find.typedResolve(x.asInstanceOf[EirResolvable[EirNamedNode]])(manifest[EirNamedNode], null))
       .toList.distinct.sortBy(_.name)
   }
 
@@ -581,26 +575,11 @@ object EirLiteralTypes extends Enumeration {
 }
 
 case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], var qualifiedName: List[String])
-  extends EirExpressionNode with EirResolvable[T] {
-
-  private var _resolved : Seq[EirNamedNode] = Nil
+  extends EirSymbolLike[T] {
 
   override def children: Iterable[EirNode] = Nil
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
-
-  override def resolve(): Seq[EirNamedNode] = {
-    if (_resolved.isEmpty) {
-      _resolved = Find.fromSymbol(this)
-    }
-    _resolved
-  }
-
-  val needsType: Boolean = {
-    classTag[T].runtimeClass.isAssignableFrom(classOf[EirType])
-  }
-
-  override def resolved: Boolean = _resolved.nonEmpty
 }
 
 trait EirPostfixExpression extends EirExpressionNode {
@@ -635,8 +614,8 @@ case class EirArrayReference(var parent: Option[EirNode], var target: EirExpress
   extends EirPostfixExpression {
 }
 
-case class EirScopedSymbol[T <: EirNode](var target: EirExpressionNode, var pending: EirResolvable[T])(var parent: Option[EirNode])
-  extends EirExpressionNode with EirResolvable[T] {
+case class EirScopedSymbol[T <: EirNode : ClassTag](var target: EirExpressionNode, var pending: EirResolvable[T])
+                                                   (var parent: Option[EirNode]) extends EirSymbolLike[T] {
   var isStatic = false
   override def resolve(): Seq[T] = Nil
   override def resolved: Boolean = pending.resolved
@@ -692,20 +671,22 @@ case class EirForLoop(var parent: Option[EirNode], var header: EirForLoopHeader,
   }
 }
 
+abstract class EirSymbolLike[+A <: EirNode : ClassTag] extends EirExpressionNode with EirResolvable[A] {
+  val needsType: Boolean = classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])
+  override def resolve(): Seq[EirNode] = Nil
+  override def resolved: Boolean = false
+}
+
 case class EirSpecializedSymbol[A <: EirNode : ClassTag](var parent: Option[EirNode],
-                                var base: EirResolvable[A],
+                                var base: EirSymbolLike[A],
                                 var types: List[EirResolvable[EirType]])
-  extends EirExpressionNode with EirResolvable[A] with EirSpecialization {
+  extends EirSymbolLike[A] with EirSpecialization {
   override def children: Iterable[EirNode] = base +: types
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     AstManipulation.updateWithin(types, oldNode, newNode).map(types = _).isDefined ||
-      ((base == oldNode) && util.applyOrFalse[EirResolvable[A]](base = _, newNode))
+      ((base == oldNode) && util.applyOrFalse[EirSymbolLike[A]](base = _, newNode))
   }
-
-  override def resolve(): Seq[A] = Nil
-
-  override def resolved: Boolean = false
 }
 
 case class EirIfElse(var parent: Option[EirNode], var test: EirExpressionNode,

@@ -6,10 +6,12 @@ import java.nio.file.Paths
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.CheckTypes.isSelf
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.annotation.tailrec
@@ -52,10 +54,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     implicit class RichEirResolvable[T <: EirNode](self: EirResolvable[T]) {
-      def isTransient: Boolean = {
-        val x = Find.typedResolve[EirNode](self)
+      def isTransient()(implicit tyCtx: TypeCheckContext): Boolean = {
+        val x = Find.typedResolve(self)(manifest[EirNode], tyCtx)
         x match {
-          case t: EirTupleType => t.children.exists(_.isTransient)
+          case t: EirTupleType => t.children.exists(_.isTransient())
           // TODO use specialization?
           case _: EirTemplateArgument => false
           case _: EirLambdaType => false
@@ -92,7 +94,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val checked = ctx.checked
     val puppables = checked.keys.filter({
       case _: EirProxy => false
-      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient)
+      case x: EirClassLike => !(x.annotation("system").isDefined || x.isAbstract || x.isTransient()(ctx.tyCtx))
       case _ => false
     })
 
@@ -165,7 +167,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def castToPuppable(ctx: CodeGenerationContext, expr: EirExpressionNode, ours: EirType): Unit = {
-    if (ours.isTransient) {
+    if (ours.isTransient()(ctx.tyCtx)) {
       Errors.cannotSerialize(expr, ours)
     } else {
       ctx << expr
@@ -173,11 +175,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
-    val theirs = t._2.declaredType.resolve().headOption
-    (ctx.exprType(t._1), theirs) match {
-      case (a: EirProxy, Some(b: EirProxy)) if a.isDescendantOf(b) =>
-        ctx << ctx.nameFor(b) << "(" << t._1 << ")"
-      case (a, Some(_)) if isEntryArgument(t._2) =>
+    implicit val tyCtx: TypeCheckContext = ctx.tyCtx
+    val (ours, theirs) = (ctx.exprType(t._1), ctx.typeOf(t._2))
+    (ours, theirs) match {
+      case (a: EirProxy, b: EirProxy) if (a.isDescendantOf(b)) =>
+         ctx << ctx.nameFor(b) << "(" << t._1 << ")"
+      case (a, _) if isEntryArgument(t._2) =>
         ctx << castToPuppable(ctx, t._1, a)
       case _ => ctx << t._1
     }
@@ -188,7 +191,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val theirs: List[EirFunctionArgument] =
       asMember(disambiguation) match {
         // TODO this should drop args for new~!
-        case Some(m@EirMember(_, f: EirFunction, _)) => f.functionArgs
+        case Some(_@EirMember(_, f: EirFunction, _)) => f.functionArgs
         case _ => Nil
       }
 
@@ -476,22 +479,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def asMember(x: Option[EirNode]): Option[EirMember] = {
-    x match {
-      case Some(m: EirMember) => Some(m)
-      case _ => x.flatMap(_.parent).to[EirMember]
-    }
+    x.to[EirMember].orElse(x.flatMap(_.parent).collect { case m: EirMember => m })
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: CodeGenerationContext, x: EirSymbol[A]): Unit = {
-    if (!CheckTypes.isSelf(x)) {
-      val m = asMember(x.disambiguation)
-      if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
+    if (CheckTypes.isSelf(x)) {
+      ctx << selfName(ctx, x)
+    } else {
+      val m = asMember(x.disambiguation).map(m => {
+        if (!m.isStatic) ctx << selfFor(ctx, m) << "->"
+        if (m.isEntryOnly) Find.namedChild[EirMember](ctx.proxy, m.name) else m
+      })
+
+      ctx << m.map(ctx.nameFor(_, None))
+        .orElse(x.disambiguation.map(n => ctx.nameFor(n, Some(x))))
+        .getOrElse(Errors.unableToName(x))
     }
-    val m = asMember(x.disambiguation) match {
-      case Some(m) if m.isEntryOnly => Some(Find.namedChild[EirMember](ctx.proxy, m.name))
-      case _ => None
-    }
-    ctx << m.map(ctx.nameFor(_)).getOrElse(ctx.nameFor(x, Some(x)))
   }
 
   override def visitDeclaration(ctx: CodeGenerationContext, x: EirDeclaration): Unit = {
@@ -516,7 +519,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(",")
       } << {
         val hasPupableParent = x.extendsThis.map(ctx.typeOf).exists(!_.isTrait)
-        Option.unless(x.isTransient || hasPupableParent)(", public hypercomm::polymorph")
+        Option.unless(x.isTransient()(ctx.tyCtx) || hasPupableParent)(", public hypercomm::polymorph")
       } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
       }
@@ -530,7 +533,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .filterNot(_.isTrait).toList
   }
 
-  def pupperFor(ctx: (CodeGenerationContext, EirNode, String))(current: String, ours: EirType): List[String] = {
+  def pupperFor(ctx: (CodeGenerationContext, EirNode, String))(current: String): List[String] = {
     List(s"${ctx._3} | $current;")
   }
 
@@ -543,7 +546,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val values = x.members.collect({
         case m@EirMember(_, d: EirDeclaration, _) if m.annotation("transient").isEmpty && !m.isStatic => d
       }).flatMap(d => {
-        pupperFor((ctx, x, puper))(ctx.nameFor(d), ctx.typeOf(d.declaredType))
+        pupperFor((ctx, x, puper))(ctx.nameFor(d))
       })
       parents ++ values
     } << s"}"
@@ -575,7 +578,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (x.templateArgs.isEmpty) {
       val isSystem = x.annotation("system").isDefined
       ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
-      if (!x.isTrait && !x.isTransient && !isSystem && !GenerateDecls.hasPup(x)) {
+      if (!x.isTrait && !x.isTransient()(ctx.tyCtx) && !isSystem && !GenerateDecls.hasPup(x)) {
         makePupper(ctx, x)
       }
     }
@@ -770,9 +773,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           selfName(ctx, s)
         } else {
           // TODO need to use FQN here, symbol is self-context providing
-          val found = Find.tryResolve(s).getOrElse({ ctx.typeOf(s) })
+          val found = Find.tryResolve(s)(ctx.tyCtx).getOrElse({ ctx.typeOf(s) })
           nameFor(ctx, found, includeTemplates, usage.orElse(Some(s)))
         }
+      case s: EirSpecializedSymbol[_] =>
+        nameFor(ctx, s.base, usage=usage) + templateArgumentsToString(ctx, s.types, usage)
       case _: EirMember | _: EirFunction if proxy.isDefined =>
         (x, proxy.flatMap(_.ordinalFor(x))) match {
           case (x: EirNamedNode, Some(ord)) => s"__${x.name}_${ord}__"
@@ -787,7 +792,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case t: EirTemplatedType => name + templateArgumentsToString(ctx, t.args, usage)
           case _ => name
         }
-      case _ if dealiased.contains("self") => selfName(ctx, x)
       case x: EirLambdaType =>
         val args = (x.to +: x.from).map(ctx.typeFor(_, Some(x)))
         s"ergoline::function<${args.mkString(",")}>"
@@ -838,7 +842,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             .mkString(",")
         } + ">"
       case t: EirLambdaType => ctx._1.typeFor(t, Some(ctx._2))
-      case t: EirType if t.isTransient => Errors.cannotSerialize(ctx._2, t)
+      case t: EirType if t.isTransient()(ctx._1.tyCtx) => Errors.cannotSerialize(ctx._2, t)
       // TODO exempt system types here?
       case t: EirType if t.isTrait => "std::shared_ptr<PUP::able>"
       case t: EirType => ctx._1.typeFor(t, Some(ctx._2))
@@ -883,7 +887,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     assert(ty.templateArgs.isEmpty)
     val args = (ty.to +: ty.from).map(ctx.typeFor(_))
     val ctypes = captures.map(ctx.typeOf(_))
-    val isTransient = ctypes.exists(_.isTransient)
+    val isTransient = ctypes.exists(_.isTransient()(ctx.tyCtx))
     val cdecltypes = ctypes.map(_t => {
       val t = ctx.typeFor(_t, Some(lambda))
       if (_t.isPointer) t else s"std::shared_ptr<$t>"
@@ -905,7 +909,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << "CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
     } else {
       ctx << captures.zip(ctypes).flatMap({
-        case (n, t) => pupperFor((ctx, lambda, "_"))(n.name, t)
+        case (n, _) => pupperFor((ctx, lambda, "_"))(n.name)
       })
     }
     ctx << "}"

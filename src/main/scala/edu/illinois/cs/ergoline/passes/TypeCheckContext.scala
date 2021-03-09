@@ -81,15 +81,8 @@ class TypeCheckContext {
 
   def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
     getTemplatedType(
-      Find.typedResolve[EirSpecializable](t.base),
-      t.args.map(CheckTypes.visit(this, _)))
-  }
-
-  def makeDistinct(s: EirSpecialization): EirSpecialization = {
-    s match {
-      case t: EirTemplatedType => getTemplatedType(t)
-      case _ => s
-    }
+      assertValid[EirSpecializable](t.base),
+      t.args.map(assertValid[EirType]))
   }
 
   private var _tuples: Map[List[EirType], EirTupleType] = Map()
@@ -109,11 +102,10 @@ class TypeCheckContext {
   def cache(n: EirNode, t: EirType): Unit = current.foreach(c => _cache += ((c, n) -> t))
   def avail(n: EirNode): Option[EirType] = current.flatMap(c => _cache.get((c, n)))
 
-  def mkCheckContext(s: EirSpecializable, spec: Option[EirSpecialization]): Option[Context] = {
-    val sp = spec.map(makeDistinct)
+  def mkCheckContext(s: EirSpecializable, sp: Option[EirSpecialization]): Option[Context] = {
     val checked = _checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
-    assert(s.templateArgs.isEmpty || spec.isDefined)
+    assert(s.templateArgs.isEmpty || sp.isDefined)
     Option.unless(checked.contains(ctx))({
       _checked += (s -> (checked :+ ctx))
       ctx

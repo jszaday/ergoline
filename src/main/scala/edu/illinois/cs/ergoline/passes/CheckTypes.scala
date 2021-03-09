@@ -13,7 +13,6 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
-import scala.reflect.ClassTag
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
@@ -21,6 +20,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   var classCache: List[EirClass] = Nil
 
   final case class MissingSelfException[A <: EirNamedNode](symbol: EirSymbol[A]) extends Exception
+  final case class MissingSpecializationException(node: Either[EirTemplateArgument, EirSpecializable]) extends Exception
 
   private def generateLval(x: EirArrayReference): EirExpressionNode = {
     makeMemberCall(x.target, "get",  x.args)
@@ -79,6 +79,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   // TODO add checks for static-ness?
   override def visitScopedSymbol[A <: EirNode](ctx: TypeCheckContext, x: EirScopedSymbol[A]): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
     val prevFc: Option[EirFunctionCall] =
@@ -89,7 +90,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     found match {
       case Some((member, result)) =>
         x.disambiguation = Some(member)
-        prevFc.foreach(validate(ctx, member, _))
+        prevFc.foreach(validate(member, _))
         result
       case None =>
         Errors.unableToResolve(x.pending)
@@ -97,6 +98,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTernaryOperator(ctx: TypeCheckContext, x: EirTernaryOperator): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val testTy = visit(ctx, x.test)
     val boolean = globals.typeFor(EirLiteralTypes.Boolean)
     if (testTy.canAssignTo(boolean)) {
@@ -116,8 +118,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTemplatedType(ctx: TypeCheckContext, x: types.EirTemplatedType): EirType = {
-    val base: EirSpecializable = assertValid[EirSpecializable](Find.uniqueResolution(x.base))
-
+    val base: EirSpecializable = assertValid[EirSpecializable](visit(ctx, x.base))
     val spec = ctx.specialize(base, x)
     val tys = Option(spec).map(_.types).getOrElse(x.args).map(visit(ctx, _))
     visit(ctx, base)
@@ -136,7 +137,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitImport(ctx: TypeCheckContext, eirImport: EirImport): EirType = null
 
   @tailrec
-  def accessibleMember(pair: (EirClassLike, EirClassLike), accessibility: EirAccessibility): Boolean = {
+  def accessibleMember(pair: (EirClassLike, EirClassLike), accessibility: EirAccessibility)(implicit ctx: TypeCheckContext): Boolean = {
     pair match {
       case (a: EirProxy, b: EirProxy) => accessibleMember((a.base, b.base), accessibility)
       case (a, b: EirProxy) => accessibleMember((a, b.base), accessibility)
@@ -145,19 +146,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def sharedBase(a: EirClassLike, b: EirClassLike): Boolean = accessibleMember((a, b), Protected)
+  def sharedBase(a: EirClassLike, b: EirClassLike)(implicit ctx: TypeCheckContext): Boolean = accessibleMember((a, b), Protected)
 
-  def sharedBase(a: EirMember, b: EirMember): Boolean = sharedBase(a.base, b.base)
+  def sharedBase(a: EirMember, b: EirMember)(implicit ctx: TypeCheckContext): Boolean = sharedBase(a.base, b.base)
 
   @tailrec
-  def targetsSelf(a: EirMember, node: EirExpressionNode): Boolean = node match {
+  def targetsSelf(a: EirMember, node: EirExpressionNode)(implicit ctx: TypeCheckContext): Boolean = node match {
     case s: EirSymbol[_] => isSelf(s) || asMember(s.disambiguation).exists(sharedBase(a, _))
     case f: EirScopedSymbol[_] => targetsSelf(a, f.target)
     case p: EirPostfixExpression => targetsSelf(a, p.target)
     case _ => false
   }
 
-  def validate(ctx: TypeCheckContext, target: EirNamedNode, call: EirFunctionCall): Unit = {
+  def validate(target: EirNamedNode, call: EirFunctionCall)(implicit ctx: TypeCheckContext): Unit = {
     target match {
       case member: EirMember =>
         val current = ctx.ancestor[EirMember]
@@ -175,31 +176,30 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitFunctionCall(ctx: TypeCheckContext, call: EirFunctionCall): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val target = visit(ctx, call.target)
     val ours = call.args.map(visit(ctx, _))
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
-      case EirLambdaType(_, args, retTy, _) if argumentsMatch(ours, args.map(visit(ctx, _))) =>
-        retTy match {
-          case t: EirType => t
-          case _ => visit(ctx, retTy)
-        }
+      case EirLambdaType(_, args, retTy, _) if argumentsMatch(ours, args.map(assertValid[EirType])) => {
+        assertValid[EirType](retTy)
+      }
       case _ => error(ctx, call, s"cannot resolve ((${ours mkString ", "}) => ???) and $target")
     }
   }
 
-  def argumentsMatch(x: Iterable[EirType], y: Iterable[EirType], exact: Boolean): Boolean =
+  def argumentsMatch(x: Iterable[EirType], y: Iterable[EirType], exact: Boolean)(implicit ctx: TypeCheckContext): Boolean =
     argumentsMatch(x.toList, y.toList, exact)
 
-  def argumentsMatch(x: List[EirType], y: List[EirType], exact: Boolean = false): Boolean = {
+  def argumentsMatch(x: List[EirType], y: List[EirType], exact: Boolean = false)(implicit ctx: TypeCheckContext): Boolean = {
     (x.length == y.length) &&
       x.zip(y).forall({
         case (x, y) if exact => x == y
-        case (x, y) => x.canAssignTo(y)
+        case (x, y) => x.canAssignTo(y)(ctx)
       })
   }
 
-  def resolveIterator(ctx: TypeCheckContext, h: EirForAllHeader): EirType = {
+  def resolveIterator(h: EirForAllHeader)(implicit ctx: TypeCheckContext): EirType = {
     visit(ctx, h.expression) match {
       case t: EirTemplatedType =>
         val iterableTy = globals.iterableType
@@ -217,6 +217,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitForLoop(ctx: TypeCheckContext, loop: EirForLoop): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     loop.header match {
       case EirCStyleHeader(decl, test, incr) =>
         visit(ctx, decl)
@@ -227,7 +228,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
         visit(ctx, incr)
       case h: EirForAllHeader =>
-        val iterTy = resolveIterator(ctx, h)
+        val iterTy = resolveIterator(h)
         if (h.identifiers.length == 1) {
           h.declarations.head.declaredType = iterTy
         } else ???
@@ -241,15 +242,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def isSelf(value: EirSymbol[_]): Boolean =
-    value.qualifiedName match {
-      case ("self" | "self@" | "self[@]") :: Nil => true
+    value.qualifiedName.lastOption
+      .filter(_ => value.qualifiedName.length == 1) match {
+      case Some("self" | "self@" | "self[@]") => true
       case _ => false
     }
 
   /** Merges two maps of type arguments to types, using unification.
    *  Propagates unification errors as null to indicate incompatibility
    */
-  private def merge(a: Map[EirTemplateArgument, EirType], b: Map[EirTemplateArgument, EirType]): Map[EirTemplateArgument, EirType] = {
+  private def merge(a: Map[EirTemplateArgument, EirType], b: Map[EirTemplateArgument, EirType])(implicit ctx: TypeCheckContext): Map[EirTemplateArgument, EirType] = {
     (a.toList ++ b.toList).groupMap(_._1)(_._2).map {
       case (arg, tys) => arg -> {
         tys.reduce((a, b) =>
@@ -266,26 +268,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
    * @param pair pair of unknown and known types
    * @return a map of learned type args and their values
    */
-  private def learn(ctx: TypeCheckContext, pair: (EirResolvable[EirType], EirType)): Map[EirTemplateArgument, EirType] = {
+  private def learn(pair: (EirResolvable[EirType], EirType))(implicit ctx: TypeCheckContext): Map[EirTemplateArgument, EirType] = {
     pair match {
-      case (EirPlaceholder(_, Some(a)), b) => learn(ctx, (visit(ctx, a), b))
+      case (EirPlaceholder(_, Some(a)), b) => learn((assertValid[EirResolvable[EirType]](a), b))
       case (a: EirTemplatedType, b: EirTemplatedType) if a.args.length == b.args.length =>
-        (learn(ctx, (a.base, visit(ctx, b.base))) +: a.args.zip(b.args.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
+        (learn((a.base, visit(ctx, b.base))) +: a.args.zip(b.args.map(visit(ctx, _))).map(learn)).reduce(merge)
       case (a: EirLambdaType, b: EirLambdaType) if a.from.length == b.from.length =>
-        (learn(ctx, (a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn(ctx, _))).reduce(merge)
+        (learn((a.to, visit(ctx, b.to))) +: a.from.zip(b.from.map(visit(ctx, _))).map(learn)).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
-      case (_: EirSymbol[_] | _: EirSpecializedSymbol[_], b) => learn(ctx, (visit(ctx, pair._1), b))
+      case (_: EirSymbol[_] | _: EirSpecializedSymbol[_], b) => learn(({
+        Find.typedResolve[EirResolvable[EirType]](pair._1)
+      }, b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _ => Map()
     }
   }
 
-  def inferSpecialization(ctx: TypeCheckContext, s: EirSpecializable, args: List[EirType]): Option[EirSpecialization] = {
+  def inferSpecialization(s: EirSpecializable, args: List[EirType])(implicit ctx: TypeCheckContext): Option[EirSpecialization] = {
     // TODO this does not consider static applications (e.g. option<?>(42))
     val unknowns = Option(s).to[EirLambdaType].map(_.from)
     val insights = unknowns
       .filter(_.length == args.length)
-      .map(_.zip(args).map(learn(ctx, _)))
+      .map(_.zip(args).map(learn))
       .map(_.reduce(merge)).getOrElse(Map())
 
     val paired = s.templateArgs.map(t => {
@@ -297,21 +301,26 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     ))(ctx.synthesize(paired.flatten))
   }
 
-  def screenCandidates(ctx: TypeCheckContext, argsrc: Option[EirExpressionNode],
+  def screenCandidates(ctx: TypeCheckContext,
+                       argsrc: Option[EirExpressionNode],
                        candidates: Iterable[(EirNamedNode, EirType)]): Option[(EirNamedNode, EirType)] = {
-    val results = candidates.flatMap(pair => {
+    implicit val tyCtx: TypeCheckContext = ctx
+    val list = candidates.toList
+    val results = list.map(pair => {
       val (candidate, member) = pair
 
       val (ispec, args) = handleSpecialization(ctx, member) match {
         case Left(s) =>
           val args = getArguments(ctx, argsrc)
           val sp = args
-            .flatMap(inferSpecialization(ctx, s, _))
+            .flatMap(inferSpecialization(s, _))
             .flatMap(ctx.trySpecialize(s, _))
             .getOrElse(return None)
           (sp, args)
         case Right(sp) => (sp, getArguments(ctx, argsrc))
       }
+
+      assert(argsrc.nonEmpty || args.isEmpty)
 
       val found = (member, args) match {
         case (EirTemplatedType(_, _ : EirClassLike, _) | _: EirClassLike, Some(_)) =>
@@ -325,8 +334,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           val found = screenCandidates(ctx, argsrc, candidates.view.zip(candidates.map(visit(ctx, _))))
           ctx.leave(sp)
           found
-        case (_ : EirLambdaType, Some(ours)) =>
-          val t = assertValid[EirLambdaType](visit(ctx, candidate))
+        case (lt : EirLambdaType, Some(ours)) =>
+          val t = if (lt.resolved) lt else assertValid[EirLambdaType](visit(ctx, candidate))
           if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
             // NOTE the double check is necessary here to visit candidate if it hasn't
             // already been visited... and since visitFunction doesn't resolve its types
@@ -338,12 +347,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case (_, Some(_)) => None
       }
 
+      assert(args.nonEmpty || found.isDefined)
+
       ctx.leave(ispec)
       found
     })
 
     // TODO implement some safety here, one must hide the others or it's ambiguous!
-    results.headOption
+    val found = results.find(_.isDefined).flatten
+    assert(argsrc.isDefined || list.isEmpty || found.isDefined)
+    found
   }
 
   def getArguments(ctx: TypeCheckContext, opt: Option[EirExpressionNode]): Option[List[EirType]] = {
@@ -360,6 +373,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitSymbol[A <: EirNamedNode](ctx: TypeCheckContext, value: EirSymbol[A]): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val prevFc = value.parent.collect({ case f: EirFunctionCall if f.target.contains(value) => f })
     val self = Option.when(isSelf(value))(value.qualifiedName.last)
     val candidates = (self match {
@@ -369,6 +383,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case _ => Nil
         }
       case None =>
+        val rslvd = Find.fromSymbol(value).map(x => x.parent match {
+          case Some(m: EirMember) => m
+          case _ => x
+        })
         val (init, last) = (value.qualifiedName.init, value.qualifiedName.last)
         if (init.nonEmpty) {
           val parent = Find.tryResolve(EirSymbol[EirNamedNode](value.parent, init))
@@ -378,22 +396,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             accessor.isStatic = true
             Find.resolveAccessor(ctx, accessor, asCls)
           } else {
-            zipWithVisit(ctx, value.resolve())
+            zipWithVisit(ctx, rslvd)
           }
         } else {
-          zipWithVisit(ctx, value.resolve())
+          zipWithVisit(ctx, rslvd)
         }
     }).toList
-    val filtered = if (value.needsType) candidates.filter({
-      case (_: EirType | _: EirResolvable[_], _) => true
-      case _ => false
+    val filtered = if (value.needsType) candidates.filter(x => {
+      def isType(x: EirNode) = x match {
+        case _: EirType | _: EirResolvable[_] => true
+        case _ => false
+      }
+      x match {
+        case (m: EirMember, _) => isType(m.member)
+        case _ => isType(x._1)
+      }
     }) else candidates
     val found = screenCandidates(ctx, prevFc, filtered)
     value.disambiguation = found.map(_._1)
     val retTy = found.map(x => visit(ctx, x._2))
     prevFc
       .zip(asMember(found.map(_._1)))
-      .foreach(x => validate(ctx, x._2, x._1))
+      .foreach(x => validate(x._2, x._1))
     retTy.getOrElse(self match {
       case Some(_) => throw MissingSelfException(value)
       case _ => Errors.unableToResolve(value)
@@ -410,7 +434,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _ => Some(false)
     }).map(visit(ctx, _)).toList
     if (retTys.isEmpty) globals.typeFor(EirLiteralTypes.Unit)
-    else Find.unionType(retTys) match {
+    else Find.unionType(retTys)(ctx) match {
       case Some(x) => x
       case None => Errors.unableToUnify(node, retTys)
     }
@@ -435,7 +459,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (None, None) => Errors.missingType(node)
       case (Some(a), None) => a
       case (None, Some(b)) => node.declaredType = b; b
-      case (Some(a), Some(b)) if b.canAssignTo(a) => a
+      case (Some(a), Some(b)) if b.canAssignTo(a)(ctx) => a
       case (Some(a), Some(b)) => Errors.cannotCast(node, b, a)
     }
     ctx.cache(node, ty)
@@ -445,7 +469,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTemplateArgument(ctx: TypeCheckContext, node: EirTemplateArgument): EirType = {
     ctx.hasSubstitution(node) match {
       case Some(x) => visit(ctx, x)
-      case _ => Errors.missingSpecialization(node)
+      case _ => throw MissingSpecializationException(Left(node))
     }
   }
 
@@ -516,7 +540,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         ctx.start(subCtx)
         val bodyType = node.body.map(visit(ctx, _))
         val retTy = visit(ctx, node.returnType)
-        if (!bodyType.forall(_.canAssignTo(retTy))) {
+        if (!bodyType.forall(_.canAssignTo(retTy)(ctx))) {
           Errors.unableToUnify(node, bodyType.get, retTy)
         }
         ctx.stop(subCtx)
@@ -536,7 +560,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
 
     if (isDefined) {
-      ctx.lambdaWith(expand(ctx, node.functionArgs), visit(ctx, node.returnType))
+      val retTy = visit(ctx, node.returnType)
+      ctx.lambdaWith(expand(ctx, node.functionArgs), retTy)
     } else {
       // NOTE expansions are explicitly not known here...
       //      what should this actually return? a placeholder?
@@ -556,6 +581,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     error(ctx, node, "annotations are type-less")
 
   override def visitBinaryExpression(ctx: TypeCheckContext, node: EirBinaryExpression): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val op = if (node.op == "!=") "==" else node.op
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
     if (op == "===" || op == "!==") {
@@ -595,7 +621,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visit(ctx: TypeCheckContext, node: EirNode): EirType = {
     ctx.enterNode(node)
-    val result = super.visit(ctx, node)
+    val result = node match {
+      case p: EirPlaceholder[_] => visit(ctx, p.expectation.getOrElse{ Errors.unableToResolve(p) })
+      case _ => super.visit(ctx, node)
+    }
     node match {
       case x: EirExpressionNode =>
         x.foundType = Option(result) match {
@@ -608,9 +637,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
-  def isInvalidFinalAssign(node : EirAssignment): Boolean = {
+  def isInvalidFinalAssign(node : EirAssignment)(implicit ctx: TypeCheckContext): Boolean = {
     node.lval match {
-      case s : EirSymbol[_] => Find.uniqueResolution(s) match {
+      case s : EirSymbol[_] => Find.fromSymbol(s) match {
         case d : EirDeclaration => d.isFinal && {
           !d.parent.to[EirMember].map(_.base).exists(x => {
             Find.parentOf[EirMember](node)
@@ -629,9 +658,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitAssignment(ctx: TypeCheckContext, node: EirAssignment): EirType = {
     val lval = visit(ctx, node.lval)
     val rval = visit(ctx, node.rval)
-    if (!rval.canAssignTo(lval)) {
+    if (!rval.canAssignTo(lval)(ctx)) {
       Errors.cannotCast(node, lval, rval)
-    } else if (isInvalidFinalAssign(node)) {
+    } else if (isInvalidFinalAssign(node)(ctx)) {
       Errors.assignToVal(node)
     } else {
       globals.unitType
@@ -664,15 +693,25 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class TypeCheckException(message: String) extends Exception(message)
 
   override def visitSpecializedSymbol(ctx: TypeCheckContext, x: EirSpecializedSymbol[_]): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     // TODO this should probably return templated types
-    val candidates = x.base.resolve().collect { case n: EirNamedNode => n }
-    val found = screenCandidates(ctx, prevFc, candidates.view.zip(candidates.map(visit(ctx, _))))
+    val resolved = Find.fromSymbol(x.base).collect { case n: EirNamedNode => n }
+    val filtered = (if (x.needsType) resolved.filter({
+      case _: EirType | _: EirResolvable[_] => true
+      case _ => false
+    }) else resolved).toList
+    val candidates = filtered.zip(filtered.map(visit(ctx, _)))
+    var found = screenCandidates(ctx, prevFc, candidates)
+    if (found.isEmpty && prevFc.isEmpty) {
+      found = candidates.headOption
+    }
     found match {
       case Some((m, ty)) =>
         x.disambiguation = Some(m)
-        prevFc.foreach(x => validate(ctx, m, x))
+        x.base.foundType = Some(ty)
+        prevFc.foreach(x => validate(m, x))
         ty match {
           case t: EirLambdaType => t
           case t: EirSpecializable => visit(ctx, EirTemplatedType(Some(x.asInstanceOf[EirNode]), t, x.types))
@@ -684,7 +723,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitIfElse(ctx: TypeCheckContext, x: EirIfElse): EirType = {
     val retTy = visit(ctx, x.test)
     val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    if (!retTy.canAssignTo(boolean)) {
+    if (!retTy.canAssignTo(boolean)(ctx)) {
       Errors.cannotCast(x, retTy, boolean)
     }
     x.ifTrue.foreach(visit(ctx, _))
@@ -695,13 +734,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitWhileLoop(ctx: TypeCheckContext, x: EirWhileLoop): EirType = {
     val exprTy = x.condition.map(visit(ctx, _))
     val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    if (!exprTy.forall(_.canAssignTo(boolean))) {
+    if (!exprTy.forall(_.canAssignTo(boolean)(ctx))) {
       Errors.cannotCast(x, exprTy.get, boolean)
     }
     visit(ctx, x.body)
   }
 
   override def visitNew(ctx: TypeCheckContext, x: EirNew): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val base = visit(ctx, x.target)
     val spec = handleSpecialization(ctx, base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
@@ -716,15 +756,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitProxy(ctx: TypeCheckContext, node: EirProxy): EirType = {
     val (_, _, opt) = handleSpecializable(ctx, node)
-    opt.foreach(subCtx => {
+    val baseTy = opt.map(subCtx => {
       ctx.start(subCtx)
       val element = ProxyManager.elementFor(node).getOrElse(node)
       element.members.map(visit(ctx, _))
-      visit(ctx, node.base)
+      val baseTy = visit(ctx, node.base)
       ctx.stop(subCtx)
+      baseTy
     })
     if (node.templateArgs.nonEmpty) {
-      ctx.getTemplatedType(node, node.templateArgs.map(visit(ctx, _)))
+      baseTy match {
+        case Some(s: EirSpecialization) => ctx.getTemplatedType(node, s.types.map(assertValid[EirType]))
+        case _ => node
+      }
     } else {
       node
     }
@@ -733,14 +777,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitMatch(ctx: TypeCheckContext, x: EirMatch): EirType = {
     visit(ctx, x.expression)
     val cases = x.cases.map(visit(ctx, _))
-    Find.unionType(cases).getOrElse(Errors.unableToUnify(x, cases))
+    Find.unionType(cases)(ctx).getOrElse(Errors.unableToUnify(x, cases))
   }
 
   override def visitMatchCase(ctx: TypeCheckContext, x: EirMatchCase): EirType = {
     ctx.goal.push(x.parent.to[EirMatch].flatMap(_.expression.foundType).getOrElse(Errors.missingType(x)))
     val boolean = globals.typeFor(EirLiteralTypes.Boolean)
     val condTy = x.condition.map(visit(ctx, _))
-    if (!condTy.forall(_.canAssignTo(boolean))) {
+    if (!condTy.forall(_.canAssignTo(boolean)(ctx))) {
       Errors.cannotCast(x.condition.get, condTy.get, boolean)
     }
     visit(ctx, x.patterns)
@@ -799,7 +843,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     // TODO -- make this more reliable
     x.decl.declaredType = goal
     val ours = visit(ctx, x.expression)
-    if (ours.canAssignTo(globals.boolType)) null
+    if (ours.canAssignTo(globals.boolType)(ctx)) null
     else Errors.cannotCast(x, ours, globals.boolType)
   }
 
@@ -834,6 +878,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitInterpolatedString(ctx: TypeCheckContext, x: EirInterpolatedString): EirType = {
+    implicit val tyCtx: TypeCheckContext = ctx
     val strTy = globals.stringType
     x.children.foreach(f => {
       val ty = visit(ctx, f)
@@ -896,7 +941,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
     val condTy = x.condition.map(visit(ctx, _))
-    if (!condTy.forall(_.canAssignTo(boolTy))) {
+    if (!condTy.forall(_.canAssignTo(boolTy)(ctx))) {
       Errors.cannotCast(x.condition.get, condTy.get, boolTy)
     }
     visit(ctx, x.body)

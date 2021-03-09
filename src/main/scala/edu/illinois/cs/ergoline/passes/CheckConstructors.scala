@@ -62,8 +62,8 @@ object CheckConstructors {
   }
 
   private def canAssignHelper(ctx: TypeCheckContext, x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
-    val tys = List(x, y).map(x => if (ctx == null) Find.typedResolve[EirType](x) else CheckTypes.visit(ctx, x))
-    tys.head.canAssignTo(tys.last)
+    val tys = List(x, y).map(x => if (ctx == null) Find.typedResolve(x)(manifest[EirType], ctx) else CheckTypes.visit(ctx, x))
+    tys.head.canAssignTo(tys.last)(ctx)
   }
 
   def constructorAssignmentOk(ctx: TypeCheckContext, decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {

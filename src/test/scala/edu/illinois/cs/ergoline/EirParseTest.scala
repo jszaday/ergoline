@@ -31,7 +31,7 @@ class EirParseTest extends FunSuite {
     EirGlobalNamespace.clear()
     val result = Modules.load("package foo; namespace bar { class baz { } }")
     val symbol = EirSymbol[EirClassLike](Some(result), List("foo", "bar", "baz"))
-    Find.uniqueResolution(symbol)
+    Find.fromSymbol(symbol)(null).length shouldEqual 1
   }
 
   test("tuple with one element same type as base type") {

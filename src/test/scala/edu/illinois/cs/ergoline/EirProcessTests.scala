@@ -48,7 +48,8 @@ class EirProcessTests extends FunSuite {
       }
     }
     failures.foreach({
-      case (f, t) => throw EirException(s"failure on ${f.getName} due to $t")
+      case (f, t) => System.err.println(s"failure on ${f.getName} due to $t")
     })
+    failures.foreach(x => throw x._2)
   }
 }

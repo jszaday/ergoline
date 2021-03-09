@@ -10,7 +10,10 @@ package object types {
   trait EirType extends EirResolvable[EirType] {
     override def resolve(): Seq[EirNode] = Seq(this)
 
-    override def resolved: Boolean = true
+    override def resolved: Boolean = children.forall {
+      case r: EirResolvable[_] => r.resolved
+      case _ => true
+    }
   }
 
   type EirNamedType = EirType with EirNamedNode

@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode, EirScopedSymbol}
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode, EirScopedSymbol, EirSymbolLike}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -53,7 +54,7 @@ object FullyResolve {
 
   def verify(node : EirNode): Boolean = {
     node.children.map({
-      case s: EirScopedSymbol[_] => true
+      case _: EirType | _: EirSymbolLike[_] => true
       case resolvable: EirResolvable[_] =>
         val resolved = resolvable.resolved
         if (!resolved) Errors.unableToResolve(resolvable)

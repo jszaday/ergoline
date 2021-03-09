@@ -45,7 +45,7 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${ctx.nameFor(x)}" << visitInherits(ctx, x) << "{"
     if (!x.isInstanceOf[EirTrait]) {
-      if (!x.isTransient) {
+      if (!x.isTransient()(ctx.tyCtx)) {
         if (!hasPup(x)) {
           if (x.templateArgs.isEmpty) ctx << "virtual void __pup__(hypercomm::serdes&) override;"
           else makePupper(ctx, x, isMember = true)

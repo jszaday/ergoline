@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.util
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.passes.CheckTypes.MissingSpecializationException
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import org.antlr.v4.runtime.tree.ParseTree
 
@@ -113,6 +114,16 @@ object Errors {
 
   def missingSpecialization(a: EirNode): Nothing = {
     exit(format(a, "missing specialization for %s", a))
+  }
+
+  def missingSpecialization(mse: MissingSpecializationException): Nothing = {
+    if (globals.verbose) throw mse
+    else {
+      mse.node match {
+        case Left(n) => missingSpecialization(n)
+        case Right(n) => missingSpecialization(n)
+      }
+    }
   }
 
   def incorrectType(a: EirNode, c: Class[_]): Nothing = {
