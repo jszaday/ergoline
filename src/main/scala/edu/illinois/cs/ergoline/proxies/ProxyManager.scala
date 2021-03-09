@@ -61,29 +61,29 @@ object ProxyManager {
 
   def proxyType(p: EirProxy): EirType = {
     assert(p.collective.isEmpty)
-    typeFor(p, p.templateArgs.map(Find.uniqueResolution(_)))
+    typeFor(p, p.templateArgs.map(Find.uniqueResolution[EirType](_)))
   }
 
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution[EirType](_)))
       case None => Errors.missingType(p)
     }
   }
 
   def collectiveType(p: EirProxy): EirType = {
     collectiveFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution(_)))
+      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution[EirType](_)))
       case None => Errors.missingType(p)
     }
   }
 
   def proxyFor(t: EirProxyType): EirType = {
     val collective = t.collective.getOrElse("")
-    val resolved = Find.uniqueResolution(t.base)
+    val resolved = Find.uniqueResolution[EirType](t.base)
     val base = resolved match {
       case t: EirTemplatedType =>
-        assertValid[EirClassLike](Find.uniqueResolution(t.base))
+        Find.uniqueResolution[EirClassLike](t.base)
       case c: EirClassLike => c
       case _ => Errors.unableToResolve(t)
     }

@@ -11,6 +11,7 @@ import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.Properties.{lineSeparator => n}
 
 class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
@@ -44,8 +45,8 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def resolve[T <: EirNode](resolvable: EirResolvable[T]): T =
-    Find.uniqueResolution(resolvable)
+  def resolve[T <: EirNode : ClassTag](resolvable: EirResolvable[T]): T =
+    Find.uniqueResolution[T](resolvable)
 
   def proxy: Option[EirProxy] = _proxies.headOption
 
@@ -68,7 +69,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def eval2const(n: EirNode): EirLiteral = n match {
     case e: EirExpressionNode => CheckTypes.evaluateConstExpr(e)(typeContext)
     case c: EirConstantFacade => c.value
-    case r: EirResolvable[_] => eval2const(resolve(r))
+    case r: EirResolvable[_] => eval2const(resolve[EirNode](r))
     case _ => Errors.invalidConstExpr(n)
   }
 

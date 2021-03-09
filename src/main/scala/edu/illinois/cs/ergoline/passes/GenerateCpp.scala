@@ -345,14 +345,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def disambiguate(ctx: CodeGenerationContext, x: EirExpressionNode): EirNode = {
     x.disambiguation.getOrElse(x match {
-      case x: EirResolvable[_] => ctx.resolve(x)
+      case x: EirResolvable[_] => ctx.resolve[EirNode](x)
       case x => x
     })
   }
 
   def visitSpecialization(s: EirSpecialization)(implicit ctx: CodeGenerationContext): Unit = {
     if (s.types.nonEmpty) {
-      val types = s.types.map(ctx.resolve[EirType])
+      val types = s.types.map(ctx.resolve[EirResolvable[EirType]])
       ctx << "<" << {
         for (t <- types.init) {
           ctx << ctx.typeFor(t)
@@ -392,7 +392,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
       val isPointer = x.target match {
         // TODO make this more robust
-        case s: EirSymbol[_] => ctx.resolve(s) match {
+        case s: EirSymbol[_] => ctx.resolve[EirNode](s) match {
           case _: EirDeclaration => true
           case EirMember(_, _: EirDeclaration, _) => true
           case _: EirFunctionArgument => true
@@ -515,7 +515,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ": " << {
         if (parents.isEmpty) "public ergoline::object" else parents.map("public " + _).mkString(",")
       } << {
-        val hasPupableParent = x.extendsThis.map(ctx.resolve[EirType]).exists(!_.isTrait)
+        val res = x.extendsThis.map(ctx.resolve[EirResolvable[EirType]])
+        val hasPupableParent = res.map(ctx.typeOf(_)).exists(!_.isTrait)
         Option.unless(x.isTransient || hasPupableParent)(", public hypercomm::polymorph")
       } << {
         ", public std::enable_shared_from_this<" + nameFor(ctx, x, includeTemplates = true) +">"
@@ -526,8 +527,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def puppingParents(ctx: CodeGenerationContext, x: EirClassLike): List[EirType] = {
     // TODO enable stateful traits?
     // TODO be templating aware?
-    (x.extendsThis ++ x.implementsThese).map(ctx.resolve[EirType])
-      .filterNot(_.isTrait).toList
+    (x.extendsThis ++ x.implementsThese)
+      // NOTE -- this is a sketchy use of EirType!
+      .map(ctx.resolve[EirType])
+      .filterNot(_.isTrait)
+      .toList
   }
 
   def pupperFor(ctx: (CodeGenerationContext, EirNode, String))(current: String, ours: EirType): List[String] = {
@@ -720,7 +724,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def templateArgumentsToString(ctx: CodeGenerationContext, args: List[EirResolvable[EirType]], usage: Option[EirNode]): String = {
     "<" + {
-      args.map(ctx.resolve[EirType]).map(ctx.typeFor(_, usage)).mkString(",")
+      args.map(ctx.resolve[EirResolvable[EirType]]).map(ctx.typeFor(_, usage)).mkString(",")
     } + ">"
   }
 
@@ -770,7 +774,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           selfName(ctx, s)
         } else {
           // TODO need to use FQN here, symbol is self-context providing
-          nameFor(ctx, ctx.resolve(s), includeTemplates, usage.orElse(Some(s)))
+          nameFor(ctx, ctx.resolve[EirNode](s), includeTemplates, usage.orElse(Some(s)))
         }
       case _: EirMember | _: EirFunction if proxy.isDefined =>
         (x, proxy.flatMap(_.ordinalFor(x))) match {
@@ -1032,7 +1036,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def typeAt(ctx: CodeGenerationContext, t: Option[EirType], idx: Int): Option[EirType] = {
     t match {
       case Some(t: EirTupleType) if idx < t.children.length =>
-        Some(ctx.resolve[EirType](t.children(idx)))
+        val res = ctx.resolve[EirResolvable[EirType]](t.children(idx))
+        Some(ctx.typeOf(res))
       case _ => None
     }
   }

@@ -115,7 +115,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTemplatedType(x: types.EirTemplatedType)(implicit ctx: TypeCheckContext): EirType = {
-    val base: EirSpecializable = assertValid[EirSpecializable](Find.uniqueResolution(x.base))
+    val base: EirSpecializable = Find.uniqueResolution[EirSpecializable](x.base)
     val spec = ctx.specialize(base, x)
     visit(base)
     ctx.leave(spec)
@@ -202,7 +202,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case t: EirTemplatedType =>
         val iterableTy = globals.iterableType
         val iteratorTy = globals.iteratorType
-        val base = Find.uniqueResolution(t.base)
+        val base = visit(t.base)
         if (base.canAssignTo(iterableTy)) {
           h.expression = makeMemberCall(h.expression, "iter")
           visit(h.expression)
@@ -273,7 +273,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (a: EirLambdaType, b: EirLambdaType) if a.from.length == b.from.length =>
         (learn((a.to, visit(b.to))) +: a.from.zip(b.from.map(visit(_))).map(learn)).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
-      case (_: EirSymbol[_] | _: EirSpecializedSymbol, b) => learn((Find.uniqueResolution(pair._1), b))
+      case (_: EirSymbol[_] | _: EirSpecializedSymbol, b) => learn((Find.uniqueResolution[EirResolvable[EirType]](pair._1), b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _ => Map()
     }
@@ -603,7 +603,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def isInvalidFinalAssign(node : EirAssignment): Boolean = {
     node.lval match {
-      case s : EirSymbol[_] => Find.uniqueResolution(s) match {
+      case s : EirSymbol[_] => Find.uniqueResolution[EirNode](s) match {
         case d : EirDeclaration => d.isFinal && {
           !d.parent.to[EirMember].map(_.base).exists(x => {
             Find.parentOf[EirMember](node)
@@ -660,7 +660,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     // TODO this should probably return templated types
-    val candidates = x.symbol.resolve()
+    val candidates = Find.resolutions[EirNamedNode](x.symbol)
     val found = screenCandidates(prevFc, candidates.view.zip(candidates.map(visit(_))))
     found match {
       case Some((m, ty)) =>
@@ -768,7 +768,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def sameTypes(a: EirType, b: EirType)(implicit ctx: TypeCheckContext): Boolean = {
     (a == b) || ((a, b) match {
       case (EirTemplatedType(_, b1, as1), EirTemplatedType(_, b2, as2)) if as1.length == as2.length =>
-        sameTypes(visit(Find.uniqueResolution(b1)), visit(Find.uniqueResolution(b2))) &&
+        sameTypes(visit(b1), visit(b2)) &&
           as1.map(visit(_)).zip(as2.map(visit(_))).forall(x => sameTypes(x._1, x._2))
       case _ => false
     })
@@ -781,7 +781,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // TODO add type-checking to verify:
       //      both goal/theirs and ours are pointer types
       // -or- ours can assign to theirs
-      case t => Find.uniqueResolution(t)
+      case t => visit(Find.uniqueResolution[EirResolvable[EirType]](t))
      }
     x.needsCasting = !sameTypes(goal, found)
     x.ty = found
@@ -797,9 +797,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else Errors.cannotCast(x, ours, globals.boolType)
   }
 
-  @tailrec def hasField(x: EirType, field: String): Boolean = {
+  @tailrec def hasField(x: EirType, field: String)(implicit ctx: TypeCheckContext): Boolean = {
     x match {
-      case t: EirTemplatedType => hasField(Find.uniqueResolution(t.base), field)
+      case t: EirTemplatedType => hasField(visit(t.base), field)
       case c: EirClassLike => c.members.exists(_.name == field)
     }
   }

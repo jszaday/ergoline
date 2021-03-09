@@ -6,6 +6,8 @@ import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
+import scala.reflect.ClassTag
+
 object TypeCompatibility {
 
   private def checkSubclass(a: EirClassLike, b: EirClassLike): Boolean = {
@@ -53,16 +55,16 @@ object TypeCompatibility {
     })
   }
 
-  implicit class RichEirResolvable[T <: EirType](ours: EirResolvable[T]) {
+  implicit class RichEirResolvable[T <: EirType : ClassTag](ours: EirResolvable[T]) {
     // A resolver must be able to resolve an unspecialized specializable for it to be used here!!
     // For example, EirSymbol(..., "foo") must resolve to foo even if when it's declared as ``trait foo<A> ...``
     def canAssignTo(theirs: EirResolvable[T]): Boolean = {
-      val (a, b) = (Find.uniqueResolution(ours), Find.uniqueResolution(theirs))
+      val (a, b) = (Find.uniqueResolution[T](ours), Find.uniqueResolution[T](theirs))
       a.canAssignTo(b)
     }
 
     def canAssignTo(b: EirType): Boolean = {
-      val a = Find.uniqueResolution(ours)
+      val a = Find.uniqueResolution[T](ours)
       a.canAssignTo(b)
     }
   }

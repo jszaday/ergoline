@@ -35,8 +35,8 @@ package object util {
   }
 
   def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
-    Find.uniqueResolution(resolvable) match {
-      case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
+    Find.uniqueResolution[EirType](resolvable) match {
+      case t@EirTemplatedType(_, base, _) => (Find.uniqueResolution[EirClassLike](base), Some(t))
       case c: EirClassLike => (c, None)
       case _ => Errors.unableToResolve(resolvable)
     }

@@ -63,7 +63,7 @@ object CheckConstructors {
 
   private def canAssignHelper(implicit ctx: TypeCheckContext,
                               x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
-    Find.uniqueResolution(x).canAssignTo(Find.uniqueResolution(y))
+    Find.uniqueResolution[EirType](x).canAssignTo(Find.uniqueResolution[EirType](y))
   }
 
   def constructorAssignmentOk(implicit ctx: TypeCheckContext,
