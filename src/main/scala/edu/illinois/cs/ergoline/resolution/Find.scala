@@ -116,7 +116,7 @@ object Find {
     // TODO seek common ancestor classes and cast
   }
 
-  def parentOf[T <: EirNode : Manifest](node: EirNode): Option[T] =
+  def parentOf[T <: EirNode : ClassTag](node: EirNode): Option[T] =
     node.parent.to[T].orElse(node.parent.flatMap(parentOf[T]))
 
   def traits(x: EirClassLike): Set[EirType] = _traits(x).toSet

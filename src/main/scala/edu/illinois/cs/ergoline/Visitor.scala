@@ -16,6 +16,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor[EirNode] {
 
@@ -58,7 +59,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     res
   }
 
-  def visitAs[T <: EirNode : Manifest](tree: ParseTree): T = {
+  def visitAs[T <: EirNode : ClassTag](tree: ParseTree): T = {
     Option(tree).map(visit) match {
       case Some(x) => assertValid[T](x)
       case None => Errors.cannotParse(tree)
@@ -457,11 +458,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
-  def symbolize[T <: EirNamedNode : Manifest](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
+  def symbolize[T <: EirNamedNode : ClassTag](identifiers: java.util.List[TerminalNode]): EirSymbol[T] = {
     EirSymbol[T](parent, identifiers.toStringList)
   }
 
-  def symbolize[T <: EirNamedNode : Manifest](identifier: TerminalNode): EirSymbol[T] = {
+  def symbolize[T <: EirNamedNode : ClassTag](identifier: TerminalNode): EirSymbol[T] = {
     EirSymbol[T](parent, List(identifier.getText))
   }
 
