@@ -174,7 +174,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
-    val theirs = t._2.declaredType.resolve().headOption
+    val theirs = Find.resolutions[EirType](t._2.declaredType).headOption
     (ctx.exprType(t._1), theirs) match {
       case (a: EirProxy, Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << ctx.nameFor(b) << "(" << t._1 << ")"

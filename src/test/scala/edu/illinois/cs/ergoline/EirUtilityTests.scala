@@ -33,8 +33,9 @@ class EirUtilityTests extends FunSuite {
 
   test("symbol resolution") {
     val foo = Modules.load("package foo ; class bar { val other : bar ; }")
-    val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _ => true).headOption
-    symbol.flatMap(_.resolve().headOption) should matchPattern {
+    val symbols = Find.within[EirSymbol[EirNamedNode]](foo, _ => true)
+    val found = symbols.headOption.map(Find.uniqueResolution[EirNode](_))
+    found should matchPattern {
       case Some(EirClass(_, _, "bar", _, _, _)) =>
     }
   }
@@ -44,13 +45,15 @@ class EirUtilityTests extends FunSuite {
     val foo = Modules.load("package foo ; def bar(): unit { baz; val baz : unit = (); }")
     val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _.qualifiedName == List("baz")).headOption
     val declaration = Find.within[EirDeclaration](foo, _ => true).headOption
-    symbol.isDefined shouldBe true
     declaration.isDefined shouldBe true
-    val ancestor = Find.commonAncestor(symbol.get, declaration.get)
+    val ancestor = symbol.flatMap(Find.commonAncestor(_, declaration.get))
     ancestor should matchPattern {
       case Some(_ : EirBlock) =>
     }
-    symbol.get.resolve() shouldEqual Nil
+    val found = symbol.map(Find.resolutions[EirNode])
+    found should matchPattern {
+      case Some(Nil) =>
+    }
   }
 
   test("should not access inaccessible scope") {

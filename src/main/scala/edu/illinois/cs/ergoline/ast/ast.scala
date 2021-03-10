@@ -389,8 +389,7 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
   def wildcard: Boolean = qualified.last == "_"
 
   override def children: Iterable[EirNode] = {
-    if (_resolved.isEmpty) Nil
-    else resolve()
+    if (_resolved.isEmpty) Nil else Find.resolutions[EirNode](this)
   }
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
@@ -586,12 +585,14 @@ case class EirSymbol[T <: EirNamedNode : ClassTag](var parent: Option[EirNode], 
 
   override def resolve(): Seq[T] = {
     if (_resolved.isEmpty) {
-      _resolved = Find.fromSymbol[T](this).toSeq
+      _resolved = Find
+        .fromSymbol(this)
+        // TODO this is necessary to distinguish type v. non-type
+        .collect { case t: T => t }
+        .toSeq
     }
     _resolved
   }
-
-  def candidates: Seq[T] = resolve()
 
   override def resolved: Boolean = _resolved.nonEmpty
 }
@@ -785,7 +786,7 @@ case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode]) 
   override def resolve(): Seq[EirType] = {
     if (_resolved.isEmpty) {
       val symbol = EirSymbol[EirNamedNode with EirType](parent, fqn)
-      _resolved = symbol.resolve().headOption.to[EirTemplateArgument]
+      _resolved = Some(Find.uniqueResolution[EirTemplateArgument](symbol))
       if (!_resolved.forall(_.isPack)) {
         Errors.expectedParameterPack(this)
       }
@@ -809,7 +810,7 @@ case class EirTypeAlias(var name: String, var templateArgs: List[EirTemplateArgu
     if (templateArgs.nonEmpty) {
       ???
     } else {
-      value.resolve().toSeq
+      Find.resolutions[EirNode](value).toSeq
     }
   }
 
