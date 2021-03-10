@@ -172,21 +172,20 @@ object Find {
         val isLast = ancestors.lastOption.contains(ancestor)
         Option.when(isLast && matches(ancestor))(ancestor)
       }
-    }).filter(ctx.canAccess(_)).map({
-      case fs: EirFileSymbol => fs.resolve().head
-      case x => x
-    }).map(_.asInstanceOf[EirNamedNode])
+    }).filter(ctx.canAccess(_)).collect{
+      case fs: EirFileSymbol =>
+        Find.uniqueResolution[EirNamedNode](fs)
+      case x: EirNamedNode => x
+    }
   }
 
-  def fromSymbol[T <: EirNamedNode : ClassTag](symbol: EirSymbol[T]): Seq[T] = {
+  def fromSymbol(symbol: EirSymbol[_]): Iterable[EirNode] = {
     symbol.qualifiedName match {
-      case last +: Nil =>
-        val found = anywhereAccessible(symbol, last).toSeq
-        found.collect{ case t: T => t }
+      case last :: Nil =>
+        anywhereAccessible(symbol, last)
       case head :: tail =>
-        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail)).toSeq.collect {
-          case t: T => t
-        }
+        anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail))
+      case Nil => Nil
     }
   }
 
@@ -196,7 +195,8 @@ object Find {
         curr.headOption.view.flatMap(child[EirNamedNode](_, withName(name).and(usage.canAccess)))
       })
       last.flatMap(child(_, withName(names.last).and(usage.canAccess)).map({
-        case fs: EirFileSymbol => fs.resolve().head.asInstanceOf[EirNamedNode]
+        case fs: EirFileSymbol =>
+          Find.uniqueResolution[EirNamedNode](fs)
         case x => x
       })).toSeq
     } else {

@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{EirFileSymbol, EirImport, EirNode, EirScopedSymbol}
-import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
 object FullyResolve {
@@ -9,8 +9,7 @@ object FullyResolve {
   def seekImports(node : EirNode, stack: List[EirNode] = Nil): Unit = {
     val kids = Option.unless(stack.contains(node))(node.children).getOrElse(Nil)
     kids.foreach({
-      case x: EirImport if !x.resolved => x.resolve()
-      case x: EirImport if x.resolved =>
+      case x: EirImport => if (!x.resolved ) Find.resolutions(x)
       case x if x.annotation("system").isDefined =>
         // TODO this PROBABLY should happen somewhere else.
         Processes.cppIncludes ++= x.annotation("system")
@@ -25,8 +24,8 @@ object FullyResolve {
     var prev : Option[EirResolvable[_]] = None
     do {
       prev = curr
-      curr = curr.flatMap(_.resolve() match {
-        case x: EirResolvable[_] if !x.resolved => Some(x)
+      curr = curr.flatMap(Find.resolutions[EirNode](_) match {
+        case Seq(x: EirResolvable[_]) if !x.resolved => Some(x)
         case _ => None
       })
       // Prevents infinite loops when a node cannot be resolved

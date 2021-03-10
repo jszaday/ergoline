@@ -54,8 +54,8 @@ package object globals {
     val name : String = if (litTy == EirLiteralTypes.Float) "double" else litTy.toString.toLowerCase
     this.ergolineModule.flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
       .collect({
-        case f: EirFileSymbol => f.resolve().head.asInstanceOf[EirClass]
-        case c: EirClass => c
+        case f: EirFileSymbol => Find.uniqueResolution[EirClassLike](f)
+        case c: EirClassLike => c
       })
       .getOrElse(throw new RuntimeException(s"could not find type of $litTy"))
   }

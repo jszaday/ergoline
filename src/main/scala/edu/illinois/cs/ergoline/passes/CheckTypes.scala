@@ -370,17 +370,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case None =>
         val (init, last) = (value.qualifiedName.init, value.qualifiedName.last)
         if (init.nonEmpty) {
-          val parent = EirSymbol[EirNamedNode](value.parent, init).resolve().headOption
-          val asCls = parent.flatMap(tryClassLike)
+          val parent = Find.resolutions[EirNamedNode](EirSymbol[EirNamedNode](value.parent, init))
+          val asCls = parent.headOption.flatMap(tryClassLike)
           if (asCls.isDefined) {
             val accessor = EirScopedSymbol(null, EirSymbol(value.parent, List(last)))(value.parent)
             accessor.isStatic = true
             Find.resolveAccessor(accessor, asCls)
           } else {
-            zipWithVisit(value.resolve())
+            zipWithVisit(Find.resolutions[EirNamedNode](value))
           }
         } else {
-          zipWithVisit(value.resolve())
+          zipWithVisit(Find.resolutions[EirNamedNode](value))
         }
     }
     val found = screenCandidates(prevFc, candidates)
@@ -755,8 +755,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTupleType(x: types.EirTupleType)(implicit ctx: TypeCheckContext): EirType = {
     val children = x.children.flatMap{
       case x: EirPackExpansion =>
-        val found = x.resolve().headOption.getOrElse(Errors.unableToResolve(x))
-        visit(found) match {
+        visit(x) match {
           case EirTupleType(_, ts) => ts
           case t => List(t)
         }
@@ -845,14 +844,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTypeAlias(x: EirTypeAlias)(implicit ctx: TypeCheckContext): EirType = {
-    visit(x.resolve().headOption.getOrElse(Errors.unableToResolve(x.value)))
+    visit(Find.uniqueResolution[EirType](x))
   }
 
   def valueWithin(x: EirResolvable[_])(implicit ctx: TypeCheckContext): EirLiteral = {
-    x.resolve().headOption.collect {
+    Find.uniqueResolution[EirNode](x) match {
       case y: EirConstantFacade => y.value
       case x: EirTemplateArgument => valueWithin(visit(x))
-    }.getOrElse(Errors.unableToResolve(x))
+      case _ => Errors.unableToResolve(x)
+    }
   }
 
   def evaluateConstExpr(expr: EirExpressionNode)(implicit ctx: TypeCheckContext): EirLiteral = {
