@@ -67,7 +67,7 @@ class EirConstructorTests extends FunSuite {
         |""".stripMargin
     )
     assertThrows[EirException](
-      CheckTypes.visit(new TypeCheckContext, module))
+      CheckTypes.visit(module)(new TypeCheckContext))
   }
 
   test("expect specialization in inheritance") {
@@ -79,7 +79,7 @@ class EirConstructorTests extends FunSuite {
         |""".stripMargin
     )
     assertThrows[EirException](
-      CheckTypes.visit(new TypeCheckContext, module))
+      CheckTypes.visit(module)(new TypeCheckContext))
   }
 
   test("shared parent class is OK") {
@@ -92,7 +92,7 @@ class EirConstructorTests extends FunSuite {
         |class d with a { }
         |""".stripMargin
     )
-    CheckTypes.visit(new TypeCheckContext, module)
+    CheckTypes.visit(module)(new TypeCheckContext)
     val c = module.children.collectFirst({
       case c: EirTrait if c.name == "c" => c
     })

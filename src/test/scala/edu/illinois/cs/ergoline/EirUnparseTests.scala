@@ -10,7 +10,7 @@ import scala.util.Properties
 
 object EirUnparseTests {
   def t: String = UnparseAst.tab
-  def localize(s: String): String = s.replaceAll("\n", Properties.lineSeparator)
+  def localize(s: String): String = s.replaceAll("(\n|\r\n)+", Properties.lineSeparator)
 }
 
 class EirUnparseTests extends FunSuite {

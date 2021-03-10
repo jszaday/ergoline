@@ -31,7 +31,7 @@ class EirParseTest extends FunSuite {
     EirGlobalNamespace.clear()
     val result = Modules.load("package foo; namespace bar { class baz { } }")
     val symbol = EirSymbol[EirClassLike](Some(result), List("foo", "bar", "baz"))
-    Find.uniqueResolution(symbol)
+    Find.uniqueResolution[EirClassLike](symbol)
   }
 
   test("tuple with one element same type as base type") {
@@ -63,19 +63,16 @@ class EirParseTest extends FunSuite {
   test("await many and when statements") {
     EirGlobalNamespace.clear()
     val v = new Visitor
-    val s =
-      s"""await all {
-        |${t}when foo(x), bar(y) if x != y => 2 * x + y ;
-        |}
-        |""".stripMargin
-    val x = v.visitAwaitManyStatement(parserFromString(s).awaitManyStatement())
-    UnparseAst.visit(x) shouldEqual localize (
-      s"""await all {
-        |${t}when foo(x: _), bar(y: _) if (x != y) => {
-        |$t${t}return ((2 * x) + y);
-        |$t}
-        |}""".stripMargin
+    val s = localize (
+     s"""await all {
+         |${t}when foo(x: _), bar(y: _) if (x != y) => {
+         |$t${t}return ((2 * x) + y);
+         |$t}
+         |}""".stripMargin
     )
+    val x = v.visitAwaitManyStatement(parserFromString(s).awaitManyStatement())
+    val res = localize(UnparseAst.visit(x))
+    s shouldEqual res
   }
 
   test("tuple tests") {
@@ -115,14 +112,14 @@ class EirParseTest extends FunSuite {
   test("type-check ternary operator") {
     EirGlobalNamespace.clear()
     val v = new Visitor
-    val t = new TypeCheckContext
+    implicit val ctx: TypeCheckContext = new TypeCheckContext
     val a = v.visitExpression(parserFromString("1 < 2 ? 1 : 2").expression())
     val b = v.visitExpression(parserFromString("1 ? 1 : 2").expression())
     val c = v.visitExpression(parserFromString("1 < 2 ? \"potato\" : 2").expression())
-    CheckTypes.visit(t, a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
+    CheckTypes.visit(a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
     // cannot use non-boolean as test
-    assertThrows[EirException](CheckTypes.visit(t, b))
+    assertThrows[EirException](CheckTypes.visit(b))
     // must be able to unify expressions' types
-    assertThrows[EirException](CheckTypes.visit(t, c))
+    assertThrows[EirException](CheckTypes.visit(c))
   }
 }

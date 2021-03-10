@@ -6,6 +6,8 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import org.antlr.v4.runtime.tree.ParseTree
 
+import scala.reflect.ClassTag
+
 object Errors {
 
   val errorCode: Int = -1
@@ -114,6 +116,8 @@ object Errors {
   def incorrectType(a: EirNode, c: Class[_]): Nothing = {
     exit(format(a, "expected a(n) %s, instead got %s (a(n) %s)", c.getName, a, a.getClass.getName))
   }
+
+  def incorrectType(a: EirNode, c: ClassTag[_]): Nothing = incorrectType(a, c.runtimeClass)
 
   def unknownOperator(a: EirNode, s: String): Nothing = {
     exit(format(a, "unrecognized operator %s", s))

@@ -58,7 +58,7 @@ class EirUtilityTests extends FunSuite {
     val foo = Modules.load("package foo ; def bar(): unit { { val baz : unit = (); } baz; }")
     val symbol = Find.within[EirSymbol[EirNamedNode]](foo, _.qualifiedName == List("baz"))
     assertThrows[EirException]({
-      symbol.foreach(Find.uniqueResolution(_))
+      symbol.foreach(Find.uniqueResolution[EirNode](_))
     })
   }
 }

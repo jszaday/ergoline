@@ -8,6 +8,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 object TypeCheckContext {
   type Context = (Option[EirClassLike], Option[EirSpecialization])
@@ -81,7 +82,7 @@ class TypeCheckContext {
   def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
     getTemplatedType(
       assertValid[EirSpecializable](Find.uniqueResolution[EirType](t.base)),
-      t.args.map(CheckTypes.visit(this, _)))
+      t.args.map(CheckTypes.visit(_)(this)))
   }
 
   def makeDistinct(s: EirSpecialization): EirSpecialization = {
@@ -204,14 +205,14 @@ class TypeCheckContext {
 
   def alreadyLeft(n: EirNode): Boolean = !stack.headOption.contains(n)
 
-  def immediateAncestor[T: Manifest]: Option[T] = {
+  def immediateAncestor[T: ClassTag]: Option[T] = {
     Option.when(stack.length >= 2)(stack(1) match {
       case x: T => Some(x)
       case _ => None
     }).flatten
   }
 
-  def ancestor[T: Manifest]: Option[T] = stack.collectFirst{ case t: T => t }
+  def ancestor[T: ClassTag]: Option[T] = stack.collectFirst{ case t: T => t }
 
   def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
 

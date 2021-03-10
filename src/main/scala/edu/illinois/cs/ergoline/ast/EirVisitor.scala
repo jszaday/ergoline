@@ -5,153 +5,180 @@ import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
 trait EirVisitor[Context, Value] {
-  def error(ctx: Context, node : EirNode): Value = {
-    throw new RuntimeException(s"unable to visit $node in context $ctx")
+  def error(x: EirNode)(implicit ctx: Context): Value = {
+    throw new RuntimeException(s"unable to visit $x in context $ctx")
   }
 
-  def visit(ctx: Context, it: Iterable[EirNode]): Iterable[Value] = it.map(visit(ctx, _))
+  def visit[A <: EirNode](it: Iterable[A])(implicit ctx: Context): Iterable[Value] = it.map(visit)
 
-  def visit(ctx: Context, it: List[EirNode]): List[Value] = it.map(visit(ctx, _))
-
-  def visit(ctx: Context, node: EirNode): Value = {
+  def visit(node: EirNode)(implicit ctx: Context): Value = {
     node match {
-      case x: EirSpecializedSymbol => visitSpecializedSymbol(ctx, x)
-      case x: EirBlock => visitBlock(ctx, x)
-      case x: EirNamespace => visitNamespace(ctx, x)
-      case x: EirDeclaration => visitDeclaration(ctx, x)
-      case x: EirTemplateArgument => visitTemplateArgument(ctx, x)
-      case x: EirClass => visitClass(ctx, x)
-      case x: EirTrait => visitTrait(ctx, x)
-      case x: EirMember => visitMember(ctx, x)
-      case x: EirFunction => visitFunction(ctx, x)
-      case x: EirAnnotation => visitAnnotation(ctx, x)
-      case x: EirBinaryExpression => visitBinaryExpression(ctx, x)
-      case x: EirFunctionArgument => visitFunctionArgument(ctx, x)
-      case x: EirAssignment => visitAssignment(ctx, x)
-      case x: EirTupleExpression => visitTupleExpression(ctx, x)
-      case x: EirLambdaExpression => visitLambdaExpression(ctx, x)
-      case x: EirReturn => visitReturn(ctx, x)
-      case x: EirSymbol[_] => visitSymbol(ctx, x)
-      case x: EirLiteral => visitLiteral(ctx, x)
-      case x: EirForLoop => visitForLoop(ctx, x)
-      case x: EirWhileLoop => visitWhileLoop(ctx, x)
-      case x: EirFunctionCall => visitFunctionCall(ctx, x)
-      case x: EirImport => visitImport(ctx, x)
-      case x: EirTupleType => visitTupleType(ctx, x)
-      case x: EirProxyType => visitProxyType(ctx, x)
-      case x: EirTemplatedType => visitTemplatedType(ctx, x)
-      case x: EirLambdaType => visitLambdaType(ctx, x)
-      case x: EirTernaryOperator => visitTernaryOperator(ctx, x)
-      case x: EirScopedSymbol[_] => visitScopedSymbol(ctx, x)
-      case x: EirArrayReference => visitArrayReference(ctx, x)
-      case x: EirIfElse => visitIfElse(ctx, x)
-      case x: EirNew => visitNew(ctx, x)
-      case x: EirProxy => visitProxy(ctx, x)
-      case x: EirMatch => visitMatch(ctx, x)
-      case x: EirMatchCase => visitMatchCase(ctx, x)
-      case x: EirPatternList => visitPatternList(ctx, x)
-      case x: EirIdentifierPattern => visitIdentifierPattern(ctx, x)
-      case x: EirExpressionPattern => visitExpressionPattern(ctx, x)
-      case x: EirInterpolatedString => visitInterpolatedString(ctx, x)
-      case x: EirTupleMultiply => visitTupleMultiply(ctx, x)
-      case x: EirConstantFacade => visitConstantFacade(ctx, x)
-      case x: EirSdagWhen => visitWhen(ctx, x)
-      case x: EirAwaitMany => visitAwaitMany(ctx, x)
+      case x: EirType => visitType(x)
+      case x: EirPattern => visitPattern(x)
+      case x: EirSymbolLike[_] => visitSymbolLike(x)
+      case x: EirExpressionNode => visitExpression(x)
+      case x: EirBlock => visitBlock(x)
+      case x: EirNamespace => visitNamespace(x)
+      case x: EirDeclaration => visitDeclaration(x)
+      case x: EirMember => visitMember(x)
+      case x: EirFunction => visitFunction(x)
+      case x: EirAnnotation => visitAnnotation(x)
+      case x: EirFunctionArgument => visitFunctionArgument(x)
+      case x: EirAssignment => visitAssignment(x)
+      case x: EirReturn => visitReturn(x)
+      case x: EirForLoop => visitForLoop(x)
+      case x: EirWhileLoop => visitWhileLoop(x)
+      case x: EirImport => visitImport(x)
+      case x: EirIfElse => visitIfElse(x)
+      case x: EirMatchCase => visitMatchCase(x)
+      case x: EirSdagWhen => visitWhen(x)
+      case x: EirAwaitMany => visitAwaitMany(x)
       case x: EirResolvable[_] if x.resolved =>
-        val found = Find.uniqueResolution(x)
-        if (found == x) error(ctx, found)
-        else visit(ctx, found)
-      case x: EirAwait => visitAwait(ctx, x)
+        val found = Find.uniqueResolution[EirNode](x)
+        if (found == x) error(found)
+        else visit(found)
       case x: EirUserNode => x.accept(ctx, this)
-      case null => error(ctx, null)
-      case x: EirTypeAlias => visitTypeAlias(ctx, x)
-      case x: EirSlice => visitSlice(ctx, x)
-      case x => error(ctx, x)
+      case null => error(null)
+      case x => error(x)
     }
   }
 
-  def visitSlice(ctx: Context, x: EirSlice): Value
+  def visitType(x: EirType)(implicit ctx: Context): Value = {
+    x match {
+      case x: EirClass => visitClass(x)
+      case x: EirTrait => visitTrait(x)
+      case x: EirProxy => visitProxy(x)
+      case x: EirTypeAlias => visitTypeAlias(x)
+      case x: EirTupleType => visitTupleType(x)
+      case x: EirProxyType => visitProxyType(x)
+      case x: EirLambdaType => visitLambdaType(x)
+      case x: EirTupleMultiply => visitTupleMultiply(x)
+      case x: EirTemplatedType => visitTemplatedType(x)
+      case x: EirConstantFacade => visitConstantFacade(x)
+      case x: EirTemplateArgument => visitTemplateArgument(x)
+      case _ => error(x)
+    }
+  }
 
-  def visitWhen(ctx: Context, x: EirSdagWhen): Value
-  def visitAwaitMany(ctx: Context, x: EirAwaitMany): Value
+  def visitPattern(x: EirPattern)(implicit ctx: Context): Value = {
+    x match {
+      case x: EirPatternList => visitPatternList(x)
+      case x: EirExpressionPattern => visitExpressionPattern(x)
+      case x: EirIdentifierPattern => visitIdentifierPattern(x)
+      case _ => error(x)
+    }
+  }
 
-  def visitConstantFacade(context: Context, facade: EirConstantFacade): Value
-  def visitTupleMultiply(context: Context, multiply: types.EirTupleMultiply): Value
+  def visitSymbolLike(x: EirSymbolLike[_ <: EirNode])(implicit ctx: Context): Value = {
+    x match {
+      case x: EirSymbol[_] => visitSymbol(x)
+      case x: EirScopedSymbol[_] => visitScopedSymbol(x)
+      case x: EirSpecializedSymbol => visitSpecializedSymbol(x)
+      case _ => error(x)
+    }
+  }
 
-  def visitTypeAlias(ctx: Context, x: EirTypeAlias): Value
-  def visitInterpolatedString(ctx: Context, x: EirInterpolatedString): Value
-  def visitAwait(ctx: Context, x: EirAwait): Value
-  def visitTupleType(ctx: Context, x: EirTupleType): Value
+  def visitExpression(node: EirExpressionNode)(implicit ctx: Context): Value = {
+    node match {
+      case x: EirSymbolLike[_] => visitSymbolLike(x)  // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
+      case x: EirNew => visitNew(x)
+      case x: EirMatch => visitMatch(x)
+      case x: EirSlice => visitSlice(x)
+      case x: EirAwait => visitAwait(x)
+      case x: EirLiteral => visitLiteral(x)
+      case x: EirFunctionCall => visitFunctionCall(x)
+      case x: EirArrayReference => visitArrayReference(x)
+      case x: EirTupleExpression => visitTupleExpression(x)
+      case x: EirTernaryOperator => visitTernaryOperator(x)
+      case x: EirLambdaExpression => visitLambdaExpression(x)
+      case x: EirBinaryExpression => visitBinaryExpression(x)
+      case x: EirInterpolatedString => visitInterpolatedString(x)
+      case x => error(x)
+    }
+  }
 
-  def visitMatch(ctx: Context, x: EirMatch): Value
+  def visitSlice(x: EirSlice)(implicit ctx: Context): Value
 
-  def visitMatchCase(ctx: Context, x: EirMatchCase): Value
+  def visitWhen(x: EirSdagWhen)(implicit ctx: Context): Value
+  def visitAwaitMany(x: EirAwaitMany)(implicit ctx: Context): Value
 
-  def visitPatternList(ctx: Context, x: EirPatternList): Value
-  def visitIdentifierPattern(ctx: Context, x: EirIdentifierPattern): Value
-  def visitExpressionPattern(ctx: Context, x: EirExpressionPattern): Value
+  def visitConstantFacade(x: EirConstantFacade)(implicit ctx: Context): Value
+  def visitTupleMultiply(x: types.EirTupleMultiply)(implicit ctx: Context): Value
 
-  def visitNew(ctx: Context, x: EirNew): Value
+  def visitTypeAlias(x: EirTypeAlias)(implicit ctx: Context): Value
+  def visitInterpolatedString(x: EirInterpolatedString)(implicit ctx: Context): Value
+  def visitAwait(x: EirAwait)(implicit ctx: Context): Value
+  def visitTupleType(x: EirTupleType)(implicit ctx: Context): Value
 
-  def visitIfElse(ctx: Context, x: EirIfElse): Value
+  def visitMatch(x: EirMatch)(implicit ctx: Context): Value
 
-  def visitProxy(ctx: Context, x: EirProxy): Value
+  def visitMatchCase(x: EirMatchCase)(implicit ctx: Context): Value
 
-//  def visitDefault(ctx: Context, x: EirNode): Value
+  def visitPatternList(x: EirPatternList)(implicit ctx: Context): Value
+  def visitIdentifierPattern(x: EirIdentifierPattern)(implicit ctx: Context): Value
+  def visitExpressionPattern(x: EirExpressionPattern)(implicit ctx: Context): Value
+
+  def visitNew(x: EirNew)(implicit ctx: Context): Value
+
+  def visitIfElse(x: EirIfElse)(implicit ctx: Context): Value
+
+  def visitProxy(x: EirProxy)(implicit ctx: Context): Value
+
+//  def visitDefault(x: EirNode)(implicit ctx: Context): Value
 
 //  def visitGlobalNamespace(ctx: Context, x: Value
-  def visitSpecializedSymbol(ctx: Context, x: EirSpecializedSymbol): Value
+  def visitSpecializedSymbol(x: EirSpecializedSymbol)(implicit ctx: Context): Value
 
-  def visitArrayReference(ctx: Context, x: EirArrayReference): Value
+  def visitArrayReference(x: EirArrayReference)(implicit ctx: Context): Value
 
-  def visitScopedSymbol[A <: EirNode](ctx: Context, x: EirScopedSymbol[A]): Value
+  def visitScopedSymbol[A <: EirNode](x: EirScopedSymbol[A])(implicit ctx: Context): Value
 
-  def visitTernaryOperator(ctx: Context, x: EirTernaryOperator): Value
+  def visitTernaryOperator(x: EirTernaryOperator)(implicit ctx: Context): Value
 
-  def visitLambdaType(ctx: Context, x: EirLambdaType): Value
+  def visitLambdaType(x: EirLambdaType)(implicit ctx: Context): Value
 
-  def visitTemplatedType(ctx: Context, x: EirTemplatedType): Value
+  def visitTemplatedType(x: EirTemplatedType)(implicit ctx: Context): Value
 
-  def visitProxyType(ctx: Context, x: EirProxyType): Value
+  def visitProxyType(x: EirProxyType)(implicit ctx: Context): Value
 
-  def visitImport(ctx: Context, x: EirImport): Value
+  def visitImport(x: EirImport)(implicit ctx: Context): Value
 
-  def visitFunctionCall(ctx: Context, x: EirFunctionCall): Value
+  def visitFunctionCall(x: EirFunctionCall)(implicit ctx: Context): Value
 
-  def visitWhileLoop(ctx: Context, x: EirWhileLoop): Value
-  def visitForLoop(ctx: Context, x: EirForLoop): Value
+  def visitWhileLoop(x: EirWhileLoop)(implicit ctx: Context): Value
+  def visitForLoop(x: EirForLoop)(implicit ctx: Context): Value
 
-  def visitLiteral(ctx: Context, x: EirLiteral): Value
+  def visitLiteral(x: EirLiteral)(implicit ctx: Context): Value
 
-  def visitSymbol[A <: EirNamedNode](ctx: Context, x: EirSymbol[A]): Value
+  def visitSymbol[A <: EirNamedNode](x: EirSymbol[A])(implicit ctx: Context): Value
 
-  def visitBlock(ctx: Context, x: EirBlock): Value
+  def visitBlock(x: EirBlock)(implicit ctx: Context): Value
 
-  def visitNamespace(ctx: Context, x: EirNamespace): Value
+  def visitNamespace(x: EirNamespace)(implicit ctx: Context): Value
 
-  def visitDeclaration(ctx: Context, x: EirDeclaration): Value
+  def visitDeclaration(x: EirDeclaration)(implicit ctx: Context): Value
 
-  def visitTemplateArgument(ctx: Context, x: EirTemplateArgument): Value
+  def visitTemplateArgument(x: EirTemplateArgument)(implicit ctx: Context): Value
 
-  def visitClass(ctx: Context, x: EirClass): Value
+  def visitClass(x: EirClass)(implicit ctx: Context): Value
 
-  def visitTrait(ctx: Context, x: EirTrait): Value
+  def visitTrait(x: EirTrait)(implicit ctx: Context): Value
 
-  def visitMember(ctx: Context, x: EirMember): Value
+  def visitMember(x: EirMember)(implicit ctx: Context): Value
 
-  def visitFunction(ctx: Context, x: EirFunction): Value
+  def visitFunction(x: EirFunction)(implicit ctx: Context): Value
 
-  def visitAnnotation(ctx: Context, x: EirAnnotation): Value
+  def visitAnnotation(x: EirAnnotation)(implicit ctx: Context): Value
 
-  def visitBinaryExpression(ctx: Context, x: EirBinaryExpression): Value
+  def visitBinaryExpression(x: EirBinaryExpression)(implicit ctx: Context): Value
 
-  def visitFunctionArgument(ctx: Context, x: EirFunctionArgument): Value
+  def visitFunctionArgument(x: EirFunctionArgument)(implicit ctx: Context): Value
 
-  def visitAssignment(ctx: Context, x: EirAssignment): Value
+  def visitAssignment(x: EirAssignment)(implicit ctx: Context): Value
 
-  def visitTupleExpression(ctx: Context, x: EirTupleExpression): Value
+  def visitTupleExpression(x: EirTupleExpression)(implicit ctx: Context): Value
 
-  def visitLambdaExpression(ctx: Context, x: EirLambdaExpression): Value
+  def visitLambdaExpression(x: EirLambdaExpression)(implicit ctx: Context): Value
 
-  def visitReturn(ctx: Context, x: EirReturn): Value
+  def visitReturn(x: EirReturn)(implicit ctx: Context): Value
 }

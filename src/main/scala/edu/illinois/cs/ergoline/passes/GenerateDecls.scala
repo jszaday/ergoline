@@ -20,7 +20,7 @@ object GenerateDecls {
       case x: EirMember => visitMember(ctx, x)
       case x: EirFunction => visitFunction(ctx, x)
       case x: EirDeclaration => visitDeclaration(ctx, x)
-      case x: EirFunctionArgument => GenerateCpp.visitFunctionArgument(ctx, x)
+      case x: EirFunctionArgument => GenerateCpp.visitFunctionArgument(x)(ctx)
       case _: EirImport =>
       case _: EirFileSymbol =>
     }
@@ -43,7 +43,7 @@ object GenerateDecls {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.annotation("system").isDefined) return
-    ctx << visitTemplateArgs(ctx, x.templateArgs) << s"struct ${ctx.nameFor(x)}" << visitInherits(ctx, x) << "{"
+    ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(x)(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
       if (!x.isTransient) {
         if (!hasPup(x)) {
@@ -66,11 +66,11 @@ object GenerateDecls {
 
   def outsideStaticDecl(ctx: CodeGenerationContext, m: EirMember): Unit = {
     val decl: EirDeclaration = assertValid[EirDeclaration](m.member)
-    ctx << visitTemplateArgs(ctx, m.base.templateArgs)
+    ctx << visitTemplateArgs(m.base.templateArgs)(ctx)
     ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << GenerateCpp.nameFor(ctx, m.base, includeTemplates = true) << "::" << m.name
     ctx << decl.initialValue.map(_ => "=") << decl.initialValue << ";"
   }
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =
-    GenerateCpp.visitFunction(ctx, x, isMember = true)
+    GenerateCpp.visitFunction(x, isMember = true)(ctx)
 }

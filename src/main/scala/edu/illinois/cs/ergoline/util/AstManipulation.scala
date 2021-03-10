@@ -3,6 +3,8 @@ package edu.illinois.cs.ergoline.util
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
+import scala.reflect.ClassTag
+
 object AstManipulation {
   def setParent[T <: EirNode](parent: T): T = {
     parent.children.foreach(_.parent = Some(parent))
@@ -41,7 +43,7 @@ object AstManipulation {
     }
   }
 
-  def updateWithin[T <: EirNode : Manifest](lst : List[T], oldNode : EirNode, newNode : EirNode): Option[List[T]] = {
+  def updateWithin[T <: EirNode : ClassTag](lst : List[T], oldNode : EirNode, newNode : EirNode): Option[List[T]] = {
     val converted = (oldNode.isValid[T] ++ newNode.isValid[T]).toList
     converted match {
       case List(o, n) =>

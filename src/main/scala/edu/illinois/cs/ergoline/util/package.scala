@@ -5,8 +5,10 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.TypeCheckContext
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 import scala.collection.View
+import scala.reflect.{ClassTag, classTag}
 
 package object util {
 
@@ -16,7 +18,7 @@ package object util {
     ty match {
       case EirLambdaType(_, from, to, args) =>
         ctx.lambdaWith(base +: from, to, args)
-      case _ => Errors.incorrectType(ty, EirLambdaType.getClass)
+      case _ => Errors.incorrectType(ty, classTag[EirLambdaType])
     }
   }
 
@@ -33,8 +35,8 @@ package object util {
   }
 
   def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
-    Find.uniqueResolution(resolvable) match {
-      case t@EirTemplatedType(_, base, _) => (assertValid[EirClassLike](Find.uniqueResolution(base)), Some(t))
+    Find.uniqueResolution[EirType](resolvable) match {
+      case t@EirTemplatedType(_, base, _) => (Find.uniqueResolution[EirClassLike](base), Some(t))
       case c: EirClassLike => (c, None)
       case _ => Errors.unableToResolve(resolvable)
     }
@@ -66,10 +68,10 @@ package object util {
     }
   }
 
-  def assertValid[T](value: EirNode)(implicit manifest: Manifest[T]): T = {
+  def assertValid[T : ClassTag](value: EirNode): T = {
     Option(value) match {
       case Some(x: T) => x
-      case _ => Errors.incorrectType(value, manifest.getClass)
+      case _ => Errors.incorrectType(value, classTag[T])
     }
   }
 
@@ -79,7 +81,7 @@ package object util {
     }).toSeq
   }
 
-  def applyOrFalse[T <: EirNode : Manifest](function: T => Unit, value: EirNode): Boolean = {
+  def applyOrFalse[T <: EirNode : ClassTag](function: T => Unit, value: EirNode): Boolean = {
     value.isValid[T].map(function).isDefined
   }
 
@@ -114,10 +116,10 @@ package object util {
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 
-      def findChild[T <: EirNode : Manifest](predicate: T => Boolean): Iterable[T] =
+      def findChild[T <: EirNode : ClassTag](predicate: T => Boolean): Iterable[T] =
         Find.child[T](node, predicate)
 
-      def isValid[T : Manifest]: Option[T] = node match {
+      def isValid[T : ClassTag]: Option[T] = node match {
         case t : T => Some(t)
         case _ => None
       }
@@ -131,7 +133,7 @@ package object util {
     }
 
     implicit class RichOption(option: Option[_]) {
-      def to[T: Manifest]: Option[T] = option match {
+      def to[T: ClassTag]: Option[T] = option match {
         case Some(t: T) => Some(t)
         case _ => None
       }
