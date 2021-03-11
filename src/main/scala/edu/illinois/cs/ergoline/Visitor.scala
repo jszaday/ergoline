@@ -7,7 +7,7 @@ import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
@@ -86,7 +86,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   def dropSelf(scope : EirScope, fileOption : Option[File]): Unit = {
     fileOption match {
       case Some(file) =>
-        AstManipulation.dropNodes(scope, scope.findChild[EirFileSymbol](f => Files.isSameFile(f.file.toPath, file.toPath)))
+        AstManipulation.dropNodes(scope,
+          Find.child[EirFileSymbol](scope,
+            f => Files.isSameFile(f.file.toPath, file.toPath)
+          )
+        )
       case _ =>
     }
   }

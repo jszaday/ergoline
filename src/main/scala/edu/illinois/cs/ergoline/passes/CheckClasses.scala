@@ -75,6 +75,6 @@ object CheckClasses {
   }
 
   def visitClass(ctx: TypeCheckContext, node : EirClass): Unit = {
-    CheckConstructors.checkConstructors(ctx, node)
+    CheckConstructors.checkConstructors(node)(ctx)
   }
 }

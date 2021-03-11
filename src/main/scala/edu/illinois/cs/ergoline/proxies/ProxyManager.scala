@@ -2,7 +2,8 @@ package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast.EirClassLike
 import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.util.matching.Regex
@@ -20,7 +21,7 @@ object ProxyManager {
 
   private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
   private var _elements: Map[EirProxy, EirProxy] = Map()
-  private var _types: Map[(EirProxy, List[EirType]), EirType] = Map()
+  private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] = Map()
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
@@ -47,9 +48,9 @@ object ProxyManager {
   }
 
   def collectiveFor(t: EirProxy): Option[EirProxy] =
-    Option.when(t.isElement)(_proxies.get((t.collective.get, t.base))).flatten
+    _proxies.get((t.collective.get, t.base)).filter(_ => t.isElement)
 
-  private def typeFor(p: EirProxy, args: List[EirType]): EirType = {
+  private def typeFor(p: EirProxy, args: List[EirResolvable[EirType]]): EirType = {
     if (args.isEmpty) p
     else if (_types.contains((p, args))) _types((p, args))
     else {
@@ -61,50 +62,53 @@ object ProxyManager {
 
   def proxyType(p: EirProxy): EirType = {
     assert(p.collective.isEmpty)
-    typeFor(p, p.templateArgs.map(Find.uniqueResolution[EirType](_)))
+    typeFor(p, p.templateArgs)
   }
 
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution[EirType](_)))
+      case Some(e) => typeFor(e, e.templateArgs)
       case None => Errors.missingType(p)
     }
   }
 
   def collectiveType(p: EirProxy): EirType = {
     collectiveFor(p) match {
-      case Some(e) => typeFor(e, e.templateArgs.map(Find.uniqueResolution[EirType](_)))
+      case Some(e) => typeFor(e, e.templateArgs)
       case None => Errors.missingType(p)
     }
   }
 
-  def proxyFor(t: EirProxyType): EirType = {
+  def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
+    val baseTy = CheckTypes.visit(t.base)
+    val baseCls = Find.asClassLike(baseTy)
+    val templateArgs = baseTy match {
+      // TODO the args map is probably not necessary here?
+      case t: EirTemplatedType => t.args.map(CheckTypes.visit)
+      case _ if baseCls.templateArgs.isEmpty => Nil
+      case _ => Errors.missingSpecialization(baseCls)
+    }
+
     val collective = t.collective.getOrElse("")
-    val resolved = Find.uniqueResolution[EirType](t.base)
-    val base = resolved match {
-      case t: EirTemplatedType =>
-        Find.uniqueResolution[EirClassLike](t.base)
-      case c: EirClassLike => c
-      case _ => Errors.unableToResolve(t)
-    }
-    val templateArgs = resolved match {
-      case t: EirTemplatedType => t.args.map(Find.uniqueResolution[EirType])
-      case _ if base.templateArgs.isEmpty => Nil
-      case _ => Errors.missingSpecialization(base)
-    }
-    val baseProxy = _proxies.get((collective, base)) match {
-      case Some(p) => p
-      case _ =>
-        val proxy = checkProxyable(base, t.collective, isElement = false)
-        _proxies += ((collective, base) -> proxy)
-        proxy
-    }
-    typeFor(Option.when(t.isElement)(elementFor(baseProxy)).flatten.getOrElse(baseProxy), templateArgs)
+    val baseProxy = _proxies.getOrElse((collective, baseCls), {
+      val proxy = checkProxyable(baseCls, t.collective, isElement = false)
+      _proxies += ((collective, baseCls) -> proxy)
+      proxy
+    })
+
+    val proxy = Option
+      .unless(t.isElement)(baseProxy)
+      .orElse(elementFor(baseProxy))
+
+    typeFor (
+      proxy.getOrElse(Errors.missingType(t)),
+      templateArgs
+    )
   }
 
-  def proxiesFor(c: EirClassLike): Iterable[EirProxy] = {
-    _proxies.collect({
-      case ((_, o), v) if o == c => v
-    })
+  def proxiesFor(x: EirClassLike): Iterable[EirProxy] = {
+    _proxies collect {
+      case ((_, y), p) if x == y => p
+    }
   }
 }

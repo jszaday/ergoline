@@ -109,12 +109,11 @@ object Modules {
   }
 
   def retrieve(name: String, scope: EirScope): EirNamespace = {
-    scope.findChild[EirNamespace](withName(name)).headOption
-      .getOrElse({
-        val ns = EirNamespace(Some(scope), Nil, name)
-        AstManipulation.placeNodes(scope, List(ns))
-        ns
-      })
+    Find.child[EirNamespace](scope, withName(name)).headOption.getOrElse {
+      val ns = EirNamespace(Some(scope), Nil, name)
+      AstManipulation.placeNodes(scope, List(ns))
+      ns
+    }
   }
 
   private def memoryUsageMb: Long = {

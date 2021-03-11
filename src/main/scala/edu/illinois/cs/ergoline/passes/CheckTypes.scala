@@ -127,7 +127,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitProxyType(x: types.EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
-    visit(ProxyManager.proxyFor(x))
+    val ty = ProxyManager.proxyFor(x)
+    x.setType(ty)
+    visit(ty)
   }
 
   override def visitImport(eirImport: EirImport)(implicit ctx: TypeCheckContext): EirType = null

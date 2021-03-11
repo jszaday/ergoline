@@ -43,8 +43,10 @@ object Find {
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
-    node.children.view.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
+  def child[T <: EirNode : ClassTag](node: EirNode, predicate: T => Boolean): View[T] = {
+    node.children.view.collect {
+      case t: T if predicate(t) => t
+    }
   }
 
   def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {

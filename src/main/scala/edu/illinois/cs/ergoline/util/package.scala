@@ -116,9 +116,6 @@ package object util {
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 
-      def findChild[T <: EirNode : ClassTag](predicate: T => Boolean): Iterable[T] =
-        Find.child[T](node, predicate)
-
       def isValid[T : ClassTag]: Option[T] = node match {
         case t : T => Some(t)
         case _ => None

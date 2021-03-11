@@ -76,13 +76,15 @@ package object types {
       (base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode)
     }
 
-    private var _resolved: Option[EirType] = None
+    private var propagatedType: Option[EirType] = None
 
-    override def resolved: Boolean = _resolved.isDefined
+    override def resolved: Boolean = propagatedType.isDefined
+    override def resolve(): Seq[EirNode] = propagatedType.toSeq
 
-    override def resolve(): List[EirType] = {
-      if (_resolved.isEmpty) _resolved = Some(ProxyManager.proxyFor(this))
-      _resolved.toList
+    def setType(t: EirType): Unit = {
+      if (propagatedType.isEmpty) {
+        propagatedType = Some(t)
+      }
     }
   }
 

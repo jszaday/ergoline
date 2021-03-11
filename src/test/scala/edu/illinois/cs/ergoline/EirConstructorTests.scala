@@ -1,29 +1,38 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirTrait}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace, EirNode, EirTrait}
 import edu.illinois.cs.ergoline.passes.{CheckConstructors, CheckEnclose, CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirConstructorTests extends FunSuite {
 
+  private implicit val ctx: TypeCheckContext = new TypeCheckContext
   private val bigProgram = {
     EirImportTests.setupEnv()
     Modules.load(
       """package foo;
         |class bar {
-        |  def bar(=baz : bar) : unit { }
-        |  def bar() : unit { baz = (); }
+        |  def bar(=baz : bar) {}
+        |  def bar() { baz = self; }
         |  val baz : bar;
         |}
         |""".stripMargin
     )
   }
 
+
+  private def checkConstructors(node: EirNode)(implicit ctx: TypeCheckContext): Int = {
+    Find.child[EirClassLike](node, _ => true)
+      .map(CheckConstructors.checkConstructors)
+      .map(Math.max(_, 1))
+      .sum
+  }
+
   test("expected ok, multiple constructors and assignment") {
-    CheckConstructors.checkConstructorsWithin(bigProgram) shouldEqual 2
+    checkConstructors(bigProgram) shouldEqual 2
   }
 
   test("expected ok, correct enclosure") {
@@ -40,8 +49,7 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     )
-    assertThrows[EirException](
-      CheckConstructors.checkConstructorsWithin(module))
+    assertThrows[EirException](checkConstructors(module))
   }
 
   test("expected failure, uninitialized field") {
@@ -53,8 +61,7 @@ class EirConstructorTests extends FunSuite {
         |}
         |""".stripMargin
     )
-    assertThrows[EirException](
-      CheckConstructors.checkConstructorsWithin(module))
+    assertThrows[EirException](checkConstructors(module))
   }
 
   test("preclude circular relationships") {
@@ -66,8 +73,7 @@ class EirConstructorTests extends FunSuite {
         |class c extends a { }
         |""".stripMargin
     )
-    assertThrows[EirException](
-      CheckTypes.visit(module)(new TypeCheckContext))
+    assertThrows[EirException](CheckTypes.visit(module))
   }
 
   test("expect specialization in inheritance") {
@@ -78,8 +84,7 @@ class EirConstructorTests extends FunSuite {
         |class b<A> { }
         |""".stripMargin
     )
-    assertThrows[EirException](
-      CheckTypes.visit(module)(new TypeCheckContext))
+    assertThrows[EirException](CheckTypes.visit(module))
   }
 
   test("shared parent class is OK") {
@@ -92,7 +97,7 @@ class EirConstructorTests extends FunSuite {
         |class d with a { }
         |""".stripMargin
     )
-    CheckTypes.visit(module)(new TypeCheckContext)
+    CheckTypes.visit(module)
     val c = module.children.collectFirst({
       case c: EirTrait if c.name == "c" => c
     })
