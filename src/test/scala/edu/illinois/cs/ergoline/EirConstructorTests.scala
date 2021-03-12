@@ -36,7 +36,7 @@ class EirConstructorTests extends FunSuite {
   }
 
   test("expected ok, correct enclosure") {
-    CheckEnclose.visit(bigProgram) shouldEqual None
+    CheckEnclose(bigProgram) shouldEqual None
   }
 
   test("expected failure, invalid self-assignment") {

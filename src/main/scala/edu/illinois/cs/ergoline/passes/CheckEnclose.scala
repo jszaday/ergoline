@@ -19,15 +19,15 @@ object CheckEnclose {
     }
   }
 
-  def visit(node: EirNode): Option[EirNode] = {
-    (node match {
-      case x: EirMember => List(x.member)
-      case _ => node.children
-    }).find(!_.validEnclose(node)) match {
-      case None => node.children.map(visit).find(_.isDefined).flatten
-      case x => x
+  private def visit(node: EirNode): Iterable[EirNode] = {
+    val children = node match {
+      case m: EirMember => Iterable(m.member)
+      case _ => node.children.view
     }
+
+    children.filterNot(_.validEnclose(node)) ++
+      children.flatMap(visit)
   }
 
-  def apply(node: EirNode): Option[EirNode] = visit(node)
+  def apply(node: EirNode): Option[EirNode] = visit(node).headOption
 }
