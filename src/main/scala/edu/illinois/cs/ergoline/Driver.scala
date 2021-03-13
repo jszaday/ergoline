@@ -2,12 +2,11 @@ package edu.illinois.cs.ergoline
 
 import java.io.{File, PrintWriter}
 import java.nio.file.Paths
-
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
 import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, LibUtils}
 
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
@@ -80,7 +79,8 @@ object Driver extends App {
     println(s"charmxi compilation:\t${charmxi - codegen}ms")
 
     try {
-      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} $out -I$inclDir generate.cc"
+      val linkOptions = options ++ LibUtils.linkLib("gsl")
+      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out -I$inclDir generate.cc"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {
