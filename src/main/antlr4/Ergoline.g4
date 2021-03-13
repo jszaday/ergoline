@@ -169,7 +169,7 @@ function
     ;
 
 functionArgument
-    :   Equals? Identifier ':' expansion='*'? type
+    :   (Ampersand | Equals)? Identifier ':' expansion='*'? type
     ;
 
 functionArgumentList
@@ -298,7 +298,7 @@ equalityExpression
 
 andExpression
     :   equalityExpression
-    |   andExpression '&' equalityExpression
+    |   andExpression Ampersand equalityExpression
     ;
 
 exclusiveOrExpression
@@ -413,6 +413,10 @@ constant
     |   CharacterConstant
     |   StringLiteral+
     |   boolLiteral
+    ;
+
+Ampersand
+    :   '&'
     ;
 
 Atpersand

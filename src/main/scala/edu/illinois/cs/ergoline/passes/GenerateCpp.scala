@@ -6,7 +6,6 @@ import java.nio.file.Paths
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
@@ -66,6 +65,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     }
   }
+
+  import GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
 
   def forwardDecl(x: EirClassLike)(implicit ctx: CodeGenerationContext): Unit = {
     visitTemplateArgs(x.templateArgs)
@@ -174,12 +175,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitCallArgument(ctx: CodeGenerationContext)(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
+    val isRef = t._2.isReference
     val theirs = Find.resolutions[EirType](t._2.declaredType).headOption
     (ctx.exprType(t._1), theirs) match {
       case (a: EirProxy, Some(b: EirProxy)) if a.isDescendantOf(b) =>
         ctx << ctx.nameFor(b) << "(" << t._1 << ")"
       case (a, Some(_)) if isEntryArgument(t._2) =>
         ctx << castToPuppable(ctx, t._1, a)
+      case (a, _) if isRef && a.isPointer =>
+        ctx << "*(" << t._1 << ")"
       case _ => ctx << t._1
     }
   }
@@ -187,9 +191,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitArguments(ctx: CodeGenerationContext)(disambiguation: Option[EirNode], args: List[EirExpressionNode]): CodeGenerationContext = {
     // TODO add support for expansions
     val theirs: List[EirFunctionArgument] =
-      asMember(disambiguation) match {
+      asMember(disambiguation).orElse(disambiguation) match {
         // TODO this should drop args for new~!
-        case Some(m@EirMember(_, f: EirFunction, _)) => f.functionArgs
+        case Some(_@EirMember(_, f: EirFunction, _)) => f.functionArgs
+        case Some(f: EirFunction) => f.functionArgs
         case _ => Nil
       }
 

@@ -94,10 +94,10 @@ class EirParseTest extends FunSuite {
     val f = (new Visitor).visitFunction(parserFromString("def foo (bar : unit, =baz : *unit): unit { }").function())
     f.functionArgs.length shouldEqual 2
     f.functionArgs.head should matchPattern {
-      case EirFunctionArgument(_, "bar", _, false, false) =>
+      case EirFunctionArgument(_, "bar", _, false, false, false) =>
     }
     f.functionArgs.last should matchPattern {
-      case EirFunctionArgument(_, "baz", _, true, true) =>
+      case EirFunctionArgument(_, "baz", _, true, true, false) =>
     }
   }
   test("annotated function retrieval test") {

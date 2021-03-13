@@ -39,7 +39,7 @@ object CheckConstructors {
   def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)
                        (implicit ctx: TypeCheckContext): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
-      case x@EirFunctionArgument(_, _, _, _, true) => x
+      case x if x.isSelfAssigning => x
     }.map(arg => {
       (Find.child[EirMember](cls, withName(arg.name)).headOption, arg)
     })
@@ -66,8 +66,8 @@ object CheckConstructors {
     needsInitialization.isEmpty || needsInitialization.forall(variable => {
       val decl = variable.member.asInstanceOf[EirDeclaration]
       constructor.functionArgs.exists {
-        case EirFunctionArgument(_, n, t, _, true) =>
-          n == decl.name && constructorAssignmentOk(decl, t)
+        case x: EirFunctionArgument if x.isSelfAssigning && x.name == decl.name =>
+          constructorAssignmentOk(decl, x.declaredType)
         case _ => false
       } || Find.within[EirAssignment](constructor, assignmentTargetsDeclaration(_, decl)).nonEmpty
     })
