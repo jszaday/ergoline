@@ -83,7 +83,7 @@ class block {
         @overlap for (var block = 0; block < nBlocks; block += 1) {
             when inputA(_ == block, blockA: array<double, 2>),
                  inputB(_ == block, blockB: array<double, 2>) => {
-                blas::dgemm(1.0, blockA, blockB, 0.0, data);
+                blas::dgemm(alpha, blockA, blockB, 0.0, data);
 
                 if ((block + 1) < nBlocks) {
                     self@[(idx[0] + 1) % nBlocks, idx[1]].inputA(block + 1, blockA);
