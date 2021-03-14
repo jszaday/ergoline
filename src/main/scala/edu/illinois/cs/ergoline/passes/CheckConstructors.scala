@@ -9,24 +9,12 @@ import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckConstructors {
-
-  def checkConstructorsWithin(module: EirScope): Int = {
-    var numChecked = 0
-    val classes = Find.within[EirClassLike](module, _ => true)
-    val pairs = classes.map(c => {
-      (c, c.members.filter(_.isConstructor))
-    })
-    for ((cls, constructors) <- pairs) {
-      numChecked += Math.max(1, checkConstructors(null, cls, constructors))
-    }
-    numChecked
+  def checkConstructors(cls: EirClassLike)(implicit ctx: TypeCheckContext): Int = {
+    checkConstructors(cls, cls.members.filter(_.isConstructor))
   }
 
-  def checkConstructors(ctx: TypeCheckContext, cls: EirClassLike): Int = {
-    checkConstructors(ctx, cls, cls.members.filter(_.isConstructor))
-  }
-
-  def checkConstructors(ctx: TypeCheckContext, cls: EirClassLike, constructors: List[EirMember]): Int = {
+  def checkConstructors(cls: EirClassLike, constructors: List[EirMember])
+                       (implicit ctx: TypeCheckContext): Int = {
     val needsInitialization = cls.needsInitialization
     if (constructors.isEmpty && needsInitialization.nonEmpty) {
       Errors.missingConstructor(cls)
@@ -35,10 +23,10 @@ object CheckConstructors {
       if (!fulfillsSuperConstructor(constructor)) {
         Errors.missingSuperConstructor(constructor)
       }
-      if (!selfAssignmentsOk(ctx, cls, constructor)) {
+      if (!selfAssignmentsOk(cls, constructor)) {
         Errors.invalidSelfAssignment(constructor)
       }
-      if (!fulfillsMandatoryAssignments(ctx, needsInitialization, constructor)) {
+      if (!fulfillsMandatoryAssignments(needsInitialization, constructor)) {
         Errors.missingMemberAssignment(constructor)
       }
     }
@@ -48,38 +36,38 @@ object CheckConstructors {
   // TODO implement this?
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = true
 
-  def selfAssignmentsOk(ctx: TypeCheckContext, cls: EirClassLike, constructor: EirMember): Boolean = {
+  def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)
+                       (implicit ctx: TypeCheckContext): Boolean = {
     val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
-      case x@EirFunctionArgument(_, _, _, _, true) => x
+      case x if x.isSelfAssigning => x
     }.map(arg => {
-      (cls.findChild[EirMember](withName(arg.name)).headOption, arg)
+      (Find.child[EirMember](cls, withName(arg.name)).headOption, arg)
     })
     argDeclPairs.isEmpty || argDeclPairs.forall(x => x match {
       case (Some(EirMember(_, d: EirDeclaration, _)), arg: EirFunctionArgument) =>
-        constructorAssignmentOk(ctx, d, arg.declaredType)
+        constructorAssignmentOk(d, arg.declaredType)
       case _ => false
     })
   }
 
-  private def canAssignHelper(implicit ctx: TypeCheckContext,
-                              x: EirResolvable[EirType], y: EirResolvable[EirType]): Boolean = {
-    Find.uniqueResolution[EirType](x).canAssignTo(Find.uniqueResolution[EirType](y))
+  private def canAssignHelper(x: EirResolvable[EirType], y: EirResolvable[EirType])
+                             (implicit ctx: TypeCheckContext): Boolean = {
+    CheckTypes.visit(x).canAssignTo(CheckTypes.visit(y))
   }
 
-  def constructorAssignmentOk(implicit ctx: TypeCheckContext,
-                              decl: EirDeclaration, declaredType: EirResolvable[EirType]): Boolean = {
-    (!decl.isFinal || decl.initialValue.isEmpty) &&
-      canAssignHelper(ctx, declaredType, decl.declaredType)
+  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType])
+                             (implicit ctx: TypeCheckContext): Boolean = {
+    (!decl.isFinal || decl.initialValue.isEmpty) && canAssignHelper(declaredType, decl.declaredType)
   }
 
-  def fulfillsMandatoryAssignments(implicit ctx: TypeCheckContext,
-                                   needsInitialization: List[EirMember], member: EirMember): Boolean = {
+  def fulfillsMandatoryAssignments(needsInitialization: List[EirMember], member: EirMember)
+                                  (implicit ctx: TypeCheckContext): Boolean = {
     val constructor = member.member.asInstanceOf[EirFunction]
     needsInitialization.isEmpty || needsInitialization.forall(variable => {
       val decl = variable.member.asInstanceOf[EirDeclaration]
       constructor.functionArgs.exists {
-        case EirFunctionArgument(_, n, t, _, true) =>
-          n == decl.name && constructorAssignmentOk(ctx, decl, t)
+        case x: EirFunctionArgument if x.isSelfAssigning && x.name == decl.name =>
+          constructorAssignmentOk(decl, x.declaredType)
         case _ => false
       } || Find.within[EirAssignment](constructor, assignmentTargetsDeclaration(_, decl)).nonEmpty
     })

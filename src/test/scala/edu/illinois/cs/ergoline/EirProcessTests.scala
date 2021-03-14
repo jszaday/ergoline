@@ -1,15 +1,13 @@
 package edu.illinois.cs.ergoline
 
-import java.io.File
-import java.nio.file.{Files, Path, Paths}
-
 import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.resolution.Modules.charmc
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
 
-import scala.util.Properties
+import java.io.File
+import java.nio.file.Paths
 
 class EirProcessTests extends FunSuite {
   Errors.useDebugAction()

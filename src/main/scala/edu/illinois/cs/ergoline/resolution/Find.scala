@@ -26,8 +26,10 @@ object Find {
     Find.ancestors(y).find(ancestors.contains(_))
   }
 
-  def withName[T <: EirNamedNode](name: String): T => Boolean =
-    (n: T) => n.name == name
+  def withName(name: String): EirNode => Boolean = {
+    case x: EirNamedNode => x.name == name
+    case _ => false
+  }
 
   def descendant(node: EirNode, predicate: EirNode => Option[Boolean], stack: List[EirNode] = Nil): Iterable[EirNode] = {
     Option.unless(stack.contains(node))({
@@ -38,13 +40,15 @@ object Find {
   }
 
   // recursively check all children of a node
-  def within[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
+  def within[T <: EirNode : ClassTag](node: EirNode, predicate: T => Boolean): View[T] = {
     Find.child[T](node, predicate).concat(node.children.view.flatMap(within[T](_, predicate)))
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T <: EirNode](node: EirNode, predicate: T => Boolean)(implicit tag: ClassTag[T]): View[T] = {
-    node.children.view.filter(matchesPredicate(predicate)).map(_.asInstanceOf[T])
+  def child[T <: EirNode : ClassTag](node: EirNode, predicate: T => Boolean): View[T] = {
+    node.children.view.collect {
+      case t: T if predicate(t) => t
+    }
   }
 
   def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
@@ -145,7 +149,7 @@ object Find {
   //      need to figure out a way around this?
   def anywhereAccessible(ctx: EirNode, name: String): View[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
-    val matches = matchesPredicate(withName(name))(_)
+    val matches = withName(name)
     val predicate: EirNode => Option[Boolean] = {
       case _: EirBlock => None
       // only allowed to consider members when within the class?
@@ -194,7 +198,7 @@ object Find {
       val last = names.init.foldRight(Iterable(scope))((name, curr) => {
         curr.headOption.view.flatMap(child[EirNamedNode](_, withName(name).and(usage.canAccess)))
       })
-      last.flatMap(child(_, withName(names.last).and(usage.canAccess)).map({
+      last.flatMap(child[EirNamedNode](_, withName(names.last).and(usage.canAccess)).map({
         case fs: EirFileSymbol =>
           Find.uniqueResolution[EirNamedNode](fs)
         case x => x
@@ -251,14 +255,6 @@ object Find {
       .map(extractFunction)
       .flatMap(_.find(child => (child.name == function.name) && child != function)))
       .getOrElse(View())
-  }
-
-  private def matchesPredicate[T](predicate: T => Boolean)(x: Any): Boolean = {
-    try {
-      predicate(x.asInstanceOf[T])
-    } catch {
-      case _: ClassCastException => false
-    }
   }
 
   private def _traits(x: EirClassLike): Iterable[EirType] = {

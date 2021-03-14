@@ -2,12 +2,12 @@ package edu.illinois.cs.ergoline
 
 import java.io.{File, PrintWriter}
 import java.nio.file.Paths
-
-import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNode}
+import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.passes.Processes
-import edu.illinois.cs.ergoline.resolution.Modules
+import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, LibUtils}
 
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
@@ -65,6 +65,12 @@ object Driver extends App {
   val codegen = Modules.currTimeMs
   println(s"ergoline compilation:\t${codegen - start}ms")
 
+  val blasMod = globals
+    .ergolineModule
+    .flatMap(Find.child(_, withName("blas")).headOption)
+
+  val usingBlas = blasMod.exists(_.isInstanceOf[EirNamespace])
+
   if (!skipCompilation) compile()
 
   private def compile(): Unit = {
@@ -80,7 +86,11 @@ object Driver extends App {
     println(s"charmxi compilation:\t${charmxi - codegen}ms")
 
     try {
-      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} $out -I$inclDir generate.cc"
+      val linkOptions = options ++ {
+        if (usingBlas) LibUtils.linkLib("gsl")
+        else None
+      }
+      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out -I$inclDir generate.cc"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {

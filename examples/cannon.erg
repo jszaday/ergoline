@@ -9,20 +9,6 @@ def drand48(): double;
 @system(fromHeader="cmath")
 def sqrt(value: double): double;
 
-def dgemm(a: array<double, 2>, b: array<double, 2>, c: array<double, 2>) {
-    val m = a.shape[0];
-    val n = b.shape[1];
-    assert(a.shape[1] == b.shape[0]);
-    assert(c.shape[0] == m && c.shape[1] == n);
-    for (var i = 0; i < m; i += 1) {
-        for (var j = 0; j < n; j += 1) {
-            for (var k = 0; k < m; k += 1) {
-                c[i, k] += a[i, j] * b[j, k];
-            }
-        }
-    }
-}
-
 @main class cannon {
     var startTime: double;
     var endTime: double;
@@ -97,7 +83,7 @@ class block {
         @overlap for (var block = 0; block < nBlocks; block += 1) {
             when inputA(_ == block, blockA: array<double, 2>),
                  inputB(_ == block, blockB: array<double, 2>) => {
-                dgemm(blockA, blockB, data);
+                blas::dgemm(1.0, blockA, blockB, 0.0, data);
 
                 if ((block + 1) < nBlocks) {
                     self@[(idx[0] + 1) % nBlocks, idx[1]].inputA(block + 1, blockA);

@@ -127,7 +127,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitProxyType(x: types.EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
-    visit(ProxyManager.proxyFor(x))
+    val ty = ProxyManager.proxyFor(x)
+    x.setType(ty)
+    visit(ty)
   }
 
   override def visitImport(eirImport: EirImport)(implicit ctx: TypeCheckContext): EirType = null
@@ -844,9 +846,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitTypeAlias(x: EirTypeAlias)(implicit ctx: TypeCheckContext): EirType = {
-    visit(Find.uniqueResolution[EirType](x))
+    visit(Find.uniqueResolution[EirResolvable[EirType]](x))
   }
 
+  @tailrec
   def valueWithin(x: EirResolvable[_])(implicit ctx: TypeCheckContext): EirLiteral = {
     Find.uniqueResolution[EirNode](x) match {
       case y: EirConstantFacade => y.value

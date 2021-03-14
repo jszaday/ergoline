@@ -441,8 +441,9 @@ case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var r
 }
 
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
-                               var declaredType: EirResolvable[EirType], var isExpansion: Boolean, var isSelfAssigning: Boolean)
-  extends EirNamedNode {
+                               var declaredType: EirResolvable[EirType],
+                               var isExpansion: Boolean, var isSelfAssigning: Boolean,
+                               var isReference: Boolean = false) extends EirNamedNode {
   override def children: Iterable[EirNode] = Seq(declaredType)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {

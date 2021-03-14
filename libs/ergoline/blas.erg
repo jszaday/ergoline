@@ -1,0 +1,7 @@
+package ergoline;
+
+namespace blas {
+    @system(alias="ergoline::blas::dgemm", fromHeader="ergoline/blas.hpp")
+    def dgemm(alpha: double, &a: array<double, 2>, &b: array<double, 2>,
+              beta: double, &c: array<double, 2>): int;
+}

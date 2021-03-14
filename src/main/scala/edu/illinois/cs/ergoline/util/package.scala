@@ -3,7 +3,7 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.passes.TypeCheckContext
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
@@ -34,9 +34,11 @@ package object util {
     m
   }
 
-  def resolveToPair(resolvable: EirResolvable[EirType]): (EirClassLike, Option[EirSpecialization]) = {
-    Find.uniqueResolution[EirType](resolvable) match {
-      case t@EirTemplatedType(_, base, _) => (Find.uniqueResolution[EirClassLike](base), Some(t))
+  def resolveToPair(resolvable: EirResolvable[EirType])
+                   (implicit ctx: TypeCheckContext): (EirClassLike, Option[EirSpecialization]) = {
+    CheckTypes.visit(resolvable) match {
+      case t@EirTemplatedType(_, base, _) =>
+        (Find.uniqueResolution[EirClassLike](base), Some(t))
       case c: EirClassLike => (c, None)
       case _ => Errors.unableToResolve(resolvable)
     }
@@ -50,7 +52,7 @@ package object util {
 
   def sweepInherited[T](ctx: TypeCheckContext, base: EirClassLike,
                         f: EirClassLike => View[T]): View[T] = {
-    base.inherited.view.map(resolveToPair).flatMap {
+    base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
       case (a, None) => f(a)
       case (a, Some(sp)) =>
         val spec = ctx.specialize(a, sp)
@@ -115,9 +117,6 @@ package object util {
       def canAccess(other: EirNode): Boolean = xCanAccessY(node, other)
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
-
-      def findChild[T <: EirNode : ClassTag](predicate: T => Boolean): Iterable[T] =
-        Find.child[T](node, predicate)
 
       def isValid[T : ClassTag]: Option[T] = node match {
         case t : T => Some(t)
