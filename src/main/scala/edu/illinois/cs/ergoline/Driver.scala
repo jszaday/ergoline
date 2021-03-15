@@ -30,6 +30,11 @@ object Driver extends App {
   val skipCompilation = options.contains("--no-compile")
   globals.strict = options.contains("-Wall")
   globals.verbose = options.contains("--verbose")
+  val idx = options.indexOf("-fno-inplace")
+  if (idx >= 0) {
+    options = options.patch(idx, Nil, 1)
+    globals.enableInPlace = false
+  }
 
   val out = {
     val idx = options.indexOf("-o")

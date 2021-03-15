@@ -27,9 +27,8 @@ inline char* get_msg_buffer(void* msg) {
 
 template <typename... Args>
 void unpack(void* msg, Args&... args) {
-  auto s = hypercomm::serdes::make_unpacker(
-      std::shared_ptr<void>(msg, [](void* msg) { CkFreeMsg(msg); }),
-      get_msg_buffer(msg));
+  std::shared_ptr<void> src(msg, [](void* msg) { CkFreeMsg(msg); });
+  auto s = hypercomm::serdes::make_unpacker(src, get_msg_buffer(msg));
   hypercomm::pup(s, std::forward_as_tuple(args...));
 }
 
@@ -42,6 +41,23 @@ CkMessage* pack(const Args&... _args) {
   hypercomm::pup(packer, args);
   CkAssert(size == packer.size());
   return msg;
+}
+
+template<typename A, typename B, std::size_t N>
+CkMessage* repack(const A& a, const std::shared_ptr<ergoline::array<B, N>>& array) {
+  const auto& src = array->source;
+  auto msg = static_cast<CkMarshallMsg*>(src.get());
+  if (src.use_count() == 1 && msg &&
+      UsrToEnv(msg)->getMsgIdx() == CMessage_CkMarshallMsg::__idx) {
+    PUP::toMem p(msg->msgBuf);
+    p | const_cast<A&>(a);
+    using src_t = std::shared_ptr<void>;
+    // a cruel way to take ownership of the pointer
+    ::new (const_cast<src_t*>(&src)) src_t();
+    return msg;
+  } else {
+    return pack(a, array);
+  }
 }
 }
 
