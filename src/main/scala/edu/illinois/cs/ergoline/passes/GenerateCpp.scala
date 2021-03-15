@@ -1069,7 +1069,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             // TODO this needs to inherit substitutions
             //      (when such things are added)
             val ctx = parent.makeSubContext()
-            List(if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n)
+            List("(bool)" + {
+              if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n
+            })
         }
       case _: EirIdentifierPattern => Nil
       case e: EirExpressionPattern =>
@@ -1306,7 +1308,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitWhen(x: EirSdagWhen)(implicit ctx: CodeGenerationContext): Unit = {
     // TODO impl this
-    if (x.condition.isDefined) ???
     val peeked = ctx.peekSentinel().filter(_ => canReuseSentinel(x.parent))
     val sentinel = peeked
       // only use an existing sentinel when its directly above us (for now)
@@ -1314,6 +1315,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .getOrElse({ makeSentinel(ctx, all = true) })
     if (peeked.isDefined) ctx << "{"
     val compound = x.patterns.length > 1
+    if (compound && x.condition.isDefined) ???
     var reqs: List[String] = Nil
     x.patterns.zipWithIndex.foreach({
       case ((symbol, patterns), i) =>
@@ -1322,16 +1324,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
-        val conditions = visitPatternCond(ctx, patterns, "*" +
-          ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
+        val temp = "*" + ctx.temporary
+        val declarations = visitPatternDecl(ctx, patterns, temp).split(n)
+        val conditions = visitPatternCond(ctx, patterns, temp, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         val ty = s"__req${i}_val__"
         val req = s"__req${i}__"
         ctx << s"using $ty = typename decltype($name)::value_t;"
         ctx << s"auto $req = $name.make_request(nullptr,"
-        ctx << {
-          if (conditions.nonEmpty) {
-            s"[=](const $ty& ${ctx.temporary}) { return $conditions; });"
-          } else "nullptr);"
+        if (conditions.nonEmpty) {
+          ctx << s"[=](const $ty& ${ctx.temporary})" << "->" << "bool" <<"{"
+          ctx << declarations
+          ctx << "return" << conditions
+          ctx << x.condition.map(_ => "&&") << x.condition
+          ctx << ";" << "});"
+        } else {
+          ctx << "nullptr);"
         }
         if (!compound) {
           ctx << s"${sentinel._2}.put($req," << s"[=]($ty&& __value__)" << "{"
