@@ -54,8 +54,8 @@ class block {
             // TODO add support for tuple expansion~! (*shape)
             data = new array<double, 2>(shape[0], shape[1]);
 
-            for (var i = 0; i < shape[0]; i += 1) {
-                for (var j = 0; j < shape[1]; j += 1) {
+            for (var j = 0; j < shape[1]; j += 1) {
+                for (var i = 0; i < shape[0]; i += 1) {
                     data[i, j] = drand48();
                 }
             }

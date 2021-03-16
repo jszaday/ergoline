@@ -14,7 +14,7 @@ struct ptr_record;
 struct serdes {
   enum state_t { SIZING, PACKING, UNPACKING };
 
-  const std::shared_ptr<void> source;
+  const std::weak_ptr<void> source;
   const char* start;
   char* current;
   const state_t state;
@@ -60,7 +60,7 @@ struct serdes {
 
   inline static serdes make_packer(const char* start) {
     return serdes{
-        .source = nullptr,
+        .source = {},
         .start = start,
         .current = const_cast<char*>(start),
         .state = PACKING,
@@ -69,7 +69,7 @@ struct serdes {
 
   inline static serdes make_sizer() {
     return serdes{
-        .source = nullptr,
+        .source = {},
         .start = nullptr,
         .current = nullptr,
         .state = SIZING,

@@ -6,28 +6,29 @@ import ck;
 class pong with message<string> {
     def pong() { }
     override def value(): string {
-        return `pong on ${ck::myPe()}`;
+        return "pong";
     }
 }
 
 class ping with message<string> {
     def ping() { }
     override def value(): string {
-        return `ping on ${ck::myPe()}`;
+        return "ping";
     }
+}
+
+trait message<T> {
+    def value(): T;
 }
 
 class pingpong {
     val mainProxy: main@;
-    var pongCount: int = 0;
 
     @entry def pingpong(=mainProxy: main@) {
         // broadcast a ping to all members of the group
         self@receive(self[@]index(), new ping());
-    }
-
-    private def notePong() {
-        pongCount += 1;
+        // then start the exchange loop
+        self[@]exchange();
     }
 
     @entry def sendPong(to: int) {
@@ -35,36 +36,36 @@ class pingpong {
         peer.receive(self[@]index(), new pong());
     }
 
-    @entry def receive(from: int, msg: message<string>) {
-        match (msg) {
-            case _: ping => sendPong(from);
-            case _: pong => notePong();
+    @entry def acknowledge(src: int, msg: message<string>) {
+        println(`[${self[@]index()}] recvd ${msg.value()} from ${src}!`);
+    }
+
+    @mailbox def receive(src: int, msg: message<string>);
+
+    @threaded @entry def exchange() {
+        @overlap for (var it = 0; it < ck::numPes(); it += 1) {
+            await all {
+                when receive(src, msg: ping) if src == it => {
+                    acknowledge(src, msg);
+                    sendPong(src);
+                }
+
+                when receive(src, msg: pong) if src == it =>
+                    acknowledge(src, msg);
+            }
         }
 
-        println(msg.value());
-
-        if (pongCount >= ck::numPes()) {
-            mainProxy.finished();
-        }
+        self[@]contribute(mainProxy.finished);
     }
 }
 
 @main class main {
-    var count: int = 0;
-
     @entry def main(args: array<string>) {
         new pingpong@group(self@);
     }
 
     @entry def finished() {
-        count += 1;
-
-        if (count >= ck::numPes()) {
-            exit();
-        }
+        println("[info] all done!");
+        exit();
     }
-}
-
-trait message<T> {
-    def value(): T;
 }

@@ -24,10 +24,14 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   private var _replacements = Map[String, String]()
 
   private var _sentinels = new mutable.Stack[(Boolean, String)]
+  private var _inplace = mutable.Set[EirFunctionCall]()
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
   def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
     tyCtx.lambdas.groupBy(x => Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x)))
+
+  def repack(x: EirFunctionCall): Unit = _inplace.add(x)
+  def shouldRepack(x: EirFunctionCall): Boolean = _inplace.contains(x)
 
   def makePointer(n: EirNode): Unit = _pointerOverrides.add(n)
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)

@@ -409,7 +409,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << x.target
       if (isPointer) ctx << ")"
       ctx << visitSpecialization(x) << "(" << {
-        if (shouldPack) ctx << "ergoline::pack("
+        if (shouldPack) {
+          if (ctx.shouldRepack(x)) ctx << "ergoline::repack("
+          else ctx << "ergoline::pack("
+        }
         if (isAsync) {
           ctx << ctx.temporary
           if (x.args.nonEmpty) ctx << ","
@@ -1066,7 +1069,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             // TODO this needs to inherit substitutions
             //      (when such things are added)
             val ctx = parent.makeSubContext()
-            List(if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n)
+            List("(bool)" + {
+              if (wildcard) s"std::dynamic_pointer_cast<${ctx.nameFor(t)}>($current)" else n
+            })
         }
       case _: EirIdentifierPattern => Nil
       case e: EirExpressionPattern =>
@@ -1277,9 +1282,32 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def findInplaceOpportunities(from: EirMember, arrArgs: List[Int], body: EirBlock)
+                              (implicit ctx: CodeGenerationContext): Unit = {
+    if (!globals.enableInPlace) return
+
+    val ours = from.counterpart
+    val calls = Find.within[EirFunctionCall](body, x => {
+      val theirs = x.target.disambiguation.to[EirMember].flatMap(_.counterpart)
+      ours == theirs && {
+        val theirArgs = x.args.flatMap(_.disambiguation).flatMap(_.parent).collect {
+          case i: EirIdentifierPattern => i.parent.to[EirPatternList].map(_.patterns.indexOf(i)).filter(_ >= 0)
+        }.flatten
+        arrArgs.forall(theirArgs.contains(_))
+      }
+    })
+
+    // TODO ensure that the args aren't (later) copied within the body
+
+    for (call <- calls) {
+      ctx.repack(call)
+
+      Errors.warn(s"${Errors.contextualize(call)}: attempting to use inplace optimizations for call to ${from.name} (use `-fno-inplace` if you encounter issues)")
+    }
+  }
+
   override def visitWhen(x: EirSdagWhen)(implicit ctx: CodeGenerationContext): Unit = {
     // TODO impl this
-    if (x.condition.isDefined) ???
     val peeked = ctx.peekSentinel().filter(_ => canReuseSentinel(x.parent))
     val sentinel = peeked
       // only use an existing sentinel when its directly above us (for now)
@@ -1287,6 +1315,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .getOrElse({ makeSentinel(ctx, all = true) })
     if (peeked.isDefined) ctx << "{"
     val compound = x.patterns.length > 1
+    if (compound && x.condition.isDefined) ???
     var reqs: List[String] = Nil
     x.patterns.zipWithIndex.foreach({
       case ((symbol, patterns), i) =>
@@ -1295,25 +1324,36 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
-        val conditions = visitPatternCond(ctx, patterns, "*" + ctx.temporary, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
+        val temp = "*" + ctx.temporary
+        val declarations = visitPatternDecl(ctx, patterns, temp).split(n)
+        val conditions = visitPatternCond(ctx, patterns, temp, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
         val ty = s"__req${i}_val__"
         val req = s"__req${i}__"
         ctx << s"using $ty = typename decltype($name)::value_t;"
         ctx << s"auto $req = $name.make_request(nullptr,"
-        ctx << {
-          if (conditions.nonEmpty) {
-            s"[=](const $ty& ${ctx.temporary}) { return $conditions; });"
-          } else "nullptr);"
+        if (conditions.nonEmpty) {
+          ctx << s"[=](const $ty& ${ctx.temporary})" << "->" << "bool" <<"{"
+          ctx << declarations
+          ctx << "return" << conditions
+          ctx << x.condition.map(_ => "&&") << x.condition
+          ctx << ";" << "});"
+        } else {
+          ctx << "nullptr);"
         }
-        if (!compound) {
-          ctx << s"${sentinel._2}.put($req," << s"[=]($ty&& __value__)" << "{"
-          ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
-          ctx.ignoreNext("{")
-          ctx << x.body
-          ctx << ");"
+
+        val arrArgs =
+          f.functionArgs
+            .zipWithIndex
+            .filter(x => isArray(ctx, ctx.typeOf(x._1)))
+            .map(_._2)
+
+        if (arrArgs.nonEmpty) {
+          findInplaceOpportunities(m, arrArgs, x.body)
         }
+
         reqs :+= s"$name.put($req);"
     })
+
     if (compound) {
       ctx << "auto __compound__ ="
       ctx << x.patterns.tail.indices.foldRight(s"__req0__")((i, s) => {
@@ -1322,13 +1362,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ";"
       val ty = "__compound_ty__"
       ctx << s"using $ty = typename decltype(__compound__)::element_type;"
-      val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
       ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t&& __value__)" << "{"
-      ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
-      ctx.ignoreNext("{")
-      ctx << x.body
-      ctx << ");"
+    } else {
+      val ty = "__req0_val__"
+      ctx << s"${sentinel._2}.put(__req0__," << s"[=]($ty&& __value__)" << "{"
     }
+
+    val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
+    ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
+    ctx.ignoreNext("{")
+    ctx << x.body
+    ctx << ");"
+
     reqs.foreach(ctx << _)
     if (peeked.isEmpty) {
       ctx << s"${sentinel._2}.block();"

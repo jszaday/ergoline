@@ -251,8 +251,10 @@ struct puper<std::shared_ptr<T>,
       ::new (&t) std::shared_ptr<T>();
     } else if (rec.is_instance()) {
       if (is_bytes<T>()) {
-        ::new (&t)
-            std::shared_ptr<T>(s.source, reinterpret_cast<T*>(s.current));
+        ::new (&t) std::shared_ptr<T>(
+          std::move(s.source.lock()),
+          reinterpret_cast<T*>(s.current)
+        );
         s.advance<T>();
       } else {
         auto p = static_cast<T*>(malloc(sizeof(T)));
@@ -295,8 +297,8 @@ inline void pup_tuple_impl(serdes& s, std::tuple<Args...>& t) {
 template <size_t N, typename... Args,
           Requires<(sizeof...(Args) > 0 && N > 0)> = nullptr>
 inline void pup_tuple_impl(serdes& s, std::tuple<Args...>& t) {
-  pup(s, std::get<N>(t));
   pup_tuple_impl<N - 1>(s, t);
+  pup(s, std::get<N>(t));
 }
 }
 
@@ -312,6 +314,14 @@ struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) == 0)>::t
   inline static void impl(serdes& s, std::tuple<Ts...>& t) {}
 };
 
+namespace {
+template <typename T>
+bool is_uninitialized(std::weak_ptr<T> const& weak) {
+  using wt = std::weak_ptr<T>;
+  return !weak.owner_before(wt{}) && !wt{}.owner_before(weak);
+}
+}
+
 template <typename T, std::size_t N>
 struct puper<ergoline::array<T, N>> {
   inline static void impl(serdes& s, ergoline::array<T, N>& t) {
@@ -323,8 +333,8 @@ struct puper<ergoline::array<T, N>> {
 
     if (s.unpacking()) {
       if (PUP::as_bytes<T>::value) {
-        if (s.source) {
-          t.source = s.source;
+        if (!is_uninitialized(s.source)) {
+          t.source = std::move(s.source.lock());
           t.buffer = reinterpret_cast<T*>(s.current);
           s.advance(sizeof(T) * t.size());
         } else {

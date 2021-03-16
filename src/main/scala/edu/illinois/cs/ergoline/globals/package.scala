@@ -10,6 +10,7 @@ package object globals {
 
   var strict: Boolean = false
   var verbose: Boolean = false
+  var enableInPlace: Boolean = true
 
   def clearGlobals(): Unit = {
     EirGlobalNamespace.clear()
