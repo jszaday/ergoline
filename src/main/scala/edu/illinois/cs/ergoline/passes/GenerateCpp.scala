@@ -1340,13 +1340,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           ctx << "nullptr);"
         }
-        if (!compound) {
-          ctx << s"${sentinel._2}.put($req," << s"[=]($ty&& __value__)" << "{"
-          ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
-          ctx.ignoreNext("{")
-          ctx << x.body
-          ctx << ");"
-        }
 
         val arrArgs =
           f.functionArgs
@@ -1360,6 +1353,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
         reqs :+= s"$name.put($req);"
     })
+
     if (compound) {
       ctx << "auto __compound__ ="
       ctx << x.patterns.tail.indices.foldRight(s"__req0__")((i, s) => {
@@ -1368,13 +1362,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ";"
       val ty = "__compound_ty__"
       ctx << s"using $ty = typename decltype(__compound__)::element_type;"
-      val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
       ctx << s"${sentinel._2}.put(std::static_pointer_cast<typename $ty::parent_t>(__compound__)," << s"[=](typename $ty::value_t&& __value__)" << "{"
-      ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
-      ctx.ignoreNext("{")
-      ctx << x.body
-      ctx << ");"
+    } else {
+      val ty = "__req0_val__"
+      ctx << s"${sentinel._2}.put(__req0__," << s"[=]($ty&& __value__)" << "{"
     }
+
+    val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
+    ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
+    ctx.ignoreNext("{")
+    ctx << x.body
+    ctx << ");"
+
     reqs.foreach(ctx << _)
     if (peeked.isEmpty) {
       ctx << s"${sentinel._2}.block();"
