@@ -10,17 +10,18 @@ import ck;
     val senders: sender@group;
     val receivers: receiver@group;
 
-    @entry def avalanche() {
-        numReps = 11;
-        numIters = 256;
+    @entry def avalanche(args: array<string>) {
+        numIters = args.size() > 1 ? args[1].toInt() : 256;
+        numReps = numIters >= 256 ? 129 : numIters / 2 + 1;
+
 
         receivers = new receiver@group(numIters);
         senders = new sender@group(numIters, receivers);
 
-        self@begin();
+        self@run();
     }
 
-    @threaded @entry def begin() {
+    @threaded @entry def run() {
         var avgTime = 0.0;
 
         for (var i = 0; i < numReps; i += 1) {
