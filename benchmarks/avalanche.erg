@@ -1,0 +1,75 @@
+package benchmarks;
+
+import ergoline::_;
+import ck;
+
+@main class avalanche {
+    val numReps: int;
+    val numIters: int;
+
+    val senders: sender@group;
+    val receivers: receiver@group;
+
+    @entry def avalanche() {
+        numReps = 11;
+        numIters = 256;
+
+        receivers = new receiver@group(numIters);
+        senders = new sender@group(numIters, receivers);
+
+        self@begin();
+    }
+
+    @threaded @entry def begin() {
+        var avgTime = 0.0;
+
+        for (var i = 0; i < numReps; i += 1) {
+            val start = ck::wallTime();
+
+            senders.send();
+            receivers.run();
+
+            ck::awaitQuiescence();
+
+            val end = ck::wallTime();
+
+            avgTime += end - start;
+        }
+
+        println(`on avg, exchange took: ${avgTime / numReps} s`);
+
+        exit();
+    }
+}
+
+class receiver {
+    val numIters: int;
+
+    @entry def receiver(=numIters: int) {}
+
+    @mailbox def receive(it: int);
+
+    @threaded @entry def run() {
+        @overlap for (var i = 0; i < numIters; i += 1) {
+            @overlap for (var j = 0; j < ck::numPes(); j += 1) {
+                when receive(_ == i) => ();
+            }
+        }
+    }
+}
+
+class sender {
+    val numIters: int;
+    val receivers: receiver@group;
+
+    @entry def sender(=numIters: int,
+                      =receivers: receiver@group) {}
+
+    @entry def send() {
+        for (var i = 0; i < numIters; i += 1) {
+            for (var j = 0; j < ck::numPes(); j += 1) {
+                receivers[j].receive(i);
+            }
+        }
+    }
+}
