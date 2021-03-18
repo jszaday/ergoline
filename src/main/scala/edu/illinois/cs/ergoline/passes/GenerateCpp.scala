@@ -473,8 +473,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitLiteral(x: EirLiteral)(implicit ctx: CodeGenerationContext): Unit = {
-    if (x.`type` == EirLiteralTypes.String) ctx << s"std::string(${x.value})"
-    else ctx << x.value
+    x.`type` match {
+      case EirLiteralTypes.Unit =>
+      case EirLiteralTypes.String => ctx << s"std::string(${x.value})"
+      case _ => ctx << x.value
+    }
   }
 
   def selfFor(ctx: CodeGenerationContext, x: EirMember): String = {
@@ -1019,11 +1022,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }<< "})(" << x.expression << ")"
   }
 
-  def visitPatternDecl(parent: CodeGenerationContext, x: EirPattern, current: String): String = {
+  def visitPatternDecl(parent: CodeGenerationContext, x: EirPattern, current: String, forceTuple: Boolean = false): String = {
     implicit val ctx = parent.makeSubContext()
     x match {
       case EirPatternList(_, ps) => ps match {
-        case p :: Nil => ctx << visitPatternDecl(ctx, p, current)
+        case p :: Nil if !forceTuple => ctx << visitPatternDecl(ctx, p, current)
+        case p :: Nil => ctx << visitPatternDecl(ctx, p, s"std::get<0>($current)")
         case patterns =>
           ctx << patterns.zipWithIndex.map({
             case (p, idx) => visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
@@ -1053,7 +1057,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitPatternCond(parent: CodeGenerationContext, x: EirPattern, current: String, parentType: Option[EirType]): List[String] = {
     x match {
       case EirPatternList(_, ps) => ps match {
-        case p :: Nil => visitPatternCond(parent, p, current, parentType)
+        case p :: Nil => parentType match {
+          case Some(t: EirTupleType) =>
+            visitPatternCond(parent, p, s"std::get<0>($current)",
+                             t.children.headOption.map(parent.resolve[EirType]))
+          case _ => visitPatternCond(parent, p, current, parentType)
+        }
         case patterns =>
           patterns.zipWithIndex.flatMap {
             case (p, idx) => visitPatternCond(parent, p, s"std::get<$idx>($current)", typeAt(parent, parentType, idx))
@@ -1317,6 +1326,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val compound = x.patterns.length > 1
     if (compound && x.condition.isDefined) ???
     var reqs: List[String] = Nil
+
+    def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
+      if (types.nonEmpty) EirTupleType(None, types)
+      else globals.unitType
+    }
+
     x.patterns.zipWithIndex.foreach({
       case ((symbol, patterns), i) =>
         val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
@@ -1325,8 +1340,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val tys = declTys.map(ctx.typeFor(_, Some(x)))
         val name = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
         val temp = "*" + ctx.temporary
-        val declarations = visitPatternDecl(ctx, patterns, temp).split(n)
-        val conditions = visitPatternCond(ctx, patterns, temp, Some(ctx.resolve(declTys.toTupleType(allowUnit = true)(None)))).mkString(" && ")
+        val declarations = visitPatternDecl(ctx, patterns, temp, forceTuple = true).split(n)
+        val conditions = visitPatternCond(ctx, patterns, temp, Some(ctx.resolve(encapsulate(declTys)))).mkString(" && ")
         val ty = s"__req${i}_val__"
         val req = s"__req${i}__"
         ctx << s"using $ty = typename decltype($name)::value_t;"
@@ -1369,7 +1384,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     val patterns = EirPatternList(None, x.patterns.flatMap(_._2.patterns))
-    ctx << visitPatternDecl(ctx, patterns, "*__value__").split(n)
+    ctx << visitPatternDecl(ctx, patterns, "*__value__", forceTuple = true).split(n)
     ctx.ignoreNext("{")
     ctx << x.body
     ctx << ");"
