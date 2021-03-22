@@ -252,18 +252,24 @@ struct puper<std::shared_ptr<T>,
 };
 
 template <typename T>
-struct puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
-                                     hypercomm::proxy, T>::value>::type> {
+class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
+                                    hypercomm::proxy, T>::value>::type> {
+  template <typename A>
+  inline static void helper(serdes& s, std::shared_ptr<T>& t) {
+    if (s.unpacking()) {
+      ::new (&t) std::shared_ptr<proxy>(new A());
+    }
+
+    s | std::dynamic_pointer_cast<A>(t)->proxy;
+  }
+
+ public:
   static void impl(serdes& s, std::shared_ptr<T>& t) {
     chare_t ty = s.unpacking() ? (chare_t::TypeInvalid) : t->type();
     s | ty;
     switch (ty) {
       case chare_t::TypeChare: {
-        if (s.unpacking()) {
-          ::new (&t) std::shared_ptr<proxy>(new chare_proxy());
-        }
-
-        s | std::dynamic_pointer_cast<chare_proxy>(t)->proxy;
+        helper<chare_proxy>(s, t);
 
         break;
       }
@@ -276,11 +282,7 @@ struct puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
         if (collective) {
           CkAbort("unknown chare type");
         } else {
-          if (s.unpacking()) {
-            ::new (&t) std::shared_ptr<proxy>(new array_element_proxy());
-          }
-
-          s | std::dynamic_pointer_cast<array_element_proxy>(t)->proxy;
+          helper<array_element_proxy>(s, t);
         }
 
         break;
@@ -294,11 +296,7 @@ struct puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
         if (collective) {
           CkAbort("unknown chare type");
         } else {
-          if (s.unpacking()) {
-            ::new (&t) std::shared_ptr<proxy>(new group_element_proxy());
-          }
-
-          s | std::dynamic_pointer_cast<group_element_proxy>(t)->proxy;
+          helper<group_element_proxy>(s, t);
         }
 
         break;
@@ -312,11 +310,7 @@ struct puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
         if (collective) {
           CkAbort("unknown chare type");
         } else {
-          if (s.unpacking()) {
-            ::new (&t) std::shared_ptr<proxy>(new nodegroup_element_proxy());
-          }
-
-          s | std::dynamic_pointer_cast<nodegroup_element_proxy>(t)->proxy;
+          helper<nodegroup_element_proxy>(s, t);
         }
 
         break;
