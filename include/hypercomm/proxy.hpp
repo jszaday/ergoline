@@ -70,27 +70,41 @@ struct array_element_proxy : public element_proxy {
   }
 };
 
-struct group_element_proxy : public element_proxy, public non_migratable_proxy {
-  using proxy_type = CProxyElement_Group;
+template<typename T>
+struct grouplike_element_proxy : public element_proxy, public non_migratable_proxy {
+  using proxy_type = T;
+
+  static constexpr auto is_node = std::is_same<CProxyElement_NodeGroup, proxy_type>::value;
 
   proxy_type proxy;
 
-  group_element_proxy(void) = default;
-  group_element_proxy(const proxy_type& _1) : proxy(_1) {}
+  grouplike_element_proxy(void) = default;
+  grouplike_element_proxy(const proxy_type& _1) : proxy(_1) {}
 
   inline CkGroupID id(void) const { return proxy.ckGetGroupID(); }
   inline int index(void) const { return proxy.ckGetGroupPe(); }
 
-  virtual chare_t type(void) const override { return chare_t::TypeGroup; }
+  virtual chare_t type(void) const override {
+    return (is_node) ? (chare_t::TypeNodeGroup)
+                     : (chare_t::TypeGroup);
+  }
 
   virtual int home(void) const override {
     return this->index();
   }
 
   virtual void* local(void) const override {
-    return (this->home() == CkMyPe()) ? CkLocalBranch(this->id()) : nullptr;
+    if (is_node) {
+      return (this->home() == CkMyNode()) ? CkLocalNodeBranch(this->id()) : nullptr;
+    } else {
+      return (this->home() == CkMyPe()) ? CkLocalBranch(this->id()) : nullptr;
+    }
   }
 };
+
+using group_element_proxy = grouplike_element_proxy<CProxyElement_Group>;
+
+using nodegroup_element_proxy = grouplike_element_proxy<CProxyElement_NodeGroup>;
 
 inline std::shared_ptr<chare_proxy> make_proxy(const chare_proxy::proxy_type& base) {
   return std::make_shared<chare_proxy>(base);
@@ -102,6 +116,10 @@ inline std::shared_ptr<array_element_proxy> make_proxy(const array_element_proxy
 
 inline std::shared_ptr<group_element_proxy> make_proxy(const group_element_proxy::proxy_type& base) {
   return std::make_shared<group_element_proxy>(base);
+}
+
+inline std::shared_ptr<nodegroup_element_proxy> make_proxy(const nodegroup_element_proxy::proxy_type& base) {
+  return std::make_shared<nodegroup_element_proxy>(base);
 }
 }
 
