@@ -3,6 +3,8 @@
 
 #include <ergoline/object.hpp>
 #include <ergoline/future.hpp>
+
+#include <hypercomm/proxy.hpp>
 #include <hypercomm/polymorph.hpp>
 
 #include <deque>
@@ -61,6 +63,7 @@ struct is_pupable<T,
                   typename std::enable_if<
                       std::is_base_of<PUP::able, T>::value ||
                       std::is_base_of<ergoline::object, T>::value ||
+                      std::is_base_of<hypercomm::proxy, T>::value ||
                       std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   enum { value = 1 };
 };

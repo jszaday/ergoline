@@ -3,7 +3,6 @@
 
 #include <hypercomm/serdes.hpp>
 #include <hypercomm/traits.hpp>
-#include <hypercomm/polymorph.hpp>
 
 #include <ergoline/hash.hpp>
 #include <ergoline/array.hpp>
@@ -76,6 +75,14 @@ struct puper<ergoline::hash_map<K, V>> {
         pup(s, pair.second);
       }
     }
+  }
+};
+
+struct puper<chare_t> {
+  using impl_type = std::underlying_type<chare_t>::type;
+
+  inline static void impl(serdes& s, chare_t& t) {
+    s | reinterpret_cast<impl_type&>(t);
   }
 };
 
@@ -237,6 +244,48 @@ struct puper<std::shared_ptr<T>,
       pack_ptr(s, p, [p]() {
         return hypercomm::identify(*p);
       });
+    }
+  }
+};
+
+template <typename T>
+struct puper<std::shared_ptr<T>,
+             typename std::enable_if<std::is_base_of<hypercomm::proxy, T>::value>::type> {
+  static void impl(serdes& s, std::shared_ptr<T>& t) {
+    chare_t ty = s.unpacking() ? (chare_t::TypeInvalid) : t->type();
+    s | ty;
+    switch (ty) {
+      case chare_t::TypeChare: {
+        if (s.unpacking()) {
+          ::new (&t) std::shared_ptr<proxy>(new chare_proxy());
+        }
+
+        s | std::dynamic_pointer_cast<chare_proxy>(t)->proxy;
+
+        break;
+      }
+
+      case chare_t::TypeArray: {
+        bool collective = s.unpacking() ? false : t->collective();
+
+        s | collective;
+
+        if (collective) {
+          CkAbort("unknown chare type");
+        } else {
+          if (s.unpacking()) {
+            ::new (&t) std::shared_ptr<proxy>(new array_element_proxy());
+          }
+
+          s | std::dynamic_pointer_cast<array_element_proxy>(t)->proxy;
+        }
+
+        break;
+      }
+
+      default: {
+        CkAbort("unknown chare type");
+      }
     }
   }
 };
