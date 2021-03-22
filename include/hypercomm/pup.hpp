@@ -267,56 +267,31 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
   static void impl(serdes& s, std::shared_ptr<T>& t) {
     chare_t ty = s.unpacking() ? (chare_t::TypeInvalid) : t->type();
     s | ty;
-    switch (ty) {
-      case chare_t::TypeChare: {
-        helper<chare_proxy>(s, t);
-
-        break;
+    if (ty == chare_t::TypeChare || ty == chare_t::TypeMainChare) {
+      helper<chare_proxy>(s, t);
+    } else if (ty != chare_t::TypeInvalid) {
+      bool collective = s.unpacking() ? false : t->collective();
+      s | collective;
+      if (collective) {
+        CkAbort("collectives currently unsupported");
       }
-
-      case chare_t::TypeArray: {
-        bool collective = s.unpacking() ? false : t->collective();
-
-        s | collective;
-
-        if (collective) {
-          CkAbort("unknown chare type");
-        } else {
+      switch (ty) {
+        case chare_t::TypeArray: {
           helper<array_element_proxy>(s, t);
+          break;
         }
-
-        break;
-      }
-
-      case chare_t::TypeGroup: {
-        bool collective = s.unpacking() ? false : t->collective();
-
-        s | collective;
-
-        if (collective) {
-          CkAbort("unknown chare type");
-        } else {
+        case chare_t::TypeGroup: {
           helper<group_element_proxy>(s, t);
+          break;
         }
-
-        break;
-      }
-
-      case chare_t::TypeNodeGroup: {
-        bool collective = s.unpacking() ? false : t->collective();
-
-        s | collective;
-
-        if (collective) {
-          CkAbort("unknown chare type");
-        } else {
+        case chare_t::TypeNodeGroup: {
           helper<nodegroup_element_proxy>(s, t);
+          break;
         }
-
-        break;
+        default: { CkAbort("unknown chare type"); }
       }
-
-      default: { CkAbort("unknown chare type"); }
+    } else {
+      CkAbort("invalid chare type");
     }
   }
 };
