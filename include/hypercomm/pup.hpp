@@ -3,7 +3,6 @@
 
 #include <hypercomm/serdes.hpp>
 #include <hypercomm/traits.hpp>
-#include <hypercomm/polymorph.hpp>
 
 #include <ergoline/hash.hpp>
 #include <ergoline/array.hpp>
@@ -79,6 +78,15 @@ struct puper<ergoline::hash_map<K, V>> {
   }
 };
 
+template <>
+struct puper<chare_t> {
+  using impl_type = std::underlying_type<chare_t>::type;
+
+  inline static void impl(serdes& s, chare_t& t) {
+    s | reinterpret_cast<impl_type&>(t);
+  }
+};
+
 template <typename T>
 struct puper<T, typename std::enable_if<is_list_or_deque<T>::value>::type> {
   using value_type = typename T::value_type;
@@ -141,8 +149,9 @@ struct puper<T, typename std::enable_if<hypercomm::built_in<T>::value>::type> {
 };
 
 template <typename T>
-struct puper<std::shared_ptr<T>,
-             typename std::enable_if<std::is_base_of<PUP::able, T>::value>::type> {
+struct puper<
+    std::shared_ptr<T>,
+    typename std::enable_if<std::is_base_of<PUP::able, T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
       PUP::able* p = nullptr;
@@ -157,35 +166,34 @@ struct puper<std::shared_ptr<T>,
 };
 
 namespace {
-  template <typename T, typename IdentifyFn>
-  inline static void pack_ptr(serdes& s, std::shared_ptr<T>& p, const IdentifyFn& f) {
-    if (!p) {
-      ptr_record rec(nullptr);
+template <typename T, typename IdentifyFn>
+inline static void pack_ptr(serdes& s, std::shared_ptr<T>& p,
+                            const IdentifyFn& f) {
+  if (!p) {
+    ptr_record rec(nullptr);
+    pup(s, rec);
+  } else {
+    auto search = s.records.find(p);
+    if (search != s.records.end()) {
+      ptr_record rec(search->second);
       pup(s, rec);
     } else {
-      auto search = s.records.find(p);
-      if (search != s.records.end()) {
-        ptr_record rec(search->second);
-        pup(s, rec);
-      } else {
-        auto id = s.records.size();
-        ptr_record rec(id, f());
-        pup(s, rec);
-        s.records[p] = id;
-        pup(s, *p);
-      }
+      auto id = s.records.size();
+      ptr_record rec(id, f());
+      pup(s, rec);
+      s.records[p] = id;
+      pup(s, *p);
     }
   }
 }
+}
 
-template<>
+template <>
 struct puper<polymorph> {
-  inline static void impl(serdes& s, polymorph& t) {
-    t.__pup__(s);
-  }
+  inline static void impl(serdes& s, polymorph& t) { t.__pup__(s); }
 };
 
-template<>
+template <>
 struct puper<ptr_record> {
   inline static void impl(serdes& s, ptr_record& t) {
     auto ty = reinterpret_cast<std::uint8_t*>(&t.t);
@@ -209,7 +217,9 @@ struct puper<ptr_record> {
 
 template <typename T>
 struct puper<std::shared_ptr<T>,
-             typename std::enable_if<std::is_base_of<ergoline::object, T>::value || std::is_base_of<hypercomm::polymorph, T>::value>::type> {
+             typename std::enable_if<
+                 std::is_base_of<ergoline::object, T>::value ||
+                 std::is_base_of<hypercomm::polymorph, T>::value>::type> {
   inline static void impl(serdes& s, std::shared_ptr<T>& t) {
     if (s.unpacking()) {
       ptr_record rec;
@@ -223,7 +233,8 @@ struct puper<std::shared_ptr<T>,
           s.instances[rec.d.instance.id] = p;
           p->__pup__(s);
         } else if (rec.is_reference()) {
-          p = std::static_pointer_cast<polymorph>(s.instances[rec.d.reference.id].lock());
+          p = std::static_pointer_cast<polymorph>(
+              s.instances[rec.d.reference.id].lock());
         } else {
           CkAbort("unknown record type %d", static_cast<int>(rec.t));
         }
@@ -232,11 +243,55 @@ struct puper<std::shared_ptr<T>,
     } else {
       auto p = std::dynamic_pointer_cast<polymorph>(t);
 #if CMK_ERROR_CHECKING
-      if (t && (p == nullptr)) CkAbort("could not cast %s to pup'able", typeid(t.get()).name());
+      if (t && (p == nullptr))
+        CkAbort("could not cast %s to pup'able", typeid(t.get()).name());
 #endif
-      pack_ptr(s, p, [p]() {
-        return hypercomm::identify(*p);
-      });
+      pack_ptr(s, p, [p]() { return hypercomm::identify(*p); });
+    }
+  }
+};
+
+template <typename T>
+class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
+                                    hypercomm::proxy, T>::value>::type> {
+  template <typename A>
+  inline static void helper(serdes& s, std::shared_ptr<T>& t) {
+    if (s.unpacking()) {
+      ::new (&t) std::shared_ptr<proxy>(new A());
+    }
+
+    s | std::dynamic_pointer_cast<A>(t)->proxy;
+  }
+
+ public:
+  static void impl(serdes& s, std::shared_ptr<T>& t) {
+    chare_t ty = s.unpacking() ? (chare_t::TypeInvalid) : t->type();
+    s | ty;
+    if (ty == chare_t::TypeChare || ty == chare_t::TypeMainChare) {
+      helper<chare_proxy>(s, t);
+    } else if (ty != chare_t::TypeInvalid) {
+      bool collective = s.unpacking() ? false : t->collective();
+      s | collective;
+      if (collective) {
+        CkAbort("collectives currently unsupported");
+      }
+      switch (ty) {
+        case chare_t::TypeArray: {
+          helper<array_element_proxy>(s, t);
+          break;
+        }
+        case chare_t::TypeGroup: {
+          helper<group_element_proxy>(s, t);
+          break;
+        }
+        case chare_t::TypeNodeGroup: {
+          helper<nodegroup_element_proxy>(s, t);
+          break;
+        }
+        default: { CkAbort("unknown chare type"); }
+      }
+    } else {
+      CkAbort("invalid chare type");
     }
   }
 };
@@ -251,10 +306,8 @@ struct puper<std::shared_ptr<T>,
       ::new (&t) std::shared_ptr<T>();
     } else if (rec.is_instance()) {
       if (is_bytes<T>()) {
-        ::new (&t) std::shared_ptr<T>(
-          std::move(s.source.lock()),
-          reinterpret_cast<T*>(s.current)
-        );
+        ::new (&t) std::shared_ptr<T>(std::move(s.source.lock()),
+                                      reinterpret_cast<T*>(s.current));
         s.advance<T>();
       } else {
         auto p = static_cast<T*>(malloc(sizeof(T)));
@@ -303,14 +356,16 @@ inline void pup_tuple_impl(serdes& s, std::tuple<Args...>& t) {
 }
 
 template <typename... Ts>
-struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) > 0)>::type> {
+struct puper<std::tuple<Ts...>,
+             typename std::enable_if<(sizeof...(Ts) > 0)>::type> {
   inline static void impl(serdes& s, std::tuple<Ts...>& t) {
     pup_tuple_impl<sizeof...(Ts)-1>(s, t);
   }
 };
 
 template <typename... Ts>
-struct puper<std::tuple<Ts...>, typename std::enable_if<(sizeof...(Ts) == 0)>::type> {
+struct puper<std::tuple<Ts...>,
+             typename std::enable_if<(sizeof...(Ts) == 0)>::type> {
   inline static void impl(serdes& s, std::tuple<Ts...>& t) {}
 };
 

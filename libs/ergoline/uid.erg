@@ -11,9 +11,9 @@ class uid {
     static var lastTime: long;
     static var lastCount: long;
 
-    var pe: int;
-    var time: long;
-    var count: long;
+    val pe: int;
+    val time: long;
+    val count: long;
 
     def uid() {
         // set our variables

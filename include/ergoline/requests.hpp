@@ -18,13 +18,50 @@
 
 namespace ergoline {
 
+namespace detail {
+template <typename... Ts>
+using first_t = typename std::enable_if<
+    sizeof...(Ts) >= 1,
+    typename std::tuple_element<0, std::tuple<Ts...>>::type>::type;
+
+template <typename Enable = void, typename... Ts>
+struct is_message_impl;
+
+template <typename... Ts>
+struct is_message_impl<typename std::enable_if<(sizeof...(Ts) != 1)>::type,
+                       Ts...> {
+  enum { value = false };
+  using type = void;
+};
+
+template <typename... Ts>
+class is_message_impl<typename std::enable_if<(sizeof...(Ts) == 1)>::type,
+                      Ts...> {
+  using private_type = typename std::remove_pointer<first_t<Ts...>>::type;
+
+ public:
+  enum { value = std::is_base_of<CkMessage, private_type>::value };
+  using type = typename std::conditional<value, private_type, void>::type;
+};
+
+template <typename... Ts>
+using is_message = is_message_impl<void, Ts...>;
+}
+
 struct request_base_ {
   virtual void cancel(void) = 0;
 };
 
 template <typename... Ts>
-struct request : public request_base_ {
-  using value_t = std::shared_ptr<std::tuple<Ts...>>;
+class request : public request_base_ {
+  using is_message = typename detail::is_message<Ts...>;
+
+ public:
+  using tuple_t =
+      typename std::conditional<is_message::value, typename is_message::type,
+                                std::tuple<Ts...>>::type;
+  using value_t = std::shared_ptr<tuple_t>;
+
   using request_t = std::shared_ptr<request<Ts...>>;
   using action_t = std::function<bool(value_t&)>;
   using predicate_t = std::function<bool(const value_t&)>;
@@ -56,7 +93,7 @@ struct request : public request_base_ {
 
 template <typename... Ts>
 struct mailbox {
-  using tuple_t = std::tuple<Ts...>;
+  using tuple_t = typename request<Ts...>::tuple_t;
   using value_t = typename request<Ts...>::value_t;
   using request_t = std::shared_ptr<request<Ts...>>;
 
