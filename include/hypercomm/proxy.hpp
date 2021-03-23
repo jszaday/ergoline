@@ -91,7 +91,7 @@ struct chare_proxy : public non_migratable_proxy {
 };
 
 struct array_element_proxy : public element_proxy {
-  using proxy_type = CProxyElement_ArrayBase;
+  using proxy_type = CProxyElement_ArrayElement;
 
   proxy_type proxy;
 
@@ -197,8 +197,10 @@ inline std::shared_ptr<chare_proxy> make_proxy(const chare_proxy::proxy_type& ba
   return std::make_shared<chare_proxy>(base);
 }
 
-inline std::shared_ptr<array_element_proxy> make_proxy(const array_element_proxy::proxy_type& base) {
-  return std::make_shared<array_element_proxy>(base);
+template<typename T,
+         PUP::Requires<std::is_base_of<array_element_proxy::proxy_type, T>::value> = nullptr>
+inline std::shared_ptr<array_element_proxy> make_proxy(const T& base) {
+  return std::make_shared<array_element_proxy>(static_cast<const array_element_proxy::proxy_type&>(base));
 }
 
 inline std::shared_ptr<group_element_proxy> make_proxy(const group_element_proxy::proxy_type& base) {

@@ -136,7 +136,13 @@ struct puper<std::array<T, N>,
 
 template <typename T>
 struct puper<T, typename std::enable_if<hypercomm::built_in<T>::value>::type> {
+  static constexpr auto is_proxy = std::is_base_of<CProxy, T>::value;
+
   inline static void impl(serdes& s, T& t) {
+    if (is_proxy && !s.unpacking()) {
+      t.ckUndelegate();
+    }
+
     switch (s.state) {
       case serdes::state_t::UNPACKING: {
         PUP::fromMem p(s.current);
@@ -270,7 +276,7 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
       ::new (&t) std::shared_ptr<proxy>(new A());
     }
 
-    s | std::dynamic_pointer_cast<A>(t)->proxy;
+    s | dynamic_cast<A*>(t.get())->proxy;
   }
 
  public:
