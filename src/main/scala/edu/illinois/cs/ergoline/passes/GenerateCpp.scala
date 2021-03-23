@@ -8,7 +8,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirT
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
@@ -273,6 +273,51 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def handleFutureMember(ctx: CodeGenerationContext, m: EirMember, base: EirExpressionNode, args: List[EirExpressionNode]): Unit = {
+    val apl = m.name == "apply"
+    val fut = base match {
+      case s: EirScopedSymbol[_] => s.target
+      case _ if apl => base
+      case _ => Errors.unreachable()
+    }
+    val rsv = if (apl) assertValid[EirLambdaType](ctx.typeOf(fut)).to else ctx.typeOf(fut)
+    val ty = ctx.resolve(rsv) match {
+      case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
+      case _ => Errors.unreachable()
+    }
+    val ptr = ty.isPointer
+    m.name match {
+      case "apply" => ctx << "ergoline::make_future(this)"
+      case "set" => ctx << "ergoline::send_future(" << fut << ",ergoline::pack(" << (args, ",") << "))"
+      case "get" =>
+        ctx << "(([&](const ergoline::future& f)" << "{"
+        ctx << "// TODO use a reqman here instead ;"
+        ctx << "CthThread sleeper = nullptr;"
+        if (ptr) {
+          ctx << ctx.typeFor(ty) << "tmp;"
+        } else {
+          ctx << "ergoline::temporary<" << ctx.typeFor(ty) << "> tmp;"
+        }
+        ctx << "auto req = this->__make_future_req__(f, [&](std::shared_ptr<CkMessage>& msg)" << "{"
+        ctx << "ergoline::unpack(std::move(msg), tmp);"
+        ctx << "if (sleeper != nullptr) CthAwaken(sleeper);"
+        ctx << "return true;"
+        ctx << "});"
+        ctx << "this->__put_future_req__(req);"
+        ctx << "if (!req->stale())" << "{"
+        ctx << "sleeper = CthSelf();"
+        ctx << "CthSuspend();"
+        ctx << "}"
+        if (ptr) {
+          ctx << "return tmp;"
+        } else {
+          ctx << "return tmp.value();"
+        }
+        ctx << "})(" << fut << "))"
+      case _ => ???
+    }
+  }
+
   def isOption(t: EirType): Boolean =
     t match {
       case t: EirClass => (t.name == "option") && (t.parent == globals.ergolineModule)
@@ -280,6 +325,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
   def isOption(t: Option[EirNode]): Boolean = t.to[EirType].exists(isOption)
+
+  def isFuture(t: EirType): Boolean =
+    t match {
+      case t: EirClass => (t.name == "future") && (t.parent == globals.ckModule)
+      case _ => false
+    }
+
+  def isFuture(t: Option[EirNode]): Boolean = t.to[EirType].exists(isFuture)
 
   def visitSystemCall(implicit ctx: CodeGenerationContext, target: EirExpressionNode,
                       disambiguated: EirNode, args: List[EirExpressionNode]): Unit = {
@@ -329,6 +382,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => error(target)
         }
       case m: EirMember if isOption(disambiguated.parent) => handleOptionMember(ctx, m, target, args)
+      case m: EirMember if isFuture(disambiguated.parent) => handleFutureMember(ctx, m, target, args)
       case _ : EirMember if static => ctx << s"$name(" << {
         visitArguments(ctx)(Some(disambiguated), base +: args)
       } << ")"
@@ -813,7 +867,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case x: EirTemplatedType =>
         arrayDim(ctx, x) match {
           case Some(n) => s"ergoline::array<${ctx.typeFor(arrayElementType(x), usage)}, $n>"
-          case None =>  nameFor(ctx, ctx.resolve(x.base), usage=usage) + templateArgumentsToString(ctx, x.args, usage)
+          case None => {
+            val base = ctx.resolve(x.base)
+            nameFor(ctx, base, usage=usage) +
+              Option.unless(isFuture(base))({
+                templateArgumentsToString(ctx, x.args, usage)
+              }).getOrElse("")
+          }
         }
       case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
         val subst = x.templateArgs.map(ctx.hasSubstitution)

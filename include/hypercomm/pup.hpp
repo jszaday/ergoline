@@ -116,6 +116,11 @@ struct puper<T, typename std::enable_if<PUP::as_bytes<T>::value>::type> {
   inline static void impl(serdes& s, T& t) { s.copy(&t); }
 };
 
+template <typename T>
+struct puper<ergoline::temporary<T>> {
+  inline static void impl(serdes& s, ergoline::temporary<T>& t) { s | t.value(); }
+};
+
 template <typename T, std::size_t N>
 struct puper<std::array<T, N>,
              typename std::enable_if<PUP::as_bytes<T>::value>::type> {
@@ -269,7 +274,7 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
     s | ty;
     if (ty == chare_t::TypeChare || ty == chare_t::TypeMainChare) {
       helper<chare_proxy>(s, t);
-    } else if (ty != chare_t::TypeInvalid) {
+    } else if (ty == chare_t::TypeArray || ty == chare_t::TypeGroup || ty == chare_t::TypeNodeGroup) {
       bool collective = s.unpacking() ? false : t->collective();
       s | collective;
       if (collective) {
@@ -288,10 +293,10 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
           helper<nodegroup_element_proxy>(s, t);
           break;
         }
-        default: { CkAbort("unknown chare type"); }
+        default: { CkAbort("unreachable"); }
       }
     } else {
-      CkAbort("invalid chare type");
+      CkAbort("invalid chare type %d", static_cast<int>(ty));
     }
   }
 };

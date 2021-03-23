@@ -103,13 +103,19 @@ object GenerateProxies {
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     GenerateCpp.visitTemplateArgs(x.templateArgs)(ctx)
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
-    ctx << s"struct $name: public CBase_$name$args" << "{" << {
-      ctx << "void pup(PUP::er &p)" << "{" << {
-        "hypercomm::interpup(p, impl_);"
-      } << {
-        x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1).map("p | " + _ + ";")
-      } << "}"; ()
+    ctx << s"struct $name: public CBase_$name$args" << "," << "public" << "ergoline::future_manager" << "{"
+
+    ctx << "virtual std::shared_ptr<hypercomm::proxy> __proxy__(void) const override" << "{" << {
+      "return hypercomm::make_proxy(this->thisProxy);"
+    } << "}"
+
+    ctx << "void pup(PUP::er &p)" << "{" << {
+      "hypercomm::interpup(p, impl_);"
     } << {
+      x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1).map("p | " + _ + ";")
+    } << "}"
+
+    ctx << {
       x.membersToGen
         .foreach(x => visitProxyMember(ctx, x))
     } << "std::shared_ptr<" << nameFor(ctx, x.base, includeTemplates = true) << ">" << s" impl_;" << s"};"

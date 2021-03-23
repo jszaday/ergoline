@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protecte
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
@@ -165,8 +165,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           bases.exists(!accessibleMember(_, member.accessibility))) {
           Errors.inaccessibleMember(member, call)
         }
+        val fut = isFuture(member.base) && member.name == "get"
         // NOTE this should probably check to see if self@ only?
-        if (member.isEntryOnly && current.exists(targetsSelf(_, call))) {
+        val self = member.isEntryOnly && current.exists(targetsSelf(_, call))
+        if (fut || self) {
           current.foreach(_.makeEntryOnly())
         }
       case _ =>

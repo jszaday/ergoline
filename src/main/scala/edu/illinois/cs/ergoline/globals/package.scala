@@ -36,7 +36,7 @@ package object globals {
   }
 
   def futureType: EirType = {
-    Find.namedChild[EirClassLike](Modules("ck", EirGlobalNamespace), "future")
+    Find.namedChild[EirClassLike](ckModule, "future")
   }
 
   def unitType: EirType = typeFor(EirLiteralTypes.Unit)
@@ -45,6 +45,7 @@ package object globals {
 
   def boolType: EirType = typeFor(EirLiteralTypes.Boolean)
 
+  def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
   def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
 
   def operatorToFunction(op : String): Option[String] = {

@@ -21,7 +21,8 @@ struct serdes {
   std::map<std::weak_ptr<void>, ptr_id_t, std::owner_less<std::weak_ptr<void>>> records;
   std::map<ptr_id_t, std::weak_ptr<void>> instances;
 
-  inline bool unpacking() { return state == state_t::UNPACKING; }
+  inline bool unpacking() const { return state == state_t::UNPACKING; }
+  inline bool sizing() const { return state == state_t::SIZING; }
 
   inline std::size_t size() { return current - start; }
 

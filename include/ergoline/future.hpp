@@ -45,8 +45,7 @@ constexpr std::uint32_t value_magic_nbr_ = 0x12345678;
 CkpvDeclare(int, recv_val_idx_);
 CkpvDeclare(int, recv_req_idx_);
 
-char* get_value_buffer_(const CkMessage* msg) {
-  auto* env = UsrToEnv(msg);
+char* get_value_buffer_(envelope* env) {
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
   auto& magic = *(reinterpret_cast<std::uint32_t*>(hdr));
   CkAssert((magic == value_magic_nbr_) && "magic number not found");
@@ -54,13 +53,13 @@ char* get_value_buffer_(const CkMessage* msg) {
 }
 
 future_id_t extract_id_(const CkMessage* msg) {
-  auto* buffer = get_value_buffer_(msg);
+  auto* buffer = get_value_buffer_(UsrToEnv(msg));
   auto& id = *(reinterpret_cast<future_id_t*>(buffer));
   return id;
 }
 
 std::shared_ptr<hypercomm::proxy> extract_proxy_(const CkMessage* msg) {
-  auto* buffer = get_value_buffer_(msg) + sizeof(future_id_t);
+  auto* buffer = get_value_buffer_(UsrToEnv(msg)) + sizeof(future_id_t);
   auto s = hypercomm::serdes::make_unpacker(nullptr, buffer);
   std::shared_ptr<hypercomm::proxy> proxy;
   s | proxy;
@@ -98,10 +97,14 @@ inline void undo_value_header_(CkMessage* msg) {
   auto* env = UsrToEnv(msg);
 
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-  auto index = *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint32_t)));
-  auto size =
+
+  auto& magic = *(reinterpret_cast<std::uint32_t*>(hdr));
+  std::uint32_t index =
+      *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint32_t)));
+  std::uint32_t size =
       *(reinterpret_cast<std::size_t*>(hdr + 2 * sizeof(std::uint32_t)));
 
+  magic = 0;
   env->setMsgIdx(index);
   env->setTotalsize(size);
 }
@@ -138,7 +141,7 @@ class future_manager {
         });
   }
 
-  void __put_future_req__(request_t&& req) { mailbox_.put(req); }
+  void __put_future_req__(const request_t& req) { mailbox_.put(req); }
 
   void __put_future_val__(std::shared_ptr<CkMessage>&& msg) {
     mailbox_.put(std::move(msg));
@@ -156,9 +159,10 @@ future_manager* as_manager_(const hypercomm::proxy& proxy) {
 }
 
 void recv_val_(void* _1) {
-  auto* env = reinterpret_cast<envelope*>(_1);
-  auto* msg = reinterpret_cast<CkMessage*>(EnvToUsr(env));
-  auto s = hypercomm::serdes::make_unpacker(nullptr, get_value_buffer_(msg));
+  auto* env = static_cast<envelope*>(_1);
+  auto* msg = static_cast<CkMessage*>(EnvToUsr(env));
+  auto buffer = get_value_buffer_(env);
+  auto s = hypercomm::serdes::make_unpacker(nullptr, buffer);
 
   future f;
   s | f;

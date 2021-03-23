@@ -28,6 +28,8 @@ public:
   virtual bool equals(const hypercomm::proxy& other) const = 0;
 
   virtual void* local(void) const = 0;
+
+  virtual std::string to_string(void) const = 0;
 };
 
 struct element_proxy : virtual public proxy {
@@ -67,7 +69,24 @@ struct chare_proxy : public non_migratable_proxy {
   virtual bool collective(void) const override { return false; }
 
   virtual void* local(void) const override {
-    return (this->home() == CkMyPe()) ? (this->id().objPtr) : nullptr;
+    auto& id = this->id();
+    if (id.onPE == CkMyPe()) {
+      auto* objs = &(CkpvAccess(chare_objs));
+      if (reinterpret_cast<std::size_t>(id.objPtr) >= objs->size()) {
+        return id.objPtr;
+      } else {
+        return CkLocalChare(&id);
+      }
+    } else {
+      return nullptr;
+    }
+  }
+
+  virtual std::string to_string(void) const override {
+    std::stringstream ss;
+    const auto& ourId = this->id();
+    ss << "chare(pe=" << ourId.onPE << ",obj=" << ourId.objPtr << ")";
+    return ss.str();
   }
 };
 
@@ -100,6 +119,10 @@ struct array_element_proxy : public element_proxy {
 
   virtual void* local(void) const override {
     return this->id().ckLocalBranch()->lookup(this->index());
+  }
+
+  virtual std::string to_string(void) const override {
+    CkAbort("unimplemented");
   }
 };
 
@@ -137,6 +160,13 @@ struct grouplike_element_proxy : public element_proxy, public non_migratable_pro
     } else {
       return (this->home() == CkMyPe()) ? CkLocalBranch(this->id()) : nullptr;
     }
+  }
+
+  virtual std::string to_string(void) const override {
+    std::stringstream ss;
+    ss << (is_node ? "nodegroup" : "group");
+    ss << "(pe=" << this->index() << ",id=" << this->id().idx << ")";
+    return ss.str();
   }
 };
 
