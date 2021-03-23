@@ -32,10 +32,10 @@ struct built_in {
   enum { value = 0 };
 };
 
-template <class T>
-struct built_in<ergoline::future<T>> {
-  enum { value = 1 };
-};
+// template <class T>
+// struct built_in<ergoline::future<T>> {
+//   enum { value = 1 };
+// };
 
 template <>
 struct built_in<PUP::able*> {

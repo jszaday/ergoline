@@ -65,14 +65,14 @@ struct hash<std::deque<T>> {
   }
 };
 
-template <class T>
-struct hash<ergoline::future<T>> {
-  std::size_t operator()(const ergoline::future<T>& t) const {
-    std::size_t seed = std::hash<CkFutureID>()(t.f.id);
-    hash_combine(seed, t.f.pe);
-    return seed;
-  }
-};
+// template <class T>
+// struct hash<ergoline::future<T>> {
+//   std::size_t operator()(const ergoline::future<T>& t) const {
+//     std::size_t seed = std::hash<CkFutureID>()(t.f.id);
+//     hash_combine(seed, t.f.pe);
+//     return seed;
+//   }
+// };
 
 template <>
 struct hash<CkChareID> {
