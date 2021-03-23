@@ -203,7 +203,6 @@ void recv_req_(void* _1) {
   std::shared_ptr<hypercomm::proxy> dst;
   future f;
 
-  // TODO add pup for reqd
   s | f;
   s | dst;
 
@@ -213,7 +212,6 @@ void recv_req_(void* _1) {
 void remote_req_(const future& f,
                  const std::shared_ptr<hypercomm::proxy>& dst) {
   auto pup = [&](hypercomm::serdes& s) {
-    // TODO add pup for reqd
     s | f;
     s | dst;
   };
