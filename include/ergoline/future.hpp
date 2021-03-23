@@ -31,25 +31,34 @@ inline void register_future_handlers(void);
 
 inline future make_future(future_manager* manager);
 
-inline void send_future(const future& f, const hypercomm::proxy* dst,
+inline void send_future(const future& f,
+                        const std::shared_ptr<hypercomm::proxy>& dst,
                         std::shared_ptr<CkMessage>&& msg);
 
-inline void send_future(const future& f, CkMessage* msg) {
+inline void send_future(const future& f,
+                        const std::shared_ptr<hypercomm::proxy>& dst,
+                        CkMessage* msg) {
   std::shared_ptr<CkMessage> ptr(msg, [](CkMessage* msg) { CkFreeMsg(msg); });
 
-  send_future(f, f.proxy.get(), std::move(ptr));
+  send_future(f, dst, std::move(ptr));
+}
+
+inline void send_future(const future& f, CkMessage* msg) {
+  send_future(f, f.proxy, msg);
 }
 
 namespace {
-constexpr std::uint32_t value_magic_nbr_ = 0x12345678;
+using msg_size_t = UInt;
+constexpr std::uint8_t value_magic_nbr_ = 0x42;
+constexpr std::uint32_t identity_magic_nbr_ = 0x12345678;
 CkpvDeclare(int, recv_val_idx_);
 CkpvDeclare(int, recv_req_idx_);
 
 char* get_value_buffer_(envelope* env) {
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-  auto& magic = *(reinterpret_cast<std::uint32_t*>(hdr));
+  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
   CkAssert((magic == value_magic_nbr_) && "magic number not found");
-  return hdr + 2 * sizeof(std::uint32_t) + sizeof(std::size_t);
+  return hdr + 2 * sizeof(std::uint8_t) + sizeof(msg_size_t);
 }
 
 future_id_t extract_id_(const CkMessage* msg) {
@@ -66,14 +75,16 @@ std::shared_ptr<hypercomm::proxy> extract_proxy_(const CkMessage* msg) {
   return proxy;
 }
 
-inline std::size_t make_value_header_(const future& f, CkMessage* msg) {
+inline std::size_t make_value_header_(const future& f,
+                                      const std::shared_ptr<hypercomm::proxy>& dst,
+                                      CkMessage* msg) {
   auto* env = UsrToEnv(msg);
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-  auto& magic = *(reinterpret_cast<std::uint32_t*>(hdr));
+  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
   auto& index =
-      *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint32_t)));
+      *(reinterpret_cast<std::uint8_t*>(hdr + sizeof(std::uint8_t)));
   auto& size =
-      *(reinterpret_cast<std::size_t*>(hdr + 2 * sizeof(std::uint32_t)));
+      *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
 
   CmiSetHandler(env, CkpvAccess(recv_val_idx_));
 
@@ -84,9 +95,14 @@ inline std::size_t make_value_header_(const future& f, CkMessage* msg) {
     size = env->getTotalsize();
     index = idx;
     magic = value_magic_nbr_;
-    auto buffer = hdr + 2 * sizeof(std::uint32_t) + sizeof(std::size_t);
+    auto buffer = hdr + 2 * sizeof(std::uint8_t) + sizeof(msg_size_t);
     auto s = hypercomm::serdes::make_packer(buffer);
     s | f;
+    if (dst->equals(*f.proxy)) {
+      s | identity_magic_nbr_;
+    } else {
+      s | dst;
+    }
     CkAssert((s.current <= reinterpret_cast<char*>(msg)) &&
              "not enough free space in header");
     return size;
@@ -98,11 +114,11 @@ inline void undo_value_header_(CkMessage* msg) {
 
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
 
-  auto& magic = *(reinterpret_cast<std::uint32_t*>(hdr));
-  std::uint32_t index =
-      *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint32_t)));
-  std::uint32_t size =
-      *(reinterpret_cast<std::size_t*>(hdr + 2 * sizeof(std::uint32_t)));
+  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
+  std::uint8_t index =
+      *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint8_t)));
+  msg_size_t size =
+      *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
 
   magic = 0;
   env->setMsgIdx(index);
@@ -165,9 +181,17 @@ void recv_val_(void* _1) {
   auto s = hypercomm::serdes::make_unpacker(nullptr, buffer);
 
   future f;
+  std::shared_ptr<hypercomm::proxy> dst;
   s | f;
 
-  send_future(f, msg);
+  auto& ident = *(reinterpret_cast<std::uint32_t*>(s.current));
+  if (ident == identity_magic_nbr_) {
+    dst = f.proxy;
+  } else {
+    s | dst;
+  }
+
+  send_future(f, dst, msg);
 }
 
 inline void send_remote_req_(envelope* env, const future& f,
@@ -189,7 +213,7 @@ inline void send_remote_req_(envelope* env, const future& f,
   } else {
     auto req = manager->__make_future_req__(
         f, [=](std::shared_ptr<CkMessage>& val) -> bool {
-          send_future(f, dst.get(), std::move(val));
+          send_future(f, dst, std::move(val));
           return true;
         });
 
@@ -237,10 +261,12 @@ inline future make_future(future_manager* manager) {
                 .id = manager->__next_future__()};
 }
 
-inline void send_future(const future& f, const hypercomm::proxy* proxy,
+inline void send_future(const future& f,
+                        const std::shared_ptr<hypercomm::proxy>& dst,
                         std::shared_ptr<CkMessage>&& msg) {
+  auto* proxy = dst.get();
   auto* manager = as_manager_(*proxy);
-  auto size = make_value_header_(f, msg.get());
+  auto size = make_value_header_(f, dst, msg.get());
 
   if (manager == nullptr) {
     auto path = proxy->path();
