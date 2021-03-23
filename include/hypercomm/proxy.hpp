@@ -122,7 +122,22 @@ struct array_element_proxy : public element_proxy {
   }
 
   virtual std::string to_string(void) const override {
-    CkAbort("unimplemented");
+    std::stringstream ss;
+    const auto& idx = this->index();
+    ss << "array(idx=[";
+    if (idx.dimension > 4) {
+      const auto& data = idx.indexShorts;
+      for (auto i = 0; i < idx.dimension; i++) {
+        ss << data[i] << ",";
+      }
+    } else {
+      const auto& data = idx.index;
+      for (auto i = 0; i < idx.dimension; i++) {
+        ss << data[i] << ",";
+      }
+    }
+    ss << "],id=" << ((CkGroupID)this->id()).idx << ")";
+    return ss.str();
   }
 };
 
