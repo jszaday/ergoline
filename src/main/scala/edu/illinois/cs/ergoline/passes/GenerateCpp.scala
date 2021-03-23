@@ -447,7 +447,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case f: EirFunction => ctx.resolve(f.returnType)
           case _ => Errors.missingType(disambiguated)
         }
-        ctx << "(([&](){" << ctx.typeFor(retTy) << ctx.temporary << ";"
+        ctx << "(([&](){" << ctx.typeFor(retTy) << ctx.temporary << "=" << "ergoline::make_future(this)" << ";"
       }
       val isPointer = x.target match {
         // TODO make this more robust

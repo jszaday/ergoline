@@ -105,10 +105,13 @@ object GenerateProxies {
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "," << "public" << "ergoline::future_manager" << "{"
 
-    ctx << "virtual std::shared_ptr<hypercomm::proxy> __proxy__(void) const override" << "{" << {
-      "return hypercomm::make_proxy(this->thisProxy);"
-    } << "}"
-
+    ctx << "virtual std::shared_ptr<hypercomm::proxy> __proxy__(void) const override" << "{" <<
+    ctx << "return hypercomm::make_proxy(" << "this->thisProxy"
+    x.collective match {
+      case Some(_) => ctx << "[" << GenerateCpp.selfIndex(Some(x)) << "]"
+      case None =>
+    }
+    ctx << ");" << "}"
     ctx << "void pup(PUP::er &p)" << "{" << {
       "hypercomm::interpup(p, impl_);"
     } << {
@@ -211,7 +214,7 @@ object GenerateProxies {
         args.headOption.foreach(x => makeArgsVector(ctx, x.name))
       } else if (!isMailbox && (args.nonEmpty || isAsync)) {
         if (isAsync) {
-          ctx << ctx.typeFor(f.returnType) << "__future__" << "("  << "PUP::reconstruct{})" << ";"
+          ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
         }
         args.foreach(makeParameter(ctx, _))
         ctx << "ergoline::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
@@ -227,12 +230,12 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << "__future__.set" << "("
+          ctx << "ergoline::send_future" << "(" << "__future__" << "," << "ergoline::pack" << "("
         } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }
         makeEntryBody(ctx, x)
-        if (isAsync) ctx << ");"
+        if (isAsync) ctx << "));"
         else ctx << ";"
       }
       ctx << "}"
