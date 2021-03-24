@@ -299,9 +299,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "// TODO use a reqman here instead ;"
         ctx << "CthThread sleeper = nullptr;"
         if (ptr) {
-          ctx << ctx.typeFor(ty) << "tmp;"
+          ctx << ctx.typeFor(ty, Some(base)) << "tmp;"
         } else {
-          ctx << "ergoline::temporary<" << ctx.typeFor(ty) << "> tmp;"
+          ctx << "ergoline::temporary<" << ctx.typeFor(ty, Some(base)) << "> tmp;"
         }
         ctx << "auto req = this->__make_future_req__(f, [&](std::shared_ptr<CkMessage>& msg)" << "{"
         ctx << "ergoline::unpack(std::move(msg), tmp);"

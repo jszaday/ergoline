@@ -548,6 +548,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     opt
       .filterNot(_ => proxy.isDefined && node.body.isEmpty)
       .foreach(subCtx => {
+        // TODO use a true subctx here
+      val ns = ctx.numSubst
       try {
         CheckFunctions.visit(ctx, node)
         ctx.start(subCtx)
@@ -564,6 +566,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           if (member.exists(!_.isStatic)) {
             member.foreach(_.makeEntryOnly())
             ctx.popUntil(node)
+            ctx.removeSubstUntil(ns)
             ctx.stop(subCtx)
             return null
           } else {

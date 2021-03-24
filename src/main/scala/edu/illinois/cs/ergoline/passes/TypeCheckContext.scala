@@ -58,6 +58,13 @@ class TypeCheckContext {
 
   var lambdas: List[EirLambdaExpression] = Nil
 
+  def numSubst: Int = _substitutions.size
+  def removeSubstUntil(n: Int): Unit = {
+    if (_substitutions.size > n) {
+      _substitutions = _substitutions.patch(0, Nil, _substitutions.size - n)
+    }
+  }
+
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
     _checked.map{
