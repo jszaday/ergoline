@@ -309,10 +309,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def screenImplicitArgs(of: EirNode)(implicit ctx: TypeCheckContext): Boolean = {
     getImplicitArgs(of).forall(x => {
-      val symbol = EirSymbol[EirDeclaration](ctx.currentNode, List(x.name))
+      val symbol = EirSymbol[EirImplicitDeclaration](ctx.currentNode, List(x.name))
       val target = visit(x.declaredType)
 
-      Find.resolutions[EirDeclaration](symbol).exists(d => {
+      Find.resolutions[EirImplicitDeclaration](symbol).exists(d => {
         d.isImplicit && visit(d).canAssignTo(target)
       })
     })

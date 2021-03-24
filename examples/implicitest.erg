@@ -14,6 +14,10 @@ import ergoline::_;
     }
 
     def foo()(implicit bar: int): int {
+        return baz();
+    }
+
+    def baz()(implicit bar: int): int {
         return bar * 2;
     }
 }

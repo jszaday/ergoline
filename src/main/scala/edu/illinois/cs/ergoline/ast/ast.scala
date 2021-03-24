@@ -147,8 +147,7 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
-  extends EirNamedNode {
-  var isImplicit: Boolean = false
+  extends EirImplicitDeclaration {
 
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] = Iterable(declaredType) ++ initialValue
@@ -362,6 +361,10 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   }
 }
 
+trait EirImplicitDeclaration extends EirNamedNode {
+  var isImplicit: Boolean = false
+}
+
 case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
@@ -445,7 +448,7 @@ case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var r
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
                                var declaredType: EirResolvable[EirType],
                                var isExpansion: Boolean, var isSelfAssigning: Boolean,
-                               var isReference: Boolean = false) extends EirNamedNode {
+                               var isReference: Boolean = false) extends EirImplicitDeclaration {
   override def children: Iterable[EirNode] = Seq(declaredType)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {

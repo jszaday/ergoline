@@ -276,6 +276,7 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
       f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
       f.functionArgs = ctx.functionArgumentList.mapOrEmpty(_.functionArgument, visitAs[EirFunctionArgument])
       f.implicitArgs = ctx.implicitArguments().mapOrEmpty(_.implicitArgument(), visitAs[EirFunctionArgument])
+      f.implicitArgs.foreach(_.isImplicit = true)
       f.returnType = Option(ctx.`type`())
         .map(visitAs[EirResolvable[EirType]](_))
         .getOrElse(globals.unitType)

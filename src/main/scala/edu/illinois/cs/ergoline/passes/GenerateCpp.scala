@@ -373,7 +373,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val implicits = CheckTypes.getImplicitArgs(disambiguated)
     val ourArgs = x.args ++ implicits.map(i => {
       // TODO enforce implicitness
-      val symbol = EirSymbol[EirDeclaration](Some(x), List(i.name))
+      val symbol = EirSymbol[EirImplicitDeclaration](Some(x), List(i.name))
       symbol.foundType = Some(ctx.typeOf(i.declaredType))
       symbol
     })
