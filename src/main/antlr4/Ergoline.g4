@@ -160,16 +160,27 @@ fieldDeclaration
     ;
 
 topLevelDeclaration
-    :   valueDeclaration
-    |   variableDeclaration
+    :   ImplicitKwd? (valueDeclaration | variableDeclaration)
+    ;
+
+basicArgument
+    :   Identifier ':' expansion='*'? type
+    ;
+
+implicitArgument
+    :   ImplicitKwd basicArgument
+    ;
+
+implicitArguments
+    :   '(' (implicitArgument ',')* implicitArgument ')'
     ;
 
 function
-    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' (':' type)? (';' | block)
+    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? (';' | block)
     ;
 
 functionArgument
-    :   (Ampersand | Equals)? Identifier ':' expansion='*'? type
+    :   (Ampersand | Equals)? basicArgument
     ;
 
 functionArgumentList
@@ -447,6 +458,7 @@ FunctionKwd : 'def';
 TrueKwd : 'true' ;
 FalseKwd : 'false' ;
 StaticKwd : 'static';
+ImplicitKwd : 'implicit' ;
 
 SelfKeyword
     :   'self' (Atpersand | Element)?

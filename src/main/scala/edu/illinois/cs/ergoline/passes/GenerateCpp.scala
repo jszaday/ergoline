@@ -193,8 +193,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val theirs: List[EirFunctionArgument] =
       asMember(disambiguation).orElse(disambiguation) match {
         // TODO this should drop args for new~!
-        case Some(_@EirMember(_, f: EirFunction, _)) => f.functionArgs
-        case Some(f: EirFunction) => f.functionArgs
+        case Some(_@EirMember(_, f: EirFunction, _)) => f.functionArgs ++ f.implicitArgs
+        case Some(f: EirFunction) => f.functionArgs ++ f.implicitArgs
         case _ => Nil
       }
 
@@ -424,11 +424,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitFunctionCall(x: EirFunctionCall)(implicit ctx: CodeGenerationContext): Unit = {
     val disambiguated = disambiguate(ctx, x.target)
     val member = asMember(Some(disambiguated))
+    val implicits = CheckTypes.getImplicitArgs(disambiguated)
+    val ourArgs = x.args ++ implicits.map(i => {
+      // TODO enforce implicitness
+      val symbol = EirSymbol[EirImplicitDeclaration](Some(x), List(i.name))
+      symbol.foundType = Some(ctx.typeOf(i.declaredType))
+      symbol
+    })
     val isAsync = disambiguated.annotation("async").isDefined
     val shouldPack = member.exists {
-      case m@EirMember(Some(_: EirProxy), _, _) => (x.args.nonEmpty || isAsync) && (m.isEntry || m.isMailbox)
+      case m@EirMember(Some(_: EirProxy), _, _) => (ourArgs.nonEmpty || isAsync) && (m.isEntry || m.isMailbox)
       // TODO this should be a local call (that does not involve packing!)
-      case m: EirMember => x.args.nonEmpty && m.isEntryOnly
+      case m: EirMember => ourArgs.nonEmpty && m.isEntryOnly
     }
     val arrayAccessor = member.collect{
       case m: EirMember if isArray(ctx, m.base) => m.name
@@ -439,7 +446,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       return
     }
     if (disambiguated.isSystem) {
-      ctx << visitSystemCall(ctx, x.target, disambiguated, x.args)
+      ctx << visitSystemCall(ctx, x.target, disambiguated, ourArgs)
     } else {
       if (isAsync) {
         val retTy = disambiguated match {
@@ -469,9 +476,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         if (isAsync) {
           ctx << ctx.temporary
-          if (x.args.nonEmpty) ctx << ","
+          if (ourArgs.nonEmpty) ctx << ","
         }
-        visitArguments(ctx)(Some(disambiguated), x.args) << Option.when(shouldPack)(")")
+        visitArguments(ctx)(Some(disambiguated), ourArgs) << Option.when(shouldPack)(")")
       } << ")"
       if (isAsync) {
         ctx << "; return" << ctx.temporary << ";" << "})())"
@@ -719,7 +726,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else {
       ctx << Option.when(!isConstructor)(ctx.typeFor(x.returnType))
     }
-    val args = x.functionArgs
+    val args = x.functionArgs ++ x.implicitArgs
     ctx << name << "("
     if (parent.exists(_.isInstanceOf[EirProxy]) && (args.nonEmpty || asyncCi)) {
       ctx << "CkMessage* __msg__"

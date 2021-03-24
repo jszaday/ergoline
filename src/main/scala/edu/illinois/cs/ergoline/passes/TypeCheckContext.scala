@@ -52,6 +52,8 @@ class TypeCheckContext {
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
+  def currentNode: Option[EirNode] = stack.headOption
+
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
   var lambdas: List[EirLambdaExpression] = Nil

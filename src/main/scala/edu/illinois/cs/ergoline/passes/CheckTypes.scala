@@ -300,6 +300,26 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     ))(ctx.synthesize(paired.flatten))
   }
 
+  @tailrec
+  def getImplicitArgs(of: EirNode): List[EirFunctionArgument] = {
+    of match {
+      case EirMember(_, f: EirFunction, _) => getImplicitArgs(f)
+      case f: EirFunction => f.implicitArgs
+      case _ => Nil
+    }
+  }
+
+  def screenImplicitArgs(of: EirNode)(implicit ctx: TypeCheckContext): Boolean = {
+    getImplicitArgs(of).forall(x => {
+      val symbol = EirSymbol[EirImplicitDeclaration](ctx.currentNode, List(x.name))
+      val target = visit(x.declaredType)
+
+      Find.resolutions[EirImplicitDeclaration](symbol).exists(d => {
+        d.isImplicit && visit(d).canAssignTo(target)
+      })
+    })
+  }
+
   def screenCandidates(argsrc: Option[EirExpressionNode],
                        candidates: Iterable[(EirNamedNode, EirType)])
                       (implicit ctx: TypeCheckContext): Option[(EirNamedNode, EirType)] = {
@@ -329,7 +349,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           val found = screenCandidates(argsrc, candidates.view.zip(candidates.map(visit(_))))
           ctx.leave(sp)
           found
-        case (_ : EirLambdaType, Some(ours)) =>
+        case (_ : EirLambdaType, Some(ours)) if screenImplicitArgs(candidate) =>
           val t = assertValid[EirLambdaType](visit(candidate))
           if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
             // NOTE the double check is necessary here to visit candidate if it hasn't
@@ -401,18 +421,22 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   // TODO when the last statement in a block is an expression, put a "return" there
   override def visitBlock(node: EirBlock)(implicit ctx: TypeCheckContext): EirType = {
-    
     node.children.foreach(visit(_))
+
     val retTys: List[EirType] = Find.descendant(node, {
       case _: EirLambdaExpression => None
       case _: EirFunction => None
       case _: EirReturn => Some(true)
       case _ => Some(false)
     }).map(visit(_)).toList
-    if (retTys.isEmpty) globals.typeFor(EirLiteralTypes.Unit)
-    else Find.unionType(retTys) match {
-      case Some(x) => x
-      case None => Errors.unableToUnify(node, retTys)
+
+    if (retTys.isEmpty) {
+      globals.typeFor(EirLiteralTypes.Unit)
+    } else {
+      Find.unionType(retTys) match {
+        case Some(x) => x
+        case None => Errors.unableToUnify(node, retTys)
+      }
     }
   }
 

@@ -254,6 +254,14 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   def visitAnnotationList(annotations: java.util.List[AnnotationContext]): Iterable[EirAnnotation] =
     annotations.asScala.map(this.visitAnnotation)
 
+  override def visitTopLevelDeclaration(ctx: TopLevelDeclarationContext): EirDeclaration = {
+    val decl = visitAs[EirDeclaration] {
+      Option(ctx.valueDeclaration()).getOrElse(ctx.variableDeclaration())
+    }
+    decl.isImplicit = ctx.ImplicitKwd() != null
+    decl
+  }
+
   override def visitAnnotation(ctx: AnnotationContext): EirAnnotation = {
     val name = ctx.Identifier().getText
     val opts =
@@ -264,9 +272,11 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
   }
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
-    enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, null), (f: EirFunction) => {
+    enter(EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, Nil, null), (f: EirFunction) => {
       f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
-      f.functionArgs = ctx.functionArgumentList.mapOrEmpty(_.functionArgument, visitFunctionArgument)
+      f.functionArgs = ctx.functionArgumentList.mapOrEmpty(_.functionArgument, visitAs[EirFunctionArgument])
+      f.implicitArgs = ctx.implicitArguments().mapOrEmpty(_.implicitArgument(), visitAs[EirFunctionArgument])
+      f.implicitArgs.foreach(_.isImplicit = true)
       f.returnType = Option(ctx.`type`())
         .map(visitAs[EirResolvable[EirType]](_))
         .getOrElse(globals.unitType)
@@ -322,14 +332,23 @@ class Visitor(global: EirScope = EirGlobalNamespace) extends ErgolineBaseVisitor
     })
   }
 
-  override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
-    val arg = EirFunctionArgument(parent, ctx.Identifier.getText, null,
-      isExpansion = Option(ctx.expansion).isDefined,
-      isSelfAssigning = Option(ctx.Equals()).isDefined,
-      isReference = Option(ctx.Ampersand()).isDefined)
-    enter(arg, (_: EirFunctionArgument) => {
+  override def visitBasicArgument(ctx: BasicArgumentContext): EirFunctionArgument = {
+    enter(EirFunctionArgument(parent, ctx.Identifier().getText, null,
+      Option(ctx.expansion).isDefined, isSelfAssigning = false),
+      (arg: EirFunctionArgument) => {
       arg.declaredType = visitAs[EirResolvable[EirType]](ctx.`type`())
     })
+  }
+
+  override def visitImplicitArgument(ctx: ImplicitArgumentContext): EirFunctionArgument = {
+    visitAs[EirFunctionArgument](ctx.basicArgument())
+  }
+
+  override def visitFunctionArgument(ctx: FunctionArgumentContext): EirFunctionArgument = {
+    val arg = visitBasicArgument(ctx.basicArgument())
+    arg.isSelfAssigning = Option(ctx.Equals()).isDefined
+    arg.isReference = Option(ctx.Ampersand()).isDefined
+    arg
   }
 
   override def visitValueDeclaration(ctx: ValueDeclarationContext): EirDeclaration = visitDeclaration(ctx.Identifier, ctx.`type`(), ctx.expression(), isFinal = true)
