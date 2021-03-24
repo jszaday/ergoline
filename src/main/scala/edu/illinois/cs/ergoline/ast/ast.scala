@@ -147,7 +147,7 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
-  extends EirNamedNode {
+  extends EirImplicitDeclaration {
 
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] = Iterable(declaredType) ++ initialValue
@@ -361,12 +361,17 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
   }
 }
 
+trait EirImplicitDeclaration extends EirNamedNode {
+  var isImplicit: Boolean = false
+}
+
 case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
+                       var implicitArgs: List[EirFunctionArgument],
                        var returnType: EirResolvable[EirType])
   extends EirNode with EirScope with EirNamedNode with EirSpecializable {
-  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs :+ returnType
+  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     if (body.contains(oldNode)) {
@@ -443,7 +448,7 @@ case class EirUnaryExpression(var parent: Option[EirNode], var op: String, var r
 case class EirFunctionArgument(var parent: Option[EirNode], var name: String,
                                var declaredType: EirResolvable[EirType],
                                var isExpansion: Boolean, var isSelfAssigning: Boolean,
-                               var isReference: Boolean = false) extends EirNamedNode {
+                               var isReference: Boolean = false) extends EirImplicitDeclaration {
   override def children: Iterable[EirNode] = Seq(declaredType)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
