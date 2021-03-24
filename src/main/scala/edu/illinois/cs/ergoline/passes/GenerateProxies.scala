@@ -105,7 +105,7 @@ object GenerateProxies {
     val args = if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None) else ""
     ctx << s"struct $name: public CBase_$name$args" << "," << "public" << "ergoline::future_manager" << "{"
 
-    ctx << "virtual std::shared_ptr<hypercomm::proxy> __proxy__(void) const override" << "{" <<
+    ctx << s"virtual std::shared_ptr<hypercomm::proxy> ${globals.implicitProxyName}(void) const override" << "{" <<
     ctx << "return hypercomm::make_proxy(" << "this->thisProxy"
     x.collective match {
       case Some(_) => ctx << "[" << GenerateCpp.selfIndex(Some(x)) << "]"

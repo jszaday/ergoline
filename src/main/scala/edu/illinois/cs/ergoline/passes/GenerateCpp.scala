@@ -287,7 +287,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val ptr = ty.isPointer
     m.name match {
-      case "apply" => ctx << "ergoline::make_future(this)"
+      case "apply" => ctx << "ergoline::make_future(" << {
+        ctx.proxy match {
+          case Some(_) => "this"
+          case None => globals.implicitProxyName
+        }
+      } << ")"
       case "set" => ctx << "ergoline::send_future(" << fut << ",ergoline::pack(" << (args, ",") << "))"
       case "get" =>
         ctx << "(([&](const ergoline::future& f)" << "{"
@@ -845,8 +850,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (CheckTypes.isSelf(s)) {
           selfName(ctx, s)
         } else {
-          // TODO need to use FQN here, symbol is self-context providing
-          nameFor(ctx, ctx.resolve[EirNode](s), includeTemplates, usage.orElse(Some(s)))
+          val rsv = ctx.tryResolve[EirNode](s)
+          rsv match {
+            case Some(n: EirNode) =>
+              // TODO need to use FQN here, symbol is self-context providing
+              nameFor(ctx, n, includeTemplates, usage.orElse(Some(s)))
+            case None if s.qualifiedName.lastOption.contains(globals.implicitProxyName) =>
+              s"(this->${globals.implicitProxyName}())"
+            case _ => Errors.unableToResolve(s)
+          }
         }
       case _: EirMember | _: EirFunction if proxy.isDefined =>
         (x, proxy.flatMap(_.ordinalFor(x))) match {

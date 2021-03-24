@@ -30,6 +30,7 @@ struct future_manager;
 inline void register_future_handlers(void);
 
 inline future make_future(future_manager* manager);
+inline future make_future(const std::shared_ptr<hypercomm::proxy>& proxy);
 
 inline void send_future(const future& f,
                         const std::shared_ptr<hypercomm::proxy>& dst,
@@ -254,6 +255,13 @@ void remote_req_(const future& f,
 
   send_remote_req_(env, f, dst);
 }
+}
+
+inline future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
+  auto manager = dynamic_cast<future_manager*>(static_cast<Chare*>(proxy->local()));
+  CkAssert((manager != nullptr) && "manager not found");
+  return future{.proxy = proxy,
+                .id = manager->__next_future__()};
 }
 
 inline future make_future(future_manager* manager) {
