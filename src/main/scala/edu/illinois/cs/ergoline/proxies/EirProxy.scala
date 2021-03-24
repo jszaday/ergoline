@@ -36,7 +36,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   def mkValueContribute(): EirMember = {
     val m = EirMember(Some(this), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
-    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
+    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType)
     val (from, to) = (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
     val (fromExp, toExp) = (EirPlaceholder(None, Some(from)), EirPlaceholder(None, Some(to)))
     f.templateArgs = List(from, to)
@@ -51,7 +51,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   def mkUnitContribute(): EirMember = {
     val m = EirMember(Some(this), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
-    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, globals.unitType)
+    val f = EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType)
     f.functionArgs = List(
       EirFunctionArgument(Some(f), "callback", EirLambdaType(None, Nil, globals.unitType), isExpansion = false, isSelfAssigning = false))
     m.member = f
@@ -64,7 +64,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val theirs = m.member.asInstanceOf[EirFunction]
     val isAsync = m.annotation("async").isDefined
     val newMember = EirMember(Some(this), null, m.accessibility)
-    val ours = EirFunction(Some(newMember), None, theirs.name, theirs.templateArgs, null, null)
+    val ours = EirFunction(Some(newMember), None, theirs.name, theirs.templateArgs, null, null, null)
     ours.returnType = if (isAsync) {
       EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))
     } else theirs.returnType
@@ -73,6 +73,7 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     newMember.annotations = m.annotations
     newMember.member = ours
     ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))
+    ours.implicitArgs = theirs.implicitArgs.map(_.cloneWith(Some(ours)))
     newMember
   }
 
@@ -94,8 +95,8 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
     val idx = indexType.get
     val parent = ProxyManager.collectiveFor(this).get
     List(
-      util.makeMemberFunction(this, "parent", Nil, parent, isConst = true),
-      util.makeMemberFunction(this, "index", Nil, idx, isConst = true),
+      util.makeMemberFunction(this, "parent", Nil, parent),
+      util.makeMemberFunction(this, "index", Nil, idx),
       mkUnitContribute(), mkValueContribute())
   }
 
@@ -109,12 +110,12 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
       .map(m => {
         // ckNew(n, ...); constructor with size + args
         val args = m.member.asInstanceOf[EirFunction].functionArgs.map(_.declaredType)
-        util.makeMemberFunction(this, baseName, (if (needsIndex) idx else Nil) ++ args, u, isConst = false)
+        util.makeMemberFunction(this, baseName, (if (needsIndex) idx else Nil) ++ args, u)
       }) ++ {
         // ckNew(); <-- empty constructor
-        if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u, isConst = false))
+        if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u))
         else Nil
-      } :+ util.makeMemberFunction(this, "get", idx, eleTy, isConst = true)
+      } :+ util.makeMemberFunction(this, "get", idx, eleTy)
   }
 
   override def members: List[EirMember] = {

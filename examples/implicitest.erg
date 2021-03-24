@@ -1,0 +1,19 @@
+package examples;
+
+import ergoline::_;
+
+@main class implicitest {
+    @entry def implicitest() {
+        implicit val bar: int = 42;
+
+        assert(foo() == (bar * 2));
+
+        println("basic implicits OK");
+
+        exit();
+    }
+
+    def foo()(implicit bar: int): int {
+        return bar * 2;
+    }
+}

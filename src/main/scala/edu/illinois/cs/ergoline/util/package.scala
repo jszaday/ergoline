@@ -24,10 +24,10 @@ package object util {
 
   def makeMemberFunction(parent: EirClassLike, name: String,
                          args: List[EirResolvable[EirType]],
-                         retTy: EirResolvable[EirType], isConst: Boolean): EirMember = {
+                         retTy: EirResolvable[EirType]): EirMember = {
     val m = EirMember(Some(parent), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
-    m.member = EirFunction(Some(m), None, name, Nil, Nil, retTy)
+    m.member = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy)
     m.member.asInstanceOf[EirFunction].functionArgs = args.zipWithIndex.map({
       case (value, i) => EirFunctionArgument(Some(m.member), s"x$i", value, isExpansion = false, isSelfAssigning = false)
     })

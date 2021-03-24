@@ -148,6 +148,7 @@ case class EirNamespace(var parent: Option[EirNode], var children: List[EirNode]
 case class EirDeclaration(var parent: Option[EirNode], var isFinal: Boolean, var name: String,
                           var declaredType: EirResolvable[EirType], var initialValue: Option[EirExpressionNode])
   extends EirNamedNode {
+  var isImplicit: Boolean = false
 
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] = Iterable(declaredType) ++ initialValue
@@ -364,9 +365,10 @@ case class EirMember(var parent: Option[EirNode], var member: EirNamedNode, var 
 case class EirFunction(var parent: Option[EirNode], var body: Option[EirBlock],
                        var name: String, var templateArgs: List[EirTemplateArgument],
                        var functionArgs: List[EirFunctionArgument],
+                       var implicitArgs: List[EirFunctionArgument],
                        var returnType: EirResolvable[EirType])
   extends EirNode with EirScope with EirNamedNode with EirSpecializable {
-  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs :+ returnType
+  override def children: Iterable[EirNode] = body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     if (body.contains(oldNode)) {
