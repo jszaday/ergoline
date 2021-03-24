@@ -52,7 +52,11 @@ class exchanger {
         }
 
         for (var i = 0; i < ck::numPes(); i += 1) {
-            assert((await futs[i]) == i);
+            val recvd = await futs[i];
+
+            if (i != recvd) {
+                abort(`did not receive expected value (${i} vs. ${recvd})`);
+            }
         }
     }
 }
