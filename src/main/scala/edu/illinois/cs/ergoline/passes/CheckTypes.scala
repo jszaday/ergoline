@@ -4,7 +4,7 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protecte
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
@@ -165,8 +165,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           bases.exists(!accessibleMember(_, member.accessibility))) {
           Errors.inaccessibleMember(member, call)
         }
+        val fut = isFuture(member.base) && member.name == "get"
         // NOTE this should probably check to see if self@ only?
-        if (member.isEntryOnly && current.exists(targetsSelf(_, call))) {
+        val self = member.isEntryOnly && current.exists(targetsSelf(_, call))
+        if (fut || self) {
           current.foreach(_.makeEntryOnly())
         }
       case _ =>
@@ -307,12 +309,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def screenImplicitArgs(of: EirNode)(implicit ctx: TypeCheckContext): Boolean = {
-    getImplicitArgs(of).forall(x => {
+  def screenImplicitArgs(of: EirNode)(implicit ctx: TypeCheckContext): List[EirFunctionArgument] = {
+    val scoped = ctx.ancestor[EirMember].toList.flatMap(_.selfDeclarations).collect {
+      case EirMember(_, d: EirImplicitDeclaration, _) if d.isImplicit => d
+    }
+
+    getImplicitArgs(of).filterNot(x => {
       val symbol = EirSymbol[EirImplicitDeclaration](ctx.currentNode, List(x.name))
       val target = visit(x.declaredType)
+      val candidates = scoped.view.filter(_.name == x.name) ++ Find.resolutions[EirImplicitDeclaration](symbol).filter(_.isImplicit)
 
-      Find.resolutions[EirImplicitDeclaration](symbol).exists(d => {
+      candidates.exists(d => {
         d.isImplicit && visit(d).canAssignTo(target)
       })
     })
@@ -321,6 +328,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def screenCandidates(argsrc: Option[EirExpressionNode],
                        candidates: Iterable[(EirNamedNode, EirType)])
                       (implicit ctx: TypeCheckContext): Option[(EirNamedNode, EirType)] = {
+    var missingSelf = false
     val results = candidates.flatMap(pair => {
       val (candidate, member) = pair
 
@@ -347,14 +355,22 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           val found = screenCandidates(argsrc, candidates.view.zip(candidates.map(visit(_))))
           ctx.leave(sp)
           found
-        case (_ : EirLambdaType, Some(ours)) if screenImplicitArgs(candidate) =>
-          val t = assertValid[EirLambdaType](visit(candidate))
-          if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
-            // NOTE the double check is necessary here to visit candidate if it hasn't
-            // already been visited... and since visitFunction doesn't resolve its types
-            Some((candidate, t))
-          } else {
+        case (_ : EirLambdaType, Some(ours)) =>
+          val missing = screenImplicitArgs(candidate)
+          if (missing.nonEmpty) {
+            missingSelf = missingSelf ||
+              missing.exists(_.name == globals.implicitProxyName)
             None
+          } else {
+            val t = assertValid[EirLambdaType](visit(candidate))
+
+            if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
+              // NOTE the double check is necessary here to visit candidate if it hasn't
+              // already been visited... and since visitFunction doesn't resolve its types
+              Some((candidate, t))
+            } else {
+              None
+            }
           }
         case (x, None) => Some(candidate, visit(x))
         case (_, Some(_)) => None
@@ -364,8 +380,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       found
     })
 
-    // TODO implement some safety here, one must hide the others or it's ambiguous!
-    results.headOption
+    val found = results.headOption
+    if (missingSelf && found.isEmpty) {
+      throw MissingSelfException(EirSymbol[EirImplicitDeclaration](ctx.currentNode, List(globals.implicitProxyName)))
+    } else {
+      // TODO implement some safety here, one must hide the others or it's ambiguous!
+      found
+    }
   }
 
   def getArguments(opt: Option[EirExpressionNode])(implicit ctx: TypeCheckContext): Option[List[EirType]] = {
@@ -527,6 +548,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     opt
       .filterNot(_ => proxy.isDefined && node.body.isEmpty)
       .foreach(subCtx => {
+        // TODO use a true subctx here
+      val ns = ctx.numSubst
       try {
         CheckFunctions.visit(ctx, node)
         ctx.start(subCtx)
@@ -543,6 +566,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           if (member.exists(!_.isStatic)) {
             member.foreach(_.makeEntryOnly())
             ctx.popUntil(node)
+            ctx.removeSubstUntil(ns)
             ctx.stop(subCtx)
             return null
           } else {

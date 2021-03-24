@@ -10,7 +10,7 @@ class dht<K, V> {
         proxy = new dht_<V>@array1d(n, n);
     }
 
-    def get(k: K): future<V> {
+    def get(k: K)(implicit __proxy__: ck::proxy): future<V> {
         val h = hash<K>(k);
         val f = future<V>();
         proxy[(h % n).toInt()].get(h, f);

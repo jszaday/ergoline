@@ -31,6 +31,27 @@ reconstruct(T* p) {
   ::new (p) T();
 }
 
+template <typename T>
+struct temporary {
+  typename std::aligned_storage<sizeof(T), alignof(T)>::type data;
+
+  temporary() {
+    reconstruct(&(this->value()));
+  }
+
+  ~temporary() {
+    value().~T();
+  }
+
+  const T& value(void) const {
+    return *(reinterpret_cast<const T*>(&data));
+  }
+
+  T& value(void) {
+    return *(reinterpret_cast<T*>(&data));
+  }
+};
+
 struct hashable {
   virtual std::size_t hash() = 0;
 };

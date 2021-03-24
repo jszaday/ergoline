@@ -8,6 +8,7 @@
 #include <functional>
 
 #include <charm++.h>
+#include <hypercomm/pup.hpp>
 
 /* Design overview:
  * - mailbox unmarshalls incoming message

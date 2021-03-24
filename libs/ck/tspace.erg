@@ -7,7 +7,7 @@ class tspace<K, Vs...> {
         table = new dht<K, (K, Vs...)>(n);
     }
 
-    def get(k: K): future<(K, Vs...)> {
+    def get(k: K)(implicit __proxy__: ck::proxy): future<(K, Vs...)> {
         return table[k];
     }
 

@@ -19,6 +19,10 @@ case class EirProxy(var parent: Option[EirNode], var base: EirClassLike, var col
   } :+ {
     EirClassLike.makeSelfDeclaration(Some(this), "self@",
       collective.map(_ => ProxyManager.collectiveType(this)).getOrElse(ProxyManager.proxyType(this)))
+  } :+ {
+    val decl = EirClassLike.makeSelfDeclaration(Some(this), globals.implicitProxyName, globals.proxyType)
+    decl.member.asInstanceOf[EirDeclaration].isImplicit = true
+    decl
   }
 
   def isMain: Boolean =

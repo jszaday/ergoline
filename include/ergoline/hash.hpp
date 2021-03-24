@@ -65,12 +65,11 @@ struct hash<std::deque<T>> {
   }
 };
 
-template <class T>
-struct hash<ergoline::future<T>> {
-  std::size_t operator()(const ergoline::future<T>& t) const {
-    std::size_t seed = std::hash<CkFutureID>()(t.f.id);
-    hash_combine(seed, t.f.pe);
-    return seed;
+template <>
+struct hash<ergoline::future> {
+  std::size_t operator()(const ergoline::future& t) const {
+    // TODO expand to include proxy as well
+    return std::hash<future_id_t>()(t.id);
   }
 };
 

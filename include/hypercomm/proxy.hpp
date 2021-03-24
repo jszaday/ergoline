@@ -3,16 +3,33 @@
 
 #include <ck.h>
 #include <memory>
+#include <utility>
 
 namespace hypercomm {
 using chare_t = ChareType;
 
 struct proxy {
+public:
   virtual chare_t type(void) const = 0;
   virtual int home(void) const = 0;
   virtual int last_known(void) const = 0;
   virtual bool collective(void) const = 0;
+  inline bool node_level(void) const;
+
+  inline std::pair<int, bool> path(void) const {
+    auto home = this->home();
+    auto last = this->last_known();
+    auto node = this->node_level();
+    auto mine = node ? CkMyNode() : CkMyPe();
+    auto dst = (home == mine) ? last : home;
+    return std::make_pair(dst, node);
+  }
+
+  virtual bool equals(const hypercomm::proxy& other) const = 0;
+
   virtual void* local(void) const = 0;
+
+  virtual std::string to_string(void) const = 0;
 };
 
 struct element_proxy : virtual public proxy {
@@ -31,6 +48,18 @@ struct chare_proxy : public non_migratable_proxy {
   chare_proxy(void) = default;
   chare_proxy(const proxy_type& _1) : proxy(_1) {}
 
+  virtual bool equals(const hypercomm::proxy& _1) const override {
+    const auto* _2 = dynamic_cast<const chare_proxy*>(&_1);
+
+    if (_2) {
+      const auto& ours = this->id();
+      const auto& theirs = _2->id();
+      return (ours.onPE == theirs.onPE) && (ours.objPtr == theirs.objPtr);
+    } else {
+      return false;
+    }
+  }
+
   inline const CkChareID& id(void) const { return proxy.ckGetChareID(); }
 
   virtual chare_t type(void) const override { return chare_t::TypeChare; }
@@ -40,7 +69,24 @@ struct chare_proxy : public non_migratable_proxy {
   virtual bool collective(void) const override { return false; }
 
   virtual void* local(void) const override {
-    return (this->home() == CkMyPe()) ? (this->id().objPtr) : nullptr;
+    auto& id = this->id();
+    if (id.onPE == CkMyPe()) {
+      auto* objs = &(CkpvAccess(chare_objs));
+      if (reinterpret_cast<std::size_t>(id.objPtr) >= objs->size()) {
+        return id.objPtr;
+      } else {
+        return CkLocalChare(&id);
+      }
+    } else {
+      return nullptr;
+    }
+  }
+
+  virtual std::string to_string(void) const override {
+    std::stringstream ss;
+    const auto& ourId = this->id();
+    ss << "chare(pe=" << ourId.onPE << ",obj=" << ourId.objPtr << ")";
+    return ss.str();
   }
 };
 
@@ -51,6 +97,12 @@ struct array_element_proxy : public element_proxy {
 
   array_element_proxy(void) = default;
   array_element_proxy(const proxy_type& _1) : proxy(_1) {}
+
+  virtual bool equals(const hypercomm::proxy& _1) const override {
+    const auto* other = dynamic_cast<const array_element_proxy*>(&_1);
+    return (other != nullptr) &&
+      (const_cast<proxy_type&>(proxy) == other->proxy);
+  }
 
   inline CkArrayID id(void) const { return proxy.ckGetArrayID(); }
   inline const CkArrayIndex& index(void) const { return proxy.ckGetIndex(); }
@@ -68,6 +120,25 @@ struct array_element_proxy : public element_proxy {
   virtual void* local(void) const override {
     return this->id().ckLocalBranch()->lookup(this->index());
   }
+
+  virtual std::string to_string(void) const override {
+    std::stringstream ss;
+    const auto& idx = this->index();
+    ss << "array(idx=[";
+    if (idx.dimension > 4) {
+      const auto& data = idx.indexShorts;
+      for (auto i = 0; i < idx.dimension; i++) {
+        ss << data[i] << ",";
+      }
+    } else {
+      const auto& data = idx.index;
+      for (auto i = 0; i < idx.dimension; i++) {
+        ss << data[i] << ",";
+      }
+    }
+    ss << "],id=" << ((CkGroupID)this->id()).idx << ")";
+    return ss.str();
+  }
 };
 
 template<typename T>
@@ -80,6 +151,11 @@ struct grouplike_element_proxy : public element_proxy, public non_migratable_pro
 
   grouplike_element_proxy(void) = default;
   grouplike_element_proxy(const proxy_type& _1) : proxy(_1) {}
+
+  virtual bool equals(const hypercomm::proxy& _1) const override {
+    const auto* other = dynamic_cast<const grouplike_element_proxy<T>*>(&_1);
+    return (other != nullptr) && (const_cast<proxy_type&>(proxy) == other->proxy);
+  }
 
   inline CkGroupID id(void) const { return proxy.ckGetGroupID(); }
   inline int index(void) const { return proxy.ckGetGroupPe(); }
@@ -100,18 +176,31 @@ struct grouplike_element_proxy : public element_proxy, public non_migratable_pro
       return (this->home() == CkMyPe()) ? CkLocalBranch(this->id()) : nullptr;
     }
   }
+
+  virtual std::string to_string(void) const override {
+    std::stringstream ss;
+    ss << (is_node ? "nodegroup" : "group");
+    ss << "(pe=" << this->index() << ",id=" << this->id().idx << ")";
+    return ss.str();
+  }
 };
 
 using group_element_proxy = grouplike_element_proxy<CProxyElement_Group>;
 
 using nodegroup_element_proxy = grouplike_element_proxy<CProxyElement_NodeGroup>;
 
+inline bool proxy::node_level(void) const {
+  return dynamic_cast<const nodegroup_element_proxy*>(this) != nullptr;
+}
+
 inline std::shared_ptr<chare_proxy> make_proxy(const chare_proxy::proxy_type& base) {
   return std::make_shared<chare_proxy>(base);
 }
 
-inline std::shared_ptr<array_element_proxy> make_proxy(const array_element_proxy::proxy_type& base) {
-  return std::make_shared<array_element_proxy>(base);
+template<typename T,
+         PUP::Requires<std::is_base_of<array_element_proxy::proxy_type, T>::value> = nullptr>
+inline std::shared_ptr<array_element_proxy> make_proxy(const T& base) {
+  return std::make_shared<array_element_proxy>(static_cast<const array_element_proxy::proxy_type&>(base));
 }
 
 inline std::shared_ptr<group_element_proxy> make_proxy(const group_element_proxy::proxy_type& base) {

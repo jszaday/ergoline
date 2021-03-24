@@ -1,0 +1,17 @@
+package ck;
+
+import ergoline::int;
+import ergoline::bool;
+import ergoline::string;
+
+@system(alias="hypercomm::proxy",pointer=true)
+class proxy {
+    @system def local(): bool;
+    @system def collective(): bool;
+
+    @system(alias="last_known") def lastKnown(): int;
+    @system(alias="node_level") def nodeLevel(): int;
+
+    @system def equals(&other: proxy): bool;
+    @system(alias="to_string") def toString(): string;
+}

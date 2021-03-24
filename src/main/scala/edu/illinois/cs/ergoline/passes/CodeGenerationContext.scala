@@ -49,8 +49,11 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
+  def tryResolve[T <: EirNode : ClassTag](resolvable: EirResolvable[T]): Option[T] =
+    Find.resolutions[T](resolvable).headOption
+
   def resolve[T <: EirNode : ClassTag](resolvable: EirResolvable[T]): T =
-    Find.uniqueResolution[T](resolvable)
+    tryResolve(resolvable).getOrElse(Errors.unableToResolve(resolvable))
 
   def proxy: Option[EirProxy] = _proxies.headOption
 

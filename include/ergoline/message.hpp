@@ -26,10 +26,15 @@ inline char* get_msg_buffer(void* msg) {
 }
 
 template <typename... Args>
+void unpack(std::shared_ptr<void>&& msg, Args&... args) {
+  auto s = hypercomm::serdes::make_unpacker(msg, get_msg_buffer(msg.get()));
+  hypercomm::pup(s, std::forward_as_tuple(args...));
+}
+
+template <typename... Args>
 void unpack(void* msg, Args&... args) {
   std::shared_ptr<void> src(msg, [](void* msg) { CkFreeMsg(msg); });
-  auto s = hypercomm::serdes::make_unpacker(src, get_msg_buffer(msg));
-  hypercomm::pup(s, std::forward_as_tuple(args...));
+  unpack(std::move(src), args...);
 }
 
 template <typename... Args>

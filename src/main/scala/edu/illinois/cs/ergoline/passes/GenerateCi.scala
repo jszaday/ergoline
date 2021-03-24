@@ -16,6 +16,9 @@ object GenerateCi {
     val ctx = new CiUnparseContext(tyCtx)
     ctx << "mainmodule generate" << "{"
     ctx << "initnode void enroll_polymorphs(void);"
+    ctx << "namespace ergoline" << "{"
+    ctx << "initproc void register_future_handlers(void);"
+    ctx << "}"
     ProxyManager.proxies
       .filterNot(x => x.base.isAbstract || x.isElement)
       .map(x => (x.namespaces.toList, x))

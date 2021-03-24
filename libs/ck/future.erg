@@ -7,5 +7,5 @@ class future<T> {
     @system def set(t: T);
     @system @sync def get(): T;
     @system(alias="is_ready") def isReady(): bool;
-    @system static def apply(): future<T>;
+    @system static def apply()(implicit __proxy__: ck::proxy): future<T>;
 }
