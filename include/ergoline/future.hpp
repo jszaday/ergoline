@@ -10,6 +10,16 @@ using future_id_t = std::uint64_t;
 struct future {
   std::shared_ptr<hypercomm::proxy> proxy;
   future_id_t id;
+
+  inline std::string to_string(void) const {
+    std::stringstream ss;
+    ss << "future(id=" << id << ",src=";
+    if (proxy)
+      ss << proxy->to_string() << ")";
+    else
+      ss << "(nil))";
+    return ss.str();
+  }
 };
 }
 
@@ -76,26 +86,33 @@ std::shared_ptr<hypercomm::proxy> extract_proxy_(const CkMessage* msg) {
   return proxy;
 }
 
-inline std::size_t make_value_header_(const future& f,
-                                      const std::shared_ptr<hypercomm::proxy>& dst,
-                                      CkMessage* msg) {
+inline std::size_t make_value_header_(
+    const future& f, const std::shared_ptr<hypercomm::proxy>& dst,
+    CkMessage* msg) {
   auto* env = UsrToEnv(msg);
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
   auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
-  auto& index =
-      *(reinterpret_cast<std::uint8_t*>(hdr + sizeof(std::uint8_t)));
-  auto& size =
-      *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
+  auto& index = *(reinterpret_cast<std::uint8_t*>(hdr + sizeof(std::uint8_t)));
+  auto& size = *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
 
   CmiSetHandler(env, CkpvAccess(recv_val_idx_));
 
   if (magic == value_magic_nbr_) {
     return size;
   } else {
-    auto idx = env->getMsgIdx();
-    size = env->getTotalsize();
-    index = idx;
+    // Ensure the message's package routine is called before we wreck it
+    if (_msgTable[env->getMsgIdx()]->pack) {
+      auto newMsg =
+          static_cast<CkMessage*>(_msgTable[env->getMsgIdx()]->pack(msg));
+      CkAssert(msg == newMsg && "message changed due to packing!");
+    }
+    // Retrieve its "essential" properties
+    std::uint8_t idx = env->getMsgIdx();
+    msg_size_t sz = env->getTotalsize();
+    // Then start wrecking it
     magic = value_magic_nbr_;
+    index = idx;
+    size = sz;
     auto buffer = hdr + 2 * sizeof(std::uint8_t) + sizeof(msg_size_t);
     auto s = hypercomm::serdes::make_packer(buffer);
     s | f;
@@ -110,20 +127,24 @@ inline std::size_t make_value_header_(const future& f,
   }
 }
 
-inline void undo_value_header_(CkMessage* msg) {
+inline void undo_value_header_(const CkMessage* msg) {
   auto* env = UsrToEnv(msg);
 
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
 
-  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
   std::uint8_t index =
       *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint8_t)));
   msg_size_t size =
       *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
 
-  magic = 0;
+  std::fill(hdr, reinterpret_cast<char*>(env) + sizeof(envelope), '\0');
   env->setMsgIdx(index);
   env->setTotalsize(size);
+
+  if (_msgTable[env->getMsgIdx()]->pack) {
+    auto newMsg = _msgTable[index]->unpack(const_cast<CkMessage*>(msg));
+    CkAssert(msg == newMsg && "message changed due to unpacking!");
+  }
 }
 
 void remote_req_(const future& f, const std::shared_ptr<hypercomm::proxy>& dst);
@@ -204,11 +225,11 @@ inline void send_remote_req_(envelope* env, const future& f,
 
     CmiSetHandler(env, CkpvAccess(recv_req_idx_));
 
-    if (path.first) {
-      CmiSyncNodeSendAndFree(path.second, env->getTotalsize(),
+    if (path.second) {
+      CmiSyncNodeSendAndFree(path.first, env->getTotalsize(),
                              reinterpret_cast<char*>(env));
     } else {
-      CmiSyncSendAndFree(path.second, env->getTotalsize(),
+      CmiSyncSendAndFree(path.first, env->getTotalsize(),
                          reinterpret_cast<char*>(env));
     }
   } else {
@@ -258,10 +279,10 @@ void remote_req_(const future& f,
 }
 
 inline future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
-  auto manager = dynamic_cast<future_manager*>(static_cast<Chare*>(proxy->local()));
+  auto manager =
+      dynamic_cast<future_manager*>(static_cast<Chare*>(proxy->local()));
   CkAssert((manager != nullptr) && "manager not found");
-  return future{.proxy = proxy,
-                .id = manager->__next_future__()};
+  return future{.proxy = proxy, .id = manager->__next_future__()};
 }
 
 inline future make_future(future_manager* manager) {
@@ -280,10 +301,17 @@ inline void send_future(const future& f,
     auto path = proxy->path();
     auto* env = reinterpret_cast<char*>(UsrToEnv(msg.get()));
 
-    if (path.first) {
-      CmiSyncNodeSendAndFree(path.second, size, env);
+#ifdef CMK_DEBUG
+    CkPrintf("[%d] Routing a value %s for %s via (%s) %d.\n",
+              CkMyPe(), f.to_string().c_str(),
+              dst->to_string().c_str(), (path.second) ? "node" : "pe",
+              path.first);
+#endif
+
+    if (path.second) {
+      CmiSyncNodeSendAndFree(path.first, size, env);
     } else {
-      CmiSyncSendAndFree(path.second, size, env);
+      CmiSyncSendAndFree(path.first, size, env);
     }
 
     ::new (&msg) std::shared_ptr<CkMessage>{};
