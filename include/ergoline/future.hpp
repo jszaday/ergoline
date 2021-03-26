@@ -60,16 +60,16 @@ inline void send_future(const future& f, CkMessage* msg) {
 
 namespace {
 using msg_size_t = UInt;
-constexpr std::uint8_t value_magic_nbr_ = 0x42;
-constexpr std::uint32_t identity_magic_nbr_ = 0x12345678;
+constexpr CmiUInt2 value_magic_nbr_ = 0x4321;
+constexpr CmiUInt2 identity_magic_nbr_ = 0x8765;
 CkpvDeclare(int, recv_val_idx_);
 CkpvDeclare(int, recv_req_idx_);
 
 char* get_value_buffer_(envelope* env) {
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
+  auto& magic = *(reinterpret_cast<CmiUInt2*>(hdr));
   CkAssert((magic == value_magic_nbr_) && "magic number not found");
-  return hdr + 2 * sizeof(std::uint8_t) + sizeof(msg_size_t);
+  return hdr + sizeof(CmiUInt2) + sizeof(std::uint8_t) + sizeof(msg_size_t);
 }
 
 future_id_t extract_id_(const CkMessage* msg) {
@@ -86,64 +86,68 @@ std::shared_ptr<hypercomm::proxy> extract_proxy_(const CkMessage* msg) {
   return proxy;
 }
 
-inline std::size_t make_value_header_(
+msg_size_t make_value_header_(
     const future& f, const std::shared_ptr<hypercomm::proxy>& dst,
-    CkMessage* msg) {
-  auto* env = UsrToEnv(msg);
-  auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-  auto& magic = *(reinterpret_cast<std::uint8_t*>(hdr));
-  auto& index = *(reinterpret_cast<std::uint8_t*>(hdr + sizeof(std::uint8_t)));
-  auto& size = *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
-
-  CmiSetHandler(env, CkpvAccess(recv_val_idx_));
-
-  if (magic == value_magic_nbr_) {
-    return size;
-  } else {
-    // Ensure the message's package routine is called before we wreck it
-    if (_msgTable[env->getMsgIdx()]->pack) {
-      auto newMsg =
-          static_cast<CkMessage*>(_msgTable[env->getMsgIdx()]->pack(msg));
+    envelope* env) {
+  auto* raw = reinterpret_cast<char*>(env);
+  auto* hdr = raw + CmiReservedHeaderSize;
+  auto* end = raw + sizeof(envelope);
+  auto& magic = *(reinterpret_cast<CmiUInt2*>(hdr));
+  hdr += sizeof(CmiUInt2);
+  std::uint8_t idx;
+  msg_size_t  size;
+  if (magic != value_magic_nbr_) {
+    idx  = env->getMsgIdx();
+    size = env->getTotalsize();
+    if (_msgTable[idx]->pack) {
+      auto msg = EnvToUsr(env);
+      auto newMsg = _msgTable[idx]->pack(msg);
+      CkPrintf("pack fn called, got %p vs %p\n", msg, newMsg);
       CkAssert(msg == newMsg && "message changed due to packing!");
-    }
-    // Retrieve its "essential" properties
-    std::uint8_t idx = env->getMsgIdx();
-    msg_size_t sz = env->getTotalsize();
-    // Then start wrecking it
-    magic = value_magic_nbr_;
-    index = idx;
-    size = sz;
-    auto buffer = hdr + 2 * sizeof(std::uint8_t) + sizeof(msg_size_t);
-    auto s = hypercomm::serdes::make_packer(buffer);
-    s | f;
-    if (dst->equals(*f.proxy)) {
-      s | identity_magic_nbr_;
     } else {
-      s | dst;
+      CkAbort("message not packed");
     }
-    CkAssert((s.current <= reinterpret_cast<char*>(msg)) &&
-             "not enough free space in header");
-    return size;
+    magic = value_magic_nbr_;
+  } else {
+    idx  = *(reinterpret_cast<std::uint8_t*>(hdr));
+    size = *(reinterpret_cast<msg_size_t*>(hdr + sizeof(std::uint8_t)));
   }
+  CmiSetInfo(env, CkMyPe());
+  CmiSetHandler(env, CpvAccess(recv_val_idx_));
+  std::fill(hdr, end, '\0');
+  auto s = hypercomm::serdes::make_packer(hdr);
+  s | idx;
+  s | size;
+  s | f;
+  if (f.proxy->equals(*dst)) {
+    s | identity_magic_nbr_;
+  } else {
+    s | dst;
+  }
+  CkAssert(s.current <= end && "ran out of free bytes!");
+  return size;
 }
 
 inline void undo_value_header_(const CkMessage* msg) {
   auto* env = UsrToEnv(msg);
-
   auto* hdr = reinterpret_cast<char*>(env) + CmiReservedHeaderSize;
-
-  std::uint8_t index =
-      *(reinterpret_cast<std::uint32_t*>(hdr + sizeof(std::uint8_t)));
-  msg_size_t size =
-      *(reinterpret_cast<msg_size_t*>(hdr + 2 * sizeof(std::uint8_t)));
+  auto index =
+      *(reinterpret_cast<std::uint8_t*>(hdr + sizeof(CmiUInt2)));
+  auto size =
+      *(reinterpret_cast<msg_size_t*>(hdr + sizeof(std::uint8_t) + sizeof(CmiUInt2)));
 
   std::fill(hdr, reinterpret_cast<char*>(env) + sizeof(envelope), '\0');
   env->setMsgIdx(index);
   env->setTotalsize(size);
 
-  if (_msgTable[env->getMsgIdx()]->pack) {
+  CkPrintf("recvd: (size=%u,idx=0x%x)\n", size, index);
+
+  if (_msgTable[index]->pack) {
+    env->setPacked(1);
     auto newMsg = _msgTable[index]->unpack(const_cast<CkMessage*>(msg));
     CkAssert(msg == newMsg && "message changed due to unpacking!");
+  } else {
+    CkAbort("wtf?");
   }
 }
 
@@ -197,8 +201,11 @@ future_manager* as_manager_(const hypercomm::proxy& proxy) {
 }
 
 void recv_val_(void* _1) {
-  auto* env = static_cast<envelope*>(_1);
-  auto* msg = static_cast<CkMessage*>(EnvToUsr(env));
+  auto* env = reinterpret_cast<envelope*>(_1);
+
+  CkPrintf("[%d] recvd value from %hu with header: %s\n", CkMyPe(), CmiGetInfo(env),
+           buf2str(((char*)env) + CmiReservedHeaderSize, sizeof(envelope) - CmiReservedHeaderSize).c_str());
+
   auto buffer = get_value_buffer_(env);
   auto s = hypercomm::serdes::make_unpacker(nullptr, buffer);
 
@@ -210,9 +217,12 @@ void recv_val_(void* _1) {
   if (ident == identity_magic_nbr_) {
     dst = f.proxy;
   } else {
+    CkAbort("failed to read magic #");
     s | dst;
   }
 
+  auto* msg = static_cast<CkMessage*>(EnvToUsr(env));
+  CkAssert(dst->local() != nullptr);
   send_future(f, dst, msg);
 }
 
@@ -295,23 +305,25 @@ inline void send_future(const future& f,
                         std::shared_ptr<CkMessage>&& msg) {
   auto* proxy = dst.get();
   auto* manager = as_manager_(*proxy);
-  auto size = make_value_header_(f, dst, msg.get());
+  auto* env = UsrToEnv(msg.get());
+  auto size = make_value_header_(f, dst, env);
 
   if (manager == nullptr) {
+    CkAssert(msg.use_count() == 1);
     auto path = proxy->path();
-    auto* env = reinterpret_cast<char*>(UsrToEnv(msg.get()));
+    auto* raw = reinterpret_cast<char*>(env);
 
 #ifdef CMK_DEBUG
-    CkPrintf("[%d] Routing a value %s for %s via (%s) %d.\n",
-              CkMyPe(), f.to_string().c_str(),
+    CkPrintf("[%d] Routing a value for %s from %hu for %s via (%s) %d, header: %s\n",
+              CkMyPe(), f.to_string().c_str(), CmiGetInfo(env),
               dst->to_string().c_str(), (path.second) ? "node" : "pe",
-              path.first);
+              path.first, buf2str(raw + CmiReservedHeaderSize, sizeof(envelope) - CmiReservedHeaderSize).c_str());
 #endif
 
     if (path.second) {
-      CmiSyncNodeSendAndFree(path.first, size, env);
+      CmiSyncNodeSendAndFree(path.first, size, raw);
     } else {
-      CmiSyncSendAndFree(path.first, size, env);
+      CmiSyncSendAndFree(path.first, size, raw);
     }
 
     ::new (&msg) std::shared_ptr<CkMessage>{};
