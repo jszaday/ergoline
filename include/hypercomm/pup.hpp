@@ -83,7 +83,14 @@ struct puper<chare_t> {
   using impl_type = std::underlying_type<chare_t>::type;
 
   inline static void impl(serdes& s, chare_t& t) {
-    s | reinterpret_cast<impl_type&>(t);
+    auto& impl = reinterpret_cast<impl_type&>(t);
+    auto smol = (std::uint8_t)impl; 
+
+    s | smol;
+
+    if (s.unpacking()) {
+      impl = (impl_type)smol;
+    }
   }
 };
 
