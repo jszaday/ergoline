@@ -1,0 +1,62 @@
+package benchmarks;
+
+import ergoline::_;
+import ck;
+
+@main class futuremark {
+    val numReps: int;
+    val numIters: int;
+    val exchangers: exchanger@group;
+
+    @entry def futuremark(args: array<string>) {
+        numReps = 11;
+        numIters = (args.size() > 1) ? args[1].toInt() : 128;
+        exchangers = new exchanger@group();
+        self@run();
+    }
+
+    @threaded @entry def run() {
+        var avgTime = 0.0;
+
+        for (var i = 0; i < numReps; i += 1) {
+            val start = ck::wallTime();
+            for (var j = 0; j < numIters; j += 1) {
+                exchangers.exchange();
+
+                ck::awaitQuiescence();
+            }
+            val end = ck::wallTime();
+            avgTime += (end - start);
+        }
+
+        println(`on avg, ${numIters} iterations of exchange took: ${avgTime / numReps} s`);
+
+        exit();
+    }
+}
+
+class exchanger {
+    @entry def exchanger() {}
+
+    @entry def recvFuture(f: ck::future<int>) {
+        f.set(self[@]index());
+    }
+
+    @threaded @entry def exchange() {
+        val futs = new array<ck::future<int>>(ck::numPes());
+
+        for (var i = 0; i < ck::numPes(); i += 1) {
+            futs[i] = ck::future<int>();
+
+            self@[i].recvFuture(futs[i]);
+        }
+
+        for (var i = 0; i < ck::numPes(); i += 1) {
+            val recvd = await futs[i];
+
+            if (i != recvd) {
+                abort(`did not receive expected value (${i} vs. ${recvd})`);
+            }
+        }
+    }
+}

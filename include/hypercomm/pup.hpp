@@ -83,11 +83,13 @@ struct puper<chare_t> {
   using impl_type = std::underlying_type<chare_t>::type;
 
   inline static void impl(serdes& s, chare_t& t) {
-    uint8_t tmp = static_cast<uint8_t>(static_cast<impl_type>(t));
-    s | tmp;
+    auto& impl = reinterpret_cast<impl_type&>(t);
+    auto smol = (std::uint8_t)impl; 
+
+    s | smol;
 
     if (s.unpacking()) {
-      t = static_cast<chare_t>(static_cast<impl_type>(tmp));
+      impl = (impl_type)smol;
     }
   }
 };
@@ -148,17 +150,17 @@ struct puper<T, typename std::enable_if<hypercomm::built_in<T>::value>::type> {
         PUP::fromMem p(s.current);
         ergoline::reconstruct(&t);
         p | t;
-        s.advance(p.size());
+        s.advanceBytes(p.size());
         break;
       }
       case serdes::state_t::PACKING: {
         PUP::toMem p(s.current);
         p | t;
-        s.advance(p.size());
+        s.advanceBytes(p.size());
         break;
       }
       case serdes::state_t::SIZING:
-        s.advance(PUP::size(t));
+        s.advanceBytes(PUP::size(t));
         break;
     }
   }
@@ -276,7 +278,8 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
       ::new (&t) std::shared_ptr<proxy>(new A());
     }
 
-    s | dynamic_cast<A*>(t.get())->proxy;
+    auto& proxy = dynamic_cast<A*>(t.get())->proxy;
+    s | proxy;
   }
 
  public:
@@ -286,7 +289,7 @@ class puper<std::shared_ptr<T>, typename std::enable_if<std::is_base_of<
     if (ty == chare_t::TypeChare || ty == chare_t::TypeMainChare) {
       helper<chare_proxy>(s, t);
     } else if (ty == chare_t::TypeArray || ty == chare_t::TypeGroup || ty == chare_t::TypeNodeGroup) {
-      bool collective = s.unpacking() ? false : t->collective();
+      uint8_t collective = s.unpacking() ? false : t->collective();
       s | collective;
       if (collective) {
         CkAbort("collectives currently unsupported");
@@ -407,7 +410,7 @@ struct puper<ergoline::array<T, N>> {
         if (!is_uninitialized(s.source)) {
           t.source = std::move(s.source.lock());
           t.buffer = reinterpret_cast<T*>(s.current);
-          s.advance(sizeof(T) * t.size());
+          s.advance<T>(t.size());
         } else {
           t.alloc(false, false);
           s.copy(t.buffer, t.size());

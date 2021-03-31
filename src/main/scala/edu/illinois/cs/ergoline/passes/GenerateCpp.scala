@@ -297,22 +297,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case "get" =>
         ctx << "(([&](const ergoline::future& f)" << "{"
         ctx << "// TODO use a reqman here instead ;"
-        ctx << "CthThread sleeper = nullptr;"
-        if (ptr) {
-          ctx << ctx.typeFor(ty, Some(base)) << "tmp;"
-        } else {
-          ctx << "ergoline::temporary<" << ctx.typeFor(ty, Some(base)) << "> tmp;"
-        }
-        ctx << "auto req = this->__make_future_req__(f, [&](std::shared_ptr<CkMessage>& msg)" << "{"
-        ctx << "ergoline::unpack(std::move(msg), tmp);"
+        ctx << "using temporary_type = "
+        if (ptr) ctx << ctx.typeFor(ty, Some(base)) << ";"
+        else ctx << "ergoline::temporary<" << ctx.typeFor(ty, Some(base)) << ">;"
+        ctx << "auto rec = std::make_shared<std::tuple<CthThread, temporary_type>>();"
+        ctx << "auto req = this->__make_future_req__(f, [rec](std::shared_ptr<CkMessage>& msg)" << "{"
+        ctx << "ergoline::unpack(std::move(msg), std::get<1>(*rec));"
+        ctx << "auto &sleeper = std::get<0>(*rec);"
         ctx << "if (sleeper != nullptr) CthAwaken(sleeper);"
         ctx << "return true;"
         ctx << "});"
+        ctx << "auto &sleeper = std::get<0>(*rec);"
+        // ctx << "sleeper = nullptr;"
         ctx << "this->__put_future_req__(req);"
         ctx << "if (!req->stale())" << "{"
         ctx << "sleeper = CthSelf();"
         ctx << "CthSuspend();"
         ctx << "}"
+        ctx << "auto &tmp = std::get<1>(*rec);"
         if (ptr) {
           ctx << "return tmp;"
         } else {

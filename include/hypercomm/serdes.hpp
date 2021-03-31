@@ -21,6 +21,7 @@ struct serdes {
   std::map<std::weak_ptr<void>, ptr_id_t, std::owner_less<std::weak_ptr<void>>> records;
   std::map<ptr_id_t, std::weak_ptr<void>> instances;
 
+  inline bool packing() const { return state == state_t::PACKING; }
   inline bool unpacking() const { return state == state_t::UNPACKING; }
   inline bool sizing() const { return state == state_t::SIZING; }
 
@@ -29,20 +30,22 @@ struct serdes {
   template <typename T>
   inline void copy(T* data, std::size_t n = 1) {
     const auto nBytes = n * sizeof(T);
+    const auto nAlign = 0; // CK_ALIGN(nBytes, sizeof(T));
     switch (state) {
       case PACKING:
         std::copy(reinterpret_cast<char*>(data),
-                  reinterpret_cast<char*>(data) + nBytes, current);
+                  reinterpret_cast<char*>(data) + nBytes,
+                  current + nAlign);
         break;
       case UNPACKING:
-        std::copy(current, current + nBytes,
+        std::copy(current + nAlign, current + nAlign + nBytes,
                   reinterpret_cast<char*>(data));
         break;
     }
-    advance(nBytes);
+    advanceBytes(nAlign + nBytes);
   }
 
-  inline void advance(std::size_t size) { current += size; }
+  inline void advanceBytes(std::size_t size) { current += size; }
 
   template <typename T>
   inline void advance(std::size_t n = 1) {
