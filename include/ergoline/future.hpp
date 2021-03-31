@@ -5,7 +5,7 @@
 #include <ergoline/requests.hpp>
 
 namespace ergoline {
-using future_id_t = std::uint64_t;
+using future_id_t = std::uint32_t;
 
 struct future {
   std::shared_ptr<hypercomm::proxy> proxy;
@@ -37,7 +37,7 @@ struct puper<ergoline::future> {
 namespace ergoline {
 namespace {
 constexpr CmiUInt2 value_magic_nbr_ = 0x6969;
-constexpr CmiUInt2 identity_magic_nbr_ = 0x8765;
+constexpr future_id_t identity_magic_nbr_ = std::numeric_limits<future_id_t>::max();
 }
 
 struct future_manager;
@@ -233,7 +233,7 @@ void recv_val_(void* _1) {
   std::shared_ptr<hypercomm::proxy> dst;
   s | f;
 
-  auto& ident = *(reinterpret_cast<std::uint32_t*>(s.current));
+  auto& ident = *(reinterpret_cast<future_id_t*>(s.current));
   if (ident == identity_magic_nbr_) {
     dst = f.proxy;
   } else {
