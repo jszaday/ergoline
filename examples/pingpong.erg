@@ -3,6 +3,10 @@ package examples;
 import ergoline::_;
 import ck;
 
+trait message<T> {
+    def value(): T;
+}
+
 class pong with message<string> {
     def pong() { }
     override def value(): string {
@@ -15,10 +19,6 @@ class ping with message<string> {
     override def value(): string {
         return "ping";
     }
-}
-
-trait message<T> {
-    def value(): T;
 }
 
 class pingpong {
