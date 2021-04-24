@@ -191,9 +191,9 @@ class TypeCheckContext {
   def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
     _substitutions
       .find(x => (x._1, s) match {
-        case (a: EirProxy, b: EirClass) => a.base == b
-        case (a: EirProxy, b: EirTrait) => a.base == b
         // NOTE EirLambdaExpression does not have template arguments so it's not considered here
+        // case (a: EirProxy, b: EirClass) => a.base == b
+        // case (a: EirProxy, b: EirTrait) => a.base == b
         case (a: EirLambdaType, b: EirFunction) => a.templateArgs == b.templateArgs
         case (a, b) => a == b
       }).map(_._2)

@@ -39,16 +39,22 @@ polymorph_id_t enroll(const std::type_index& index, const allocator_t& alloc) {
   auto& t = CsvAccess(type_registry_);
   auto& i = CsvAccess(alloc_registry_);
   const auto id = static_cast<polymorph_id_t>(t.size());
+#if CMK_ERROR_CHECKING
+  auto search = t.find(index);
+  if (search != t.end()) {
+    CkAbort("fatal> the polymorph %s was enrolled multiple times\n",
+            index.name());
+  }
+#endif
   t[index] = id;
   i[id] = alloc;
   return id;
 }
 
-template<typename T>
+template <typename T>
 inline polymorph_id_t enroll() {
-  return enroll(std::type_index(typeid(T)), []() {
-    return std::make_shared<T>(PUP::reconstruct{});
-  });
+  return enroll(std::type_index(typeid(T)),
+                []() { return std::make_shared<T>(PUP::reconstruct{}); });
 }
 
 inline polymorph_id_t identify(const std::type_index& index) {
