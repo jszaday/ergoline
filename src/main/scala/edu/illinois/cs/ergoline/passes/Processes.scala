@@ -9,12 +9,6 @@ import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object Processes {
-  private var ctx = new TypeCheckContext
-
-  def reset(): Unit = {
-    ctx = new TypeCheckContext
-  }
-
   var cppIncludes: Set[String] = Set(
     "algorithm",
     "memory",
@@ -27,15 +21,20 @@ object Processes {
     "ergoline/reducer.hpp",
     "#include \"generate.decl.h\" // ;"
   )
+  private var ctx = new TypeCheckContext
 
-  def onLoad(node : EirNode): Unit = {
+  def reset(): Unit = {
+    ctx = new TypeCheckContext
+  }
+
+  def onLoad(node: EirNode): Unit = {
     val all = node +: Modules.fileSiblings.getOrElse(node, Nil)
 
     for (x <- all) {
       FullyResolve.visit(x)
 
       x match {
-        case n : EirNamespace => CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(ctx)
+        case n: EirNamespace => CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(ctx)
         case _ => CheckTypes.visit(x)(ctx)
       }
     }
@@ -46,12 +45,64 @@ object Processes {
     GenerateCi.visitAll(ctx)
   }
 
+  // TODO this logic should be moved into GenerateCpp
+  // NOTE This will go away once passes are implemented
+  def generateCpp(): Iterable[String] = {
+    val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
+    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
+    val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
+
+    val sorted = ctx.checked.keys.collect({
+      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
+    }).toList.dependenceSort()
+    assert(!globals.strict || sorted.hasValidOrder)
+    val toDecl = sorted.namespacePartitioned
+    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;", "#include <ergoline/function.hpp> // ;")
+    // NOTE do we ever need to topo sort these?
+    a.foreach(GenerateCpp.forwardDecl(ctx, _))
+
+    toDecl foreach {
+      case (namespace, classes) =>
+        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+          classes.foreach(GenerateCpp.forwardDecl(_)(ctx))
+        } << "}"
+    }
+
+    ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+
+    // NOTE do we ever need to topo sort proxies?
+    a.foreach(GenerateProxies.visitProxy(ctx, _))
+
+    toDecl foreach {
+      case (namespace, classes) =>
+        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+          classes.foreach(GenerateDecls.visit(ctx, _))
+        } << "}"
+    }
+    ctx.lambdas.foreach({
+      case (namespace, lambdas) =>
+        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+          lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
+        } << "}"
+    })
+    kids.foreach(GenerateCpp.visit(_)(ctx))
+    c.foreach(GenerateProxies.visitProxy(ctx, _))
+    GenerateCpp.registerPolymorphs(ctx)
+    ctx << List(
+      "#define CK_TEMPLATES_ONLY",
+      "#include \"generate.def.h\"",
+      "#undef CK_TEMPLATES_ONLY",
+      "#include \"generate.def.h\""
+    ).map(_ + "// ;")
+    List(ctx.toString)
+  }
+
   // TODO this logic should be moved into its own file or generate cpp
   object RichProcessesSyntax {
     implicit class RichEirClassList(self: List[EirClassLike]) {
 
       // TODO use a topological instead of greedy sorting algorithm
-       def dependenceSort(): List[EirClassLike] = {
+      def dependenceSort(): List[EirClassLike] = {
         var unplaced = self.sortBy(_.inherited.size)
         var placed: List[EirClassLike] = Nil
         while (unplaced.nonEmpty) {
@@ -62,6 +113,11 @@ object Processes {
         }
         placed
       }
+
+      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
+        self.orderedPartition(x => {
+          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+        })
 
       // TODO find a more idiomatic way to do this
       def orderedPartition[A](f: EirClassLike => A): List[(A, List[EirClassLike])] = {
@@ -88,11 +144,6 @@ object Processes {
         result
       }
 
-      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
-        self.orderedPartition(x => {
-          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
-        })
-
       def hasValidOrder: Boolean = {
         self.zipWithIndex.forall({
           case (c, i) =>
@@ -100,46 +151,5 @@ object Processes {
         })
       }
     }
-  }
-
-  // TODO this logic should be moved into GenerateCpp
-  // NOTE This will go away once passes are implemented
-  def generateCpp(): Iterable[String] = {
-    val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
-    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
-    val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
-
-    val sorted = ctx.checked.keys.collect({
-      case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
-    }).toList.dependenceSort()
-    assert(!globals.strict || sorted.hasValidOrder)
-    val toDecl = sorted.namespacePartitioned
-    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;", "#include <ergoline/function.hpp> // ;")
-    a.foreach(GenerateCpp.forwardDecl(ctx, _))
-    toDecl.foreach({
-      case (namespace, classes) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          classes.foreach(GenerateCpp.forwardDecl(_)(ctx))
-        } << "}"
-    })
-    ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
-    a.foreach(GenerateProxies.visitProxy(ctx, _))
-    kids.foreach(GenerateDecls.visit(ctx, _))
-    ctx.lambdas.foreach({
-      case (namespace, lambdas) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
-        } << "}"
-    })
-    kids.foreach(GenerateCpp.visit(_)(ctx))
-    c.foreach(GenerateProxies.visitProxy(ctx, _))
-    GenerateCpp.registerPolymorphs(ctx)
-    ctx << List(
-      "#define CK_TEMPLATES_ONLY",
-      "#include \"generate.def.h\"",
-      "#undef CK_TEMPLATES_ONLY",
-      "#include \"generate.def.h\""
-    ).map(_ + "// ;")
-    List(ctx.toString)
   }
 }
