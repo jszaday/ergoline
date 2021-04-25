@@ -33,10 +33,13 @@ class TypeCheckContext {
         theirs.forall(b => {
           (
             ty.zip(Some(b)) forall {
-              case (a, b: EirConstantFacade) => CheckTypes.visit(b).canAssignTo(a)
+              case (a, b: EirConstantFacade) =>
+                CheckTypes.visit(b.value).canAssignTo(a)
               case _ => false
             }
           ) && (
+            // Upper Bounds:
+            // a must be a subclass of b
             ub.zip(Some(b)) map {
               case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
             } forall {
@@ -44,6 +47,8 @@ class TypeCheckContext {
               case _ => false
             }
           ) && (
+            // Lower Bounds:
+            // b must be a subclass of a
             lb.zip(Some(b)) map {
               case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
             } forall {
