@@ -43,16 +43,16 @@ class TypeCheckContext {
             ub.zip(Some(b)) map {
               case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
             } forall {
-              case (a, b) => a.isDescendantOf(b)
+              case (a, b) => b.isDescendantOf(a)
               case _ => false
             }
           ) && (
             // Lower Bounds:
-            // b must be a subclass of a
+            // a must be a supertype of b
             lb.zip(Some(b)) map {
               case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
             } forall {
-              case (a, b) => b.isDescendantOf(a)
+              case (a, b) => a.isDescendantOf(b)
               case _ => false
             }
           )
