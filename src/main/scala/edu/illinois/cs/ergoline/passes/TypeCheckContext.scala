@@ -3,8 +3,10 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.resolution.Find.asClassLike
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 import scala.collection.mutable
@@ -20,11 +22,41 @@ class TypeCheckContext {
   object TypeCheckSyntax {
     implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
       // TODO implement this, check upper/lower/type bounds
-      def accepts(resolvable: EirResolvable[EirType]): Boolean = true
+      def accepts(resolvable: EirResolvable[EirType])(implicit ctx: TypeCheckContext): Boolean = {
+        val ub = argument.upperBound.map(CheckTypes.visit)
+        val lb = argument.lowerBound.map(CheckTypes.visit)
+        val ty = argument.argumentType.map(CheckTypes.visit)
+        val theirs = CheckTypes.visit(resolvable) match {
+          case t: EirTupleType if argument.isPack => t.children.map(_.asInstanceOf[EirType])
+          case t => List(t)
+        }
+        theirs.forall(b => {
+          (
+            ty.zip(Some(b)) forall {
+              case (a, b: EirConstantFacade) => CheckTypes.visit(b).canAssignTo(a)
+              case _ => false
+            }
+          ) && (
+            ub.zip(Some(b)) map {
+              case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
+            } forall {
+              case (a, b) => a.isDescendantOf(b)
+              case _ => false
+            }
+          ) && (
+            lb.zip(Some(b)) map {
+              case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
+            } forall {
+              case (a, b) => b.isDescendantOf(a)
+              case _ => false
+            }
+          )
+        })
+      }
     }
 
     implicit class RichEirSpecializable(specializable: EirSpecializable) {
-      def accepts(specialization: EirSpecialization): List[Option[EirResolvable[EirType]]] = {
+      def accepts(specialization: EirSpecialization)(implicit ctx: TypeCheckContext): List[Option[EirResolvable[EirType]]] = {
         val ours = specializable.templateArgs
         val theirs = specialization.types
         val n = math.max(ours.length, theirs.length)
@@ -137,7 +169,7 @@ class TypeCheckContext {
   }
 
   def trySpecialize(s : EirSpecializable, spec : EirSpecialization): Option[EirSpecialization] = {
-    val types = s.accepts(spec)
+    val types = s.accepts(spec)(this)
     Option.when(types.forall(_.isDefined))({
       val sp = Option.when(types.length == spec.types.length)(spec)
                      .getOrElse({ synthesize(types.map(_.get)) })

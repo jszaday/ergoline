@@ -2,7 +2,6 @@ package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirConstantFacade}
-import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
