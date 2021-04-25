@@ -147,4 +147,28 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     Processes.onLoad(module)
   }
+
+  test("check lower type bounds") {
+    setupEnv()
+    val module = Modules.load("""
+      |package foo;
+      |
+      |trait bird {}
+      |class duck with bird {}
+      |
+      |class foo<A >: duck> {
+      |  def foo() {}
+      |}
+      |
+      |class bar<A <: bird> {
+      |  def bar() {}
+      |}
+      |
+      |def baz() {
+      |    var a = new foo<bird>();
+      |    var b = new bar<duck>();
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
+  }
 }
