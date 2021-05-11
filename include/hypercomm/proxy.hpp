@@ -32,7 +32,9 @@ public:
   virtual std::string to_string(void) const = 0;
 };
 
+template<typename Index>
 struct element_proxy : virtual public proxy {
+  virtual Index index() const = 0;
   virtual bool collective(void) const override { return false; }
 };
 
@@ -90,7 +92,7 @@ struct chare_proxy : public non_migratable_proxy {
   }
 };
 
-struct array_element_proxy : public element_proxy {
+struct array_element_proxy : public element_proxy<CkArrayIndex> {
   using proxy_type = CProxyElement_ArrayElement;
 
   proxy_type proxy;
@@ -105,7 +107,7 @@ struct array_element_proxy : public element_proxy {
   }
 
   inline CkArrayID id(void) const { return proxy.ckGetArrayID(); }
-  inline const CkArrayIndex& index(void) const { return proxy.ckGetIndex(); }
+  virtual CkArrayIndex index() const override { return proxy.ckGetIndex(); }
 
   virtual chare_t type(void) const override { return chare_t::TypeArray; }
 
@@ -142,7 +144,7 @@ struct array_element_proxy : public element_proxy {
 };
 
 template<typename T>
-struct grouplike_element_proxy : public element_proxy, public non_migratable_proxy {
+struct grouplike_element_proxy : public element_proxy<int>, public non_migratable_proxy {
   using proxy_type = T;
 
   static constexpr auto is_node = std::is_same<CProxyElement_NodeGroup, proxy_type>::value;
@@ -158,7 +160,10 @@ struct grouplike_element_proxy : public element_proxy, public non_migratable_pro
   }
 
   inline CkGroupID id(void) const { return proxy.ckGetGroupID(); }
-  inline int index(void) const { return proxy.ckGetGroupPe(); }
+
+  virtual int index(void) const override {
+    return proxy.ckGetGroupPe();
+  }
 
   virtual chare_t type(void) const override {
     return (is_node) ? (chare_t::TypeNodeGroup)
