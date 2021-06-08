@@ -1,4 +1,4 @@
-name: Scala CI
+name: Scala CI (SMP)
 
 on:
   push:
@@ -19,7 +19,16 @@ jobs:
       run: |
         git clone https://github.com/UIUC-PPL/charm.git
         cd charm
-        ./build charm++ netlrts-linux-x86_64 smp -g -j4 --with-production --enable-error-checking
+        ./build charm++ netlrts-linux-x86_64 -g -j2 --with-production --enable-error-checking
+
+    # Build Hypercomm
+    - name: build-hypercomm
+      run: |
+        git submodule init
+        git submodule update
+        cd hypercomm
+        cmake .
+        make -j2
 
     - name: Set up JDK 1.8
       uses: actions/setup-java@v1

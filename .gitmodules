@@ -1,0 +1,3 @@
+[submodule "hypercomm"]
+	path = hypercomm
+	url = https://github.com/jszaday/hypercomm.git
