@@ -161,8 +161,6 @@ object GenerateProxies {
   }
 
   private def makeEntryBody(ctx: CodeGenerationContext, member: EirMember): Unit = {
-    updateLocalityContext(ctx)
-
     member.counterpart match {
       case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
       case Some(m@EirMember(_, f: EirFunction, _)) =>
@@ -252,6 +250,9 @@ object GenerateProxies {
         args.foreach(makeParameter(ctx, _))
         ctx << "hypercomm::unpack(__msg__," << (Option.when(isAsync)("__future__") ++ args.map(_.name), ",") << ");"
       }
+
+      updateLocalityContext(ctx)
+
       if (isConstructor) {
         ctx << "this->__init_mailboxes__();"
 
@@ -265,7 +266,7 @@ object GenerateProxies {
         }
       } else {
         if (isAsync) {
-          ctx << "ergoline::send_future" << "(" << "__future__" << "," << "ergoline::pack" << "("
+          ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
         } else if (ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)) {
           ctx << "return "
         }

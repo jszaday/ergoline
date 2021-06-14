@@ -89,6 +89,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ProxyManager
       .singletons
+      .filterNot(_.isAbstract)
       .foreach(p => {
         val (ty, name) = ("int", counterFor(p, ns))
         ctx << "CpvDeclare(" << ty << "," << name << ");"
@@ -200,6 +201,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ProxyManager
       .singletons
+      .filterNot(_.isAbstract)
       .foreach(p => {
         val (ty, name) = ("int", counterFor(p, global)(ctx))
         ctx << "CpvInitialize(" << ty << "," << name << ");"
@@ -517,7 +519,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case f: EirFunction => ctx.resolve(f.returnType)
           case _ => Errors.missingType(disambiguated)
         }
-        ctx << "(([&](){" << ctx.typeFor(retTy) << ctx.temporary << "=" << "ergoline::make_future(this)" << ";"
+        ctx << "(([&](){" << ctx.typeFor(retTy) << ctx.temporary << "=" << "this->make_future()" << ";"
       }
       val isPointer = x.target match {
         // TODO make this more robust
