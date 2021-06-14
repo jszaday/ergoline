@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{collectiveTypeFor, readOnlyFor, zipWithSpecializations}
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find
@@ -53,10 +54,6 @@ object GenerateCi {
     })
   }
 
-  def readOnlyFor(p: EirProxy, occurrence: Option[EirNode])(implicit ctx: CodeGenerationContext): String = {
-    (ctx.nameFor(p, occurrence) + "ro_").toLowerCase()
-  }
-
   def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): Unit = {
     namespaces.foreach(ns => {
       ctx << s"namespace ${ns.name}" << "{"
@@ -72,7 +69,10 @@ object GenerateCi {
         }
 
         if (p.collective.isEmpty) {
-          ctx << "readonly" << ("CProxy_" + p.baseName) << readOnlyFor(p, None)(ctx) << ";"
+          zipWithSpecializations(Seq(p))(ctx) foreach {
+            case (p, types) =>
+              ctx << "readonly" << collectiveTypeFor(p, types)(ctx) << " " << readOnlyFor(p, types, None)(ctx) << ";"
+          }
         }
       })
 

@@ -84,29 +84,32 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 //    super.visitNamespace(ctx, node)
 //  }
 
+  def zipWithSpecializations[A <: EirSpecializable](as: Iterable[A])(implicit ctx: CodeGenerationContext): List[(A, List[EirResolvable[EirType]])] = {
+    as.flatMap(a => {
+      if (a.templateArgs.isEmpty) Seq((a, Nil))
+      else ctx.checked(a).map(s => (a, s.types))
+    }).toList
+  }
+
   def declareGlobals(implicit ctx: CodeGenerationContext): Unit = {
     val ns = Some(EirGlobalNamespace)
 
-    ProxyManager
-      .singletons
-      .filterNot(_.isAbstract)
-      .foreach(p => {
-        val (ty, name) = ("int", counterFor(p, ns))
+    zipWithSpecializations (
+      ProxyManager
+        .singletons
+        .filterNot(_.isAbstract)
+    ) foreach {
+      case (p, types) =>
+        val (ty, name) = ("int", counterFor(p, types, ns))
         ctx << "CpvDeclare(" << ty << "," << name << ");"
 
         val namespaces = Find.ancestors(p).collect { case n: EirNamespace => n }.toList
         namespaces.reverse.foreach(ns => ctx << "namespace" << ns.name << "{")
-        ctx << "/* readonly */ " << ("CProxy_" + p.baseName) << GenerateCi.readOnlyFor(p, None)(ctx) << ";"
+        ctx << "/* readonly */ " << collectiveTypeFor(p, types) << " " << readOnlyFor(p, types, None)(ctx) << ";"
         namespaces.foreach(_ => ctx << "}")
-      })
+    }
   }
 
-  def indexForSingleton(p: EirProxy)(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << "std::make_tuple("
-    ctx << "CkMyPe()" << ","
-    ctx << "++CpvAccess(" << counterFor(p)(ctx) << ")"
-    ctx << ")"
-  }
 
   def generateMain(implicit ctx: CodeGenerationContext): Unit = {
     val ns = Some(EirGlobalNamespace)
@@ -115,30 +118,32 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val msgName = "__msg__"
         ctx << "struct" << mainName << ":" << "public" << ("CBase_" + mainName) << "{"
         ctx << mainName << "(" << "CkArgMsg*" << msgName << ")" << "{"
-        val concreteSingletons = ProxyManager.singletons.filter(!_.isAbstract).toList
+        val concreteSingletons =
+          zipWithSpecializations(ProxyManager.singletons.filterNot(_.isAbstract))
 
-        concreteSingletons
-          .foreach(p => {
-            ctx << GenerateCi.readOnlyFor(p, ns) << "=" << {
-              (qualificationsFor(p, ns.get) :+ ("CProxy_" + p.baseName)).mkString("::")
+        concreteSingletons foreach {
+          case (p, types) =>
+            ctx << readOnlyFor(p, types, ns) << "=" << {
+              (qualificationsFor(p, ns.get) :+ collectiveTypeFor(p, types)).mkString("::")
             } << "::ckNew();"
-          })
+        }
 
-        concreteSingletons
-          .filter(_.isMain)
-          .foreach(p => {
-            ctx << "ergoline::create_element(" << GenerateCi.readOnlyFor(p, ns) << "," << {
-              indexForSingleton(p)
-            } << "," << {
-              if (!p.members.filter(_.isConstructor).exists {
-                case EirMember(_, f: EirFunction, _) => f.functionArgs.isEmpty
-                case _ => false
-              }) {
-                ctx << "(CkMessage*)CkCopyMsg((void**)&" << msgName << ")" << ","
-              }
-              ctx << "CkMyPe()"
-            } << ");"
-          })
+        concreteSingletons collect {
+          case (p, _) if p.isMain => assert(p.templateArgs.isEmpty) ; p
+        } foreach( p => {
+          ctx << "ergoline::create_element(" << readOnlyFor(p, Nil, ns) << "," << {
+            indexForSingleton(p, Nil)
+          } << "," << {
+            if (!p.members.filter(_.isConstructor).exists {
+              case EirMember(_, f: EirFunction, _) => f.functionArgs.isEmpty
+              case _ => false
+            }) {
+              ctx << "(CkMessage*)CkCopyMsg((void**)&" << msgName << ")" << ","
+            }
+            ctx << "CkMyPe()"
+          } << ");"
+        })
+
         ctx << "// CkFreeMsg(" << msgName << ");"
         ctx << "}" << "};"
       case None =>
@@ -150,12 +155,42 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << s"namespace" << ctx.nameFor(ns) << "{" << "struct" << ctx.nameFor(x) << ";" << "}")
   }
 
-  def counterFor(p: EirProxy, n: Option[EirNode] = Some(EirGlobalNamespace))(implicit ctx: CodeGenerationContext): String = {
+  def mkTypeSuffix(types: List[EirResolvable[EirType]], occurrence: Option[EirNode])(implicit ctx: CodeGenerationContext): String = {
+    types.map(ctx.typeFor(_, occurrence)).mkString("_") + Option.when(types.nonEmpty)("_").getOrElse("")
+  }
+
+  // TODO this may need a context/occurrence?
+  def collectiveTypeFor(p: EirProxy, types: List[EirResolvable[EirType]])(implicit ctx: CodeGenerationContext): String = {
+    "CProxy_" + p.baseName + {
+      if (types.nonEmpty) {
+        "<" + (types.map(ctx.typeFor(_)) mkString ",") + ">"
+      } else {
+        ""
+      }
+    }
+  }
+
+  def counterFor(p: EirProxy, types: List[EirResolvable[EirType]], occurrence: Option[EirNode] = Some(EirGlobalNamespace))(implicit ctx: CodeGenerationContext): String = {
     "__" + {
-      ctx.nameFor(p, n)
+      ctx.nameFor(p, occurrence)
         .replaceAll("CProxy_", "")
         .replaceAll("::", "_")
+    } + {
+      mkTypeSuffix(types, occurrence)
     } + "ctr__"
+  }
+
+  def readOnlyFor(p: EirProxy, types: List[EirResolvable[EirType]], occurrence: Option[EirNode])(implicit ctx: CodeGenerationContext): String = {
+    ctx.nameFor(p, occurrence) + {
+      mkTypeSuffix(types, occurrence)
+    } + "ro__"
+  }
+
+  def indexForSingleton(p: EirProxy, types: List[EirResolvable[EirType]])(implicit ctx: CodeGenerationContext): Unit = {
+    ctx << "std::make_tuple("
+    ctx << "CkMyPe()" << ","
+    ctx << "++CpvAccess(" << counterFor(p, types)(ctx) << ")"
+    ctx << ")"
   }
 
   val corePupables: Seq[String] = Seq(
@@ -199,14 +234,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << "}"
 
-    ProxyManager
-      .singletons
-      .filterNot(_.isAbstract)
-      .foreach(p => {
-        val (ty, name) = ("int", counterFor(p, global)(ctx))
+    zipWithSpecializations (
+      ProxyManager
+        .singletons
+        .filterNot(_.isAbstract)
+    )(ctx) foreach {
+      case (p, types) =>
+        val (ty, name) = ("int", counterFor(p, types, global)(ctx))
         ctx << "CpvInitialize(" << ty << "," << name << ");"
         ctx << "CpvAccess(" << name << ") = 0;"
-      })
+    }
 
     ctx << "}"
   }
@@ -1150,10 +1187,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 //              ctx << "((" << GenerateCi.readOnlyFor(p, Some(x)) << "[" << {
 //                indexForSingleton(p)
 //              } << "]" << ".insert("
+              val types = objTy match {
+                case t: EirTemplatedType => t.types
+                case _ => Nil
+              }
               ctx << "((ergoline::create_element(" << {
-                GenerateCi.readOnlyFor(p, Some(x))
+                readOnlyFor(p, types, Some(x))
               } << "," << {
-                indexForSingleton(p)
+                indexForSingleton(p, types)
               } << Option.when(args.nonEmpty)(",")
               0
           }
