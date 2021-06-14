@@ -4,6 +4,7 @@
 #include <chrono>
 #include <string>
 #include <charm++.h>
+#include <hypercomm/core/locality_base.hpp>
 
 #include "hash.hpp"
 
@@ -14,9 +15,9 @@ std::ostream& operator<< (std::ostream& stream, const std::tuple<int, int>& idx)
 namespace ergoline {
 
 inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
-  auto manager =
-      dynamic_cast<hypercomm::future_manager_*>(static_cast<Chare*>(proxy->local()));
-  CkAssert(manager && "manager not found");
+  auto* chare = static_cast<Chare*>(proxy->local());
+  auto* manager = dynamic_cast<hypercomm::future_manager_*>(chare);
+  CkAssert(manager && "unable to retrieve local chare");
   return manager->make_future();
 }
 

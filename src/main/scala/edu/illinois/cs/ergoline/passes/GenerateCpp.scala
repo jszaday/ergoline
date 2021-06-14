@@ -967,7 +967,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               // TODO need to use FQN here, symbol is self-context providing
               nameFor(ctx, n, includeTemplates, usage.orElse(Some(s)))
             case None if s.qualifiedName.lastOption.contains(globals.implicitProxyName) =>
-              s"(this->${globals.implicitProxyName}())"
+              s"(this->__element__())"
             case _ => Errors.unableToResolve(s)
           }
         }
