@@ -1589,13 +1589,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     x.patterns.zipWithIndex.foreach({
       case ((_, patterns), i) =>
-        val mboxName = quadruplets(i)._2
+        val (m, mboxName, _, arrayArgs) = quadruplets(i)
         val name = s"__value${i}__"
         val ty = name.init + "type__"
 
         ctx << s"using" << ty << "=" << getMailboxType(mboxName) << ";"
         ctx << "auto" << name << "=" << s"hypercomm::value2typed<$ty>(std::move(" << set << "[" << i.toString << "]));"
         ctx << visitPatternDecl(ctx, patterns, name + "->value()", forceTuple = true).split(n)
+
+        if (arrayArgs.nonEmpty) {
+          findInplaceOpportunities(m, arrayArgs, x.body)
+        }
     })
 
     ctx.ignoreNext("{")
@@ -1623,10 +1627,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             ctx << ";" << "});"
             name
           })
-
-        if (arrayArgs.nonEmpty) {
-          findInplaceOpportunities(m, arrayArgs, x.body)
-        }
 
         ctx << s"$mboxName->put_request_to(" << pred.getOrElse("{},") << pred.map(_ => ",") << com << "," << i.toString << ");"
 
