@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import java.io.{File, PrintWriter}
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Find.withName
@@ -50,10 +50,6 @@ object Driver extends App {
   options = options.filterNot(_ startsWith "--") ++
     Properties.envOrElse("CFLAGS", "").split(raw"\s+")
 
-  val inclDir =
-    "\"" + Modules.ergolineHome.map(_.resolve("include"))
-      .getOrElse(Errors.unableToResolve("ERGOLINE_HOME"))
-      .toRealPath().toString + "\""
   val start = Modules.currTimeMs
   // open each specified file
   val modules: Iterable[EirNode] =
@@ -79,6 +75,35 @@ object Driver extends App {
   if (!skipCompilation) compile()
 
   private def compile(): Unit = {
+    val hyperInclPaths = Seq(
+      Modules.hypercommHome.map(_.resolve("include")),
+      Modules.hypercommHome.map(_.resolve("include/hypercomm/core"))
+    )
+
+    val ergoInclPaths = Seq(
+      Modules.ergolineHome.map(_.resolve("include"))
+    )
+
+    val hyperLibsPath = Modules.hypercommHome.map(_.resolve("lib"))
+
+    val hyperLibs = Seq(
+      "components",
+      "utilities",
+      "serialization",
+      "messaging",
+    ).map(x => s"-lhypercomm-$x")
+
+    val inclPaths =
+      (hyperInclPaths ++ ergoInclPaths)
+        .flatMap(_.map(_.toRealPath().toString))
+        .map("-I\"" + _ + "\"")
+        .mkString(" ")
+
+    val libPaths =
+      hyperLibsPath
+        .map(_.toRealPath().toString)
+        .map("-L\"" + _ + "\"") ++ hyperLibs
+
     try {
       val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
       println(s"$$ $cmd")
@@ -94,8 +119,8 @@ object Driver extends App {
       val linkOptions = options ++ {
         if (usingBlas) LibUtils.linkLib("gsl")
         else None
-      }
-      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out -I$inclDir generate.cc"
+      } ++ libPaths
+      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {

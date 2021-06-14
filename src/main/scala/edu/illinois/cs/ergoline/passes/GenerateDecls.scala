@@ -45,17 +45,15 @@ object GenerateDecls {
     if (x.annotation("system").isDefined) return
     ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(x)(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
-      if (!x.isTransient) {
-        if (!hasPup(x)) {
-          if (x.templateArgs.isEmpty) ctx << "virtual void __pup__(hypercomm::serdes&) override;"
-          else makePupper(ctx, x, isMember = true)
-        }
-        if (!hasHash(x)) makeHasher(ctx, x)
-        val parent = x.extendsThis
-          .map(Find.uniqueResolution[EirType])
-          .map(ctx.nameFor(_, Some(x)))
-        ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p => s": $p(__tag__)") << "{}"
-      } else if (!hasHash(x)) makeHasher(ctx, x)
+      if (!hasPup(x)) {
+        if (x.templateArgs.isEmpty) ctx << "virtual void __pup__(hypercomm::serdes&) override;"
+        else makePupper(ctx, x, isMember = true)
+      }
+      if (!hasHash(x)) makeHasher(ctx, x)
+      val parent = x.extendsThis
+        .map(Find.uniqueResolution[EirType])
+        .map(ctx.nameFor(_, Some(x)))
+      ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p => s": $p(__tag__)") << "{}"
     }
     ctx << x.members << s"};"
 

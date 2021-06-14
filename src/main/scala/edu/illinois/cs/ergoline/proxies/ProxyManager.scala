@@ -31,11 +31,15 @@ object ProxyManager {
     }
   }
 
+  def hasMain: Boolean = _proxies.exists(_._2.isMain)
+
   def proxies: Iterable[EirProxy] = _proxies.values
+
+  def singletons: Iterable[EirProxy] = proxies.filter(_.collective.isEmpty)
 
   def checkProxyable(base: EirClassLike, collective: Option[String], isElement: Boolean): EirProxy = {
     // validate base has an entry constructor of the appropriate nature
-    EirProxy(Some(base), base, collective, isElement)
+    EirProxy(base.parent, base, collective, isElement)
   }
 
   def elementFor(t: EirProxy): Option[EirProxy] = {

@@ -2,7 +2,7 @@ package ck;
 
 import ergoline::bool;
 
-@system(alias="ergoline::future",fromHeader="ergoline/future.hpp")
+@system(alias="hypercomm::future")
 class future<T> {
     @system def set(t: T);
     @system @sync def get(): T;

@@ -1,13 +1,26 @@
 #ifndef __ERGOLINE_UTIL_HPP__
 #define __ERGOLINE_UTIL_HPP__
 
-#include <charm++.h>
-
 #include <chrono>
 #include <string>
-#include <iomanip>
+#include <charm++.h>
+#include <hypercomm/core/locality_base.hpp>
+
+#include "hash.hpp"
+
+std::ostream& operator<< (std::ostream& stream, const std::tuple<int, int>& idx) {
+  return stream << "(" << std::get<0>(idx) << ", " << std::get<1>(idx) << ")";
+}
 
 namespace ergoline {
+
+inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
+  auto* chare = static_cast<Chare*>(proxy->local());
+  auto* manager = dynamic_cast<hypercomm::future_manager_*>(chare);
+  CkAssert(manager && "unable to retrieve local chare");
+  return manager->make_future();
+}
+
 inline std::string bool_toString(const bool& b) {
   return b ? "true" : "false";
 }
@@ -15,24 +28,6 @@ inline std::string bool_toString(const bool& b) {
 inline std::int64_t timestamp() {
   auto curr = std::chrono::system_clock::now();
   return std::chrono::duration_cast<std::chrono::seconds>(curr.time_since_epoch()).count();
-}
-
-std::string buf2str(const char* data, const std::size_t& size) {
-  std::stringstream ss;
-  ss << "[ ";
-  for (auto i = 0; i < size; i++) {
-    ss << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << (unsigned short)(0xFF & data[i]) << " ";
-  }
-  ss << "]";
-  return ss.str();
-}
-
-std::string env2str(const envelope* env) {
-  auto* bytes = reinterpret_cast<const char*>(env);
-  std::stringstream ss;
-  ss << buf2str(bytes, sizeof(envelope)) << "|";
-  ss << buf2str(bytes + sizeof(envelope), env->getTotalsize() - sizeof(envelope));
-  return ss.str();
 }
 }
 

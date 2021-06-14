@@ -1,83 +1,34 @@
 #ifndef __ERGOLINE_CALLBACK_HPP__
 #define __ERGOLINE_CALLBACK_HPP__
 
-#include <map>
-#include <memory>
-#include <cstring>
-#include <functional>
-
-#include <charm++.h>
+#include <hypercomm/core/immediate.hpp>
 
 namespace ergoline {
-using callback_fn_t = std::function<bool(CkMarshallMsg*)>;
 
-namespace {
-using callback_id_t = std::size_t;
-using callback_map_t = std::map<callback_id_t, callback_fn_t>;
+template<typename Ret, typename... Args>
+class immediate;
 
-CkpvDeclare(callback_id_t, last_callback_id_);
-CkpvDeclare(callback_map_t, callback_map_);
+template<typename Ret, typename... Args>
+struct immediate<Ret(Args...)> : public hypercomm::immediate_action<Ret(Args...)> {
+  using action_type = std::function<Ret(Args...)>;
+  action_type action_;
 
-CkMarshallMsg* msg_to_marshall_msg(CkMessage* msg);
+  immediate(const action_type& _1): action_(_1) {}
 
-void callback_client_fn(void* param, void* message) {
-  auto id = reinterpret_cast<callback_id_t>(param);
-  CkAssert(CkpvInitialized(callback_map_));
-  auto msg = msg_to_marshall_msg(static_cast<CkMessage*>(message));
-  bool deregister = CkpvAccess(callback_map_)[id](msg);
-  if (deregister) {
-    CkpvAccess(callback_map_).erase(id);
+  virtual Ret action(Args... args) override {
+    return this->action_(args...);
   }
-}
 
-callback_id_t get_next_id() {
-  if (!CkpvInitialized(last_callback_id_)) {
-    CkpvInitialize(callback_id_t, last_callback_id_);
-    CkpvAccess(last_callback_id_) = 0;
+  virtual void __pup__(hypercomm::serdes& s) override {
+    CkAbort("not yet implemented!");
   }
-  return CkpvAccess(last_callback_id_)++;
+};
+
+template<typename Ret, typename... Args>
+std::shared_ptr<immediate<Ret(Args...)>> wrap_lambda(const typename immediate<Ret(Args...)>::action_type& action) {
+  return std::make_shared<immediate<Ret(Args...)>>(action);
 }
 
-callback_id_t register_callback(const callback_fn_t& f) {
-  if (!CkpvInitialized(callback_map_)) {
-    CkpvInitialize(callback_map_t, callback_map_);
-  }
-  auto id = get_next_id();
-  CkpvAccess(callback_map_)[id] = f;
-  return id;
-}
-
-CkMarshallMsg* msg_to_marshall_msg(CkMessage* msg) {
-  auto env = UsrToEnv(msg);
-  auto idx = env->getMsgIdx();
-  if (idx == CMessage_CkMarshallMsg::__idx) {
-    return static_cast<CkMarshallMsg*>(msg);
-  } else if (idx == CMessage_CkReductionMsg::__idx) {
-    auto red = static_cast<CkReductionMsg*>(msg);
-    auto res = CkAllocateMarshallMsg(red->getLength());
-    std::memcpy(res->msgBuf, red->getData(), red->getLength());
-    delete red;
-    return res;
-  } else {
-    CkAbort("unsure how to handle msg of type %s.", _msgTable[idx]->name);
-  }
-}
-}
-
-CkCallback make_callback(const callback_fn_t& f) {
-  auto id = register_callback(f);
-  return CkCallback(&callback_client_fn, reinterpret_cast<void*>(id));
-}
-
-template <typename T>
-CkCallback make_callback(const ck::future<T>& f) {
-  auto fn = [f](CkMarshallMsg* msg) {
-    CkSendToFuture(f.handle(), msg);
-    return true;
-  };
-  auto id = register_callback(fn);
-  return CkCallback(&callback_client_fn, reinterpret_cast<void*>(id));
-}
 }
 
 #endif

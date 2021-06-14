@@ -1,12 +1,12 @@
 #ifndef __ERGOLINE_ARRAY_HPP__
 #define __ERGOLINE_ARRAY_HPP__
 
-#include "object.hpp"
+#include <hypercomm/serialization/pup.hpp>
 
 namespace ergoline {
 
 template <typename T, std::size_t N>
-struct array : public hashable {
+struct array { // : public hashable {
   static_assert(N >= 0, "dimensionality must be positive");
 
   using buffer_t = T*;
@@ -58,9 +58,9 @@ struct array : public hashable {
     }
   }
 
-  std::size_t hash() override {
-    return hash_utils::hash_iterable(*this);
-  }
+  // std::size_t hash() override {
+  //   return hash_utils::hash_iterable(*this);
+  // }
 
   // TODO implement this? idk...
   template <class... Args>
@@ -78,7 +78,7 @@ struct array : public hashable {
       auto p = static_cast<T*>(malloc(sizeof(T) * n));
       for (auto i = 0; init && i < n; i++) {
         if (shallow) {
-          reconstruct(p + i);
+          hypercomm::reconstruct(p + i);
         } else {
           new (p + i) T();
         }
@@ -110,6 +110,43 @@ std::shared_ptr<array<double, 1>> array<double, 1>::fill(
   std::fill(a->begin(), a->end(), value);
   return a;
 }
+}
+
+namespace hypercomm {
+template <typename T, std::size_t N>
+struct puper<ergoline::array<T, N>> {
+  inline static void impl(serdes& s, ergoline::array<T, N>& t) {
+    if (s.unpacking()) {
+      reconstruct(&t);
+    }
+
+    pup(s, t.shape);
+
+    if (s.unpacking()) {
+      if (PUP::as_bytes<T>::value) {
+        if (!is_uninitialized(s.source)) {
+          t.source = std::move(s.source.lock());
+          t.buffer = reinterpret_cast<T*>(s.current);
+          s.advance<T>(t.size());
+        } else {
+          t.alloc(false, false);
+          s.copy(t.buffer, t.size());
+        }
+      } else {
+        t.alloc(true, true);
+        for (auto& i : t) {
+          pup(s, i);
+        }
+      }
+    } else if (PUP::as_bytes<T>::value) {
+      s.copy(t.buffer, t.size());
+    } else {
+      for (auto& i : t) {
+        pup(s, i);
+      }
+    }
+  }
+};
 }
 
 #endif
