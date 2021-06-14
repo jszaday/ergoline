@@ -18,8 +18,17 @@ object Modules {
   val packageFile = "package.erg"
   val homePathEnv = "ERG_HOME"
   val searchPathEnv = "ERG_CLASSPATH"
+
   val ergolineHome =
     Option(Properties.envOrElse(homePathEnv, ".")).map(Paths.get(_)).find(Files.isDirectory(_))
+
+  val hypercommHome = ergolineHome
+    .map(_.resolve("hypercomm"))
+    .filter(Files.isDirectory(_))
+    .orElse({
+      Properties.envOrNone("HYPERCOMM_HOME").map(Paths.get(_))
+    })
+
   val coreModules: Path = ergolineHome
     .map(_.resolve("libs"))
     .getOrElse(Errors.unableToResolve(ergolineHome.toString))

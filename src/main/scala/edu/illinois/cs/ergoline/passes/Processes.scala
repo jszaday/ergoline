@@ -16,9 +16,9 @@ object Processes {
     "tuple",
     "utility",
     "vector",
-    "ergoline/array.hpp",
-    "ergoline/requests.hpp",
-    "ergoline/reducer.hpp",
+//    "ergoline/array.hpp",
+//    "ergoline/requests.hpp",
+//    "ergoline/reducer.hpp",
     "#include \"generate.decl.h\" // ;"
   )
   private var ctx = new TypeCheckContext
@@ -45,6 +45,19 @@ object Processes {
     GenerateCi.visitAll(ctx)
   }
 
+  val priorityIncludes: Seq[String] = Seq(
+    "#include <ergoline/components.hpp> // ;",
+    "#include <hypercomm/core/typed_value.hpp> // ;",
+    "#include <hypercomm/components/sentinel.hpp> // ;",
+    "#include <hypercomm/core/resuming_callback.hpp> // ;",
+    "#include <ergoline/callback.hpp> // ;",
+    "#include <ergoline/function.hpp> // ;",
+    "#include <ergoline/mailbox.hpp> // ;",
+    "#include <ergoline/reducer.hpp> // ;",
+    "#include <ergoline/object.hpp> // ;",
+    "#include <ergoline/array.hpp> // ;"
+  )
+
   // TODO this logic should be moved into GenerateCpp
   // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
@@ -57,7 +70,7 @@ object Processes {
     }).toList.dependenceSort()
     assert(!globals.strict || sorted.hasValidOrder)
     val toDecl = sorted.namespacePartitioned
-    ctx << Seq("#include <ergoline/object.hpp> // ;", "#include <ergoline/hash.hpp> // ;", "#include <ergoline/function.hpp> // ;")
+    ctx << priorityIncludes
     // NOTE do we ever need to topo sort these?
     a.foreach(GenerateCpp.forwardDecl(ctx, _))
 
@@ -69,6 +82,8 @@ object Processes {
     }
 
     ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+
+    GenerateCpp.declareGlobals(ctx)
 
     // NOTE do we ever need to topo sort proxies?
     a.foreach(GenerateProxies.visitProxy(ctx, _))
@@ -87,7 +102,10 @@ object Processes {
     })
     kids.foreach(GenerateCpp.visit(_)(ctx))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
+
+    GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
+
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",

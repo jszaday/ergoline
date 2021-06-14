@@ -14,7 +14,13 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Properties.{lineSeparator => n}
 
+object CodeGenerationContext {
+  type Sentinel = (Boolean, String, Option[mutable.Stack[String]])
+}
+
 class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
+
+  import CodeGenerationContext.Sentinel
 
   var lines: List[String] = Nil
   val ignores: mutable.Stack[String] = new mutable.Stack[String]
@@ -23,8 +29,8 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   private val _proxies: mutable.Stack[EirProxy] = new mutable.Stack[EirProxy]
   private var _replacements = Map[String, String]()
 
-  private var _sentinels = new mutable.Stack[(Boolean, String)]
-  private var _inplace = mutable.Set[EirFunctionCall]()
+  private val _sentinels = new mutable.Stack[Sentinel]
+  private val _inplace = mutable.Set[EirFunctionCall]()
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
   def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
@@ -37,9 +43,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def unsetPointer(n: EirNode): Unit = _pointerOverrides.remove(n)
   def hasPointerOverride(n: EirNode): Boolean = _pointerOverrides.contains(n)
 
-  def pushSentinel(s: (Boolean, String)): Unit = _sentinels.push(s)
-  def popSentinel(s: (Boolean, String)): Unit = assert(s.eq(_sentinels.pop()))
-  def peekSentinel(): Option[(Boolean, String)] = _sentinels.headOption
+  def pushSentinel(s: Sentinel): Unit = _sentinels.push(s)
+  def popSentinel(s: Sentinel): Unit = assert(s.eq(_sentinels.pop()))
+  def peekSentinel(): Option[Sentinel] = _sentinels.headOption
 
   def updateProxy(proxy: EirProxy): Unit = {
     if (_proxies.headOption.contains(proxy)) {
