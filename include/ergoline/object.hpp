@@ -1,16 +1,8 @@
 #ifndef __ERGOLINE_OBJECT_HPP__
 #define __ERGOLINE_OBJECT_HPP__
 
-// #include <memory>
-// #include <charm++.h>
-// #include "util.hpp"
-
 #include <hypercomm/core/comparable.hpp>
 #include <hypercomm/utilities.hpp>
-
-std::ostream& operator<< (std::ostream& stream, const std::tuple<int, int>& idx) {
-  return stream << "(" << std::get<0>(idx) << ", " << std::get<1>(idx) << ")";
-}
 
 namespace ergoline {
 
@@ -170,5 +162,8 @@ struct object: virtual public hypercomm::polymorph,
 // using hash_map = std::unordered_map<K, V, hash_utils::hash<K>, equal_to<K>>;
 
 }
+
+#include "hash.hpp"
+#include "util.hpp"
 
 #endif

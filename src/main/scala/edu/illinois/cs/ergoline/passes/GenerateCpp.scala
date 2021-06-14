@@ -416,7 +416,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val ptr = ty.isPointer
     m.name match {
-      case "apply" => ctx << "this->make_future()"
+      case "apply" =>
+        ctx.proxy match {
+          case Some(_) => ctx << "this->make_future()"
+          case None => ctx << "ergoline::make_future(" << {
+            globals.implicitProxyName
+          } << ")"
+        }
       case "set" => ctx << fut << ".set(hypercomm::pack_to_port({}," << (args, ",") << "))"
       case "get" =>
         val futureName = "f"
