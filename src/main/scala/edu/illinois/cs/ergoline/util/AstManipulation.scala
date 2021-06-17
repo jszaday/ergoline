@@ -11,22 +11,30 @@ object AstManipulation {
     parent
   }
 
-  def encloseNodes(nodes: EirNode*)(implicit addReturn: Boolean = false): EirBlock = {
-    AstManipulation.setParent(EirBlock(nodes.head.parent, {
-      if (!addReturn || nodes.length != 1) nodes.toList
-      else {
-        val ret = EirReturn(None, assertValid[EirExpressionNode](nodes.head))
-        nodes.head.parent = Some(ret)
-        List(ret)
-      }
-    }))
+  def encloseNodes(
+      nodes: EirNode*
+  )(implicit addReturn: Boolean = false): EirBlock = {
+    AstManipulation.setParent(
+      EirBlock(
+        nodes.head.parent, {
+          if (!addReturn || nodes.length != 1) nodes.toList
+          else {
+            val ret =
+              EirReturn(None, assertValid[EirExpressionNode](nodes.head))
+            nodes.head.parent = Some(ret)
+            List(ret)
+          }
+        }
+      )
+    )
   }
 
   def dropNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
     for (node <- nodes) {
       scope match {
         case x: EirNamespace => x.removeChild(node)
-        case _ => throw new RuntimeException(s"could not drop $node from $scope")
+        case _ =>
+          throw new RuntimeException(s"could not drop $node from $scope")
       }
     }
   }
@@ -43,12 +51,16 @@ object AstManipulation {
     }
   }
 
-  def updateWithin[T <: EirNode : ClassTag](lst : List[T], oldNode : EirNode, newNode : EirNode): Option[List[T]] = {
+  def updateWithin[T <: EirNode: ClassTag](
+      lst: List[T],
+      oldNode: EirNode,
+      newNode: EirNode
+  ): Option[List[T]] = {
     val converted = (oldNode.isValid[T] ++ newNode.isValid[T]).toList
     converted match {
       case List(o, n) =>
         lst.indexOf(o) match {
-          case -1 => None
+          case -1  => None
           case idx => Some(lst.updated(idx, n))
         }
       case _ => None

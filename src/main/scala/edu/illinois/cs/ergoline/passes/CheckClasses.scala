@@ -9,7 +9,8 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object CheckClasses {
 
-  final case class ClassCheckException(node: EirClassLike, message: String) extends Exception(message)
+  final case class ClassCheckException(node: EirClassLike, message: String)
+      extends Exception(message)
 
   var checked: List[EirClassLike] = Nil
 
@@ -24,8 +25,8 @@ object CheckClasses {
     if (checked.contains(node)) return
 
     node match {
-      case c : EirClass => visitClass(ctx, c)
-      case t : EirTrait => visitTrait(t)
+      case c: EirClass => visitClass(ctx, c)
+      case t: EirTrait => visitTrait(t)
     }
 
     node.inherited.foreach(checkParentClass(node, _)(ctx))
@@ -42,14 +43,25 @@ object CheckClasses {
     b.derived = b.derived + a
   }
 
-  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType])
-                      (implicit ctx: TypeCheckContext): Unit = {
+  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType])(
+      implicit ctx: TypeCheckContext
+  ): Unit = {
     val resolved = asClassLike(candidate)
     node match {
       case _: EirTrait if !resolved.isInstanceOf[EirTrait] =>
-        Errors.invalidParentClass(node, resolved, "traits can only extend/implement traits.")
-      case _: EirClass if node.extendsThis.contains(candidate) && !resolved.isInstanceOf[EirClass] =>
-        Errors.invalidParentClass(node, resolved, "classes cannot extend non-classes.")
+        Errors.invalidParentClass(
+          node,
+          resolved,
+          "traits can only extend/implement traits."
+        )
+      case _: EirClass
+          if node.extendsThis.contains(candidate) && !resolved
+            .isInstanceOf[EirClass] =>
+        Errors.invalidParentClass(
+          node,
+          resolved,
+          "classes cannot extend non-classes."
+        )
       case _ =>
     }
     if (resolved.isDescendantOf(node)) {
@@ -58,23 +70,28 @@ object CheckClasses {
     val others = node.inherited.filterNot(_ == candidate).map(asClassLike)
     val found = others.find(x => x == resolved || x.isDescendantOf(resolved))
     if (found.isDefined) {
-      Errors.invalidParentClass(node, resolved, s"already implemented by ${found.get.name}.")
+      Errors.invalidParentClass(
+        node,
+        resolved,
+        s"already implemented by ${found.get.name}."
+      )
     }
     addDerived(node, resolved)
     // NOTE typechecking is used to catch mismatches in our parents' template specialization
     //      i.e. missing/wrong number of arguments
   }
 
-  def visitTrait(node : EirTrait): Unit = {
+  def visitTrait(node: EirTrait): Unit = {
     node.members.foreach(x => {
       x.member match {
-        case _ : EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
+        case _: EirFunction =>
+          if (x.isConstructor) error(node, "cannot have constructor")
         case x => error(node, s"invalid member $x")
       }
     })
   }
 
-  def visitClass(ctx: TypeCheckContext, node : EirClass): Unit = {
+  def visitClass(ctx: TypeCheckContext, node: EirClass): Unit = {
     CheckConstructors.checkConstructors(node)(ctx)
   }
 }

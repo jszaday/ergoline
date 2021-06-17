@@ -12,7 +12,6 @@ import edu.illinois.cs.ergoline.util.{Errors, LibUtils}
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
 
-
 object Driver extends App {
   private def helpMessage(): Unit = {
     print("""| ergoline compiler, pre-alpha version
@@ -22,9 +21,11 @@ object Driver extends App {
     System.exit(0)
   }
   // get the options from the command-line args
-  var (options, files) = args.toList.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
+  var (options, files) = args.toList.partition(x =>
+    (x startsWith "-") || !(x.toLowerCase endsWith "erg")
+  )
 
-  if (options.contains("-h")|| files.isEmpty) helpMessage()
+  if (options.contains("-h") || files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
 
   val skipCompilation = options.contains("--no-compile")
@@ -66,8 +67,7 @@ object Driver extends App {
   val codegen = Modules.currTimeMs
   println(s"ergoline compilation:\t${codegen - start}ms")
 
-  val blasMod = globals
-    .ergolineModule
+  val blasMod = globals.ergolineModule
     .flatMap(Find.child(_, withName("blas")).headOption)
 
   val usingBlas = blasMod.exists(_.isInstanceOf[EirNamespace])
@@ -90,7 +90,7 @@ object Driver extends App {
       "components",
       "utilities",
       "serialization",
-      "messaging",
+      "messaging"
     ).map(x => s"-lhypercomm-$x")
 
     val inclPaths =
@@ -105,11 +105,13 @@ object Driver extends App {
         .map("-L\"" + _ + "\"") ++ hyperLibs
 
     try {
-      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
+      val cmd =
+        s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {
-      case throwable: Throwable => Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
+      case throwable: Throwable =>
+        Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
     }
 
     val charmxi = Modules.currTimeMs
@@ -120,11 +122,13 @@ object Driver extends App {
         if (usingBlas) LibUtils.linkLib("gsl")
         else None
       } ++ libPaths
-      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
+      val cmd =
+        s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {
-      case throwable: Throwable => Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
+      case throwable: Throwable =>
+        Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
     }
 
     val cxx = Modules.currTimeMs

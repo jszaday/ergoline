@@ -15,7 +15,11 @@ object CheckFunctions {
   //      consider: def fn<A...>(A... as);
   //           and: def fn(int i);
   //      these are ambiguous in situ!
-  def sharedArgs(implicit ctx: TypeCheckContext, a: EirFunction, b: EirFunction): Boolean = {
+  def sharedArgs(implicit
+      ctx: TypeCheckContext,
+      a: EirFunction,
+      b: EirFunction
+  ): Boolean = {
     (a.templateArgs.isEmpty && b.templateArgs.isEmpty) && {
       val as = CheckTypes.visit(a.functionArgs)
       val bs = CheckTypes.visit(b.functionArgs)
@@ -23,16 +27,31 @@ object CheckFunctions {
     }
   }
 
-  private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[(EirMember, EirType)] = {
-    sweepInheritedFirst(ctx, within, (base: EirClassLike) => {
-      Find.child[EirMember](base, withName(of.name)).collectFirst{
-        case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) =>
-          (m, CheckTypes.visit(f.returnType)(ctx))
-      }.orElse(overridesWithin(ctx, base, of))
-    })
+  private def overridesWithin(
+      ctx: TypeCheckContext,
+      within: EirClassLike,
+      of: EirFunction
+  ): Option[(EirMember, EirType)] = {
+    sweepInheritedFirst(
+      ctx,
+      within,
+      (base: EirClassLike) => {
+        Find
+          .child[EirMember](base, withName(of.name))
+          .collectFirst {
+            case m @ EirMember(_, f: EirFunction, accessibility)
+                if accessibility != Private && sharedArgs(ctx, of, f) =>
+              (m, CheckTypes.visit(f.returnType)(ctx))
+          }
+          .orElse(overridesWithin(ctx, base, of))
+      }
+    )
   }
 
-  def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[(EirMember, EirType)] = {
+  def seekOverrides(
+      ctx: TypeCheckContext,
+      member: EirMember
+  ): Option[(EirMember, EirType)] = {
     overridesWithin(ctx, member.base, assertValid[EirFunction](member.member))
   }
 
@@ -69,7 +88,7 @@ object CheckFunctions {
           }
         }
       case None if isOverride => Errors.doesNotOverride(function)
-      case _ => // OK
+      case _                  => // OK
     }
 
     // TODO check if @entry outside of proxy?

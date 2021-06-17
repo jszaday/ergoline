@@ -20,7 +20,9 @@ object Modules {
   val searchPathEnv = "ERG_CLASSPATH"
 
   val ergolineHome =
-    Option(Properties.envOrElse(homePathEnv, ".")).map(Paths.get(_)).find(Files.isDirectory(_))
+    Option(Properties.envOrElse(homePathEnv, "."))
+      .map(Paths.get(_))
+      .find(Files.isDirectory(_))
 
   val hypercommHome = ergolineHome
     .map(_.resolve("hypercomm"))
@@ -34,22 +36,35 @@ object Modules {
     .getOrElse(Errors.unableToResolve(ergolineHome.toString))
   val searchPathDefaults: Seq[Path] = Seq(coreModules, Paths.get("."))
   val searchPath: Seq[Path] = (searchPathDefaults ++
-    Properties.envOrNone(searchPathEnv).toIterable
-      .flatMap(_.split(pathSeparator)).map(Paths.get(_))).filter(Files.exists(_))
+    Properties
+      .envOrNone(searchPathEnv)
+      .toIterable
+      .flatMap(_.split(pathSeparator))
+      .map(Paths.get(_))).filter(Files.exists(_))
 
   def charmHome: Option[Path] =
-    Properties.envOrNone("CHARM_HOME")
-      .map(Paths.get(_)).find(Files.isDirectory(_))
+    Properties
+      .envOrNone("CHARM_HOME")
+      .map(Paths.get(_))
+      .find(Files.isDirectory(_))
 
-  def charmc: Option[Path] = charmHome
-    .map(_.resolve("bin").resolve("charmc"))
-    .find(Files.isExecutable)
+  def charmc: Option[Path] =
+    charmHome
+      .map(_.resolve("bin").resolve("charmc"))
+      .find(Files.isExecutable)
 
   val loadedFiles: mutable.Map[File, EirNamedNode] = mutable.Map()
   val fileSiblings: mutable.Map[EirNode, List[EirNode]] = mutable.Map()
 
   private object ErgolineErrorListener extends ConsoleErrorListener {
-    override def syntaxError(recognizer: Recognizer[_, _], offendingSymbol: Any, line: Int, charPositionInLine: Int, msg: String, e: RecognitionException): Unit = {
+    override def syntaxError(
+        recognizer: Recognizer[_, _],
+        offendingSymbol: Any,
+        line: Int,
+        charPositionInLine: Int,
+        msg: String,
+        e: RecognitionException
+    ): Unit = {
       Errors.exit("line " + line + ":" + charPositionInLine + " " + msg)
     }
   }
@@ -77,21 +92,32 @@ object Modules {
   def apply(qualified: List[String], scope: EirScope): Option[EirNamedNode] = {
     qualified match {
       case head :: Nil => this(head, scope)
-      case head :: tail => this(head, scope).map(x =>
-        retrieve(tail, util.assertValid[EirScope](x)))
+      case head :: tail =>
+        this(head, scope).map(x =>
+          retrieve(tail, util.assertValid[EirScope](x))
+        )
       case Nil => None
     }
   }
 
   def apply(name: String, scope: EirScope): Option[EirNamedNode] = {
     // find a directory/file with the desired name, and provisionally import it
-    searchPath.map(_.resolve(name).toFile).find(_.exists()).flatMap(provisional(_, scope))
+    searchPath
+      .map(_.resolve(name).toFile)
+      .find(_.exists())
+      .flatMap(provisional(_, scope))
   }
 
   def discoverSources(f: File): (Option[File], Iterable[File]) = {
     val children = f.listFiles().map(_.getCanonicalFile)
-    (children.find(x => !x.isDirectory && x.getName == packageFile),
-      children.filter(x => (x.isDirectory || x.getName.endsWith(".erg")) && (x.getName != packageFile)))
+    (
+      children.find(x => !x.isDirectory && x.getName == packageFile),
+      children.filter(x =>
+        (x.isDirectory || x.getName.endsWith(
+          ".erg"
+        )) && (x.getName != packageFile)
+      )
+    )
   }
 
   def provisional(f: File, scope: EirScope): Option[EirNamedNode] = {
@@ -126,7 +152,7 @@ object Modules {
   }
 
   private def memoryUsageMb: Long = {
-    (Runtime.getRuntime.totalMemory -  Runtime.getRuntime.freeMemory) / (1024 * 1024)
+    (Runtime.getRuntime.totalMemory - Runtime.getRuntime.freeMemory) / (1024 * 1024)
   }
 
   def currTimeMs: Long = System.currentTimeMillis()
@@ -137,14 +163,21 @@ object Modules {
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
-      case (value: EirNamedNode, sibilings) if value.hasName(Modules.expectation(f)) =>
+      case (value: EirNamedNode, sibilings)
+          if value.hasName(Modules.expectation(f)) =>
         fileSiblings(value) = sibilings
         loadedFiles(file) = value
         Processes.onLoad(value)
         val (endMs, endMb) = (currTimeMs, memoryUsageMb)
-        Errors.log(s"loaded ${file.getName} in ${endMs - startMs} ms (final mem usage ${Math.max(endMb - startMb, 0)} MB)")
+        Errors.log(
+          s"loaded ${file.getName} in ${endMs - startMs} ms (final mem usage ${Math
+            .max(endMb - startMb, 0)} MB)"
+        )
         value
-      case _ => throw new RuntimeException(s"could not find ${expectation(file)} within ${file.getCanonicalPath}")
+      case _ =>
+        throw new RuntimeException(
+          s"could not find ${expectation(file)} within ${file.getCanonicalPath}"
+        )
     }
   }
 

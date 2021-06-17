@@ -3,7 +3,8 @@ package edu.illinois.cs.ergoline.util
 object LibUtils {
   private var result: Option[String] = None
 
-  private def checkResult(s: String): Boolean = result.exists(_.contains("lib" + s))
+  private def checkResult(s: String): Boolean =
+    result.exists(_.contains("lib" + s))
 
   def isPresent(lib: String): Boolean = {
     checkResult(lib) || (result.isEmpty && {

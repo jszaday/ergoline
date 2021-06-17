@@ -1,6 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{
+  EirTemplatedType,
+  EirTupleType,
+  EirType
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
@@ -34,7 +38,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
   def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
-    tyCtx.lambdas.groupBy(x => Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x)))
+    tyCtx.lambdas.groupBy(x =>
+      Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+    )
 
   def repack(x: EirFunctionCall): Unit = _inplace.add(x)
   def shouldRepack(x: EirFunctionCall): Boolean = _inplace.contains(x)
@@ -55,10 +61,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def tryResolve[T <: EirNode : ClassTag](resolvable: EirResolvable[T]): Option[T] =
+  def tryResolve[T <: EirNode: ClassTag](
+      resolvable: EirResolvable[T]
+  ): Option[T] =
     Find.resolutions[T](resolvable).headOption
 
-  def resolve[T <: EirNode : ClassTag](resolvable: EirResolvable[T]): T =
+  def resolve[T <: EirNode: ClassTag](resolvable: EirResolvable[T]): T =
     tryResolve(resolvable).getOrElse(Errors.unableToResolve(resolvable))
 
   def proxy: Option[EirProxy] = _proxies.headOption
@@ -75,18 +83,22 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def typeOf(n: EirNode): EirType = {
     n match {
       case x: EirExpressionNode => exprType(x)
-      case x => CheckTypes.visit(x)(typeContext)
+      case x                    => CheckTypes.visit(x)(typeContext)
     }
   }
 
-  def eval2const(n: EirNode): EirLiteral = n match {
-    case e: EirExpressionNode => CheckTypes.evaluateConstExpr(e)(typeContext)
-    case c: EirConstantFacade => c.value
-    case r: EirResolvable[_] => eval2const(resolve[EirNode](r))
-    case _ => Errors.invalidConstExpr(n)
-  }
+  def eval2const(n: EirNode): EirLiteral =
+    n match {
+      case e: EirExpressionNode => CheckTypes.evaluateConstExpr(e)(typeContext)
+      case c: EirConstantFacade => c.value
+      case r: EirResolvable[_]  => eval2const(resolve[EirNode](r))
+      case _                    => Errors.invalidConstExpr(n)
+    }
 
-  def specialize(s : EirSpecializable, sp : EirSpecialization): EirSpecialization = tyCtx.specialize(s, sp)
+  def specialize(
+      s: EirSpecializable,
+      sp: EirSpecialization
+  ): EirSpecialization = tyCtx.specialize(s, sp)
 
   def leave(ours: EirSpecialization): Unit = tyCtx.leave(ours)
 
@@ -109,11 +121,14 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     _replacements += (from -> to)
   }
 
-  def typeFor(x: EirResolvable[EirType], ctx: Option[EirNode] = None): String = {
+  def typeFor(
+      x: EirResolvable[EirType],
+      ctx: Option[EirNode] = None
+  ): String = {
     resolve[EirNode](x) match {
       case t: EirTemplateArgument => nameFor(t, ctx)
-      case t: EirType => typeFor(t, ctx)
-      case n: EirNode => Errors.incorrectType(n, classOf[EirType])
+      case t: EirType             => typeFor(t, ctx)
+      case n: EirNode             => Errors.incorrectType(n, classOf[EirType])
     }
   }
 
@@ -123,7 +138,8 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def typeFor(x: EirType, ctx: Option[EirNode]): String = {
     x match {
-      case t: EirTupleType => s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
+      case t: EirTupleType =>
+        s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
       case t: EirTemplatedType if isOption(resolve(t.base)) =>
         val arg = resolve(t.args.head)
         makeShared(!arg.isPointer, typeFor(arg, ctx))
@@ -131,23 +147,34 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def exprType(expr: EirExpressionNode): EirType = expr.foundType.getOrElse(Errors.missingType(expr))
+  def exprType(expr: EirExpressionNode): EirType =
+    expr.foundType.getOrElse(Errors.missingType(expr))
 
   def <<(ctx: CodeGenerationContext): CodeGenerationContext = ctx
 
-  def <<(node: EirNode)(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <<(node: EirNode)(implicit
+      visitor: (CodeGenerationContext, EirNode) => Unit
+  ): CodeGenerationContext = {
     visitor(this, node)
     this
   }
 
-  def <|(t: (Option[EirNode], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <|(
+      t: (Option[EirNode], String)
+  )(implicit
+      visitor: (CodeGenerationContext, EirNode) => Unit
+  ): CodeGenerationContext = {
     t._1 match {
       case Some(n) => this << n
-      case None => this << t._2
+      case None    => this << t._2
     }
   }
 
-  def <<[T <: EirNode](t: (Iterable[T], String))(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <<[T <: EirNode](
+      t: (Iterable[T], String)
+  )(implicit
+      visitor: (CodeGenerationContext, EirNode) => Unit
+  ): CodeGenerationContext = {
     val (nodes: Iterable[EirNode], separator: String) = t
     if (nodes.nonEmpty) {
       for (node <- nodes.init) {
@@ -159,8 +186,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     this
   }
 
-
-  def << (t: (Iterable[String], String)): CodeGenerationContext = {
+  def <<(t: (Iterable[String], String)): CodeGenerationContext = {
     val (values: Iterable[String], separator: String) = t
     if (values.nonEmpty) {
       for (value <- values.init) {
@@ -171,7 +197,11 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     this
   }
 
-  def <<(nodes: Iterable[EirNode])(implicit visitor: (CodeGenerationContext, EirNode) => Unit): CodeGenerationContext = {
+  def <<(
+      nodes: Iterable[EirNode]
+  )(implicit
+      visitor: (CodeGenerationContext, EirNode) => Unit
+  ): CodeGenerationContext = {
     nodes.foreach(visitor(this, _))
     this
   }
@@ -184,9 +214,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   private def endLine(isFor: Boolean, s: Option[Char]): Boolean = {
     s match {
-      case Some(';') => !isFor
+      case Some(';')       => !isFor
       case Some('{' | '}') => true
-      case _ => false
+      case _               => false
     }
   }
 
@@ -231,7 +261,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     this
   }
 
-  def << (values: Iterable[String]): CodeGenerationContext = {
+  def <<(values: Iterable[String]): CodeGenerationContext = {
     for (value <- values) this << value
     this
   }
@@ -260,5 +290,11 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     output.toString()
   }
 
-  def last: Char = current.toString().trim.lastOption.orElse(lines.lastOption.flatMap(_.trim.lastOption)).getOrElse('\u0000')
+  def last: Char =
+    current
+      .toString()
+      .trim
+      .lastOption
+      .orElse(lines.lastOption.flatMap(_.trim.lastOption))
+      .getOrElse('\u0000')
 }
