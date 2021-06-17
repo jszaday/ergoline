@@ -1,6 +1,6 @@
 package ergoline;
 
-struct range<A> with iterable<A> {
+class range<A> with iterable<A> {
     val start: A;
     val end: A;
     val step: A;
