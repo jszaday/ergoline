@@ -13,87 +13,87 @@ trait EirVisitor[Context, Value] {
 
   def visit(node: EirNode)(implicit ctx: Context): Value = {
     node match {
-      case x: EirType => visitType(x)
-      case x: EirPattern => visitPattern(x)
-      case x: EirSymbolLike[_] => visitSymbolLike(x)
-      case x: EirExpressionNode => visitExpression(x)
-      case x: EirBlock => visitBlock(x)
-      case x: EirNamespace => visitNamespace(x)
-      case x: EirDeclaration => visitDeclaration(x)
-      case x: EirMember => visitMember(x)
-      case x: EirFunction => visitFunction(x)
-      case x: EirAnnotation => visitAnnotation(x)
+      case x: EirType             => visitType(x)
+      case x: EirPattern          => visitPattern(x)
+      case x: EirSymbolLike[_]    => visitSymbolLike(x)
+      case x: EirExpressionNode   => visitExpression(x)
+      case x: EirBlock            => visitBlock(x)
+      case x: EirNamespace        => visitNamespace(x)
+      case x: EirDeclaration      => visitDeclaration(x)
+      case x: EirMember           => visitMember(x)
+      case x: EirFunction         => visitFunction(x)
+      case x: EirAnnotation       => visitAnnotation(x)
       case x: EirFunctionArgument => visitFunctionArgument(x)
-      case x: EirAssignment => visitAssignment(x)
-      case x: EirReturn => visitReturn(x)
-      case x: EirForLoop => visitForLoop(x)
-      case x: EirWhileLoop => visitWhileLoop(x)
-      case x: EirImport => visitImport(x)
-      case x: EirIfElse => visitIfElse(x)
-      case x: EirMatchCase => visitMatchCase(x)
-      case x: EirSdagWhen => visitWhen(x)
-      case x: EirAwaitMany => visitAwaitMany(x)
+      case x: EirAssignment       => visitAssignment(x)
+      case x: EirReturn           => visitReturn(x)
+      case x: EirForLoop          => visitForLoop(x)
+      case x: EirWhileLoop        => visitWhileLoop(x)
+      case x: EirImport           => visitImport(x)
+      case x: EirIfElse           => visitIfElse(x)
+      case x: EirMatchCase        => visitMatchCase(x)
+      case x: EirSdagWhen         => visitWhen(x)
+      case x: EirAwaitMany        => visitAwaitMany(x)
       case x: EirResolvable[_] if x.resolved =>
         val found = Find.uniqueResolution[EirNode](x)
         if (found == x) error(found)
         else visit(found)
       case x: EirUserNode => x.accept(ctx, this)
-      case null => error(null)
-      case x => error(x)
+      case null           => error(null)
+      case x              => error(x)
     }
   }
 
   def visitType(x: EirType)(implicit ctx: Context): Value = {
     x match {
-      case x: EirClass => visitClass(x)
-      case x: EirTrait => visitTrait(x)
-      case x: EirProxy => visitProxy(x)
-      case x: EirTypeAlias => visitTypeAlias(x)
-      case x: EirTupleType => visitTupleType(x)
-      case x: EirProxyType => visitProxyType(x)
-      case x: EirLambdaType => visitLambdaType(x)
-      case x: EirTupleMultiply => visitTupleMultiply(x)
-      case x: EirTemplatedType => visitTemplatedType(x)
-      case x: EirConstantFacade => visitConstantFacade(x)
+      case x: EirClass            => visitClass(x)
+      case x: EirTrait            => visitTrait(x)
+      case x: EirProxy            => visitProxy(x)
+      case x: EirTypeAlias        => visitTypeAlias(x)
+      case x: EirTupleType        => visitTupleType(x)
+      case x: EirProxyType        => visitProxyType(x)
+      case x: EirLambdaType       => visitLambdaType(x)
+      case x: EirTupleMultiply    => visitTupleMultiply(x)
+      case x: EirTemplatedType    => visitTemplatedType(x)
+      case x: EirConstantFacade   => visitConstantFacade(x)
       case x: EirTemplateArgument => visitTemplateArgument(x)
-      case _ => error(x)
+      case _                      => error(x)
     }
   }
 
   def visitPattern(x: EirPattern)(implicit ctx: Context): Value = {
     x match {
-      case x: EirPatternList => visitPatternList(x)
+      case x: EirPatternList       => visitPatternList(x)
       case x: EirExpressionPattern => visitExpressionPattern(x)
       case x: EirIdentifierPattern => visitIdentifierPattern(x)
-      case _ => error(x)
+      case _                       => error(x)
     }
   }
 
   def visitSymbolLike(x: EirSymbolLike[_ <: EirNode])(implicit ctx: Context): Value = {
     x match {
-      case x: EirSymbol[_] => visitSymbol(x)
-      case x: EirScopedSymbol[_] => visitScopedSymbol(x)
+      case x: EirSymbol[_]         => visitSymbol(x)
+      case x: EirScopedSymbol[_]   => visitScopedSymbol(x)
       case x: EirSpecializedSymbol => visitSpecializedSymbol(x)
-      case _ => error(x)
+      case _                       => error(x)
     }
   }
 
   def visitExpression(node: EirExpressionNode)(implicit ctx: Context): Value = {
     node match {
-      case x: EirSymbolLike[_] => visitSymbolLike(x)  // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
-      case x: EirNew => visitNew(x)
-      case x: EirMatch => visitMatch(x)
-      case x: EirSlice => visitSlice(x)
-      case x: EirAwait => visitAwait(x)
-      case x: EirLiteral => visitLiteral(x)
-      case x: EirFunctionCall => visitFunctionCall(x)
-      case x: EirArrayReference => visitArrayReference(x)
-      case x: EirTupleExpression => visitTupleExpression(x)
-      case x: EirTernaryOperator => visitTernaryOperator(x)
-      case x: EirLambdaExpression => visitLambdaExpression(x)
-      case x: EirBinaryExpression => visitBinaryExpression(x)
+      case x: EirSymbolLike[_]      => visitSymbolLike(x) // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
+      case x: EirNew                => visitNew(x)
+      case x: EirMatch              => visitMatch(x)
+      case x: EirSlice              => visitSlice(x)
+      case x: EirAwait              => visitAwait(x)
+      case x: EirLiteral            => visitLiteral(x)
+      case x: EirFunctionCall       => visitFunctionCall(x)
+      case x: EirArrayReference     => visitArrayReference(x)
+      case x: EirTupleExpression    => visitTupleExpression(x)
+      case x: EirTernaryOperator    => visitTernaryOperator(x)
+      case x: EirLambdaExpression   => visitLambdaExpression(x)
+      case x: EirBinaryExpression   => visitBinaryExpression(x)
       case x: EirInterpolatedString => visitInterpolatedString(x)
-      case x => error(x)
+      case x                        => error(x)
     }
   }
 

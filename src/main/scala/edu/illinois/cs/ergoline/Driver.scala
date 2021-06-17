@@ -12,7 +12,6 @@ import edu.illinois.cs.ergoline.util.{Errors, LibUtils}
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
 
-
 object Driver extends App {
   private def helpMessage(): Unit = {
     print("""| ergoline compiler, pre-alpha version
@@ -24,7 +23,7 @@ object Driver extends App {
   // get the options from the command-line args
   var (options, files) = args.toList.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
 
-  if (options.contains("-h")|| files.isEmpty) helpMessage()
+  if (options.contains("-h") || files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
 
   val skipCompilation = options.contains("--no-compile")
@@ -37,7 +36,7 @@ object Driver extends App {
   }
 
   val out = {
-    val idx = options.indexOf("-o")
+    val idx       = options.indexOf("-o")
     val hasOutput = idx >= 0 && idx < (options.length - 1)
     val opt =
       Option.when(hasOutput)("-o " + options(idx + 1)).getOrElse("-o a.out")
@@ -66,8 +65,7 @@ object Driver extends App {
   val codegen = Modules.currTimeMs
   println(s"ergoline compilation:\t${codegen - start}ms")
 
-  val blasMod = globals
-    .ergolineModule
+  val blasMod = globals.ergolineModule
     .flatMap(Find.child(_, withName("blas")).headOption)
 
   val usingBlas = blasMod.exists(_.isInstanceOf[EirNamespace])
@@ -90,7 +88,7 @@ object Driver extends App {
       "components",
       "utilities",
       "serialization",
-      "messaging",
+      "messaging"
     ).map(x => s"-lhypercomm-$x")
 
     val inclPaths =

@@ -24,8 +24,8 @@ object CheckClasses {
     if (checked.contains(node)) return
 
     node match {
-      case c : EirClass => visitClass(ctx, c)
-      case t : EirTrait => visitTrait(t)
+      case c: EirClass => visitClass(ctx, c)
+      case t: EirTrait => visitTrait(t)
     }
 
     node.inherited.foreach(checkParentClass(node, _)(ctx))
@@ -42,8 +42,7 @@ object CheckClasses {
     b.derived = b.derived + a
   }
 
-  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType])
-                      (implicit ctx: TypeCheckContext): Unit = {
+  def checkParentClass(node: EirClassLike, candidate: EirResolvable[EirType])(implicit ctx: TypeCheckContext): Unit = {
     val resolved = asClassLike(candidate)
     node match {
       case _: EirTrait if !resolved.isInstanceOf[EirTrait] =>
@@ -56,7 +55,7 @@ object CheckClasses {
       Errors.invalidParentClass(node, resolved, "circular relationship.")
     }
     val others = node.inherited.filterNot(_ == candidate).map(asClassLike)
-    val found = others.find(x => x == resolved || x.isDescendantOf(resolved))
+    val found  = others.find(x => x == resolved || x.isDescendantOf(resolved))
     if (found.isDefined) {
       Errors.invalidParentClass(node, resolved, s"already implemented by ${found.get.name}.")
     }
@@ -65,16 +64,16 @@ object CheckClasses {
     //      i.e. missing/wrong number of arguments
   }
 
-  def visitTrait(node : EirTrait): Unit = {
+  def visitTrait(node: EirTrait): Unit = {
     node.members.foreach(x => {
       x.member match {
-        case _ : EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
-        case x => error(node, s"invalid member $x")
+        case _: EirFunction => if (x.isConstructor) error(node, "cannot have constructor")
+        case x              => error(node, s"invalid member $x")
       }
     })
   }
 
-  def visitClass(ctx: TypeCheckContext, node : EirClass): Unit = {
+  def visitClass(ctx: TypeCheckContext, node: EirClass): Unit = {
     CheckConstructors.checkConstructors(node)(ctx)
   }
 }

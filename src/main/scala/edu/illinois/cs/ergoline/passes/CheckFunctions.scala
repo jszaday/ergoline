@@ -23,13 +23,25 @@ object CheckFunctions {
     }
   }
 
-  private def overridesWithin(ctx: TypeCheckContext, within: EirClassLike, of: EirFunction): Option[(EirMember, EirType)] = {
-    sweepInheritedFirst(ctx, within, (base: EirClassLike) => {
-      Find.child[EirMember](base, withName(of.name)).collectFirst{
-        case m@EirMember(_, f: EirFunction, accessibility) if accessibility != Private && sharedArgs(ctx, of, f) =>
-          (m, CheckTypes.visit(f.returnType)(ctx))
-      }.orElse(overridesWithin(ctx, base, of))
-    })
+  private def overridesWithin(
+      ctx: TypeCheckContext,
+      within: EirClassLike,
+      of: EirFunction
+  ): Option[(EirMember, EirType)] = {
+    sweepInheritedFirst(
+      ctx,
+      within,
+      (base: EirClassLike) => {
+        Find
+          .child[EirMember](base, withName(of.name))
+          .collectFirst {
+            case m @ EirMember(_, f: EirFunction, accessibility)
+                if accessibility != Private && sharedArgs(ctx, of, f) =>
+              (m, CheckTypes.visit(f.returnType)(ctx))
+          }
+          .orElse(overridesWithin(ctx, base, of))
+      }
+    )
   }
 
   def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[(EirMember, EirType)] = {
@@ -39,10 +51,10 @@ object CheckFunctions {
   // TODO check self-assigning arguments?
   def visit(implicit ctx: TypeCheckContext, function: EirFunction): Unit = {
     val overloads = Find.overloads(function)
-    val member = function.parent.to[EirMember]
-    val system = member.getOrElse(function).annotation("system")
-    val mailbox = member.exists(_.isMailbox)
-    val hasBody = function.body.isDefined
+    val member    = function.parent.to[EirMember]
+    val system    = member.getOrElse(function).annotation("system")
+    val mailbox   = member.exists(_.isMailbox)
+    val hasBody   = function.body.isDefined
 
     if (system.isDefined || mailbox) {
       if (hasBody) Errors.systemFnHasBody(function)
@@ -57,7 +69,7 @@ object CheckFunctions {
       .foreach(Errors.ambiguousOverload(function, _))
 
     val isOverride = member.exists(_.isOverride)
-    val found = member.flatMap(seekOverrides(ctx, _))
+    val found      = member.flatMap(seekOverrides(ctx, _))
     found match {
       case Some((m: EirMember, theirs: EirType)) =>
         if (!isOverride) {
@@ -69,7 +81,7 @@ object CheckFunctions {
           }
         }
       case None if isOverride => Errors.doesNotOverride(function)
-      case _ => // OK
+      case _                  => // OK
     }
 
     // TODO check if @entry outside of proxy?

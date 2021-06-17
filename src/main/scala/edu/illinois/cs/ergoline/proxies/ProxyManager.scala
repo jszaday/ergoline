@@ -13,21 +13,21 @@ object ProxyManager {
 
   def dimensionality(s: String): Int = {
     s match {
-      case arrayPtn(dim) => dim.toInt
+      case arrayPtn(dim)         => dim.toInt
       case "nodegroup" | "group" => 1
-      case _ => Errors.unreachable()
+      case _                     => Errors.unreachable()
     }
   }
 
-  private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
-  private var _elements: Map[EirProxy, EirProxy] = Map()
+  private var _proxies: Map[(String, EirClassLike), EirProxy]                = Map()
+  private var _elements: Map[EirProxy, EirProxy]                             = Map()
   private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] = Map()
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
       case EirTemplatedType(_, p: EirProxy, _) => Some(p)
-      case p: EirProxy => Some(p)
-      case _ => None
+      case p: EirProxy                         => Some(p)
+      case _                                   => None
     }
   }
 
@@ -43,12 +43,14 @@ object ProxyManager {
   }
 
   def elementFor(t: EirProxy): Option[EirProxy] = {
-    Option.when(t.isElement)(t).orElse(t.collective.map(_ => {
-      if (!_elements.contains(t)) {
-        _elements += (t -> EirProxy(t.parent, t.base, t.collective, isElement = true))
-      }
-      _elements(t)
-    }))
+    Option
+      .when(t.isElement)(t)
+      .orElse(t.collective.map(_ => {
+        if (!_elements.contains(t)) {
+          _elements += (t -> EirProxy(t.parent, t.base, t.collective, isElement = true))
+        }
+        _elements(t)
+      }))
   }
 
   def collectiveFor(t: EirProxy): Option[EirProxy] =
@@ -72,39 +74,41 @@ object ProxyManager {
   def elementType(p: EirProxy): EirType = {
     elementFor(p) match {
       case Some(e) => typeFor(e, e.templateArgs)
-      case None => Errors.missingType(p)
+      case None    => Errors.missingType(p)
     }
   }
 
   def collectiveType(p: EirProxy): EirType = {
     collectiveFor(p) match {
       case Some(e) => typeFor(e, e.templateArgs)
-      case None => Errors.missingType(p)
+      case None    => Errors.missingType(p)
     }
   }
 
   def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
-    val baseTy = CheckTypes.visit(t.base)
+    val baseTy  = CheckTypes.visit(t.base)
     val baseCls = Find.asClassLike(baseTy)
     val templateArgs = baseTy match {
       // TODO the args map is probably not necessary here?
-      case t: EirTemplatedType => t.args.map(CheckTypes.visit)
+      case t: EirTemplatedType               => t.args.map(CheckTypes.visit)
       case _ if baseCls.templateArgs.isEmpty => Nil
-      case _ => Errors.missingSpecialization(baseCls)
+      case _                                 => Errors.missingSpecialization(baseCls)
     }
 
     val collective = t.collective.getOrElse("")
-    val baseProxy = _proxies.getOrElse((collective, baseCls), {
-      val proxy = checkProxyable(baseCls, t.collective, isElement = false)
-      _proxies += ((collective, baseCls) -> proxy)
-      proxy
-    })
+    val baseProxy = _proxies.getOrElse(
+      (collective, baseCls), {
+        val proxy = checkProxyable(baseCls, t.collective, isElement = false)
+        _proxies += ((collective, baseCls) -> proxy)
+        proxy
+      }
+    )
 
     val proxy = Option
       .unless(t.isElement)(baseProxy)
       .orElse(elementFor(baseProxy))
 
-    typeFor (
+    typeFor(
       proxy.getOrElse(Errors.missingType(t)),
       templateArgs
     )

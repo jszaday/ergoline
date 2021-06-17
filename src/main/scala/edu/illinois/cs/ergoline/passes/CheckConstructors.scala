@@ -13,8 +13,7 @@ object CheckConstructors {
     checkConstructors(cls, cls.members.filter(_.isConstructor))
   }
 
-  def checkConstructors(cls: EirClassLike, constructors: List[EirMember])
-                       (implicit ctx: TypeCheckContext): Int = {
+  def checkConstructors(cls: EirClassLike, constructors: List[EirMember])(implicit ctx: TypeCheckContext): Int = {
     val needsInitialization = cls.needsInitialization
     if (constructors.isEmpty && needsInitialization.nonEmpty) {
       Errors.missingConstructor(cls)
@@ -36,32 +35,40 @@ object CheckConstructors {
   // TODO implement this?
   def fulfillsSuperConstructor(constructor: EirMember): Boolean = true
 
-  def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)
-                       (implicit ctx: TypeCheckContext): Boolean = {
-    val argDeclPairs = constructor.member.asInstanceOf[EirFunction].functionArgs.collect {
-      case x if x.isSelfAssigning => x
-    }.map(arg => {
-      (Find.child[EirMember](cls, withName(arg.name)).headOption, arg)
-    })
-    argDeclPairs.isEmpty || argDeclPairs.forall(x => x match {
-      case (Some(EirMember(_, d: EirDeclaration, _)), arg: EirFunctionArgument) =>
-        constructorAssignmentOk(d, arg.declaredType)
-      case _ => false
-    })
+  def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)(implicit ctx: TypeCheckContext): Boolean = {
+    val argDeclPairs = constructor.member
+      .asInstanceOf[EirFunction]
+      .functionArgs
+      .collect {
+        case x if x.isSelfAssigning => x
+      }
+      .map(arg => {
+        (Find.child[EirMember](cls, withName(arg.name)).headOption, arg)
+      })
+    argDeclPairs.isEmpty || argDeclPairs.forall(x =>
+      x match {
+        case (Some(EirMember(_, d: EirDeclaration, _)), arg: EirFunctionArgument) =>
+          constructorAssignmentOk(d, arg.declaredType)
+        case _ => false
+      }
+    )
   }
 
-  private def canAssignHelper(x: EirResolvable[EirType], y: EirResolvable[EirType])
-                             (implicit ctx: TypeCheckContext): Boolean = {
+  private def canAssignHelper(x: EirResolvable[EirType], y: EirResolvable[EirType])(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
     CheckTypes.visit(x).canAssignTo(CheckTypes.visit(y))
   }
 
-  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType])
-                             (implicit ctx: TypeCheckContext): Boolean = {
+  def constructorAssignmentOk(decl: EirDeclaration, declaredType: EirResolvable[EirType])(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
     (!decl.isFinal || decl.initialValue.isEmpty) && canAssignHelper(declaredType, decl.declaredType)
   }
 
-  def fulfillsMandatoryAssignments(needsInitialization: List[EirMember], member: EirMember)
-                                  (implicit ctx: TypeCheckContext): Boolean = {
+  def fulfillsMandatoryAssignments(needsInitialization: List[EirMember], member: EirMember)(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
     val constructor = member.member.asInstanceOf[EirFunction]
     needsInitialization.isEmpty || needsInitialization.forall(variable => {
       val decl = variable.member.asInstanceOf[EirDeclaration]

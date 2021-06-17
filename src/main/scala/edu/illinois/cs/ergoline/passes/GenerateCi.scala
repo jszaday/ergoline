@@ -43,10 +43,12 @@ object GenerateCi {
 
   def makeChareSpecializations(ctx: CiUnparseContext, proxy: EirProxy): Unit = {
     val kind = visitChareType(proxy.isMain, proxy.collective)
-    val specializations = ctx.checked.getOrElse(proxy, Nil).map(
-      _.types.map(Find.uniqueResolution[EirType])
-    ) // NOTE we might want to consider putting .distinct here?
-      //      (but it shouldn't be necessary)
+    val specializations = ctx.checked
+      .getOrElse(proxy, Nil)
+      .map(
+        _.types.map(Find.uniqueResolution[EirType])
+      ) // NOTE we might want to consider putting .distinct here?
+    //      (but it shouldn't be necessary)
     specializations.foreach(sp => {
       ctx << kind << proxy.baseName << "<" << {
         (sp.map(ctx.typeFor(_, Some(proxy))), ", ")
@@ -99,8 +101,8 @@ object GenerateCi {
 //    if (p.isMain && f.isConstructor) {
 //      ctx << s"entry [nokeep] " << p.baseName << "(CkArgMsg* msg);"
 //    } else {
-      ctx << "entry" << attributesFor(p, f)
-      GenerateCpp.visitFunction(assertValid[EirFunction](f.member), isMember = true)(ctx)
+    ctx << "entry" << attributesFor(p, f)
+    GenerateCpp.visitFunction(assertValid[EirFunction](f.member), isMember = true)(ctx)
 //    }
   }
 

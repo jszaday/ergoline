@@ -6,14 +6,14 @@ import edu.illinois.cs.ergoline.resolution.EirResolvable
 
 object CheckEnclose {
   object CheckEncloseSyntax {
-    implicit class RichEirNode(node : EirNode) {
-      def validEnclose(other : EirNode): Boolean = {
+    implicit class RichEirNode(node: EirNode) {
+      def validEnclose(other: EirNode): Boolean = {
         node match {
           /* TODO this needs to be thought about more so it does
            *      not exempt symbols from scrutiny
            */
           case _: EirEncloseExempt | _: EirResolvable[_] => true
-          case _ => node.parent.contains(other)
+          case _                                         => node.parent.contains(other)
         }
       }
     }
@@ -22,7 +22,7 @@ object CheckEnclose {
   private def visit(node: EirNode): Iterable[EirNode] = {
     val children = node match {
       case m: EirMember => Iterable(m.member)
-      case _ => node.children.view
+      case _            => node.children.view
     }
 
     children.filterNot(_.validEnclose(node)) ++

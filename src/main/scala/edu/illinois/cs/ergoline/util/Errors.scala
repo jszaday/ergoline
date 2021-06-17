@@ -19,17 +19,18 @@ object Errors {
   def contextualize(n: EirNode): String =
     n.location.map(_.toString).getOrElse("???")
 
-  def nameFor(n: EirNode): String = n match {
-    case n: EirNamedNode => n.name
-    case t: EirTupleType => s"(${t.children.map(nameFor(_)) mkString ", "})"
-    case _ => n.toString
-  }
+  def nameFor(n: EirNode): String =
+    n match {
+      case n: EirNamedNode => n.name
+      case t: EirTupleType => s"(${t.children.map(nameFor(_)) mkString ", "})"
+      case _               => n.toString
+    }
 
   def format(ctx: EirNode, msg: String, params: Any*): String = {
     val start = Option(ctx).map(contextualize).getOrElse("???")
     start + ": " + msg.format(params.map {
       case n: EirNode => nameFor(n)
-      case x => x.toString
+      case x          => x.toString
     }: _*)
   }
 
@@ -136,7 +137,14 @@ object Errors {
   }
 
   def cannotParse(tree: ParseTree): Nothing = {
-    exit(format(null, "could not parse %s (a(n) %s)", Option(tree).map(_.getText).getOrElse("null"), Option(tree).map(_.getClass.getName).getOrElse("null")))
+    exit(
+      format(
+        null,
+        "could not parse %s (a(n) %s)",
+        Option(tree).map(_.getText).getOrElse("null"),
+        Option(tree).map(_.getClass.getName).getOrElse("null")
+      )
+    )
   }
 
   def systemFnHasBody(f: EirFunction): Nothing = {

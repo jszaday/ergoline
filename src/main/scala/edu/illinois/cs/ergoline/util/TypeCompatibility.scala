@@ -10,13 +10,17 @@ import scala.reflect.ClassTag
 object TypeCompatibility {
 
   private def checkSubclass(a: EirClassLike, b: EirClassLike): Boolean = {
-    a.inherited.map(Find.uniqueResolution[EirType]).map({
-      case t: EirTemplatedType =>
-        assertValid[EirClassLike](Find.uniqueResolution[EirType](t.base))
-      case c: EirClassLike => c
-    }).collect({
-      case c: EirClassLike => c
-    }).exists(x => { x == b || checkSubclass(x, b) })
+    a.inherited
+      .map(Find.uniqueResolution[EirType])
+      .map({
+        case t: EirTemplatedType =>
+          assertValid[EirClassLike](Find.uniqueResolution[EirType](t.base))
+        case c: EirClassLike => c
+      })
+      .collect({
+        case c: EirClassLike => c
+      })
+      .exists(x => { x == b || checkSubclass(x, b) })
   }
 
   implicit class RichEirClassLike(self: EirClassLike) {
@@ -33,28 +37,31 @@ object TypeCompatibility {
 
   implicit class RichEirType(ours: EirType) {
 
-    def canAssignTo(theirs: EirType): Boolean = (ours == theirs) || ((ours, theirs) match {
-      case (x: EirTemplatedType, y: EirTemplatedType) =>
-        // TODO add checking for default arguments
-        x.base.canAssignTo(y.base) && (x.args.length == y.args.length) && x.args.zip(y.args).forall{
-          case (xx, yy) => xx.canAssignTo(yy)
-        }
-      case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
-      case (x: EirTupleType, y: EirTupleType) =>
-        x.children.length == y.children.length &&
-          x.children.zip(y.children).forall({
-            case (a, b) => a.canAssignTo(b)
-          })
-      case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
-        x.inherited.exists(_.canAssignTo(y))
-      case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
-        x.base.canAssignTo(y)
-      case (x: EirConstantFacade, y: EirConstantFacade) => x.value.equivalentTo(y.value)
-      case _ => false
-    })
+    def canAssignTo(theirs: EirType): Boolean =
+      (ours == theirs) || ((ours, theirs) match {
+        case (x: EirTemplatedType, y: EirTemplatedType) =>
+          // TODO add checking for default arguments
+          x.base.canAssignTo(y.base) && (x.args.length == y.args.length) && x.args.zip(y.args).forall {
+            case (xx, yy) => xx.canAssignTo(yy)
+          }
+        case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
+        case (x: EirTupleType, y: EirTupleType) =>
+          x.children.length == y.children.length &&
+            x.children
+              .zip(y.children)
+              .forall({
+                case (a, b) => a.canAssignTo(b)
+              })
+        case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
+          x.inherited.exists(_.canAssignTo(y))
+        case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
+          x.base.canAssignTo(y)
+        case (x: EirConstantFacade, y: EirConstantFacade) => x.value.equivalentTo(y.value)
+        case _                                            => false
+      })
   }
 
-  implicit class RichEirResolvable[T <: EirType : ClassTag](ours: EirResolvable[T]) {
+  implicit class RichEirResolvable[T <: EirType: ClassTag](ours: EirResolvable[T]) {
     // A resolver must be able to resolve an unspecialized specializable for it to be used here!!
     // For example, EirSymbol(..., "foo") must resolve to foo even if when it's declared as ``trait foo<A> ...``
     def canAssignTo(theirs: EirResolvable[T]): Boolean = {

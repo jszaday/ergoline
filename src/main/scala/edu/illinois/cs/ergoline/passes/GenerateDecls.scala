@@ -11,18 +11,18 @@ object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
 
   def hasHash(x: EirClassLike): Boolean = false
-  def hasPup(x: EirClassLike): Boolean = false
+  def hasPup(x: EirClassLike): Boolean  = false
 
   def visit(ctx: CodeGenerationContext, node: EirNode): Unit = {
     node match {
-      case x: EirNamespace => visitNamespace(ctx, x)
-      case x: EirClassLike => visitClassLike(ctx, x)
-      case x: EirMember => visitMember(ctx, x)
-      case x: EirFunction => visitFunction(ctx, x)
-      case x: EirDeclaration => visitDeclaration(ctx, x)
+      case x: EirNamespace        => visitNamespace(ctx, x)
+      case x: EirClassLike        => visitClassLike(ctx, x)
+      case x: EirMember           => visitMember(ctx, x)
+      case x: EirFunction         => visitFunction(ctx, x)
+      case x: EirDeclaration      => visitDeclaration(ctx, x)
       case x: EirFunctionArgument => GenerateCpp.visitFunctionArgument(x)(ctx)
-      case _: EirImport =>
-      case _: EirFileSymbol =>
+      case _: EirImport           =>
+      case _: EirFileSymbol       =>
     }
   }
 
@@ -57,15 +57,21 @@ object GenerateDecls {
     }
     ctx << x.members << s"};"
 
-    x.members.collect {
-      case m@EirMember(_, _: EirDeclaration, _) if m.isStatic => m
-    }.foreach(outsideStaticDecl(ctx, _))
+    x.members
+      .collect {
+        case m @ EirMember(_, _: EirDeclaration, _) if m.isStatic => m
+      }
+      .foreach(outsideStaticDecl(ctx, _))
   }
 
   def outsideStaticDecl(ctx: CodeGenerationContext, m: EirMember): Unit = {
     val decl: EirDeclaration = assertValid[EirDeclaration](m.member)
     ctx << visitTemplateArgs(m.base.templateArgs)(ctx)
-    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << GenerateCpp.nameFor(ctx, m.base, includeTemplates = true) << "::" << m.name
+    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << GenerateCpp.nameFor(
+      ctx,
+      m.base,
+      includeTemplates = true
+    ) << "::" << m.name
     ctx << decl.initialValue.map(_ => "=") << decl.initialValue << ";"
   }
 
