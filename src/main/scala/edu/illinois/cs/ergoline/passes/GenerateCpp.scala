@@ -1137,7 +1137,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         else x.op
       }
     } else {
-      ctx << "->" << target.to[EirNamedNode].map(_.name) << "("
+      val lhs = ctx.resolve(ctx.typeOf(x.lhs))
+      ctx << fieldAccessorFor(lhs) << target.to[EirNamedNode].map(_.name) << "("
     }
     ctx << x.rhs << ")"
   }
@@ -1560,7 +1561,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << ")"
       case _ =>
-        ctx << "new" << ctx.typeFor(objTy, Some(x)) << "(" << visitArguments(
+        ctx << Option.when(objTy.isPointer)("new") << ctx.typeFor(
+          objTy,
+          Some(x)
+        ) << "(" << visitArguments(
           ctx
         )(x.disambiguation, args) << ")"
     }
