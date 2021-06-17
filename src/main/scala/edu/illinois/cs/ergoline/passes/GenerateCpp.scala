@@ -42,10 +42,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       def isPointer: Boolean = {
         self.isInstanceOf[EirLambdaType] || (
           Find.tryClassLike(self) match {
-            case Some(c: EirClass) => !c.valueType
-            case Some(_)           => true
-            case None              => false
-        }
+            case Some(c: EirClass)        => !c.valueType
+            case Some(_: EirProxy) | None => false
+            case Some(_)                  => true
+          }
         )
       }
 
