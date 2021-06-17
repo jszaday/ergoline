@@ -1,6 +1,6 @@
 package ergoline;
 
-@system class int {
+@system struct int {
     @system(reducer="CkReduction::sum_int")
     def plus(other: int): int;
 

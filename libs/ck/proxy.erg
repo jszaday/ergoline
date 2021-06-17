@@ -4,7 +4,7 @@ import ergoline::int;
 import ergoline::bool;
 import ergoline::string;
 
-@system(alias="hypercomm::proxy",pointer=true)
+@system(alias="hypercomm::proxy")
 class proxy {
     @system def local(): bool;
     @system def collective(): bool;
