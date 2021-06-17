@@ -340,7 +340,8 @@ case class EirClass(
     var name: String,
     var templateArgs: List[EirTemplateArgument],
     var extendsThis: Option[EirResolvable[EirType]],
-    var implementsThese: List[EirResolvable[EirType]]
+    var implementsThese: List[EirResolvable[EirType]],
+    var valueType: Boolean = false
 ) extends EirNode
     with EirClassLike
 

@@ -251,12 +251,15 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: ClassDeclarationContext
   ): EirClassLike = {
     val name = ctx.Identifier().getText
-    val node: EirClassLike =
-      if (ctx.ClassKwd() != null) {
-        EirClass(parent, null, name, null, None, Nil)
+    val node: EirClassLike = {
+      val isClass = ctx.ClassKwd() != null
+      val isStruct = ctx.StructKwd() != null
+      if (isClass || isStruct) {
+        EirClass(parent, null, name, null, None, Nil, isStruct)
       } else {
         EirTrait(parent, null, name, null, None, Nil)
       }
+    }
     enter(
       node,
       (c: EirClassLike) => {

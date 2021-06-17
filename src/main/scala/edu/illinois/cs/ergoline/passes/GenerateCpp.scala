@@ -40,17 +40,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     implicit class RichEirType(self: EirType) {
       def isPointer: Boolean = {
-        self match {
-          case _: EirLambdaType => true
-          case _: EirClassLike | _: EirTemplatedType =>
-            val cls = Find.asClassLike(self)
-            val system: Option[EirAnnotation] = cls.annotation("system")
-            system match {
-              case Some(system) => system("pointer").exists(_.toBoolean)
-              case None         => !cls.isInstanceOf[EirProxy]
-            }
-          case _ => false
+        self.isInstanceOf[EirLambdaType] || (
+          Find.tryClassLike(self) match {
+            case Some(c: EirClass) => !c.valueType
+            case Some(_)           => true
+            case None              => false
         }
+        )
       }
 
       def isSystem: Boolean =
