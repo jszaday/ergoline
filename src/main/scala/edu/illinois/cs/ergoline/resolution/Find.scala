@@ -5,9 +5,19 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.Find.uniqueResolution
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichIntOption, RichOption}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichEirNode,
+  RichIntOption,
+  RichOption
+}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
-import edu.illinois.cs.ergoline.util.{Errors, addExplicitSelf, assertValid, extractFunction, sweepInherited}
+import edu.illinois.cs.ergoline.util.{
+  Errors,
+  addExplicitSelf,
+  assertValid,
+  extractFunction,
+  sweepInherited
+}
 
 import scala.collection.View
 import scala.reflect.{ClassTag, classTag}
@@ -42,7 +52,9 @@ object Find {
         node.children.view
           .zip(node.children.view.map(predicate))
           .collect({
-            case (child, Some(x)) => Option.when(x)(child) ++ descendant(child, predicate, stack :+ node)
+            case (child, Some(x)) =>
+              Option
+                .when(x)(child) ++ descendant(child, predicate, stack :+ node)
           })
           .flatten
       })
@@ -50,24 +62,39 @@ object Find {
   }
 
   // recursively check all children of a node
-  def within[T <: EirNode: ClassTag](node: EirNode, predicate: T => Boolean): View[T] = {
-    Find.child[T](node, predicate).concat(node.children.view.flatMap(within[T](_, predicate)))
+  def within[T <: EirNode: ClassTag](
+      node: EirNode,
+      predicate: T => Boolean
+  ): View[T] = {
+    Find
+      .child[T](node, predicate)
+      .concat(node.children.view.flatMap(within[T](_, predicate)))
   }
 
   // check only the immediate children of the node (do not descend)
-  def child[T <: EirNode: ClassTag](node: EirNode, predicate: T => Boolean): View[T] = {
+  def child[T <: EirNode: ClassTag](
+      node: EirNode,
+      predicate: T => Boolean
+  ): View[T] = {
     node.children.view.collect {
       case t: T if predicate(t) => t
     }
   }
 
-  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(implicit tag: ClassTag[T]): T = {
+  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(
+      implicit tag: ClassTag[T]
+  ): T = {
     node
       .flatMap(firstNamedChild[T](_, name))
-      .getOrElse(Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name"))
+      .getOrElse(
+        Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name")
+      )
   }
 
-  private def firstNamedChild[T <: EirNamedNode: ClassTag](node: EirNode, name: String): Option[T] = {
+  private def firstNamedChild[T <: EirNamedNode: ClassTag](
+      node: EirNode,
+      name: String
+  ): Option[T] = {
     node.children.view collectFirst {
       case n: EirNamedNode if n.name == name => n
     } map {
@@ -102,21 +129,30 @@ object Find {
   }
 
   // TODO use this!!
-  def uniqueResolution[T <: EirNode: ClassTag](it: Iterable[EirResolvable[_]]): Iterable[T] = {
+  def uniqueResolution[T <: EirNode: ClassTag](
+      it: Iterable[EirResolvable[_]]
+  ): Iterable[T] = {
     it.map(uniqueResolution[T])
   }
 
-  def unionResolvable(x: EirType, rY: EirResolvable[EirType])(implicit ctx: TypeCheckContext): Option[EirType] = {
-    val oY = Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(CheckTypes.visit(rY))
+  def unionResolvable(x: EirType, rY: EirResolvable[EirType])(implicit
+      ctx: TypeCheckContext
+  ): Option[EirType] = {
+    val oY =
+      Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(CheckTypes.visit(rY))
     oY.map(unionType(x, _)) match {
       case Some(x) => x
       case None    => Some(x)
     }
   }
 
-  def unionType(types: EirType*)(implicit ctx: TypeCheckContext): Option[EirType] = unionType(types)
+  def unionType(types: EirType*)(implicit
+      ctx: TypeCheckContext
+  ): Option[EirType] = unionType(types)
 
-  def unionType(types: Iterable[EirType])(implicit ctx: TypeCheckContext): Option[EirType] = {
+  def unionType(
+      types: Iterable[EirType]
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val distinct = types.toList.distinct
     distinct.tail.foldRight(distinct.headOption)((x, oY) =>
       oY match {
@@ -126,7 +162,9 @@ object Find {
     )
   }
 
-  def unionType(x: EirType, y: EirType)(implicit ctx: TypeCheckContext): Option[EirType] = {
+  def unionType(x: EirType, y: EirType)(implicit
+      ctx: TypeCheckContext
+  ): Option[EirType] = {
     if (x == y) Some(x)
     else if (x.canAssignTo(y)) Some(y)
     else Some(x).filter(y.canAssignTo)
@@ -163,16 +201,22 @@ object Find {
   //      need to figure out a way around this?
   def anywhereAccessible(ctx: EirNode, name: String): View[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
-    val matches   = withName(name)
+    val matches = withName(name)
     val predicate: EirNode => Option[Boolean] = {
       case _: EirBlock => None
       // only allowed to consider members when within the class?
-      case x: EirMember    => Option.when(matches(x) && ancestors.contains(x.base))(false)
-      case x: EirNamespace => Option.when(matches(x) || ancestors.contains(x))(matches(x))
-      case x: EirClassLike => Option.when(!ancestors.contains(x) || matches(x))(matches(x))
+      case x: EirMember =>
+        Option.when(matches(x) && ancestors.contains(x.base))(false)
+      case x: EirNamespace =>
+        Option.when(matches(x) || ancestors.contains(x))(matches(x))
+      case x: EirClassLike =>
+        Option.when(!ancestors.contains(x) || matches(x))(matches(x))
       case x: EirImport =>
-        Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(matches(x))
-      case x if !isTopLevel(x) || x.isInstanceOf[EirFunction] => Option.when(matches(x))(true)
+        Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(
+          matches(x)
+        )
+      case x if !isTopLevel(x) || x.isInstanceOf[EirFunction] =>
+        Option.when(matches(x))(true)
       // TODO how to handle arguments?
 //      case x: EirFunction => Option.when(matches(x))(true)
       case x => Some(matches(x))
@@ -212,17 +256,26 @@ object Find {
     }
   }
 
-  private def qualified(usage: EirNode, scope: EirNamedNode, names: List[String]): Seq[EirNamedNode] = {
+  private def qualified(
+      usage: EirNode,
+      scope: EirNamedNode,
+      names: List[String]
+  ): Seq[EirNamedNode] = {
     if (names.nonEmpty) {
       val last = names.init.foldRight(Iterable(scope))((name, curr) => {
-        curr.headOption.view.flatMap(child[EirNamedNode](_, withName(name).and(usage.canAccess)))
+        curr.headOption.view.flatMap(
+          child[EirNamedNode](_, withName(name).and(usage.canAccess))
+        )
       })
       last
-        .flatMap(child[EirNamedNode](_, withName(names.last).and(usage.canAccess)).map({
-          case fs: EirFileSymbol =>
-            Find.uniqueResolution[EirNamedNode](fs)
-          case x => x
-        }))
+        .flatMap(
+          child[EirNamedNode](_, withName(names.last).and(usage.canAccess))
+            .map({
+              case fs: EirFileSymbol =>
+                Find.uniqueResolution[EirNamedNode](fs)
+              case x => x
+            })
+        )
         .toSeq
     } else {
       Seq(scope)
@@ -245,8 +298,8 @@ object Find {
       case _                   => None
     }
 
-  def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(implicit
-      ctx: TypeCheckContext
+  def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(
+      implicit ctx: TypeCheckContext
   ): View[(EirMember, EirType)] = {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
     def helper(x: EirMember) = {
@@ -271,20 +324,27 @@ object Find {
     }
   }
 
-  def accessibleConstructor(base: EirType, x: EirNew, mustBeConcrete: Boolean = false): View[EirMember] = {
+  def accessibleConstructor(
+      base: EirType,
+      x: EirNew,
+      mustBeConcrete: Boolean = false
+  ): View[EirMember] = {
     val c = asClassLike(base)
-    if (c.isAbstract && mustBeConcrete) throw new RuntimeException(s"cannot instantiate ${c.name}")
+    if (c.isAbstract && mustBeConcrete)
+      throw new RuntimeException(s"cannot instantiate ${c.name}")
     child[EirMember](c, (y: EirMember) => y.isConstructor && x.canAccess(y))
   }
 
   def overloads(function: EirFunction): View[EirFunction] = {
     val member = function.parent.to[EirMember]
-    val base   = member.map(_.base).orElse(function.parent)
+    val base = member.map(_.base).orElse(function.parent)
     base
       .map(
         _.children.view
           .map(extractFunction)
-          .flatMap(_.find(child => (child.name == function.name) && child != function))
+          .flatMap(
+            _.find(child => (child.name == function.name) && child != function)
+          )
       )
       .getOrElse(View())
   }
@@ -303,7 +363,10 @@ object Find {
     })
   }
 
-  private def accessibleMember(base: EirType, x: EirScopedSymbol[_]): View[EirMember] =
+  private def accessibleMember(
+      base: EirType,
+      x: EirScopedSymbol[_]
+  ): View[EirMember] =
     x.pending match {
       case EirSymbol(_, head :: rest) =>
         accessibleMember(base, x, head).flatMap(qualified(x, _, rest)).collect {
@@ -314,7 +377,11 @@ object Find {
       case _                       => Errors.unreachable()
     }
 
-  def accessibleMember(base: EirType, ctx: EirNode, field: String): View[EirMember] = {
+  def accessibleMember(
+      base: EirType,
+      ctx: EirNode,
+      field: String
+  ): View[EirMember] = {
     // TODO check parent classes as well!
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
@@ -322,7 +389,8 @@ object Find {
   object FindSyntax {
 
     implicit class RichPredicate[T](predicate: T => Boolean) {
-      def and(other: T => Boolean): T => Boolean = (t: T) => predicate(t) && other(t)
+      def and(other: T => Boolean): T => Boolean =
+        (t: T) => predicate(t) && other(t)
     }
 
   }

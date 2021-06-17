@@ -63,7 +63,8 @@ object Errors {
     exit(format(ctx, "cannot resolve field '%s' of %s", field, a))
   }
 
-  def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing = unableToUnify(ctx, Seq(a, b))
+  def unableToUnify(ctx: EirNode, a: EirType, b: EirType): Nothing =
+    unableToUnify(ctx, Seq(a, b))
 
   def unableToName(n: EirNode): Nothing = {
     exit(format(n, "unable to generate name for %s", n))
@@ -75,7 +76,14 @@ object Errors {
 
   def unableToUnify(ctx: EirNode, it: Iterable[EirType]): Nothing = {
     if (it.isEmpty) missingType(ctx)
-    else exit(format(ctx, "could not unify types: [%s]", it.map(nameFor) mkString ", "))
+    else
+      exit(
+        format(
+          ctx,
+          "could not unify types: [%s]",
+          it.map(nameFor) mkString ", "
+        )
+      )
   }
 
   def unableToResolve(resolvable: EirResolvable[_]): Nothing = {
@@ -94,8 +102,18 @@ object Errors {
     exit(format(target, "%s is not accessible within %s", target, usage))
   }
 
-  def invalidTupleIndices(tuple: EirTupleType, nodes: Iterable[EirNode]): Nothing = {
-    exit(format(nodes.headOption.orNull, "cannot use %s as indices for %s", nodes, tuple))
+  def invalidTupleIndices(
+      tuple: EirTupleType,
+      nodes: Iterable[EirNode]
+  ): Nothing = {
+    exit(
+      format(
+        nodes.headOption.orNull,
+        "cannot use %s as indices for %s",
+        nodes,
+        tuple
+      )
+    )
   }
 
   def invalidConstExpr(expr: EirNode): Nothing = {
@@ -106,8 +124,20 @@ object Errors {
     exit(format(node, "could not find the namespace of %s", node))
   }
 
-  def invalidParentClass(a: EirClassLike, b: EirClassLike, hint: String = ""): Nothing = {
-    exit(format(a, "%s cannot be used as a parent class for %s %s", a, b, if (hint.nonEmpty) ", " + hint else "."))
+  def invalidParentClass(
+      a: EirClassLike,
+      b: EirClassLike,
+      hint: String = ""
+  ): Nothing = {
+    exit(
+      format(
+        a,
+        "%s cannot be used as a parent class for %s %s",
+        a,
+        b,
+        if (hint.nonEmpty) ", " + hint else "."
+      )
+    )
   }
 
   def missingSpecialization(a: EirNode): Nothing = {
@@ -115,10 +145,19 @@ object Errors {
   }
 
   def incorrectType(a: EirNode, c: Class[_]): Nothing = {
-    exit(format(a, "expected a(n) %s, instead got %s (a(n) %s)", c.getName, a, a.getClass.getName))
+    exit(
+      format(
+        a,
+        "expected a(n) %s, instead got %s (a(n) %s)",
+        c.getName,
+        a,
+        a.getClass.getName
+      )
+    )
   }
 
-  def incorrectType(a: EirNode, c: ClassTag[_]): Nothing = incorrectType(a, c.runtimeClass)
+  def incorrectType(a: EirNode, c: ClassTag[_]): Nothing =
+    incorrectType(a, c.runtimeClass)
 
   def unknownOperator(a: EirNode, s: String): Nothing = {
     exit(format(a, "unrecognized operator %s", s))
@@ -164,7 +203,15 @@ object Errors {
   }
 
   def incompatibleOverride(f: EirFunction, a: EirType, b: EirType): Nothing = {
-    exit(format(f, "%s has an incompatible return type with overridden function (%s vs. %s)", f, a, b))
+    exit(
+      format(
+        f,
+        "%s has an incompatible return type with overridden function (%s vs. %s)",
+        f,
+        a,
+        b
+      )
+    )
   }
 
   def missingConstructor(cls: EirClassLike): Nothing = {
@@ -172,7 +219,9 @@ object Errors {
   }
 
   def missingMemberAssignment(cons: EirMember): Nothing = {
-    exit(format(cons, "%s needs to initialize all members of %s", cons, cons.base))
+    exit(
+      format(cons, "%s needs to initialize all members of %s", cons, cons.base)
+    )
   }
 
   def invalidSelfAssignment(f: EirMember): Nothing = {

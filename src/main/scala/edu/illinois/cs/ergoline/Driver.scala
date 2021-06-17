@@ -21,7 +21,9 @@ object Driver extends App {
     System.exit(0)
   }
   // get the options from the command-line args
-  var (options, files) = args.toList.partition(x => (x startsWith "-") || !(x.toLowerCase endsWith "erg"))
+  var (options, files) = args.toList.partition(x =>
+    (x startsWith "-") || !(x.toLowerCase endsWith "erg")
+  )
 
   if (options.contains("-h") || files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
@@ -36,7 +38,7 @@ object Driver extends App {
   }
 
   val out = {
-    val idx       = options.indexOf("-o")
+    val idx = options.indexOf("-o")
     val hasOutput = idx >= 0 && idx < (options.length - 1)
     val opt =
       Option.when(hasOutput)("-o " + options(idx + 1)).getOrElse("-o a.out")
@@ -103,11 +105,13 @@ object Driver extends App {
         .map("-L\"" + _ + "\"") ++ hyperLibs
 
     try {
-      val cmd = s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
+      val cmd =
+        s"${charmc.getOrElse("charmc")} ${options mkString " "} generate.ci"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {
-      case throwable: Throwable => Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
+      case throwable: Throwable =>
+        Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
     }
 
     val charmxi = Modules.currTimeMs
@@ -118,11 +122,13 @@ object Driver extends App {
         if (usingBlas) LibUtils.linkLib("gsl")
         else None
       } ++ libPaths
-      val cmd = s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
+      val cmd =
+        s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
       println(s"$$ $cmd")
       os.proc(cmd.split(raw"\s+")).call()
     } catch {
-      case throwable: Throwable => Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
+      case throwable: Throwable =>
+        Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")
     }
 
     val cxx = Modules.currTimeMs

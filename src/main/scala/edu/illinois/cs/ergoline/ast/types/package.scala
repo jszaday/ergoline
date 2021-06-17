@@ -15,15 +15,24 @@ package object types {
 
   type EirNamedType = EirType with EirNamedNode
 
-  case class EirTupleType(var parent: Option[EirNode], var children: List[EirResolvable[EirType]]) extends EirType {
+  case class EirTupleType(
+      var parent: Option[EirNode],
+      var children: List[EirResolvable[EirType]]
+  ) extends EirType {
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      AstManipulation.updateWithin(children, oldNode, newNode).map(children = _).isDefined
+      AstManipulation
+        .updateWithin(children, oldNode, newNode)
+        .map(children = _)
+        .isDefined
     }
   }
 
-  case class EirTupleMultiply(var lhs: EirResolvable[EirType], var rhs: EirExpressionNode)(var parent: Option[EirNode])
+  case class EirTupleMultiply(
+      var lhs: EirResolvable[EirType],
+      var rhs: EirExpressionNode
+  )(var parent: Option[EirNode])
       extends EirType {
-    override def children: Iterable[EirNode]                               = List(lhs, rhs)
+    override def children: Iterable[EirNode] = List(lhs, rhs)
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
   }
 
@@ -37,8 +46,12 @@ package object types {
     override def children: List[EirResolvable[EirType]] = from ++ List(to)
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      AstManipulation.updateWithin(from, oldNode, newNode).map(from = _).isDefined ||
-      ((to == oldNode) && util.applyOrFalse[EirResolvable[EirType]](to = _, newNode))
+      AstManipulation
+        .updateWithin(from, oldNode, newNode)
+        .map(from = _)
+        .isDefined ||
+      ((to == oldNode) && util
+        .applyOrFalse[EirResolvable[EirType]](to = _, newNode))
     }
 
     override def equals(any: Any): Boolean = {
@@ -63,8 +76,12 @@ package object types {
     //      so the compiler knows which specializations to forward-declare!
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      AstManipulation.updateWithin(args, oldNode, newNode).map(args = _).isDefined ||
-      ((base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode))
+      AstManipulation
+        .updateWithin(args, oldNode, newNode)
+        .map(args = _)
+        .isDefined ||
+      ((base == oldNode) && util
+        .applyOrFalse[EirResolvable[EirType]](base = _, newNode))
     }
 
     override def equals(any: Any): Boolean = {
@@ -87,12 +104,13 @@ package object types {
     override def children: Iterable[EirResolvable[EirType]] = Seq(base)
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-      (base == oldNode) && util.applyOrFalse[EirResolvable[EirType]](base = _, newNode)
+      (base == oldNode) && util
+        .applyOrFalse[EirResolvable[EirType]](base = _, newNode)
     }
 
     private var propagatedType: Option[EirType] = None
 
-    override def resolved: Boolean       = propagatedType.isDefined
+    override def resolved: Boolean = propagatedType.isDefined
     override def resolve(): Seq[EirNode] = propagatedType.toSeq
 
     def setType(t: EirType): Unit = {

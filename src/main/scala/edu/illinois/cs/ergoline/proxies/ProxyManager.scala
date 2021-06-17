@@ -1,7 +1,11 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast.EirClassLike
-import edu.illinois.cs.ergoline.ast.types.{EirProxyType, EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{
+  EirProxyType,
+  EirTemplatedType,
+  EirType
+}
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -19,9 +23,10 @@ object ProxyManager {
     }
   }
 
-  private var _proxies: Map[(String, EirClassLike), EirProxy]                = Map()
-  private var _elements: Map[EirProxy, EirProxy]                             = Map()
-  private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] = Map()
+  private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
+  private var _elements: Map[EirProxy, EirProxy] = Map()
+  private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] =
+    Map()
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
@@ -37,7 +42,11 @@ object ProxyManager {
 
   def singletons: Iterable[EirProxy] = proxies.filter(_.collective.isEmpty)
 
-  def checkProxyable(base: EirClassLike, collective: Option[String], isElement: Boolean): EirProxy = {
+  def checkProxyable(
+      base: EirClassLike,
+      collective: Option[String],
+      isElement: Boolean
+  ): EirProxy = {
     // validate base has an entry constructor of the appropriate nature
     EirProxy(base.parent, base, collective, isElement)
   }
@@ -47,7 +56,12 @@ object ProxyManager {
       .when(t.isElement)(t)
       .orElse(t.collective.map(_ => {
         if (!_elements.contains(t)) {
-          _elements += (t -> EirProxy(t.parent, t.base, t.collective, isElement = true))
+          _elements += (t -> EirProxy(
+            t.parent,
+            t.base,
+            t.collective,
+            isElement = true
+          ))
         }
         _elements(t)
       }))
@@ -56,7 +70,10 @@ object ProxyManager {
   def collectiveFor(t: EirProxy): Option[EirProxy] =
     _proxies.get((t.collective.get, t.base)).filter(_ => t.isElement)
 
-  private def typeFor(p: EirProxy, args: List[EirResolvable[EirType]]): EirType = {
+  private def typeFor(
+      p: EirProxy,
+      args: List[EirResolvable[EirType]]
+  ): EirType = {
     if (args.isEmpty) p
     else if (_types.contains((p, args))) _types((p, args))
     else {
@@ -86,7 +103,7 @@ object ProxyManager {
   }
 
   def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
-    val baseTy  = CheckTypes.visit(t.base)
+    val baseTy = CheckTypes.visit(t.base)
     val baseCls = Find.asClassLike(baseTy)
     val templateArgs = baseTy match {
       // TODO the args map is probably not necessary here?

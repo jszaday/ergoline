@@ -1,6 +1,10 @@
 package edu.illinois.cs.ergoline.util
 
-import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{
+  EirTemplatedType,
+  EirTupleType,
+  EirType
+}
 import edu.illinois.cs.ergoline.ast.{EirClassLike, EirConstantFacade}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -41,7 +45,9 @@ object TypeCompatibility {
       (ours == theirs) || ((ours, theirs) match {
         case (x: EirTemplatedType, y: EirTemplatedType) =>
           // TODO add checking for default arguments
-          x.base.canAssignTo(y.base) && (x.args.length == y.args.length) && x.args.zip(y.args).forall {
+          x.base.canAssignTo(
+            y.base
+          ) && (x.args.length == y.args.length) && x.args.zip(y.args).forall {
             case (xx, yy) => xx.canAssignTo(yy)
           }
         case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
@@ -56,16 +62,20 @@ object TypeCompatibility {
           x.inherited.exists(_.canAssignTo(y))
         case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
           x.base.canAssignTo(y)
-        case (x: EirConstantFacade, y: EirConstantFacade) => x.value.equivalentTo(y.value)
-        case _                                            => false
+        case (x: EirConstantFacade, y: EirConstantFacade) =>
+          x.value.equivalentTo(y.value)
+        case _ => false
       })
   }
 
-  implicit class RichEirResolvable[T <: EirType: ClassTag](ours: EirResolvable[T]) {
+  implicit class RichEirResolvable[T <: EirType: ClassTag](
+      ours: EirResolvable[T]
+  ) {
     // A resolver must be able to resolve an unspecialized specializable for it to be used here!!
     // For example, EirSymbol(..., "foo") must resolve to foo even if when it's declared as ``trait foo<A> ...``
     def canAssignTo(theirs: EirResolvable[T]): Boolean = {
-      val (a, b) = (Find.uniqueResolution[T](ours), Find.uniqueResolution[T](theirs))
+      val (a, b) =
+        (Find.uniqueResolution[T](ours), Find.uniqueResolution[T](theirs))
       a.canAssignTo(b)
     }
 

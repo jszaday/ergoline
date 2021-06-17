@@ -6,10 +6,11 @@ import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 
 package object globals {
-  def unitLiteral(parent: Option[EirNode]): EirExpressionNode = EirLiteral(parent, EirLiteralTypes.Unit, "()")
+  def unitLiteral(parent: Option[EirNode]): EirExpressionNode =
+    EirLiteral(parent, EirLiteralTypes.Unit, "()")
 
-  var strict: Boolean        = false
-  var verbose: Boolean       = false
+  var strict: Boolean = false
+  var verbose: Boolean = false
   var enableInPlace: Boolean = true
 
   def clearGlobals(): Unit = {
@@ -18,15 +19,15 @@ package object globals {
   }
 
   val operators: Map[String, String] = Map(
-    "+"  -> "plus",
-    "-"  -> "minus",
-    "*"  -> "times",
+    "+" -> "plus",
+    "-" -> "minus",
+    "*" -> "times",
     "==" -> "equals",
     ">=" -> "compareTo",
-    ">"  -> "compareTo",
-    "<"  -> "compareTo",
-    "%"  -> "rem",
-    "/"  -> "div"
+    ">" -> "compareTo",
+    "<" -> "compareTo",
+    "%" -> "rem",
+    "/" -> "div"
   )
 
   val implicitProxyName: String = "__proxy__"
@@ -57,15 +58,18 @@ package object globals {
 
   def boolType: EirType = typeFor(EirLiteralTypes.Boolean)
 
-  def ckModule: Option[EirNamedNode]       = Modules("ck", EirGlobalNamespace)
-  def ergolineModule: Option[EirNamedNode] = Modules("ergoline", EirGlobalNamespace)
+  def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
+  def ergolineModule: Option[EirNamedNode] =
+    Modules("ergoline", EirGlobalNamespace)
 
   def operatorToFunction(op: String): Option[String] = {
     Option.when(operators.contains(op))(operators(op))
   }
 
   def typeFor(litTy: EirLiteralTypes.Value): EirType = {
-    val name: String = if (litTy == EirLiteralTypes.Float) "double" else litTy.toString.toLowerCase
+    val name: String =
+      if (litTy == EirLiteralTypes.Float) "double"
+      else litTy.toString.toLowerCase
     this.ergolineModule
       .flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
       .collect({

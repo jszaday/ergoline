@@ -15,7 +15,11 @@ object CheckFunctions {
   //      consider: def fn<A...>(A... as);
   //           and: def fn(int i);
   //      these are ambiguous in situ!
-  def sharedArgs(implicit ctx: TypeCheckContext, a: EirFunction, b: EirFunction): Boolean = {
+  def sharedArgs(implicit
+      ctx: TypeCheckContext,
+      a: EirFunction,
+      b: EirFunction
+  ): Boolean = {
     (a.templateArgs.isEmpty && b.templateArgs.isEmpty) && {
       val as = CheckTypes.visit(a.functionArgs)
       val bs = CheckTypes.visit(b.functionArgs)
@@ -44,17 +48,20 @@ object CheckFunctions {
     )
   }
 
-  def seekOverrides(ctx: TypeCheckContext, member: EirMember): Option[(EirMember, EirType)] = {
+  def seekOverrides(
+      ctx: TypeCheckContext,
+      member: EirMember
+  ): Option[(EirMember, EirType)] = {
     overridesWithin(ctx, member.base, assertValid[EirFunction](member.member))
   }
 
   // TODO check self-assigning arguments?
   def visit(implicit ctx: TypeCheckContext, function: EirFunction): Unit = {
     val overloads = Find.overloads(function)
-    val member    = function.parent.to[EirMember]
-    val system    = member.getOrElse(function).annotation("system")
-    val mailbox   = member.exists(_.isMailbox)
-    val hasBody   = function.body.isDefined
+    val member = function.parent.to[EirMember]
+    val system = member.getOrElse(function).annotation("system")
+    val mailbox = member.exists(_.isMailbox)
+    val hasBody = function.body.isDefined
 
     if (system.isDefined || mailbox) {
       if (hasBody) Errors.systemFnHasBody(function)
@@ -69,7 +76,7 @@ object CheckFunctions {
       .foreach(Errors.ambiguousOverload(function, _))
 
     val isOverride = member.exists(_.isOverride)
-    val found      = member.flatMap(seekOverrides(ctx, _))
+    val found = member.flatMap(seekOverrides(ctx, _))
     found match {
       case Some((m: EirMember, theirs: EirType)) =>
         if (!isOverride) {

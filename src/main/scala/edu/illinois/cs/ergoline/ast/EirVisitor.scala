@@ -9,7 +9,9 @@ trait EirVisitor[Context, Value] {
     throw new RuntimeException(s"unable to visit $x in context $ctx")
   }
 
-  def visit[A <: EirNode](it: Iterable[A])(implicit ctx: Context): Iterable[Value] = it.map(visit)
+  def visit[A <: EirNode](it: Iterable[A])(implicit
+      ctx: Context
+  ): Iterable[Value] = it.map(visit)
 
   def visit(node: EirNode)(implicit ctx: Context): Value = {
     node match {
@@ -69,7 +71,9 @@ trait EirVisitor[Context, Value] {
     }
   }
 
-  def visitSymbolLike(x: EirSymbolLike[_ <: EirNode])(implicit ctx: Context): Value = {
+  def visitSymbolLike(
+      x: EirSymbolLike[_ <: EirNode]
+  )(implicit ctx: Context): Value = {
     x match {
       case x: EirSymbol[_]         => visitSymbol(x)
       case x: EirScopedSymbol[_]   => visitScopedSymbol(x)
@@ -80,7 +84,10 @@ trait EirVisitor[Context, Value] {
 
   def visitExpression(node: EirExpressionNode)(implicit ctx: Context): Value = {
     node match {
-      case x: EirSymbolLike[_]      => visitSymbolLike(x) // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
+      case x: EirSymbolLike[_] =>
+        visitSymbolLike(
+          x
+        ) // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
       case x: EirNew                => visitNew(x)
       case x: EirMatch              => visitMatch(x)
       case x: EirSlice              => visitSlice(x)
@@ -103,10 +110,14 @@ trait EirVisitor[Context, Value] {
   def visitAwaitMany(x: EirAwaitMany)(implicit ctx: Context): Value
 
   def visitConstantFacade(x: EirConstantFacade)(implicit ctx: Context): Value
-  def visitTupleMultiply(x: types.EirTupleMultiply)(implicit ctx: Context): Value
+  def visitTupleMultiply(x: types.EirTupleMultiply)(implicit
+      ctx: Context
+  ): Value
 
   def visitTypeAlias(x: EirTypeAlias)(implicit ctx: Context): Value
-  def visitInterpolatedString(x: EirInterpolatedString)(implicit ctx: Context): Value
+  def visitInterpolatedString(x: EirInterpolatedString)(implicit
+      ctx: Context
+  ): Value
   def visitAwait(x: EirAwait)(implicit ctx: Context): Value
   def visitTupleType(x: EirTupleType)(implicit ctx: Context): Value
 
@@ -115,8 +126,12 @@ trait EirVisitor[Context, Value] {
   def visitMatchCase(x: EirMatchCase)(implicit ctx: Context): Value
 
   def visitPatternList(x: EirPatternList)(implicit ctx: Context): Value
-  def visitIdentifierPattern(x: EirIdentifierPattern)(implicit ctx: Context): Value
-  def visitExpressionPattern(x: EirExpressionPattern)(implicit ctx: Context): Value
+  def visitIdentifierPattern(x: EirIdentifierPattern)(implicit
+      ctx: Context
+  ): Value
+  def visitExpressionPattern(x: EirExpressionPattern)(implicit
+      ctx: Context
+  ): Value
 
   def visitNew(x: EirNew)(implicit ctx: Context): Value
 
@@ -127,11 +142,15 @@ trait EirVisitor[Context, Value] {
 //  def visitDefault(x: EirNode)(implicit ctx: Context): Value
 
 //  def visitGlobalNamespace(ctx: Context, x: Value
-  def visitSpecializedSymbol(x: EirSpecializedSymbol)(implicit ctx: Context): Value
+  def visitSpecializedSymbol(x: EirSpecializedSymbol)(implicit
+      ctx: Context
+  ): Value
 
   def visitArrayReference(x: EirArrayReference)(implicit ctx: Context): Value
 
-  def visitScopedSymbol[A <: EirNode](x: EirScopedSymbol[A])(implicit ctx: Context): Value
+  def visitScopedSymbol[A <: EirNode](x: EirScopedSymbol[A])(implicit
+      ctx: Context
+  ): Value
 
   def visitTernaryOperator(x: EirTernaryOperator)(implicit ctx: Context): Value
 
@@ -150,7 +169,9 @@ trait EirVisitor[Context, Value] {
 
   def visitLiteral(x: EirLiteral)(implicit ctx: Context): Value
 
-  def visitSymbol[A <: EirNamedNode](x: EirSymbol[A])(implicit ctx: Context): Value
+  def visitSymbol[A <: EirNamedNode](x: EirSymbol[A])(implicit
+      ctx: Context
+  ): Value
 
   def visitBlock(x: EirBlock)(implicit ctx: Context): Value
 
@@ -158,7 +179,9 @@ trait EirVisitor[Context, Value] {
 
   def visitDeclaration(x: EirDeclaration)(implicit ctx: Context): Value
 
-  def visitTemplateArgument(x: EirTemplateArgument)(implicit ctx: Context): Value
+  def visitTemplateArgument(x: EirTemplateArgument)(implicit
+      ctx: Context
+  ): Value
 
   def visitClass(x: EirClass)(implicit ctx: Context): Value
 
@@ -170,15 +193,21 @@ trait EirVisitor[Context, Value] {
 
   def visitAnnotation(x: EirAnnotation)(implicit ctx: Context): Value
 
-  def visitBinaryExpression(x: EirBinaryExpression)(implicit ctx: Context): Value
+  def visitBinaryExpression(x: EirBinaryExpression)(implicit
+      ctx: Context
+  ): Value
 
-  def visitFunctionArgument(x: EirFunctionArgument)(implicit ctx: Context): Value
+  def visitFunctionArgument(x: EirFunctionArgument)(implicit
+      ctx: Context
+  ): Value
 
   def visitAssignment(x: EirAssignment)(implicit ctx: Context): Value
 
   def visitTupleExpression(x: EirTupleExpression)(implicit ctx: Context): Value
 
-  def visitLambdaExpression(x: EirLambdaExpression)(implicit ctx: Context): Value
+  def visitLambdaExpression(x: EirLambdaExpression)(implicit
+      ctx: Context
+  ): Value
 
   def visitReturn(x: EirReturn)(implicit ctx: Context): Value
 }

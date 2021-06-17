@@ -14,7 +14,11 @@ package object util {
 
   import EirUtilitySyntax.RichEirNode
 
-  def addExplicitSelf(ctx: TypeCheckContext, base: EirType, ty: EirType): EirType = {
+  def addExplicitSelf(
+      ctx: TypeCheckContext,
+      base: EirType,
+      ty: EirType
+  ): EirType = {
     ty match {
       case EirLambdaType(_, from, to, args) =>
         ctx.lambdaWith(base +: from, to, args)
@@ -33,14 +37,22 @@ package object util {
     m.member = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy)
     m.member.asInstanceOf[EirFunction].functionArgs = args.zipWithIndex.map({
       case (value, i) =>
-        EirFunctionArgument(Some(m.member), s"x$i", value, isExpansion = false, isSelfAssigning = false)
+        EirFunctionArgument(
+          Some(m.member),
+          s"x$i",
+          value,
+          isExpansion = false,
+          isSelfAssigning = false
+        )
     })
     m
   }
 
   def resolveToPair(
       resolvable: EirResolvable[EirType]
-  )(implicit ctx: TypeCheckContext): (EirClassLike, Option[EirSpecialization]) = {
+  )(implicit
+      ctx: TypeCheckContext
+  ): (EirClassLike, Option[EirSpecialization]) = {
     CheckTypes.visit(resolvable) match {
       case t @ EirTemplatedType(_, base, _) =>
         (Find.uniqueResolution[EirClassLike](base), Some(t))
@@ -50,15 +62,23 @@ package object util {
   }
 
   // lazily sweep (immediately) inherited classes, applying specialization(s)
-  def sweepInheritedFirst[T](ctx: TypeCheckContext, base: EirClassLike, f: EirClassLike => Option[T]): Option[T] = {
+  def sweepInheritedFirst[T](
+      ctx: TypeCheckContext,
+      base: EirClassLike,
+      f: EirClassLike => Option[T]
+  ): Option[T] = {
     sweepInherited(ctx, base, (a: EirClassLike) => f(a).view).headOption
   }
 
-  def sweepInherited[T](ctx: TypeCheckContext, base: EirClassLike, f: EirClassLike => View[T]): View[T] = {
+  def sweepInherited[T](
+      ctx: TypeCheckContext,
+      base: EirClassLike,
+      f: EirClassLike => View[T]
+  ): View[T] = {
     base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
       case (a, None) => f(a)
       case (a, Some(sp)) =>
-        val spec  = ctx.specialize(a, sp)
+        val spec = ctx.specialize(a, sp)
         val found = f(a)
         ctx.leave(spec)
         found
@@ -88,7 +108,10 @@ package object util {
       .toSeq
   }
 
-  def applyOrFalse[T <: EirNode: ClassTag](function: T => Unit, value: EirNode): Boolean = {
+  def applyOrFalse[T <: EirNode: ClassTag](
+      function: T => Unit,
+      value: EirNode
+  ): Boolean = {
     value.isValid[T].map(function).isDefined
   }
 
@@ -153,10 +176,16 @@ package object util {
         }
     }
 
-    implicit class RichResolvableTypeIterable(types: Iterable[EirResolvable[EirType]]) {
-      def toTupleType(allowUnit: Boolean = false)(implicit parent: Option[EirNode]): EirResolvable[EirType] =
+    implicit class RichResolvableTypeIterable(
+        types: Iterable[EirResolvable[EirType]]
+    ) {
+      def toTupleType(
+          allowUnit: Boolean = false
+      )(implicit parent: Option[EirNode]): EirResolvable[EirType] =
         types.toList match {
-          case Nil            => if (allowUnit) globals.unitType else throw new RuntimeException("please use unit type")
+          case Nil =>
+            if (allowUnit) globals.unitType
+            else throw new RuntimeException("please use unit type")
           case element :: Nil => element
           case x              => EirTupleType(parent, x)
         }

@@ -3,7 +3,12 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{
+  makeHasher,
+  makePupper,
+  visitInherits,
+  visitTemplateArgs
+}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
@@ -11,7 +16,7 @@ object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
 
   def hasHash(x: EirClassLike): Boolean = false
-  def hasPup(x: EirClassLike): Boolean  = false
+  def hasPup(x: EirClassLike): Boolean = false
 
   def visit(ctx: CodeGenerationContext, node: EirNode): Unit = {
     node match {
@@ -28,7 +33,8 @@ object GenerateDecls {
 
   def visitMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
     ctx << Option.when(x.isStatic)({
-      if (x.member.isInstanceOf[EirDeclaration]) "thread_local static" else "static"
+      if (x.member.isInstanceOf[EirDeclaration]) "thread_local static"
+      else "static"
     })
     visit(ctx, x.member)
   }
@@ -43,17 +49,22 @@ object GenerateDecls {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.annotation("system").isDefined) return
-    ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(x)(ctx) << "{"
+    ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
+      x
+    )(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
       if (!hasPup(x)) {
-        if (x.templateArgs.isEmpty) ctx << "virtual void __pup__(hypercomm::serdes&) override;"
+        if (x.templateArgs.isEmpty)
+          ctx << "virtual void __pup__(hypercomm::serdes&) override;"
         else makePupper(ctx, x, isMember = true)
       }
       if (!hasHash(x)) makeHasher(ctx, x)
       val parent = x.extendsThis
         .map(Find.uniqueResolution[EirType])
         .map(ctx.nameFor(_, Some(x)))
-      ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p => s": $p(__tag__)") << "{}"
+      ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p =>
+        s": $p(__tag__)"
+      ) << "{}"
     }
     ctx << x.members << s"};"
 
@@ -67,7 +78,10 @@ object GenerateDecls {
   def outsideStaticDecl(ctx: CodeGenerationContext, m: EirMember): Unit = {
     val decl: EirDeclaration = assertValid[EirDeclaration](m.member)
     ctx << visitTemplateArgs(m.base.templateArgs)(ctx)
-    ctx << "thread_local" << ctx.typeFor(decl.declaredType, Some(decl)) << GenerateCpp.nameFor(
+    ctx << "thread_local" << ctx.typeFor(
+      decl.declaredType,
+      Some(decl)
+    ) << GenerateCpp.nameFor(
       ctx,
       m.base,
       includeTemplates = true

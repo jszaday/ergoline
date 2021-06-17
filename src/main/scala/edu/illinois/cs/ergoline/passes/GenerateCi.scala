@@ -2,7 +2,11 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{collectiveTypeFor, readOnlyFor, zipWithSpecializations}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{
+  collectiveTypeFor,
+  readOnlyFor,
+  zipWithSpecializations
+}
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find
@@ -10,9 +14,11 @@ import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateCi {
 
-  class CiUnparseContext(override val tyCtx: TypeCheckContext) extends CodeGenerationContext("ci", tyCtx) {}
+  class CiUnparseContext(override val tyCtx: TypeCheckContext)
+      extends CodeGenerationContext("ci", tyCtx) {}
 
-  def generatedMain: Option[String] = Option.when(ProxyManager.hasMain)("generated_main_")
+  def generatedMain: Option[String] =
+    Option.when(ProxyManager.hasMain)("generated_main_")
 
   def visitAll(tyCtx: TypeCheckContext): String = {
     val ctx = new CiUnparseContext(tyCtx)
@@ -56,7 +62,11 @@ object GenerateCi {
     })
   }
 
-  def visitNamespaces(ctx: CiUnparseContext, namespaces: List[EirNamespace], proxies: List[EirProxy]): Unit = {
+  def visitNamespaces(
+      ctx: CiUnparseContext,
+      namespaces: List[EirNamespace],
+      proxies: List[EirProxy]
+  ): Unit = {
     namespaces.foreach(ns => {
       ctx << s"namespace ${ns.name}" << "{"
     })
@@ -73,7 +83,9 @@ object GenerateCi {
         if (p.collective.isEmpty) {
           zipWithSpecializations(Seq(p))(ctx) foreach {
             case (p, types) =>
-              ctx << "readonly" << collectiveTypeFor(p, types)(ctx) << " " << readOnlyFor(p, types, None)(ctx) << ";"
+              ctx << "readonly" << collectiveTypeFor(p, types)(
+                ctx
+              ) << " " << readOnlyFor(p, types, None)(ctx) << ";"
           }
         }
       })
@@ -102,7 +114,10 @@ object GenerateCi {
 //      ctx << s"entry [nokeep] " << p.baseName << "(CkArgMsg* msg);"
 //    } else {
     ctx << "entry" << attributesFor(p, f)
-    GenerateCpp.visitFunction(assertValid[EirFunction](f.member), isMember = true)(ctx)
+    GenerateCpp.visitFunction(
+      assertValid[EirFunction](f.member),
+      isMember = true
+    )(ctx)
 //    }
   }
 

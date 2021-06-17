@@ -34,8 +34,11 @@ object Processes {
       FullyResolve.visit(x)
 
       x match {
-        case n: EirNamespace => CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(ctx)
-        case _               => CheckTypes.visit(x)(ctx)
+        case n: EirNamespace =>
+          CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(
+            ctx
+          )
+        case _ => CheckTypes.visit(x)(ctx)
       }
     }
   }
@@ -62,12 +65,14 @@ object Processes {
   // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
     val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
-    val (a, c)                     = ProxyManager.proxies.toList.partition(_.isAbstract)
-    val kids                       = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
+    val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
+    val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
 
     val sorted = ctx.checked.keys
       .collect({
-        case c: EirClassLike if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty => c
+        case c: EirClassLike
+            if !c.isInstanceOf[EirProxy] && c.annotation("system").isEmpty =>
+          c
       })
       .toList
       .dependenceSort()
@@ -84,7 +89,9 @@ object Processes {
         } << "}"
     }
 
-    ctx << cppIncludes.map(x => if (x.contains("#include")) x else s"#include <$x> // ;")
+    ctx << cppIncludes.map(x =>
+      if (x.contains("#include")) x else s"#include <$x> // ;"
+    )
 
     GenerateCpp.declareGlobals(ctx)
 
@@ -124,10 +131,12 @@ object Processes {
 
       // TODO use a topological instead of greedy sorting algorithm
       def dependenceSort(): List[EirClassLike] = {
-        var unplaced                   = self.sortBy(_.inherited.size)
+        var unplaced = self.sortBy(_.inherited.size)
         var placed: List[EirClassLike] = Nil
         while (unplaced.nonEmpty) {
-          val idx = unplaced.indexWhere(!_.inherited.map(Find.asClassLike).exists(unplaced.contains(_)))
+          val idx = unplaced.indexWhere(
+            !_.inherited.map(Find.asClassLike).exists(unplaced.contains(_))
+          )
           placed :+= unplaced(idx)
           unplaced = unplaced.patch(idx, Nil, 1)
         }
@@ -140,9 +149,11 @@ object Processes {
         })
 
       // TODO find a more idiomatic way to do this
-      def orderedPartition[A](f: EirClassLike => A): List[(A, List[EirClassLike])] = {
-        var current: Option[A]                    = None
-        var group: List[EirClassLike]             = Nil
+      def orderedPartition[A](
+          f: EirClassLike => A
+      ): List[(A, List[EirClassLike])] = {
+        var current: Option[A] = None
+        var group: List[EirClassLike] = Nil
         var result: List[(A, List[EirClassLike])] = Nil
         for (a <- self) {
           val b = f(a)
