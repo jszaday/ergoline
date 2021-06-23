@@ -212,8 +212,7 @@ object GenerateProxies {
       case Some(m @ EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx << "(([&](void) mutable" << visitFunctionBody(
-            f,
-            encapsulated = true
+            f
           )(ctx) << ")())"
         } else {
           ctx << s"this->impl_->${ctx

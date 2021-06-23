@@ -42,9 +42,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       def isReconstructible: Boolean = {
         // TODO refine this with @system(reconstructible=true)
         // TODO eliminate the check for EirTemplateArgument here
-        !self.isInstanceOf[
-          EirTemplateArgument
-        ] && !self.isPointer && !self.isSystem
+        self match {
+          case _: EirTemplateArgument                            => false
+          case _: EirProxy | EirTemplatedType(_, _: EirProxy, _) => false
+          case _                                                 => !self.isPointer && !self.isSystem
+        }
       }
 
       def isPointer: Boolean = {
@@ -1023,50 +1025,52 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitFunctionBody(
-      x: EirFunction,
-      encapsulated: Boolean
+      x: EirFunction
   )(implicit ctx: CodeGenerationContext): Unit = {
     val member = x.parent.to[EirMember]
-    val parent = member.flatMap(_.parent).to[EirClassLike]
-    val declarations = Option
-      .when(member.exists(_.isConstructor))(
-        parent
-          .map(_.members)
-          .getOrElse(Nil)
-          .map(_.member)
-          .collect({
-            case d: EirDeclaration if d.initialValue.isDefined => d
-          })
-      )
-      .toIterable
-      .flatten
-    val currSelf = ctx.proxy.map(_ => "impl_").getOrElse("this")
 
-    val assignments = x.functionArgs.filter(_.isSelfAssigning)
-    if (assignments.nonEmpty || declarations.nonEmpty) {
+    if (member.exists(_.isConstructor)) {
+      val parent = assertValid[EirClassLike](member.flatMap(_.parent))
+      val encapsulated = ctx.proxy.nonEmpty
+      val currSelf = if (encapsulated) "impl_" else "this"
+      val assignments = x.functionArgs.filter(_.isSelfAssigning)
+      val declarations = parent.members collect {
+        case m @ EirMember(_, d: EirDeclaration, _)
+            if !m.isStatic && d.initialValue.nonEmpty =>
+          d
+      }
+
       if (!encapsulated) {
         ctx << ":"
         ctx << (assignments.map(x => {
           val name = ctx.nameFor(x)
           s"$name($name)"
         }), ",")
+        ctx << Option.when(assignments.nonEmpty && declarations.nonEmpty)(",")
+        ctx << (declarations.map(x => {
+          (ctx.makeSubContext() << ctx.nameFor(
+            x
+          ) << "(" << x.initialValue << ")").toString
+        }), ",")
       }
 
-      ctx << "{"
-      ctx.ignoreNext("{")
-    }
+      if (assignments.nonEmpty || declarations.nonEmpty) {
+        ctx << "{"
+        ctx.ignoreNext("{")
+      }
 
-    if (encapsulated) {
-      ctx << assignments.map(arg => {
-        val name = ctx.nameFor(arg)
-        currSelf + "->" + name + "=" + name + ";"
-      })
+      if (encapsulated) {
+        ctx << assignments.map(arg => {
+          val name = ctx.nameFor(arg)
+          currSelf + "->" + name + "=" + name + ";"
+        })
 
-      declarations.foreach(d => {
-        ctx << currSelf << "->" << ctx.nameFor(
-          d
-        ) << "=" << d.initialValue << ";"
-      })
+        declarations.foreach(d => {
+          ctx << currSelf << "->" << ctx.nameFor(
+            d
+          ) << "=" << d.initialValue << ";"
+        })
+      }
     }
 
     ctx <| (x.body, ";")
@@ -1133,7 +1137,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (x.body.isEmpty) {
       Errors.missingBody(x)
     }
-    visitFunctionBody(x, encapsulated = false)
+    visitFunctionBody(x)
   }
 
   override def visitFunction(

@@ -7,6 +7,8 @@ trait colorful {
 }
 
 struct banana with colorful {
+    val peeled: bool = false;
+
     def banana() {}
 
     override def color(): string {
