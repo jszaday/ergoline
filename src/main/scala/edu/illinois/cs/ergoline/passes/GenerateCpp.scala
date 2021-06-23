@@ -1031,6 +1031,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (member.exists(_.isConstructor)) {
       val parent = assertValid[EirClassLike](member.flatMap(_.parent))
+      val parentClass =
+        parent.extendsThis.map(ctx.resolve).flatMap(Find.tryClassLike)
+
       val encapsulated = ctx.proxy.nonEmpty
       val currSelf = if (encapsulated) "impl_" else "this"
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
@@ -1041,7 +1044,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
 
       if (!encapsulated) {
-        ctx << ":"
+        ctx << Option.when(assignments.nonEmpty || declarations.nonEmpty)(":")
+
+        // TODO find whether the body contains a call to (super) and isolate it.
+        val parentCons =
+          parentClass.map(_.members).getOrElse(Nil).filter(_.isConstructor)
+        if (parentCons.nonEmpty) assert(parentCons collect {
+          case EirMember(_, f: EirFunction, _) => f
+        } exists { x =>
+          x.functionArgs.isEmpty
+        })
+
         ctx << (assignments.map(x => {
           val name = ctx.nameFor(x)
           s"$name($name)"
