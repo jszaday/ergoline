@@ -1862,8 +1862,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val valueTy = ctx.resolve(ctx.typeOf(value))
 
     (Find.tryClassLike(goal), Find.tryClassLike(valueTy)) match {
-      case (Some(a: EirProxy), Some(b: EirProxy)) if a.isDescendantOf(b) =>
-        ctx << ctx.nameFor(b) << "(" << value << ")"
+      case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
+        ctx << ctx.nameFor(a) << "(" << value << ")"
       case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
         structToTrait(value, b)
       case _ => ctx << value
