@@ -42,8 +42,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       def isReconstructible: Boolean = {
         // TODO refine this with @system(reconstructible=true)
         // TODO eliminate the check for EirTemplateArgument here
+        // TODO fix reconstruction of tuple types!
         self match {
-          case _: EirTemplateArgument                            => false
+          case _: EirTemplateArgument | _: EirTupleType          => false
           case _: EirProxy | EirTemplatedType(_, _: EirProxy, _) => false
           case _                                                 => !self.isPointer && !self.isSystem
         }
