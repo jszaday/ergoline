@@ -2,20 +2,24 @@ package examples;
 
 import ergoline::_;
 
+abstract class peelable {
+    var peeled: bool = false;
+
+    def peelable() {}
+
+    def peel() { peeled = true; }
+}
+
 trait colorful {
     def color(): string;
 }
 
-struct banana with colorful {
-    var peeled: bool = false;
-
+struct banana extends peelable with colorful {
     def banana() {}
 
     override def color(): string {
         return "yellow";
     }
-
-    def peel() { peeled = true; }
 }
 
 class cherry with colorful {
@@ -44,7 +48,13 @@ class cherry with colorful {
         peelByReference(b);     // then, `b` gets passed-by-reference
         assert(b.peeled);       // so it is actually peeled
 
+        peelIt(b);
+
         exit();
+    }
+
+    def peelIt(p: peelable) {
+        p.peel();
     }
 
     def peelByReference(&b: banana) {

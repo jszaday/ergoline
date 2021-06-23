@@ -434,9 +434,10 @@ case class EirMember(
   def isVirtual: Boolean =
     member match {
       case _: EirFunction =>
-        (base.isAbstract || isOverride) && !annotations.exists(
-          _.name == "system"
-        )
+        !isConstructor && (base.isAbstract || isOverride) && !annotations
+          .exists(
+            _.name == "system"
+          )
       case _ => false
     }
 

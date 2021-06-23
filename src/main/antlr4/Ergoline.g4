@@ -128,7 +128,7 @@ inheritanceDecl
     ;
 
 classDeclaration
-    :   AbstractKwd? (ClassKwd | StructKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
     ;
 
 annotatedMember

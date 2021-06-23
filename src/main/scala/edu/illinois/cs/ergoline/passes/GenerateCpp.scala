@@ -881,8 +881,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitInherits(
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val base = x.extendsThis.map(ctx.resolve)
     val parents =
-      (x.implementsThese ++ x.extendsThis).map(ctx.resolve).map(ctx.nameFor(_))
+      (base ++ x.implementsThese.map(ctx.resolve)) map (ctx.nameFor(_))
+    val pupableBase = base.map(ctx.typeOf).exists(!_.isTrait)
+
     if (x.isInstanceOf[EirTrait]) {
       ctx << {
         if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(",")
@@ -892,13 +895,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << ": " << {
 //        if (parents.isEmpty) "public ergoline::object" else
         parents.map("public " + _).mkString(", ")
-      } << Option.when(parents.nonEmpty)(", ") << {
-        val res = x.extendsThis.map(ctx.resolve[EirResolvable[EirType]])
-        val hasPupableParent = res.map(ctx.typeOf(_)).exists(!_.isTrait)
-        Option.unless( /* x.isTransient || */ hasPupableParent)(
-          "public ergoline::object"
-        )
-      } <<
+      }
+      if (!pupableBase) {
+        // TODO x.isTransient ?
+        ctx << Option.when(parents.nonEmpty)(",") << "public ergoline::object"
+      }
+      ctx <<
         Option.unless(x.isValueType)(
           ", public std::enable_shared_from_this<" + nameFor(
             ctx,
