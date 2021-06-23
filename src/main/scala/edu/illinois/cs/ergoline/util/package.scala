@@ -93,12 +93,15 @@ package object util {
     }
   }
 
-  def assertValid[T: ClassTag](value: EirNode): T = {
-    Option(value) match {
+  def assertValid[T: ClassTag](value: Option[EirNode]): T = {
+    value match {
       case Some(x: T) => x
-      case _          => Errors.incorrectType(value, classTag[T])
+      case Some(x)    => Errors.incorrectType(x, classTag[T])
+      case None       => Errors.unreachable()
     }
   }
+
+  def assertValid[T: ClassTag](value: EirNode): T = assertValid[T](Some(value))
 
   def visitAll[T](node: EirNode, f: EirNode => T): Seq[T] = {
     f(node) +: node.children

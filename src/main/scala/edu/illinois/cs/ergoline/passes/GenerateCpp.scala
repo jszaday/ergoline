@@ -39,6 +39,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     implicit class RichEirType(self: EirType) {
+      def isReconstructible: Boolean = {
+        // TODO refine this with @system(reconstructible=true)
+        // TODO eliminate the check for EirTemplateArgument here
+        // TODO fix reconstruction of tuple types!
+        self match {
+          case _: EirTemplateArgument | _: EirTupleType          => false
+          case _: EirProxy | EirTemplatedType(_, _: EirProxy, _) => false
+          case _                                                 => !self.isPointer && !self.isSystem
+        }
+      }
+
       def isPointer: Boolean = {
         self.isInstanceOf[EirLambdaType] || Find
           .tryClassLike(self)
@@ -887,13 +898,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         Option.unless( /* x.isTransient || */ hasPupableParent)(
           "public ergoline::object"
         )
-      } << {
-        ", public std::enable_shared_from_this<" + nameFor(
-          ctx,
-          x,
-          includeTemplates = true
-        ) + ">"
-      }
+      } <<
+        Option.unless(x.isValueType)(
+          ", public std::enable_shared_from_this<" + nameFor(
+            ctx,
+            x,
+            includeTemplates = true
+          ) + ">"
+        )
     }
   }
 
@@ -1017,37 +1029,65 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirFunction
   )(implicit ctx: CodeGenerationContext): Unit = {
     val member = x.parent.to[EirMember]
-    val parent = member.flatMap(_.parent).to[EirClassLike]
-    val declarations = Option
-      .when(member.exists(_.isConstructor))(
-        parent
-          .map(_.members)
-          .getOrElse(Nil)
-          .map(_.member)
-          .collect({
-            case d: EirDeclaration if d.initialValue.isDefined => d
-          })
-      )
-      .toIterable
-      .flatten
-    val currSelf = ctx.proxy.map(_ => "impl_").getOrElse("this")
-    ctx << {
+
+    if (member.exists(_.isConstructor)) {
+      val parent = assertValid[EirClassLike](member.flatMap(_.parent))
+      val parentClass =
+        parent.extendsThis.map(ctx.resolve).flatMap(Find.tryClassLike)
+
+      val encapsulated = ctx.proxy.nonEmpty
+      val currSelf = if (encapsulated) "impl_" else "this"
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
+      val declarations = parent.members collect {
+        case m @ EirMember(_, d: EirDeclaration, _)
+            if !m.isStatic && d.initialValue.nonEmpty =>
+          d
+      }
+
+      if (!encapsulated) {
+        ctx << Option.when(assignments.nonEmpty || declarations.nonEmpty)(":")
+
+        // TODO find whether the body contains a call to (super) and isolate it.
+        val parentCons =
+          parentClass.map(_.members).getOrElse(Nil).filter(_.isConstructor)
+        if (parentCons.nonEmpty) assert(parentCons collect {
+          case EirMember(_, f: EirFunction, _) => f
+        } exists { x =>
+          x.functionArgs.isEmpty
+        })
+
+        ctx << (assignments.map(x => {
+          val name = ctx.nameFor(x)
+          s"$name($name)"
+        }), ",")
+        ctx << Option.when(assignments.nonEmpty && declarations.nonEmpty)(",")
+        ctx << (declarations.map(x => {
+          (ctx.makeSubContext() << ctx.nameFor(
+            x
+          ) << "(" << x.initialValue << ")").toString
+        }), ",")
+      }
+
       if (assignments.nonEmpty || declarations.nonEmpty) {
         ctx << "{"
         ctx.ignoreNext("{")
       }
-      assignments.map(arg => {
-        val name = ctx.nameFor(arg)
-        currSelf + "->" + name + "=" + name + ";"
-      })
-    } << {
-      declarations.foreach(d => {
-        ctx << currSelf << "->" << ctx.nameFor(
-          d
-        ) << "=" << d.initialValue << ";"
-      })
-    } <| (x.body, ";")
+
+      if (encapsulated) {
+        ctx << assignments.map(arg => {
+          val name = ctx.nameFor(arg)
+          currSelf + "->" + name + "=" + name + ";"
+        })
+
+        declarations.foreach(d => {
+          ctx << currSelf << "->" << ctx.nameFor(
+            d
+          ) << "=" << d.initialValue << ";"
+        })
+      }
+    }
+
+    ctx <| (x.body, ";")
   }
 
   def visitFunction(x: EirFunction, isMember: Boolean)(implicit
@@ -1222,7 +1262,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirMember(_, d: EirDeclaration, _) => ctx.resolve(d.declaredType)
       case _                                  => Errors.missingType(n)
     }
-    "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+
+    if (ty.isPointer) {
+      "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+    } else {
+      "*this"
+    }
   }
 
   def nameFor(
@@ -1361,8 +1406,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirFunctionArgument
   )(implicit ctx: CodeGenerationContext): Unit = {
     ctx << {
-      if (isEntryArgument(x)) typeForEntryArgument((ctx, x))(x.declaredType)
-      else ctx.typeFor(x.declaredType, Some(x))
+      if (isEntryArgument(x))
+        ctx << typeForEntryArgument((ctx, x))(x.declaredType)
+      else {
+        val ty = ctx.resolve(x.declaredType)
+        ctx << ctx.typeFor(ty, Some(x)) << Option.when(
+          x.isReference && Find.tryClassLike(ty).exists(_.isValueType)
+        )("&")
+      }
     } << ctx.nameFor(x)
   }
 

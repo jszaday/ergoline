@@ -3,6 +3,7 @@ package ergoline;
 @system(alias = "CkPrintf") def println(s : string): unit;
 @system(alias = "CkAbort") def abort(s : string): unit;
 @system(alias = "CkAssert") def assert(b : bool): unit;
+@system(alias = "CkAssertNot") def assertNot(b : bool): unit;
 @system(alias = "CkExit") def exit(): unit;
 
 @system(alias = "ergoline::hash")

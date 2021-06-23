@@ -8,6 +8,8 @@
 
 #include "hash.hpp"
 
+#define CkAssertNot(b) CkAssert(!b)
+
 std::ostream& operator<< (std::ostream& stream, const std::tuple<int, int>& idx) {
   return stream << "(" << std::get<0>(idx) << ", " << std::get<1>(idx) << ")";
 }

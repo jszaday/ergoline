@@ -7,11 +7,15 @@ trait colorful {
 }
 
 struct banana with colorful {
+    var peeled: bool = false;
+
     def banana() {}
 
     override def color(): string {
         return "yellow";
     }
+
+    def peel() { peeled = true; }
 }
 
 class cherry with colorful {
@@ -32,7 +36,25 @@ class cherry with colorful {
         check(c);
         check(d);
 
+        peelByValue(b);         // `b` gets passed by-value 
+        assertNot(b.peeled);    /* so its peeling will not be
+                                 * reflected here
+                                 */
+
+        peelByReference(b);     // then, `b` gets passed-by-reference
+        assert(b.peeled);       // so it is actually peeled
+
         exit();
+    }
+
+    def peelByReference(&b: banana) {
+        b.peel();
+    }
+
+    def peelByValue(b: banana) {
+        b.peel();
+
+        assert(b.peeled);
     }
 
     def check(c: colorful) {
