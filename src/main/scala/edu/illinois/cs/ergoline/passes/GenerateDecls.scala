@@ -10,6 +10,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   visitTemplateArgs
 }
 import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateDecls {
@@ -62,7 +63,22 @@ object GenerateDecls {
       val parent = x.extendsThis
         .map(Find.uniqueResolution[EirType])
         .map(ctx.nameFor(_, Some(x)))
-      ctx << ctx.nameFor(x) << "(PUP::reconstruct __tag__)" << parent.map(p =>
+
+      val thisName = ctx.nameFor(x)
+      if (x.isValueType) { // TODO add !isAbstract?
+        val tmp = ctx.temporary
+        ctx << thisName << "(" << "const" << thisName << "&" << tmp << ")" << {
+          parent.map(p => s": $p($tmp)")
+        } << "{"
+        x.members.collect {
+          case m @ EirMember(_, d: EirDeclaration, _) if !m.isStatic => d.name
+        } foreach { x =>
+          ctx << "this" << "->" << x << "=" << tmp << "." << x << ";"
+        }
+        ctx << "}"
+      }
+
+      ctx << thisName << "(PUP::reconstruct __tag__)" << parent.map(p =>
         s": $p(__tag__)"
       ) << "{}"
     }
