@@ -1406,8 +1406,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirFunctionArgument
   )(implicit ctx: CodeGenerationContext): Unit = {
     ctx << {
-      if (isEntryArgument(x)) typeForEntryArgument((ctx, x))(x.declaredType)
-      else ctx.typeFor(x.declaredType, Some(x))
+      if (isEntryArgument(x))
+        ctx << typeForEntryArgument((ctx, x))(x.declaredType)
+      else {
+        val ty = ctx.resolve(x.declaredType)
+        ctx << ctx.typeFor(ty, Some(x)) << Option.when(
+          x.isReference && Find.tryClassLike(ty).exists(_.isValueType)
+        )("&")
+      }
     } << ctx.nameFor(x)
   }
 
