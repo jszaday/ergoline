@@ -559,6 +559,15 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       })
   }
 
+  override def visitCallArgument(ctx: CallArgumentContext): EirNode = {
+    enter(
+      EirCallArgument(null, ctx.Ampersand() != null)(parent),
+      (arg: EirCallArgument) => {
+        arg.expr = visitAs[EirExpressionNode](ctx.expression())
+      }
+    )
+  }
+
   override def visitPostfixExpression(
       ctx: PostfixExpressionContext
   ): EirExpressionNode = {
@@ -587,7 +596,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         (f: EirFunctionCall) => {
           f.target = visitAs[EirExpressionNode](ctx.postfixExpression())
           f.args =
-            ctx.fnArgs.mapOrEmpty(_.expression, visitAs[EirExpressionNode])
+            ctx.fnArgs.mapOrEmpty(_.callArgument, visitAs[EirCallArgument])
           f.types = specializationToList(ctx.specialization())
         }
       )

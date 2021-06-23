@@ -248,10 +248,18 @@ sliceExpressionList
     :   (sliceExpression ',')* sliceExpression
     ;
 
+callArgument
+    :   '&'? expression
+    ;
+
+callArgumentList
+    :   (callArgument ',')* callArgument
+    ;
+
 postfixExpression
     :   primaryExpression
     |   postfixExpression '[' arrArgs=sliceExpressionList ']'
-    |   postfixExpression specialization? LParen fnArgs=expressionList? RParen
+    |   postfixExpression specialization? LParen fnArgs=callArgumentList? RParen
     |   selfExpression Identifier
     |   postfixExpression '.' Identifier
     ;

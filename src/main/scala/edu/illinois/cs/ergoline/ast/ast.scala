@@ -772,9 +772,10 @@ case class EirSymbol[T <: EirNamedNode: ClassTag](
   override def resolved: Boolean = _resolved.nonEmpty
 }
 
-trait EirPostfixExpression extends EirExpressionNode {
+abstract class EirPostfixExpression[A <: EirNode: ClassTag]
+    extends EirExpressionNode {
   var target: EirExpressionNode
-  var args: List[EirExpressionNode]
+  var args: List[A]
 
   override def children: Iterable[EirNode] = target +: args
 
@@ -800,12 +801,20 @@ case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode)
   }
 }
 
+case class EirCallArgument(var expr: EirExpressionNode, var isRef: Boolean)(
+    var parent: Option[EirNode]
+) extends EirExpressionNode {
+  override def children: Iterable[EirNode] = Seq(expr)
+
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 case class EirFunctionCall(
     var parent: Option[EirNode],
     var target: EirExpressionNode,
-    var args: List[EirExpressionNode],
+    var args: List[EirCallArgument],
     var types: List[EirResolvable[EirType]]
-) extends EirPostfixExpression
+) extends EirPostfixExpression[EirCallArgument]
     with EirSpecialization {
   override def children: Iterable[EirNode] = super.children ++ types
 }
@@ -814,7 +823,7 @@ case class EirArrayReference(
     var parent: Option[EirNode],
     var target: EirExpressionNode,
     var args: List[EirExpressionNode]
-) extends EirPostfixExpression {}
+) extends EirPostfixExpression[EirExpressionNode]
 
 case class EirScopedSymbol[T <: EirNode: ClassTag](
     var target: EirExpressionNode,
