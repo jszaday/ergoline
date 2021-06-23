@@ -7,7 +7,7 @@ import ck;
 // should be globally unique because of its use of the
 // Pe# and Pes, by their nature, may only make one
 // uid at a time
-class uid {
+struct uid {
     static var lastTime: long;
     static var lastCount: long;
 

@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirConstantFacade}
+import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirConstantFacade}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
@@ -35,6 +35,14 @@ object TypeCompatibility {
             (a.collective == b.collective) &&
             a.base.isDescendantOf(b.base)
         case _ => checkSubclass(self, other)
+      }
+    }
+
+    def isValueType: Boolean = {
+      self match {
+        case x: EirClass => x.valueType
+        case _: EirProxy => true
+        case _           => false
       }
     }
   }

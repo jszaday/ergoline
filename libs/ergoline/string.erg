@@ -1,6 +1,6 @@
 package ergoline;
 
-@system(alias = "std::string") class string {
+@system(alias = "std::string") struct string {
     @system def toString(): string;
     @system def plus(other: string): string;
 

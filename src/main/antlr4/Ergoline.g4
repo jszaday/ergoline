@@ -128,7 +128,7 @@ inheritanceDecl
     ;
 
 classDeclaration
-    :   AbstractKwd? (ClassKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    :   AbstractKwd? (ClassKwd | StructKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
     ;
 
 annotatedMember
@@ -453,6 +453,7 @@ ValueKeyword : 'val' ;
 AbstractKwd : 'abstract';
 OverrideKwd : 'override';
 ClassKwd : 'class';
+StructKwd : 'struct';
 TraitKwd : 'trait';
 FunctionKwd : 'def';
 TrueKwd : 'true' ;

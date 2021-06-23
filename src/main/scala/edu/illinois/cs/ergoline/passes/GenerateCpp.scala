@@ -40,17 +40,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     implicit class RichEirType(self: EirType) {
       def isPointer: Boolean = {
-        self match {
-          case _: EirLambdaType => true
-          case _: EirClassLike | _: EirTemplatedType =>
-            val cls = Find.asClassLike(self)
-            val system: Option[EirAnnotation] = cls.annotation("system")
-            system match {
-              case Some(system) => system("pointer").exists(_.toBoolean)
-              case None         => !cls.isInstanceOf[EirProxy]
-            }
-          case _ => false
-        }
+        self.isInstanceOf[EirLambdaType] || Find
+          .tryClassLike(self)
+          .exists(!_.isValueType)
       }
 
       def isSystem: Boolean =
@@ -390,6 +382,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def structToTrait(n: EirNode, c: EirClassLike)(implicit
+      ctx: CodeGenerationContext
+  ): CodeGenerationContext = {
+    ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+  }
+
   def visitCallArgument(
       ctx: CodeGenerationContext
   )(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
@@ -400,6 +398,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << ctx.nameFor(b) << "(" << t._1 << ")"
       case (a, Some(_)) if isEntryArgument(t._2) =>
         ctx << castToPuppable(ctx, t._1, a)
+      case (a: EirClassLike, Some(b: EirClassLike))
+          if !isRef && (a.isValueType && b.isPointer) =>
+        structToTrait(t._1, a)(ctx)
       case (a, _) if isRef && a.isPointer =>
         ctx << "*(" << t._1 << ")"
       case _ => ctx << t._1
@@ -856,8 +857,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitDeclaration(
       x: EirDeclaration
   )(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << ctx.typeFor(x.declaredType, Some(x)) << s"${ctx.nameFor(x)}" << x.initialValue
-      .map(_ => "=") << x.initialValue << ";"
+    val lhsTy = ctx.resolve(x.declaredType)
+    ctx << ctx.typeFor(lhsTy, Some(x)) << s"${ctx.nameFor(x)}" << {
+      x.initialValue.foreach { x => assignmentRhs(lhsTy, "=", x) }
+    } << ";"
   }
 
   override def visitTemplateArgument(
@@ -1141,7 +1144,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         else x.op
       }
     } else {
-      ctx << "->" << target.to[EirNamedNode].map(_.name) << "("
+      val lhs = ctx.resolve(ctx.typeOf(x.lhs))
+      ctx << fieldAccessorFor(lhs) << target.to[EirNamedNode].map(_.name) << "("
     }
     ctx << x.rhs << ")"
   }
@@ -1564,7 +1568,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << ")"
       case _ =>
-        ctx << "new" << ctx.typeFor(objTy, Some(x)) << "(" << visitArguments(
+        ctx << Option.when(objTy.isPointer)("new") << ctx.typeFor(
+          objTy,
+          Some(x)
+        ) << "(" << visitArguments(
           ctx
         )(x.disambiguation, args) << ")"
     }
@@ -1854,12 +1861,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     system.flatMap(_("alias").map(_.stripped)).contains("[]")
   }
 
+  def assignmentRhs(lhsTy: EirType, op: String, rhs: EirExpressionNode)(implicit
+      ctx: CodeGenerationContext
+  ): CodeGenerationContext = {
+    val rhsTy = ctx.resolve(ctx.typeOf(rhs))
+
+    ctx << op << {
+      Find.tryClassLike(rhsTy) match {
+        case Some(c: EirClassLike) if lhsTy.isPointer && c.isValueType =>
+          structToTrait(rhs, c)
+        case _ => ctx << rhs
+      }
+    }
+  }
+
   override def visitAssignment(
       x: EirAssignment
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val lhsTy = ctx.resolve(ctx.typeOf(x.lval))
+
     x.lval match {
       case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x << ";"
-      case _                                           => ctx << x.lval << x.op << x.rval << ";"
+      case _ =>
+        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval) << ";"
     }
   }
 

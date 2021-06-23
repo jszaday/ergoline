@@ -1,6 +1,6 @@
 package ergoline;
 
-@system(alias="ergoline::hash_map", pointer=true)
+@system(alias="ergoline::hash_map")
 class map<K, V> {
     @system def map();
 
