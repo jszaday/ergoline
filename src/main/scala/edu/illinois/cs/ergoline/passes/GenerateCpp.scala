@@ -388,22 +388,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
   }
 
-  def visitCallArgument(
+  def visitCallArgument(t: (EirExpressionNode, EirFunctionArgument))(implicit
       ctx: CodeGenerationContext
-  )(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
-    val isRef = t._2.isReference
-    val theirs = Find.resolutions[EirType](t._2.declaredType).headOption
-    (ctx.exprType(t._1), theirs) match {
-      case (a: EirProxy, Some(b: EirProxy)) if a.isDescendantOf(b) =>
-        ctx << ctx.nameFor(b) << "(" << t._1 << ")"
-      case (a, Some(_)) if isEntryArgument(t._2) =>
-        ctx << castToPuppable(ctx, t._1, a)
-      case (a: EirClassLike, Some(b: EirClassLike))
-          if !isRef && (a.isValueType && b.isPointer) =>
-        structToTrait(t._1, a)(ctx)
-      case (a, _) if isRef && a.isPointer =>
-        ctx << "*(" << t._1 << ")"
-      case _ => ctx << t._1
+  ): CodeGenerationContext = {
+    Find.resolutions[EirType](t._2.declaredType) match {
+      case goal :: _ =>
+        val shouldDeref = goal.isPointer && t._2.isReference
+        ctx << Option.when(shouldDeref)("*(") << implicitCast(
+          goal,
+          t._1
+        ) << Option.when(shouldDeref)(")")
+      case Nil => ???
     }
   }
 
@@ -428,11 +423,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
       if (zipped.nonEmpty) {
         zipped.init.foreach(pair => {
-          visitCallArgument(ctx)(pair)
+          visitCallArgument(pair)(ctx)
           ctx << ","
         })
 
-        visitCallArgument(ctx)(zipped.last)
+        visitCallArgument(zipped.last)(ctx)
       } else {
         ctx
       }
@@ -1861,18 +1856,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     system.flatMap(_("alias").map(_.stripped)).contains("[]")
   }
 
+  def implicitCast(goal: EirType, value: EirExpressionNode)(implicit
+      ctx: CodeGenerationContext
+  ): CodeGenerationContext = {
+    val valueTy = ctx.resolve(ctx.typeOf(value))
+
+    (Find.tryClassLike(goal), Find.tryClassLike(valueTy)) match {
+      case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
+        ctx << ctx.nameFor(a) << "(" << value << ")"
+      case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
+        structToTrait(value, b)
+      case _ => ctx << value
+    }
+  }
+
   def assignmentRhs(lhsTy: EirType, op: String, rhs: EirExpressionNode)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
-    val rhsTy = ctx.resolve(ctx.typeOf(rhs))
-
-    ctx << op << {
-      Find.tryClassLike(rhsTy) match {
-        case Some(c: EirClassLike) if lhsTy.isPointer && c.isValueType =>
-          structToTrait(rhs, c)
-        case _ => ctx << rhs
-      }
-    }
+    ctx << op << implicitCast(lhsTy, rhs)
   }
 
   override def visitAssignment(
