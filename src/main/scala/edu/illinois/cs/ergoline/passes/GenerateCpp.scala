@@ -39,6 +39,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     implicit class RichEirType(self: EirType) {
+      def isReconstructible: Boolean = {
+        // TODO refine this with @system(reconstructible=true)
+        // TODO eliminate the check for EirTemplateArgument here
+        !self.isInstanceOf[
+          EirTemplateArgument
+        ] && !self.isPointer && !self.isSystem
+      }
+
       def isPointer: Boolean = {
         self.isInstanceOf[EirLambdaType] || Find
           .tryClassLike(self)
@@ -887,13 +895,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         Option.unless( /* x.isTransient || */ hasPupableParent)(
           "public ergoline::object"
         )
-      } << {
-        ", public std::enable_shared_from_this<" + nameFor(
-          ctx,
-          x,
-          includeTemplates = true
-        ) + ">"
-      }
+      } <<
+        Option.unless(x.isValueType)(
+          ", public std::enable_shared_from_this<" + nameFor(
+            ctx,
+            x,
+            includeTemplates = true
+          ) + ">"
+        )
     }
   }
 
@@ -1014,7 +1023,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitFunctionBody(
-      x: EirFunction
+      x: EirFunction,
+      encapsulated: Boolean
   )(implicit ctx: CodeGenerationContext): Unit = {
     val member = x.parent.to[EirMember]
     val parent = member.flatMap(_.parent).to[EirClassLike]
@@ -1031,23 +1041,35 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .toIterable
       .flatten
     val currSelf = ctx.proxy.map(_ => "impl_").getOrElse("this")
-    ctx << {
-      val assignments = x.functionArgs.filter(_.isSelfAssigning)
-      if (assignments.nonEmpty || declarations.nonEmpty) {
-        ctx << "{"
-        ctx.ignoreNext("{")
+
+    val assignments = x.functionArgs.filter(_.isSelfAssigning)
+    if (assignments.nonEmpty || declarations.nonEmpty) {
+      if (!encapsulated) {
+        ctx << ":"
+        ctx << (assignments.map(x => {
+          val name = ctx.nameFor(x)
+          s"$name($name)"
+        }), ",")
       }
-      assignments.map(arg => {
+
+      ctx << "{"
+      ctx.ignoreNext("{")
+    }
+
+    if (encapsulated) {
+      ctx << assignments.map(arg => {
         val name = ctx.nameFor(arg)
         currSelf + "->" + name + "=" + name + ";"
       })
-    } << {
+
       declarations.foreach(d => {
         ctx << currSelf << "->" << ctx.nameFor(
           d
         ) << "=" << d.initialValue << ";"
       })
-    } <| (x.body, ";")
+    }
+
+    ctx <| (x.body, ";")
   }
 
   def visitFunction(x: EirFunction, isMember: Boolean)(implicit
@@ -1111,7 +1133,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (x.body.isEmpty) {
       Errors.missingBody(x)
     }
-    visitFunctionBody(x)
+    visitFunctionBody(x, encapsulated = false)
   }
 
   override def visitFunction(
@@ -1222,7 +1244,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirMember(_, d: EirDeclaration, _) => ctx.resolve(d.declaredType)
       case _                                  => Errors.missingType(n)
     }
-    "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+
+    if (ty.isPointer) {
+      "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
+    } else {
+      "*this"
+    }
   }
 
   def nameFor(

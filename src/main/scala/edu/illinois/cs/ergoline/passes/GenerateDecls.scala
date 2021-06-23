@@ -2,7 +2,10 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirResolvable
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{
+  RichEirResolvable,
+  RichEirType
+}
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   makeHasher,
   makePupper,
@@ -78,9 +81,21 @@ object GenerateDecls {
         ctx << "}"
       }
 
-      ctx << thisName << "(PUP::reconstruct __tag__)" << parent.map(p =>
-        s": $p(__tag__)"
-      ) << "{}"
+      val fields = x.members collect {
+        case m @ EirMember(_, d: EirDeclaration, _) if !m.isStatic => d
+      } filter { x =>
+        ctx.resolve(x.declaredType).isReconstructible
+      }
+
+      val needsColon = parent.nonEmpty || fields.nonEmpty
+
+      ctx << thisName << "(PUP::reconstruct __tag__)" << Option.when(
+        needsColon
+      )(":") << parent.map(p => s"$p(__tag__)") << Option.when(
+        parent.nonEmpty && fields.nonEmpty
+      )(",") << {
+        (fields.map(x => s"${x.name}(__tag__)"), ",")
+      } << "{}"
     }
     ctx << x.members << s"};"
 
