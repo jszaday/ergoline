@@ -1883,7 +1883,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.lval match {
       case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x << ";"
       case _ =>
-        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval)
+        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval) << ";"
     }
   }
 
