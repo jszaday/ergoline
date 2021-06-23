@@ -382,6 +382,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def structToTrait(n: EirNode, c: EirClassLike)(implicit
+      ctx: CodeGenerationContext
+  ): CodeGenerationContext = {
+    ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+  }
+
   def visitCallArgument(
       ctx: CodeGenerationContext
   )(t: (EirExpressionNode, EirFunctionArgument)): CodeGenerationContext = {
@@ -392,6 +398,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << ctx.nameFor(b) << "(" << t._1 << ")"
       case (a, Some(_)) if isEntryArgument(t._2) =>
         ctx << castToPuppable(ctx, t._1, a)
+      case (a: EirClassLike, Some(b: EirClassLike))
+          if !isRef && (a.isValueType && b.isPointer) =>
+        structToTrait(t._1, a)(ctx)
       case (a, _) if isRef && a.isPointer =>
         ctx << "*(" << t._1 << ")"
       case _ => ctx << t._1
@@ -848,8 +857,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitDeclaration(
       x: EirDeclaration
   )(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << ctx.typeFor(x.declaredType, Some(x)) << s"${ctx.nameFor(x)}" << x.initialValue
-      .map(_ => "=") << x.initialValue << ";"
+    val lhsTy = ctx.resolve(x.declaredType)
+    ctx << ctx.typeFor(lhsTy, Some(x)) << s"${ctx.nameFor(x)}" << {
+      x.initialValue.foreach { x => assignmentRhs(lhsTy, "=", x) }
+    } << ";"
   }
 
   override def visitTemplateArgument(
@@ -1850,12 +1861,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     system.flatMap(_("alias").map(_.stripped)).contains("[]")
   }
 
+  def assignmentRhs(lhsTy: EirType, op: String, rhs: EirExpressionNode)(implicit
+      ctx: CodeGenerationContext
+  ): CodeGenerationContext = {
+    val rhsTy = ctx.resolve(ctx.typeOf(rhs))
+
+    ctx << op << {
+      Find.tryClassLike(rhsTy) match {
+        case Some(c: EirClassLike) if lhsTy.isPointer && c.isValueType =>
+          structToTrait(rhs, c)
+        case _ => ctx << rhs
+      }
+    }
+  }
+
   override def visitAssignment(
       x: EirAssignment
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val lhsTy = ctx.resolve(ctx.typeOf(x.lval))
+
     x.lval match {
       case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x << ";"
-      case _                                           => ctx << x.lval << x.op << x.rval << ";"
+      case _ =>
+        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval)
     }
   }
 
