@@ -125,17 +125,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTernaryOperator(
       x: EirTernaryOperator
   )(implicit ctx: TypeCheckContext): EirType = {
-    val testTy = visit(x.test)
-    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    if (testTy.canAssignTo(boolean)) {
-      val tty = visit(x.ifTrue)
-      val fty = visit(x.ifFalse)
-      Find.unionType(tty, fty) match {
-        case Some(found) => found
-        case None        => Errors.unableToUnify(x, tty, fty)
-      }
-    } else {
-      Errors.cannotCast(x, testTy, boolean)
+    checkCondition(x.test)
+    val tty = visit(x.ifTrue)
+    val fty = visit(x.ifFalse)
+    Find.unionType(tty, fty) match {
+      case Some(found) => found
+      case None        => Errors.unableToUnify(x, tty, fty)
     }
   }
 
@@ -319,11 +314,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     loop.header match {
       case EirCStyleHeader(decl, test, incr) =>
         visit(decl)
-        val ttype = test.map(visit(_))
-        val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-        if (!ttype.exists(_.canAssignTo(boolean))) {
-          Errors.cannotCast(loop, ttype.get, boolean)
-        }
+        checkCondition(test)
         visit(incr)
       case h: EirForAllHeader =>
         val iterTy = resolveIterator(h)
@@ -950,11 +941,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitIfElse(
       x: EirIfElse
   )(implicit ctx: TypeCheckContext): EirType = {
-    val retTy = visit(x.test)
-    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    if (!retTy.canAssignTo(boolean)) {
-      Errors.cannotCast(x, retTy, boolean)
-    }
+    checkCondition(x.test)
     x.ifTrue.foreach(visit(_))
     x.ifFalse.foreach(visit(_))
     null
@@ -963,11 +950,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitWhileLoop(
       x: EirWhileLoop
   )(implicit ctx: TypeCheckContext): EirType = {
-    val exprTy = x.condition.map(visit(_))
-    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    if (!exprTy.forall(_.canAssignTo(boolean))) {
-      Errors.cannotCast(x, exprTy.get, boolean)
-    }
+    checkCondition(x.condition)
     visit(x.body)
   }
 
@@ -1020,11 +1003,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         .flatMap(_.expression.foundType)
         .getOrElse(Errors.missingType(x))
     )
-    val boolean = globals.typeFor(EirLiteralTypes.Boolean)
-    val condTy = x.condition.map(visit(_))
-    if (!condTy.forall(_.canAssignTo(boolean))) {
-      Errors.cannotCast(x.condition.get, condTy.get, boolean)
-    }
+
+    checkCondition(x.condition)
+
     visit(x.patterns)
     x.body.map(visit(_)).getOrElse(globals.typeFor(EirLiteralTypes.Unit))
   }
@@ -1213,6 +1194,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       context: TypeCheckContext
   ): EirType = facade
 
+  def checkCondition(x: EirExpressionNode)(implicit ctx: TypeCheckContext): Unit = {
+    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
+    val condTy = visit(x)
+    if (!condTy.canAssignTo(boolTy)) {
+      Errors.cannotCast(x, condTy, boolTy)
+    }
+  }
+
+  def checkCondition(x: Option[EirExpressionNode])(implicit ctx: TypeCheckContext): Unit = {
+    x.foreach(checkCondition(_))
+  }
+
   override def visitWhen(
       x: EirSdagWhen
   )(implicit ctx: TypeCheckContext): EirType = {
@@ -1228,11 +1221,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       })
       visit(p)
     }
-    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
-    val condTy = x.condition.map(visit(_))
-    if (!condTy.forall(_.canAssignTo(boolTy))) {
-      Errors.cannotCast(x.condition.get, condTy.get, boolTy)
-    }
+
+    checkCondition(x.condition)
+
     visit(x.body)
   }
 
