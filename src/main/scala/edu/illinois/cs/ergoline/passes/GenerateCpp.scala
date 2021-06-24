@@ -393,21 +393,31 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def structToTrait(n: EirNode, c: EirClassLike)(implicit
+  def structToTrait(n: EirNode, c: EirClassLike, noCopy: Boolean)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
-    ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+    if (noCopy) {
+      ctx << "std::shared_ptr<" << ctx.typeFor(c, Some(n)) << ">(std::shared_ptr<void>{},&" << n << ")"
+    } else {
+      ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+    }
   }
 
   def visitCallArgument(t: (EirExpressionNode, EirFunctionArgument))(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
+    val requiresRef = t._1 match {
+      case arg: EirCallArgument => arg.isRef
+      case _ => false
+    }
+
     Find.resolutions[EirType](t._2.declaredType) match {
       case goal :: _ =>
         val shouldDeref = goal.isPointer && t._2.isReference
         ctx << Option.when(shouldDeref)("*(") << implicitCast(
           goal,
-          t._1
+          t._1,
+          requiresRef
         ) << Option.when(shouldDeref)(")")
       case Nil => ???
     }
@@ -1909,7 +1919,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     system.flatMap(_("alias").map(_.stripped)).contains("[]")
   }
 
-  def implicitCast(goal: EirType, value: EirExpressionNode)(implicit
+  def implicitCast(goal: EirType, value: EirExpressionNode, requiresRef: Boolean)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     val valueTy = ctx.resolve(ctx.typeOf(value))
@@ -1918,7 +1928,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
         ctx << ctx.nameFor(a) << "(" << value << ")"
       case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
-        structToTrait(value, b)
+        structToTrait(value, b, noCopy = requiresRef)
       case _ => ctx << value
     }
   }
@@ -1926,7 +1936,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def assignmentRhs(lhsTy: EirType, op: String, rhs: EirExpressionNode)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
-    ctx << op << implicitCast(lhsTy, rhs)
+    ctx << op << implicitCast(lhsTy, rhs, requiresRef = false)
   }
 
   override def visitAssignment(

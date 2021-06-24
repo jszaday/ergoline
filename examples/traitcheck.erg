@@ -32,39 +32,27 @@ class cherry with colorful {
 
 @main class traitcheck {
     @entry def traitcheck(args: array<string>) {
-        val b = new banana();
+        val b = new banana();   // stack-alloc'd despite `new`
         val c = new cherry();
-        val d: colorful = b;
+        val d: colorful = b;    // a copy is made at this point
 
         check(b);
         check(c);
         check(d);
 
-        peelByValue(b);         // `b` gets passed by-value 
-        assertNot(b.peeled);    /* so its peeling will not be
-                                 * reflected here
-                                 */
+        peelIt(b);              // first, `b` is passed by-value
+        assertNot(b.peeled);    // so its peeling is not seen here
 
-        peelByReference(b);     // then, `b` gets passed-by-reference
-        assert(b.peeled);       // so it is actually peeled
-
-        peelIt(b);
+        peelIt(&b);             // then, it's passed-by-reference
+        assert(b.peeled);       // so its peeling can be seen here
 
         exit();
     }
 
     def peelIt(p: peelable) {
+        assertNot(p.peeled);
+
         p.peel();
-    }
-
-    def peelByReference(&b: banana) {
-        b.peel();
-    }
-
-    def peelByValue(b: banana) {
-        b.peel();
-
-        assert(b.peeled);
     }
 
     def check(c: colorful) {
