@@ -628,9 +628,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "ergoline::contribute(this," << {
           visitCallback(
             args match {
-              case List(value, reducer, target) =>
+              case List(value, reducer, target: EirCallArgument) =>
                 ctx << value << "," << visitReducer(reducer) << ","
-                target
+                target.expr
               case List(target) => target
               case _            => Errors.unreachable()
             },
