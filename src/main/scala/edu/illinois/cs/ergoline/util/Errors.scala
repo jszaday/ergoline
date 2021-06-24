@@ -243,4 +243,19 @@ object Errors {
   def expectedReducer(node: EirNode): Nothing = {
     exit(format(node, "unsure how to use %s as a reducer", node))
   }
+
+  def expectedLvalue(node: EirExpressionNode): Nothing = {
+    exit(format(node, "expected an lvalue but got %s instead", node))
+  }
+
+  def expectedValueType(node: EirExpressionNode, ty: EirType): Nothing = {
+    exit(
+      format(
+        node,
+        "expected a value type, but %s has type %s instead",
+        node,
+        ty
+      )
+    )
+  }
 }

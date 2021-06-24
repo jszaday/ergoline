@@ -1082,13 +1082,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << Option.when(assignments.nonEmpty || declarations.nonEmpty)(":")
 
         // TODO find whether the body contains a call to (super) and isolate it.
-        val parentCons =
-          parentClass.map(_.members).getOrElse(Nil).filter(_.isConstructor)
-        if (parentCons.nonEmpty) assert(parentCons collect {
-          case EirMember(_, f: EirFunction, _) => f
-        } exists { x =>
-          x.functionArgs.isEmpty
-        })
 
         ctx << (assignments.map(x => {
           val name = ctx.nameFor(x)
