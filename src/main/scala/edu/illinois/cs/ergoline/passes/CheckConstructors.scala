@@ -23,8 +23,15 @@ object CheckConstructors {
       Errors.missingConstructor(cls)
     }
     for (constructor <- constructors) {
-      if (!fulfillsSuperConstructor(constructor)) {
-        Errors.missingSuperConstructor(constructor)
+      (
+        cls,
+        cls.extendsThis.map(CheckTypes.visit).flatMap(Find.tryClassLike)
+      ) match {
+        case (base: EirClass, Some(parent: EirClass)) =>
+          if (!fulfillsSuperConstructor(base, parent, constructor)) {
+            Errors.missingSuperConstructor(constructor)
+          }
+        case _ =>
       }
       if (!selfAssignmentsOk(cls, constructor)) {
         Errors.invalidSelfAssignment(constructor)
@@ -37,7 +44,20 @@ object CheckConstructors {
   }
 
   // TODO implement this?
-  def fulfillsSuperConstructor(constructor: EirMember): Boolean = true
+  def fulfillsSuperConstructor(
+      parent: EirClass,
+      base: EirClass,
+      constructor: EirMember
+  ): Boolean = {
+    val parentCons =
+      parent.members.filter(_.isConstructor)
+
+    parentCons.isEmpty || (parentCons collect {
+      case EirMember(_, f: EirFunction, _) => f
+    } exists { x =>
+      x.functionArgs.isEmpty
+    })
+  }
 
   def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)(implicit
       ctx: TypeCheckContext
