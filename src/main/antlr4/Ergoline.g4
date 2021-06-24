@@ -387,8 +387,8 @@ specialization
     ;
 
 proxySuffix
-    :   Atpersand
-    |   (Atpersand | Element) CollectiveKeyword
+    :    Atpersand
+    |   (Atpersand | ProxySuffix) CollectiveKeyword
     ;
 
 basicType
@@ -442,8 +442,22 @@ Atpersand
     :   '@'
     ;
 
+fragment
 Element
     :   '[@]'
+    ;
+
+fragment
+Section
+    :   '{@}'
+    ;
+
+ProxySuffix
+    :   Element | Section
+    ;
+
+SelfKeyword
+    :   'self' ('@' | ProxySuffix)?
     ;
 
 CollectiveKeyword
@@ -468,10 +482,6 @@ TrueKwd : 'true' ;
 FalseKwd : 'false' ;
 StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
-
-SelfKeyword
-    :   'self' (Atpersand | Element)?
-    ;
 
 Equals : '=' ;
 PlusAssign: '+=';

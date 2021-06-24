@@ -631,7 +631,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       base = templatedType
     }
     if (ctx.proxySuffix() != null) {
-      val isElement = Option(ctx.proxySuffix().Element()).isDefined
+      val isElement = Option(ctx.proxySuffix().ProxySuffix().getText == "[@]").isDefined
       val proxyType =
         EirProxyType(
           parent,
