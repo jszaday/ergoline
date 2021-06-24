@@ -44,6 +44,10 @@ package object globals {
     Find.namedChild[EirClassLike](ergolineModule, "object")
   }
 
+  def rangeType: EirType = {
+    Find.namedChild[EirClassLike](ergolineModule, "range")
+  }
+
   def futureType: EirType = {
     Find.namedChild[EirClassLike](ckModule, "future")
   }

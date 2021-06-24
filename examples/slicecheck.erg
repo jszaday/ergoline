@@ -1,0 +1,22 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def main(args: array<string>) {
+        val n = args.size() > 1 ? args[1].toInt() : 16;
+        val arrProxy = new slicecheck@array1d(n, n);
+    }
+}
+
+class slicecheck {
+    val n: int;
+
+    @entry def slicecheck(=n: int) {
+        val evenIndices = self@[0:2:n];
+        val oddIndices = self@[1:2:n];
+
+
+    }
+}

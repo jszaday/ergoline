@@ -1194,7 +1194,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       context: TypeCheckContext
   ): EirType = facade
 
-  def checkCondition(x: EirExpressionNode)(implicit ctx: TypeCheckContext): Unit = {
+  def checkCondition(
+      x: EirExpressionNode
+  )(implicit ctx: TypeCheckContext): Unit = {
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
     val condTy = visit(x)
     if (!condTy.canAssignTo(boolTy)) {
@@ -1202,7 +1204,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def checkCondition(x: Option[EirExpressionNode])(implicit ctx: TypeCheckContext): Unit = {
+  def checkCondition(
+      x: Option[EirExpressionNode]
+  )(implicit ctx: TypeCheckContext): Unit = {
     x.foreach(checkCondition(_))
   }
 
@@ -1227,9 +1231,54 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     visit(x.body)
   }
 
-  override def visitSlice(x: EirSlice)(implicit
+  override def visitSlice(slice: EirSlice)(implicit
       ctx: TypeCheckContext
-  ): EirType = ???
+  ): EirType = {
+    val arrRef = slice.parent collect { case x: EirArrayReference => x }
+    val isLast = arrRef.exists(slice == _.args.last)
+    val targetType = arrRef.map(_.target).map(visit)
+    val sizeMethods = {
+      // TODO ensure that we specialize for cases like { foo<A> ... def size(): A }
+      targetType
+        .flatMap(Find.tryClassLike)
+        .map(_.members collect {
+          case m @ EirMember(_, f: EirFunction, _)
+              if (f.name == "size" && f.functionArgs.isEmpty && !m.isStatic) =>
+            visit(f.returnType)
+        })
+        .getOrElse(Nil)
+    }
+
+    // TODO changeover to begin/end using iterators/indices?
+    val start =
+      slice.start getOrElse EirLiteral(None, EirLiteralTypes.Integer, "0")
+    val step =
+      slice.step getOrElse EirLiteral(None, EirLiteralTypes.Integer, "1")
+    val end = slice.end getOrElse {
+      if (isLast && sizeMethods.nonEmpty) {
+        // TODO ensure that return type of size method can assign to index!
+        EirFunctionCall(None, EirScopedSymbol(arrRef.get.target, EirSymbol[EirNamedNode](None, List("size")))(None), Nil, Nil)
+      } else {
+        val peer = arrRef.map(_.args).flatMap { x =>
+          Option.unless(isLast)(x(x.indexOf(slice) + 1))
+        }
+
+        peer match {
+          case Some(x: EirSlice) =>
+            x.start.getOrElse(Errors.unboundSlice(slice, targetType))
+          case Some(x) => x
+          case _       => Errors.unboundSlice(slice, targetType)
+        }
+      }
+    }
+
+    val args = List(start, step, end)
+    val types = args.map(visit(_))
+    val union = Find.unionType(types).getOrElse(Errors.unableToUnify(slice, types))
+    val range = EirNew(None, EirTemplatedType(None, globals.rangeType, List(union)), args)
+    slice.disambiguation = Some(range)
+    visit(range)
+  }
 
   override def visitAwaitMany(
       x: EirAwaitMany
