@@ -92,8 +92,27 @@ trait EirEncloseExempt extends EirNode
 trait EirScope extends EirNode
 
 abstract class EirExpressionNode extends EirNode {
-  var disambiguation: Option[EirNode] = None
-  var foundType: Option[EirType] = None
+  private var _disambiguation: Option[EirNode] = None
+  private var _foundType: Option[EirType] = None
+
+  def disambiguation: Option[EirNode] = _disambiguation
+  def disambiguation_=(x: Option[EirNode]): Unit = _disambiguation = x
+
+  def foundType: Option[EirType] = _foundType
+  def foundType_=(x: Option[EirType]): Unit = _foundType = x
+}
+
+abstract class EirExpressionFacade extends EirExpressionNode {
+  def expr: EirExpressionNode
+
+  override def children: Iterable[EirNode] = Seq(expr)
+
+  override def disambiguation: Option[EirNode] = expr.disambiguation
+  override def disambiguation_=(x: Option[EirNode]): Unit =
+    expr.disambiguation = x
+
+  override def foundType: Option[EirType] = expr.foundType
+  override def foundType_=(x: Option[EirType]): Unit = expr.foundType = x
 }
 
 trait EirNamedNode extends EirNode {
@@ -803,10 +822,9 @@ case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode)
 
 case class EirCallArgument(var expr: EirExpressionNode, var isRef: Boolean)(
     var parent: Option[EirNode]
-) extends EirExpressionNode {
-  override def children: Iterable[EirNode] = Seq(expr)
-
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+) extends EirExpressionFacade {
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean =
+    (expr == oldNode) && util.applyOrFalse[EirExpressionNode](expr = _, newNode)
 }
 
 case class EirFunctionCall(

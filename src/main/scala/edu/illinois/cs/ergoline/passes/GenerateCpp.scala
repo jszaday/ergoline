@@ -397,7 +397,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     if (noCopy) {
-      ctx << "std::shared_ptr<" << ctx.typeFor(c, Some(n)) << ">(std::shared_ptr<void>{},&" << n << ")"
+      ctx << "std::shared_ptr<" << ctx.typeFor(
+        c,
+        Some(n)
+      ) << ">(std::shared_ptr<void>{},&" << n << ")"
     } else {
       ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
     }
@@ -408,7 +411,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   ): CodeGenerationContext = {
     val requiresRef = t._1 match {
       case arg: EirCallArgument => arg.isRef
-      case _ => false
+      case _                    => false
     }
 
     Find.resolutions[EirType](t._2.declaredType) match {
@@ -1919,7 +1922,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     system.flatMap(_("alias").map(_.stripped)).contains("[]")
   }
 
-  def implicitCast(goal: EirType, value: EirExpressionNode, requiresRef: Boolean)(implicit
+  def implicitCast(
+      goal: EirType,
+      value: EirExpressionNode,
+      requiresRef: Boolean
+  )(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     val valueTy = ctx.resolve(ctx.typeOf(value))
