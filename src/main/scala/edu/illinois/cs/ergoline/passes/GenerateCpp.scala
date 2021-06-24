@@ -427,11 +427,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def visitArguments(
-      ctx: CodeGenerationContext
-  )(
+      disambiguation: Option[EirNode],
+      rawArgs: ArgumentList
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    visitArguments(disambiguation, rawArgs._1 ++ rawArgs._2)
+  }
+
+  // TODO direct use of this function should be considered suspect!
+  def visitArguments(
       disambiguation: Option[EirNode],
       args: List[EirExpressionNode]
-  ): CodeGenerationContext = {
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
     // TODO add support for expansions
     val theirs: List[EirFunctionArgument] =
       asMember(disambiguation).orElse(disambiguation) match {
@@ -493,6 +499,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << l.stripped
       case _ => Errors.expectedReducer(_target)
     }
+  }
+
+  // TODO all uses of this should be considered legacy/suspect!
+  def flattenArgs(args: ArgumentList): List[EirExpressionNode] = {
+    args._1.map(_.expr) ++ args._2
   }
 
   def handleOptionMember(
@@ -605,11 +616,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def isFuture(t: Option[EirNode]): Boolean = t.to[EirType].exists(isFuture)
 
+  type ArgumentList =
+    (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
+
   def visitSystemCall(implicit
       ctx: CodeGenerationContext,
       target: EirExpressionNode,
       disambiguated: EirNode,
-      args: List[EirExpressionNode]
+      args: ArgumentList
   ): Unit = {
     val base = target match {
       case f: EirScopedSymbol[_] => f.target
@@ -627,10 +641,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case m @ EirMember(Some(_: EirProxy), _, _) if m.name == "contribute" =>
         ctx << "ergoline::contribute(this," << {
           visitCallback(
-            args match {
-              case List(value, reducer, target: EirCallArgument) =>
+            flattenArgs(args) match {
+              case List(value, reducer, target) =>
                 ctx << value << "," << visitReducer(reducer) << ","
-                target.expr
+                target
               case List(target) => target
               case _            => Errors.unreachable()
             },
@@ -650,35 +664,36 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => error(target)
         }
       case m: EirMember if isOption(disambiguated.parent) =>
-        handleOptionMember(ctx, m, target, args)
+        handleOptionMember(ctx, m, target, flattenArgs(args))
       case m: EirMember if isFuture(disambiguated.parent) =>
-        handleFutureMember(ctx, m, target, args)
+        handleFutureMember(ctx, m, target, flattenArgs(args))
       case _: EirMember if static =>
         ctx << s"$name(" << {
-          visitArguments(ctx)(Some(disambiguated), base +: args)
+          val baseArg = EirCallArgument(base, isRef = false)(None)
+          visitArguments(Some(disambiguated), (baseArg +: args._1, args._2))
         } << ")"
       case EirMember(_, f: EirFunction, _) if cast =>
         ctx << s"((" << ctx.typeFor(f.returnType) << ")" << base << ")"
       case m: EirMember =>
         if (name == "apply")
-          ctx << base << s"(" << visitArguments(ctx)(
+          ctx << base << s"(" << visitArguments(
             Some(disambiguated),
             args
           ) << ")"
         else {
           val fqnOrDot =
             if (m.isStatic) "::" else fieldAccessorFor(ctx.exprType(base))
-          ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(ctx)(
+          ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(
             Some(disambiguated),
             args
           ) << ")"
         }
       case _: EirFunction if name == "CkPrintf" || name == "CkAbort" =>
         ctx << name << "(\"%s\\n\"," << "(" << {
-          visitArguments(ctx)(Some(disambiguated), args)
+          visitArguments(Some(disambiguated), args)
         } << ")" << ".c_str())"
       case _ =>
-        ctx << s"($name(" << visitArguments(ctx)(
+        ctx << s"($name(" << visitArguments(
           Some(disambiguated),
           args
         ) << "))"
@@ -714,19 +729,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): Unit = {
     val disambiguated = disambiguate(ctx, x.target)
     val member = asMember(Some(disambiguated))
-    val implicits = CheckTypes.getImplicitArgs(disambiguated)
-    val ourArgs = x.args ++ implicits.map(i => {
+    val implicits = CheckTypes.getImplicitArgs(disambiguated) map { i =>
       // TODO enforce implicitness
       val symbol = EirSymbol[EirImplicitDeclaration](Some(x), List(i.name))
       symbol.foundType = Some(ctx.typeOf(i.declaredType))
       symbol
-    })
+    }
+    val hasArgs = (x.args.size + implicits.size) != 0
     val isAsync = disambiguated.annotation("async").isDefined
     val shouldPack = member.exists {
       case m @ EirMember(Some(_: EirProxy), _, _) =>
-        (ourArgs.nonEmpty || isAsync) && (m.isEntry || m.isMailbox)
+        (hasArgs || isAsync) && (m.isEntry || m.isMailbox)
       // TODO this should be a local call (that does not involve packing!)
-      case m: EirMember => ourArgs.nonEmpty && m.isEntryOnly
+      case m: EirMember => hasArgs && m.isEntryOnly
     }
     val arrayAccessor = member.collect {
       case m: EirMember if isArray(ctx, m.base) => m.name
@@ -737,7 +752,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       return
     }
     if (disambiguated.isSystem) {
-      ctx << visitSystemCall(ctx, x.target, disambiguated, ourArgs)
+      ctx << visitSystemCall(
+        ctx,
+        x.target,
+        disambiguated,
+        (x.args, implicits)
+      )
     } else {
       if (isAsync) {
         val retTy = disambiguated match {
@@ -770,11 +790,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         if (isAsync) {
           ctx << ctx.temporary
-          if (ourArgs.nonEmpty) ctx << ","
+          if (hasArgs) ctx << ","
         }
-        visitArguments(ctx)(Some(disambiguated), ourArgs) << Option.when(
-          shouldPack
-        )(")")
+        ctx << visitArguments(Some(disambiguated), (x.args, implicits))
+        ctx << Option.when(shouldPack)(")")
       } << ")"
       if (isAsync) {
         ctx << "; return" << ctx.temporary << ";" << "})())"
@@ -1604,7 +1623,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val postDrop = args.drop(numTake)
         if (postDrop.nonEmpty) {
           ctx << "hypercomm::pack(" << {
-            visitArguments(ctx)(x.disambiguation, postDrop)
+            visitArguments(x.disambiguation, postDrop)
           } << ")" << Option.unless(numTake == 0)(",")
         }
         if (numTake > 0) {
@@ -1625,16 +1644,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               arrayElementType(t),
               Some(x)
             ) << "," << n.toString << ">(" << makeIndex(ctx, args)
-          case None => visitArguments(ctx)(x.disambiguation, args)
+          case None => visitArguments(x.disambiguation, args)
         }
         ctx << ")"
       case _ =>
         ctx << Option.when(objTy.isPointer)("new") << ctx.typeFor(
           objTy,
           Some(x)
-        ) << "(" << visitArguments(
-          ctx
-        )(x.disambiguation, args) << ")"
+        ) << "(" << visitArguments(x.disambiguation, args) << ")"
     }
   }
 
