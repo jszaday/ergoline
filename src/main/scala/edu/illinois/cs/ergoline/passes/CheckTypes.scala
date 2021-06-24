@@ -194,9 +194,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     node match {
       case s: EirSymbol[_] =>
         isSelf(s) || asMember(s.disambiguation).exists(sharedBase(a, _))
-      case f: EirScopedSymbol[_]   => targetsSelf(a, f.target)
-      case p: EirPostfixExpression => targetsSelf(a, p.target)
-      case _                       => false
+      case f: EirScopedSymbol[_]      => targetsSelf(a, f.target)
+      case p: EirPostfixExpression[_] => targetsSelf(a, p.target)
+      case _                          => false
     }
 
   def validate(
@@ -1111,7 +1111,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       field: String,
       args: List[EirExpressionNode] = Nil
   ): EirFunctionCall = {
-    val f = EirFunctionCall(Some(target), null, args, Nil)
+    val f = EirFunctionCall(
+      Some(target),
+      null,
+      args.map(EirCallArgument(_, isRef = false)(None)),
+      Nil
+    )
     val s = EirScopedSymbol(target, null)(Some(f))
     s.pending = EirSymbol(Some(s), List(field))
     f.target = s

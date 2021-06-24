@@ -2,10 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{
-  RichEirResolvable,
-  RichEirType
-}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   makeHasher,
   makePupper,

@@ -100,6 +100,7 @@ trait EirVisitor[Context, Value] {
       case x: EirLambdaExpression   => visitLambdaExpression(x)
       case x: EirBinaryExpression   => visitBinaryExpression(x)
       case x: EirInterpolatedString => visitInterpolatedString(x)
+      case x: EirCallArgument       => visitExpression(x.expr)
       case x                        => error(x)
     }
   }

@@ -92,8 +92,27 @@ trait EirEncloseExempt extends EirNode
 trait EirScope extends EirNode
 
 abstract class EirExpressionNode extends EirNode {
-  var disambiguation: Option[EirNode] = None
-  var foundType: Option[EirType] = None
+  private var _disambiguation: Option[EirNode] = None
+  private var _foundType: Option[EirType] = None
+
+  def disambiguation: Option[EirNode] = _disambiguation
+  def disambiguation_=(x: Option[EirNode]): Unit = _disambiguation = x
+
+  def foundType: Option[EirType] = _foundType
+  def foundType_=(x: Option[EirType]): Unit = _foundType = x
+}
+
+abstract class EirExpressionFacade extends EirExpressionNode {
+  def expr: EirExpressionNode
+
+  override def children: Iterable[EirNode] = Seq(expr)
+
+  override def disambiguation: Option[EirNode] = expr.disambiguation
+  override def disambiguation_=(x: Option[EirNode]): Unit =
+    expr.disambiguation = x
+
+  override def foundType: Option[EirType] = expr.foundType
+  override def foundType_=(x: Option[EirType]): Unit = expr.foundType = x
 }
 
 trait EirNamedNode extends EirNode {
@@ -434,9 +453,10 @@ case class EirMember(
   def isVirtual: Boolean =
     member match {
       case _: EirFunction =>
-        (base.isAbstract || isOverride) && !annotations.exists(
-          _.name == "system"
-        )
+        !isConstructor && (base.isAbstract || isOverride) && !annotations
+          .exists(
+            _.name == "system"
+          )
       case _ => false
     }
 
@@ -771,9 +791,10 @@ case class EirSymbol[T <: EirNamedNode: ClassTag](
   override def resolved: Boolean = _resolved.nonEmpty
 }
 
-trait EirPostfixExpression extends EirExpressionNode {
+abstract class EirPostfixExpression[A <: EirNode: ClassTag]
+    extends EirExpressionNode {
   var target: EirExpressionNode
-  var args: List[EirExpressionNode]
+  var args: List[A]
 
   override def children: Iterable[EirNode] = target +: args
 
@@ -799,12 +820,19 @@ case class EirAwait(var parent: Option[EirNode], var target: EirExpressionNode)
   }
 }
 
+case class EirCallArgument(var expr: EirExpressionNode, var isRef: Boolean)(
+    var parent: Option[EirNode]
+) extends EirExpressionFacade {
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean =
+    (expr == oldNode) && util.applyOrFalse[EirExpressionNode](expr = _, newNode)
+}
+
 case class EirFunctionCall(
     var parent: Option[EirNode],
     var target: EirExpressionNode,
-    var args: List[EirExpressionNode],
+    var args: List[EirCallArgument],
     var types: List[EirResolvable[EirType]]
-) extends EirPostfixExpression
+) extends EirPostfixExpression[EirCallArgument]
     with EirSpecialization {
   override def children: Iterable[EirNode] = super.children ++ types
 }
@@ -813,7 +841,7 @@ case class EirArrayReference(
     var parent: Option[EirNode],
     var target: EirExpressionNode,
     var args: List[EirExpressionNode]
-) extends EirPostfixExpression {}
+) extends EirPostfixExpression[EirExpressionNode]
 
 case class EirScopedSymbol[T <: EirNode: ClassTag](
     var target: EirExpressionNode,
