@@ -15,7 +15,10 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
   RichResolvableTypeIterable
 }
-import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{
+  RichEirClassLike,
+  RichEirType
+}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
 
 import scala.annotation.tailrec
@@ -224,12 +227,32 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  def isLvalue(node: EirExpressionNode): Boolean = {
+    node match {
+      case _: EirSymbolLike[_] => true
+      case _                   => false
+    }
+  }
+
+  def checkReference(node: EirExpressionNode, ty: EirType): Unit = {
+    if (!isLvalue(node)) {
+      Errors.expectedLvalue(node)
+    } else if (!Find.tryClassLike(ty).forall(_.isValueType)) {
+      Errors.expectedValueType(node, ty)
+    }
+  }
+
   override def visitFunctionCall(
       call: EirFunctionCall
   )(implicit ctx: TypeCheckContext): EirType = {
-
     val target = visit(call.target)
     val ours = call.args.map(visit(_))
+
+    // screen for correct usage of reference-passing
+    call.args zip ours filter { _._1.isRef } foreach {
+      case (x, y) => checkReference(x.expr, y)
+    }
+
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
       case EirLambdaType(_, args, retTy, _)
