@@ -1240,16 +1240,40 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): EirType = {
     val arrRef = slice.parent collect { case x: EirArrayReference => x }
-    val isLast = arrRef.exists(slice == _.args.last)
+    val isHead = arrRef.flatMap(_.args.headOption).contains(slice)
+    val isLast = arrRef.exists(x => x.args.size > 1 && x.args.last == slice)
     val targetType = arrRef.map(_.target).map(visit)
     val one = EirLiteral(None, EirLiteralTypes.Integer, "1")
 
     // TODO changeover to begin/end using iterators/indices?
-    // TODO start starts at the end of the previous slice if one isn't defined and !isLast
-    val start =
-      slice.start getOrElse EirLiteral(None, EirLiteralTypes.Integer, "0")
+    val start = slice.start getOrElse {
+      if (isHead) {
+        EirLiteral(None, EirLiteralTypes.Integer, "0")
+      } else {
+        val prev = arrRef
+          .map(_.args.indexOf(slice) - 1)
+          .filter(_ >= 0)
+          .flatMap(x => arrRef.map(_.args(x)))
+
+        prev match {
+          case Some(x: EirSlice) =>
+            x.end.map(y => {
+              EirBinaryExpression(
+                None,
+                y,
+                "-",
+                EirBinaryExpression(None, y, "%", x.step getOrElse one)
+              )
+            }) getOrElse Errors.unboundSlice(slice, targetType)
+          case Some(x) => x
+          case _       => Errors.unboundSlice(slice, targetType)
+        }
+      }
+    }
+
     val step =
       slice.step getOrElse one
+
     val end = slice.end getOrElse {
       val hasSizer = {
         targetType
@@ -1279,18 +1303,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
         peer match {
           case Some(x: EirSlice) =>
-            x.start match {
-              case Some(y) =>
-                // TODO validate that this is unilaterally OK
-                //      e.g., may need more complex logic when y < 0?
-                EirBinaryExpression(
-                  None,
-                  y,
-                  "-",
-                  EirBinaryExpression(None, y, "%", x.step.getOrElse(one))
-                )
-              case _ => Errors.unboundSlice(slice, targetType)
-            }
+            x.start getOrElse Errors.unboundSlice(slice, targetType)
           case Some(x) => x
           case _       => Errors.unboundSlice(slice, targetType)
         }
