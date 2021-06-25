@@ -95,12 +95,21 @@ package object types {
     override def types: List[EirResolvable[EirType]] = args
   }
 
+  sealed trait EirProxyKind
+
+  case object EirElementProxy extends EirProxyKind
+  case object EirSectionProxy extends EirProxyKind
+
   case class EirProxyType(
       var parent: Option[EirNode],
       var base: EirResolvable[EirType],
       var collective: Option[String],
-      var isElement: Boolean
+      var kind: Option[EirProxyKind]
   ) extends EirType {
+
+    def isElement: Boolean = kind.contains(EirElementProxy)
+    def isSection: Boolean = kind.contains(EirSectionProxy)
+
     override def children: Iterable[EirResolvable[EirType]] = Seq(base)
 
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {

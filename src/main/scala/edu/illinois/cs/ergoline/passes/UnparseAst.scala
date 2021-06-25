@@ -371,7 +371,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitProxy(x: EirProxy)(implicit ctx: UnparseContext): String =
     visitProxyType(
-      EirProxyType(x.parent, x.base, x.collective, isElement = x.isElement)
+      EirProxyType(
+        x.parent,
+        x.base,
+        x.collective,
+        Option.when(x.isElement)(EirElementProxy)
+      )
     )
 
   override def visitMatch(x: EirMatch)(implicit ctx: UnparseContext): String = {

@@ -248,6 +248,17 @@ object Errors {
     exit(format(node, "expected an lvalue but got %s instead", node))
   }
 
+  def unboundSlice(node: EirSlice, ty: Option[EirType]): Nothing = {
+    exit(
+      format(
+        node,
+        "unbound slice (%s) of unbound type %s (of unknown size)",
+        node,
+        ty
+      )
+    )
+  }
+
   def expectedValueType(node: EirExpressionNode, ty: EirType): Nothing = {
     exit(
       format(

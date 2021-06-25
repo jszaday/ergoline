@@ -148,6 +148,22 @@ class EirImportTests extends FunSuite {
     Processes.onLoad(module)
   }
 
+  test("verify that slicing works as expected") {
+    setupEnv()
+    // TODO restore this to string::tryParse<...> and auto-generate lambda
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |@main def hello(args : array<string>): unit {
+      |    val n      = args.size();
+      |    val slice1 = args[0:2:];
+      |    val slice2 = args[0:2:n];
+      |    val slice3 = args[:2:n];
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
+  }
+
   test("check lower type bounds") {
     setupEnv()
     val module = Modules.load("""

@@ -2240,7 +2240,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitSlice(x: EirSlice)(implicit
       ctx: CodeGenerationContext
-  ): Unit = ???
+  ): Unit = {
+    visit(x.disambiguation)
+  }
 
   def popSentinel(
       sentinel: CodeGenerationContext.Sentinel
