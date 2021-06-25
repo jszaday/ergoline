@@ -1241,7 +1241,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   ): EirType = {
     val arrRef = slice.parent collect { case x: EirArrayReference => x }
     val isHead = arrRef.flatMap(_.args.headOption).contains(slice)
-    val isLast = arrRef.exists(x => x.args.size > 1 && x.args.last == slice)
+    val isLast = arrRef.flatMap(_.args.lastOption).contains(slice)
     val targetType = arrRef.map(_.target).map(visit)
     val one = EirLiteral(None, EirLiteralTypes.Integer, "1")
 
