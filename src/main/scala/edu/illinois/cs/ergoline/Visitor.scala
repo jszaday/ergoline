@@ -631,13 +631,17 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       base = templatedType
     }
     if (ctx.proxySuffix() != null) {
-      val isElement = Option(ctx.proxySuffix().ProxySuffix().getText == "[@]").isDefined
+      val suffix = Option(ctx.proxySuffix().ProxySuffix())
+      val isElement = suffix.exists(_.getText == "[@]")
+      val isSection = suffix.exists(_.getText == "{@}")
       val proxyType =
         EirProxyType(
           parent,
           base,
           Option(ctx.proxySuffix().CollectiveKeyword()).map(_.getText),
-          isElement
+          kind =
+            Option.when(isElement)(EirElementProxy) orElse
+              Option.when(isSection)(EirSectionProxy)
         )
       base.parent = Some(proxyType)
       base = proxyType

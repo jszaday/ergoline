@@ -9,6 +9,10 @@ class array<A, N: int = 1> {
 
     @system(alias="[]")
     def get(idx: *shape): A;
+
+    @system
+    def get(indices: range<shape>): iterable<A>;
+
     @system(alias="[]")
     def set(idx: *shape, value: A): unit;
     @system def size(): shape;

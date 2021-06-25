@@ -1,9 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{
-  EirAccessibility,
-  Protected
-}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protected}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -11,15 +8,9 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
-  RichOption,
-  RichResolvableTypeIterable
-}
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{
-  RichEirClassLike,
-  RichEirType
-}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, validAccessibility}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, resolveToPair, validAccessibility}
 
 import scala.annotation.tailrec
 
@@ -667,7 +658,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       node.members.foreach(visit(_))
       node.inherited.foreach(visit(_))
       if (node.annotation("main").isDefined) {
-        visitProxyType(EirProxyType(None, node, None, isElement = false))
+        visitProxyType(EirProxyType(None, node, None, None))
       }
       ctx.stop(subCtx)
     })
@@ -1237,17 +1228,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val arrRef = slice.parent collect { case x: EirArrayReference => x }
     val isLast = arrRef.exists(slice == _.args.last)
     val targetType = arrRef.map(_.target).map(visit)
-    val sizeMethods = {
-      // TODO ensure that we specialize for cases like { foo<A> ... def size(): A }
-      targetType
-        .flatMap(Find.tryClassLike)
-        .map(_.members collect {
-          case m @ EirMember(_, f: EirFunction, _)
-              if (f.name == "size" && f.functionArgs.isEmpty && !m.isStatic) =>
-            visit(f.returnType)
-        })
-        .getOrElse(Nil)
-    }
 
     // TODO changeover to begin/end using iterators/indices?
     val start =
@@ -1255,9 +1235,27 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val step =
       slice.step getOrElse EirLiteral(None, EirLiteralTypes.Integer, "1")
     val end = slice.end getOrElse {
-      if (isLast && sizeMethods.nonEmpty) {
-        // TODO ensure that return type of size method can assign to index!
-        EirFunctionCall(None, EirScopedSymbol(arrRef.get.target, EirSymbol[EirNamedNode](None, List("size")))(None), Nil, Nil)
+      val hasSizer = {
+        targetType
+          .flatMap(Find.tryClassLike)
+          .flatMap(_.members collectFirst {
+            case m @ EirMember(_, f: EirFunction, _)
+                if f.name == "size" && f.functionArgs.isEmpty && !m.isStatic =>
+              m
+          })
+          .nonEmpty
+      }
+
+      if (isLast && hasSizer) {
+        EirFunctionCall(
+          None,
+          EirScopedSymbol(
+            arrRef.get.target,
+            EirSymbol[EirNamedNode](None, List("size"))
+          )(None),
+          Nil,
+          Nil
+        )
       } else {
         val peer = arrRef.map(_.args).flatMap { x =>
           Option.unless(isLast)(x(x.indexOf(slice) + 1))
@@ -1274,8 +1272,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     val args = List(start, step, end)
     val types = args.map(visit(_))
-    val union = Find.unionType(types).getOrElse(Errors.unableToUnify(slice, types))
-    val range = EirNew(None, EirTemplatedType(None, globals.rangeType, List(union)), args)
+    val union =
+      Find.unionType(types).getOrElse(Errors.unableToUnify(slice, types))
+    val range =
+      EirNew(None, EirTemplatedType(None, globals.rangeType, List(union)), args)
     slice.disambiguation = Some(range)
     visit(range)
   }
