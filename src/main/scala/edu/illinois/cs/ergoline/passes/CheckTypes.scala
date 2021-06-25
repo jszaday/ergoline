@@ -1242,13 +1242,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val arrRef = slice.parent collect { case x: EirArrayReference => x }
     val isLast = arrRef.exists(slice == _.args.last)
     val targetType = arrRef.map(_.target).map(visit)
+    val one = EirLiteral(None, EirLiteralTypes.Integer, "1")
 
     // TODO changeover to begin/end using iterators/indices?
     // TODO start starts at the end of the previous slice if one isn't defined and !isLast
     val start =
       slice.start getOrElse EirLiteral(None, EirLiteralTypes.Integer, "0")
     val step =
-      slice.step getOrElse EirLiteral(None, EirLiteralTypes.Integer, "1")
+      slice.step getOrElse one
     val end = slice.end getOrElse {
       val hasSizer = {
         targetType
@@ -1278,8 +1279,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
         peer match {
           case Some(x: EirSlice) =>
-            // TODO this should be (x.start - (x.start % x.step))!
-            x.start.getOrElse(Errors.unboundSlice(slice, targetType))
+            x.start match {
+              case Some(y) =>
+                // TODO validate that this is unilaterally OK
+                //      e.g., may need more complex logic when y < 0?
+                EirBinaryExpression(
+                  None,
+                  y,
+                  "-",
+                  EirBinaryExpression(None, y, "%", x.step.getOrElse(one))
+                )
+              case _ => Errors.unboundSlice(slice, targetType)
+            }
           case Some(x) => x
           case _       => Errors.unboundSlice(slice, targetType)
         }
