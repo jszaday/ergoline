@@ -1,6 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protected}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{
+  EirAccessibility,
+  Protected
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -8,9 +11,20 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, resolveToPair, validAccessibility}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichOption,
+  RichResolvableTypeIterable
+}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{
+  RichEirClassLike,
+  RichEirType
+}
+import edu.illinois.cs.ergoline.util.{
+  Errors,
+  assertValid,
+  resolveToPair,
+  validAccessibility
+}
 
 import scala.annotation.tailrec
 
@@ -1230,6 +1244,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val targetType = arrRef.map(_.target).map(visit)
 
     // TODO changeover to begin/end using iterators/indices?
+    // TODO start starts at the end of the previous slice if one isn't defined and !isLast
     val start =
       slice.start getOrElse EirLiteral(None, EirLiteralTypes.Integer, "0")
     val step =
@@ -1263,6 +1278,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
         peer match {
           case Some(x: EirSlice) =>
+            // TODO this should be (x.start - (x.start % x.step))!
             x.start.getOrElse(Errors.unboundSlice(slice, targetType))
           case Some(x) => x
           case _       => Errors.unboundSlice(slice, targetType)
