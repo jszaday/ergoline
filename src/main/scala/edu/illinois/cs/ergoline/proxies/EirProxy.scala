@@ -2,8 +2,12 @@ package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{
+  EirElementProxy,
   EirLambdaType,
+  EirProxyKind,
+  EirSectionProxy,
   EirTemplatedType,
+  EirTupleType,
   EirType
 }
 import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
@@ -19,10 +23,13 @@ case class EirProxy(
     var parent: Option[EirNode],
     var base: EirClassLike,
     var collective: Option[String],
-    var isElement: Boolean
+    var kind: Option[EirProxyKind]
 ) extends EirClassLike {
 
   isAbstract = base.isAbstract
+
+  def isElement: Boolean = kind.contains(EirElementProxy)
+  def isSection: Boolean = kind.contains(EirSectionProxy)
 
   override def selfDeclarations: List[EirMember] =
     base.selfDeclarations ++ {
@@ -106,21 +113,20 @@ case class EirProxy(
   }
 
   def mkUnitContribute(): EirMember = {
-    val m = EirMember(Some(this), null, EirAccessibility.Public)
-    m.annotations +:= EirAnnotation("system", Map())
-    val f =
-      EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType)
-    f.functionArgs = List(
-      EirFunctionArgument(
-        Some(f),
-        "callback",
-        EirLambdaType(None, Nil, globals.unitType),
-        isExpansion = false,
-        isSelfAssigning = false
-      )
+    util.makeMemberFunctionWithArgs(
+      this,
+      "contribute",
+      List(
+        EirFunctionArgument(
+          None,
+          "callback",
+          EirLambdaType(None, Nil, globals.unitType),
+          isExpansion = false,
+          isSelfAssigning = false
+        )
+      ),
+      globals.unitType
     )
-    m.member = f
-    m
   }
 
   // replace "self" with "selfProxy"
@@ -164,21 +170,34 @@ case class EirProxy(
     indices.map(_.toTupleType()(Some(this))).to[EirType]
   }
 
+  private def genContributors(): List[EirMember] = {
+    List(mkUnitContribute(), mkValueContribute())
+  }
+
+  private def genSectionMembers(): List[EirMember] = genContributors()
+
   private def genElementMembers(): List[EirMember] = {
-    val idx = indexType.get
     val parent = ProxyManager.collectiveFor(this).get
-    List(
+    val idx = indexType.get
+
+    genContributors() ++ List(
       util.makeMemberFunction(this, "parent", Nil, parent),
-      util.makeMemberFunction(this, "index", Nil, idx),
-      mkUnitContribute(),
-      mkValueContribute()
+      util.makeMemberFunction(this, "index", Nil, idx)
     )
   }
 
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
+    val idxTy = idx.toTupleType()(None)
     val u = globals.typeFor(EirLiteralTypes.Unit)
+
     val eleTy = ProxyManager.elementType(this)
+    val secTy = ProxyManager.sectionType(this)
+    val rangeTy =
+      EirTemplatedType(None, globals.rangeType, List(idxTy))
+    val arrayTy =
+      EirTemplatedType(None, globals.arrayType, List(idxTy))
+
     val needsIndex = collective.exists(_.startsWith("array"))
     base.members
       .filter(x => validMember(x) && x.isConstructor)
@@ -196,19 +215,26 @@ case class EirProxy(
       // ckNew(); <-- empty constructor
       if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u))
       else Nil
-    } :+ util.makeMemberFunction(this, "get", idx, eleTy)
+    } :+ util.makeMemberFunction(this, "get", idx, eleTy) :+
+      util.makeMemberFunction(this, "get", List(arrayTy), secTy) :+
+      util.makeMemberFunction(this, "get", List(rangeTy), secTy)
   }
 
   override def members: List[EirMember] = {
     if (internalMembers.isEmpty) {
       val fromKind =
-        if (isElement) genElementMembers()
-        else if (collective.isDefined) genCollectiveMembers()
-        else Nil
+        (kind, collective) match {
+          case (Some(EirElementProxy), _) => genElementMembers()
+          case (Some(EirSectionProxy), _) => genSectionMembers()
+          case (_, Some(_))               => genCollectiveMembers()
+          case _                          => Nil
+        }
+
       internalMembers = fromKind ++ base.members
         .filter(x => validMember(x) && (singleton || !x.isConstructor))
         .map(updateMember)
     }
+
     internalMembers
   }
 
