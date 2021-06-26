@@ -50,6 +50,8 @@ object GenerateDecls {
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (x.annotation("system").isDefined) return
+    val names = Find.ancestors(x).collect{ case x: EirNamespace => x.name } :+ x.name
+    ctx << "#define __" + (names mkString "_") + "__" + " // ;"
     ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
       x
     )(ctx) << "{"

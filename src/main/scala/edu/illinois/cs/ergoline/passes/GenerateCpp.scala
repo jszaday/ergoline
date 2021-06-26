@@ -4,7 +4,9 @@ import java.io.File
 import java.nio.file.Paths
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{
+  EirElementProxy,
   EirLambdaType,
+  EirSectionProxy,
   EirTemplatedType,
   EirTupleType,
   EirType
@@ -619,6 +621,44 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   type ArgumentList =
     (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
 
+  def stripSection(target: EirExpressionNode): EirExpressionNode = {
+    target match {
+      case EirScopedSymbol(target, _)              => stripSection(target)
+      case EirArrayReference(_, _, section :: Nil) => stripSection(section)
+      case _                                       => target
+    }
+  }
+
+  def visitContribute(
+      proxy: EirProxy,
+      target: EirExpressionNode,
+      args: ArgumentList
+  )(implicit ctx: CodeGenerationContext) = {
+    proxy.kind match {
+      case Some(EirSectionProxy) =>
+        val argv = flattenArgs(args)
+        ctx << "this->local_contribution(" << "ergoline::conv2section(" << stripSection(
+          target
+        ) << ")" << {
+          if (argv.size == 1) ", hypercomm::make_unit_value(), ergoline::make_null_combiner()" else ???
+        } << ", ergoline::intercall(" << visitCallback(argv.last, isReduction = true) << ")" << ")"
+      case Some(EirElementProxy) =>
+        ctx << "ergoline::contribute(this," << {
+          visitCallback(
+            flattenArgs(args) match {
+              case List(value, reducer, target) =>
+                ctx << value << "," << visitReducer(reducer) << ","
+                target
+              case List(target) => target
+              case _            => Errors.unreachable()
+            },
+            isReduction = true
+          )
+        } << ")"
+      case _ => Errors.unreachable()
+    }
+  }
+
   def visitSystemCall(implicit
       ctx: CodeGenerationContext,
       target: EirExpressionNode,
@@ -638,19 +678,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val name =
       system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
     disambiguated.asInstanceOf[EirNamedNode] match {
-      case m @ EirMember(Some(_: EirProxy), _, _) if m.name == "contribute" =>
-        ctx << "ergoline::contribute(this," << {
-          visitCallback(
-            flattenArgs(args) match {
-              case List(value, reducer, target) =>
-                ctx << value << "," << visitReducer(reducer) << ","
-                target
-              case List(target) => target
-              case _            => Errors.unreachable()
-            },
-            isReduction = true
-          )
-        } << ")"
+      case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
+        visitContribute(p, target, args)
       case _: EirMember if proxy.isDefined =>
         name match {
           case "index" => ctx << selfIndex
