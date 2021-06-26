@@ -32,6 +32,15 @@ package object globals {
 
   val implicitProxyName: String = "__proxy__"
 
+  def hasLoaded(name: String): Boolean = {
+    ergolineModule.exists {
+      case n: EirNamespace => n.children.exists {
+        case n: EirNamedNode => n.name == name && !n.isInstanceOf[EirFileSymbol]
+        case _ => false
+      }
+    }
+  }
+
   def iterableType: EirType = {
     Find.namedChild[EirClassLike](ergolineModule, "iterable")
   }

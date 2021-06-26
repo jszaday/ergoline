@@ -1,0 +1,39 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    var tally: int = 0;
+
+    @entry def main(args: array<string>) {
+        val n = args.size() > 1 ? args[1].toInt() : 16;
+        val arrProxy = new slicecheck@array1d(n, n, self@);
+    }
+
+    @entry def done() {
+        tally += 1;
+
+        println(`main> recvd callback ${tally} of 2`);
+
+        if (tally >= 2) {
+            exit();
+        }
+    }
+}
+
+class slicecheck {
+    val n: int;
+
+    @entry def slicecheck(=n: int, mainProxy: main@) {
+        if ((self[@]index() % 2) == 0) {
+            self@[0:2:n].contribute(mainProxy.done);
+        } else {
+            val odds = new array<int>(n / 2);
+            for (var i = 0; i < (n / 2); i += 1) {
+                odds[i] = 2 * i + 1;
+            }
+            self@[odds].contribute(mainProxy.done);
+        }
+    }
+}

@@ -257,7 +257,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   val corePupables: Seq[String] = Seq(
     "hypercomm::future_port",
     "hypercomm::port_opener",
-    "hypercomm::forwarding_callback"
+    "hypercomm::forwarding_callback",
+    "hypercomm::inter_callback"
   )
 
   def registerPolymorphs(ctx: CodeGenerationContext): Unit = {
@@ -621,6 +622,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   type ArgumentList =
     (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
 
+  @tailrec
   def stripSection(target: EirExpressionNode): EirExpressionNode = {
     target match {
       case EirScopedSymbol(target, _)              => stripSection(target)
@@ -633,7 +635,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       proxy: EirProxy,
       target: EirExpressionNode,
       args: ArgumentList
-  )(implicit ctx: CodeGenerationContext) = {
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
     proxy.kind match {
       case Some(EirSectionProxy) =>
         val argv = flattenArgs(args)
@@ -641,7 +643,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           target
         ) << ")" << {
           if (argv.size == 1) ", hypercomm::make_unit_value(), ergoline::make_null_combiner()" else ???
-        } << ", ergoline::intercall(" << visitCallback(argv.last, isReduction = true) << ")" << ")"
+        } << ", hypercomm::intercall(" << visitCallback(argv.last, isReduction = true) << ")" << ")"
       case Some(EirElementProxy) =>
         ctx << "ergoline::contribute(this," << {
           visitCallback(
