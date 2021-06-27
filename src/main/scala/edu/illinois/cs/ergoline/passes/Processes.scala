@@ -71,10 +71,17 @@ object Processes {
     "#include <ergoline/array.hpp> // ;"
   )
 
+  def willGenerate(name: String)(implicit ctx: CodeGenerationContext): Boolean = {
+    ctx.checked.keys exists {
+      case n: EirNamedNode => n.name == name
+      case _ => false
+    }
+  }
+
   def sensitiveHelper(map: Map[String, String])(implicit ctx: CodeGenerationContext) = {
     map foreach {
       case (name, header) =>
-        if (globals.hasLoaded(name)) {
+        if (willGenerate(name)) {
           ctx << s"#include <$header> // ;"
         }
     }
