@@ -4,28 +4,37 @@ import ergoline::_;
 import ck;
 
 @main class main {
+    val arrProxy: slicecheck@array1d;
+    val n: int;
+
     var tally: int = 0;
 
     @entry def main(args: array<string>) {
-        val n = args.size() > 1 ? args[1].toInt() : 16;
-        val arrProxy = new slicecheck@array1d(n, n, self@);
+        val multiplier = args.size() > 1 ? args[1].toInt() : 16;
+        n = multiplier * ck::numPes();
+
+        arrProxy = new slicecheck@array1d(n, n, self@);
     }
 
     @entry def done() {
         tally += 1;
 
-        println(`main> recvd callback ${tally} of 2`);
+        println(`main> recvd callback ${tally} of 3`);
 
-        if (tally >= 2) {
+        if (tally == 2) {
+            arrProxy[0:2:n].evenOnly();
+            arrProxy[1:2:n].oddOnly();
+        } else if (tally >= 3) {
             exit();
         }
     }
 }
 
 class slicecheck {
+    val mainProxy: main@;
     val n: int;
 
-    @entry def slicecheck(=n: int, mainProxy: main@) {
+    @entry def slicecheck(=n: int, =mainProxy: main@) {
         if ((self[@]index() % 2) == 0) {
             self@[0:2:n].contribute(mainProxy.done);
         } else {
@@ -35,5 +44,19 @@ class slicecheck {
             }
             self@[odds].contribute(mainProxy.done);
         }
+    }
+
+    @entry def evenOnly() {
+        val mine = self[@]index();
+        assert((mine % 2) == 0);
+        println(`${mine}> hello from an even-indexed member!`);
+        self[@]contribute(mainProxy.done);
+    }
+
+    @entry def oddOnly() {
+        val mine = self[@]index();
+        assert((mine % 2) != 0);
+        println(`${mine}> hello from an odd-indexed member!`);
+        self[@]contribute(mainProxy.done);
     }
 }

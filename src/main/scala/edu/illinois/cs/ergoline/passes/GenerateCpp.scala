@@ -261,6 +261,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     "hypercomm::inter_callback"
   )
 
+  val localityPupables: Seq[String] = Seq(
+    "hypercomm::vector_section",
+    "hypercomm::reduction_port",
+    "hypercomm::broadcaster"
+  )
+
   def registerPolymorphs(ctx: CodeGenerationContext): Unit = {
     val global = Some(EirGlobalNamespace)
     val checked = ctx.checked
@@ -275,6 +281,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << "hypercomm::init_polymorph_registry();"
     ctx << "if(CkMyRank()==0)" << "{"
+
+    ProxyManager.registeredIndices() foreach { x =>
+      localityPupables foreach (y => {
+        ctx << "hypercomm::enroll<" << y
+        ctx << "<" << ctx.typeFor(x, global) << ">>" << "()" << ";"
+      })
+    }
+
     puppables.foreach(x => {
       if (x.templateArgs.isEmpty) {
         ctx << "hypercomm::enroll<" << ctx
@@ -623,11 +637,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
 
   @tailrec
-  def stripSection(target: EirExpressionNode): EirExpressionNode = {
+  def stripSection(
+      target: EirExpressionNode,
+      getProxy: Boolean = false
+  ): EirExpressionNode = {
     target match {
-      case EirScopedSymbol(target, _)              => stripSection(target)
-      case EirArrayReference(_, _, section :: Nil) => stripSection(section)
-      case _                                       => target
+      case EirScopedSymbol(target, _) => stripSection(target, getProxy)
+      case EirArrayReference(_, target, section :: Nil) =>
+        stripSection(if (getProxy) target else section, getProxy)
+      case _ => target
     }
   }
 
@@ -642,8 +660,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "this->local_contribution(" << "ergoline::conv2section(" << stripSection(
           target
         ) << ")" << {
-          if (argv.size == 1) ", hypercomm::make_unit_value(), ergoline::make_null_combiner()" else ???
-        } << ", hypercomm::intercall(" << visitCallback(argv.last, isReduction = true) << ")" << ")"
+          if (argv.size == 1)
+            ", hypercomm::make_unit_value(), ergoline::make_null_combiner()"
+          else ???
+        } << ", hypercomm::intercall(" << visitCallback(
+          argv.last,
+          isReduction = true
+        ) << ")" << ")"
       case Some(EirElementProxy) =>
         ctx << "ergoline::contribute(this," << {
           visitCallback(
@@ -661,6 +684,37 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def epIndexFor(proxy: EirProxy, member: EirMember, hasArgs: Boolean)(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    "CkIndex_" + proxy.baseName + "::" + ctx.nameFor(member) + "(" + {
+      Option.when(hasArgs)("nullptr").getOrElse("")
+    } + ")"
+  }
+
+  def visitMulticast(
+      proxy: EirProxy,
+      member: EirMember,
+      target: EirExpressionNode,
+      args: ArgumentList
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    val hasArgs = (args._1.size + args._2.size) != 0
+
+    {
+      stripSection(target, getProxy = true) match {
+        case s: EirSymbol[_] if CheckTypes.isSelf(s) =>
+          ctx << "this->broadcast("
+        case s => ctx << "hypercomm::broadcast_to(" << s << ","
+      }
+    } << "ergoline::conv2section(" << stripSection(
+      target
+    ) << ").clone()" << "," << {
+      epIndexFor(proxy, member, hasArgs)
+    } << ", hypercomm::pack_to_port({}" << Option.when(hasArgs)(",") << {
+      visitArguments(Some(member), args)
+    } << ")" << ")"
+  }
+
   def visitSystemCall(implicit
       ctx: CodeGenerationContext,
       target: EirExpressionNode,
@@ -671,7 +725,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case f: EirScopedSymbol[_] => f.target
       case _                     => target
     }
-    val proxy = disambiguated.parent.to[EirProxy]
     val system = disambiguated.annotation("system").get
     val static = system("static").exists(_.toBoolean)
     val invert = system("invert").exists(_.toBoolean)
@@ -679,15 +732,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val cast = system("cast").exists(_.toBoolean)
     val name =
       system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
-    disambiguated.asInstanceOf[EirNamedNode] match {
+    disambiguated match {
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
         visitContribute(p, target, args)
-      case _: EirMember if proxy.isDefined =>
+      case m @ EirMember(Some(p: EirProxy), _, _) if p.isSection =>
+        visitMulticast(p, m, target, args)
+      case EirMember(Some(p: EirProxy), _, _) =>
         name match {
           case "index" => ctx << selfIndex
           case "parent" =>
-            ctx << s"(CProxy_${proxy.get.baseName}(" << base << {
-              proxy.get.collective match {
+            ctx << s"(CProxy_${p.baseName}(" << base << {
+              p.collective match {
                 case Some("group" | "nodegroup")      => ".ckGetGroupID()))"
                 case Some(s) if s.startsWith("array") => ".ckGetArrayID()))"
               }

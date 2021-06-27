@@ -1,11 +1,13 @@
 package edu.illinois.cs.ergoline.proxies
 
-import edu.illinois.cs.ergoline.ast.EirClassLike
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLiteralTypes}
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
+import scala.language.postfixOps
 import scala.util.matching.Regex
 
 object ProxyManager {
@@ -24,6 +26,12 @@ object ProxyManager {
   private var _sections: Map[EirProxy, EirProxy] = Map()
   private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] =
     Map()
+
+  def registeredIndices(): Set[EirType] = {
+    (globals.typeFor(EirLiteralTypes.Integer) +: _proxies.values
+      .flatMap(_.indexType)
+      .toList).toSet
+  }
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {

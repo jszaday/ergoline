@@ -149,7 +149,8 @@ case class EirProxy(
     } else theirs.returnType
 //    val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.counterpart = Some(m)
-    newMember.annotations = m.annotations
+    newMember.annotations =
+      m.annotations ++ Option.when(isSection)(EirAnnotation("system", Map()))
     newMember.member = ours
     ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))
     ours.implicitArgs = theirs.implicitArgs.map(_.cloneWith(Some(ours)))
@@ -166,7 +167,7 @@ case class EirProxy(
     n.map(List.fill(_)(i))
   }
 
-  private def indexType: Option[EirType] = {
+  def indexType: Option[EirType] = {
     indices.map(_.toTupleType()(Some(this))).to[EirType]
   }
 
