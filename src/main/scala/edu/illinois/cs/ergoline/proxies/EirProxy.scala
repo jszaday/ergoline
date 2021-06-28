@@ -189,15 +189,15 @@ case class EirProxy(
 
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
-    val idxTy = idx.toTupleType()(None)
-    val u = globals.typeFor(EirLiteralTypes.Unit)
 
+    val idxTy = idx.toTupleType()(None)
     val eleTy = ProxyManager.elementType(this)
     val secTy = ProxyManager.sectionType(this)
-    val rangeTy =
-      EirTemplatedType(None, globals.rangeType, List(idxTy))
-    val arrayTy =
+    val unitTy = globals.typeFor(EirLiteralTypes.Unit)
+    val arrayTy = // TODO iterable could be used here instead?
       EirTemplatedType(None, globals.arrayType, List(idxTy))
+    val rangeTys =
+      idx.map(x => EirTemplatedType(None, globals.rangeType, List(x)))
 
     val needsIndex = collective.exists(_.startsWith("array"))
     base.members
@@ -210,15 +210,15 @@ case class EirProxy(
           this,
           baseName,
           (if (needsIndex) idx else Nil) ++ args,
-          u
+          unitTy
         )
       }) ++ {
       // ckNew(); <-- empty constructor
-      if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, u))
+      if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, unitTy))
       else Nil
     } :+ util.makeMemberFunction(this, "get", idx, eleTy) :+
       util.makeMemberFunction(this, "get", List(arrayTy), secTy) :+
-      util.makeMemberFunction(this, "get", List(rangeTy), secTy)
+      util.makeMemberFunction(this, "get", rangeTys, secTy)
   }
 
   override def members: List[EirMember] = {
