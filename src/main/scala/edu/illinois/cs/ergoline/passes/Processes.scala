@@ -21,6 +21,15 @@ object Processes {
 //    "ergoline/reducer.hpp",
     "#include \"generate.decl.h\" // ;"
   )
+
+  var sensitiveDeclIncludes: Map[String, String] = Map(
+    ("range", "ergoline/section.decl.hpp")
+  )
+
+  var sensitiveDefIncludes: Map[String, String] = Map(
+    ("range", "ergoline/section.def.hpp")
+  )
+
   private var ctx = new TypeCheckContext
 
   def reset(): Unit = {
@@ -53,6 +62,7 @@ object Processes {
     "#include <hypercomm/core/typed_value.hpp> // ;",
     "#include <hypercomm/components/sentinel.hpp> // ;",
     "#include <hypercomm/core/resuming_callback.hpp> // ;",
+    "#include <hypercomm/core/inter_callback.hpp> // ;",
     "#include <ergoline/callback.hpp> // ;",
     "#include <ergoline/function.hpp> // ;",
     "#include <ergoline/mailbox.hpp> // ;",
@@ -60,6 +70,26 @@ object Processes {
     "#include <ergoline/object.hpp> // ;",
     "#include <ergoline/array.hpp> // ;"
   )
+
+  def willGenerate(
+      name: String
+  )(implicit ctx: CodeGenerationContext): Boolean = {
+    ctx.checked.keys exists {
+      case n: EirNamedNode => n.name == name
+      case _               => false
+    }
+  }
+
+  def sensitiveHelper(
+      map: Map[String, String]
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    map foreach {
+      case (name, header) =>
+        if (willGenerate(name)) {
+          ctx << s"#include <$header> // ;"
+        }
+    }
+  }
 
   // TODO this logic should be moved into GenerateCpp
   // NOTE This will go away once passes are implemented
@@ -93,6 +123,8 @@ object Processes {
       if (x.contains("#include")) x else s"#include <$x> // ;"
     )
 
+    sensitiveHelper(sensitiveDeclIncludes)(ctx)
+
     GenerateCpp.declareGlobals(ctx)
 
     // NOTE do we ever need to topo sort proxies?
@@ -116,12 +148,15 @@ object Processes {
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
 
+    sensitiveHelper(sensitiveDefIncludes)(ctx)
+
     ctx << List(
       "#define CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\"",
       "#undef CK_TEMPLATES_ONLY",
       "#include \"generate.def.h\""
     ).map(_ + "// ;")
+
     List(ctx.toString)
   }
 

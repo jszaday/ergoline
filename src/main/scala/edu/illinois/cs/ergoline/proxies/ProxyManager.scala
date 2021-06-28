@@ -1,15 +1,13 @@
 package edu.illinois.cs.ergoline.proxies
 
-import edu.illinois.cs.ergoline.ast.EirClassLike
-import edu.illinois.cs.ergoline.ast.types.{
-  EirProxyType,
-  EirTemplatedType,
-  EirType
-}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLiteralTypes}
+import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.Errors
 
+import scala.language.postfixOps
 import scala.util.matching.Regex
 
 object ProxyManager {
@@ -25,8 +23,15 @@ object ProxyManager {
 
   private var _proxies: Map[(String, EirClassLike), EirProxy] = Map()
   private var _elements: Map[EirProxy, EirProxy] = Map()
+  private var _sections: Map[EirProxy, EirProxy] = Map()
   private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] =
     Map()
+
+  def registeredIndices(): Set[EirType] = {
+    (globals.typeFor(EirLiteralTypes.Integer) +: _proxies.values
+      .flatMap(_.indexType)
+      .toList).toSet
+  }
 
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
@@ -45,30 +50,61 @@ object ProxyManager {
   def checkProxyable(
       base: EirClassLike,
       collective: Option[String],
-      isElement: Boolean
+      kind: Option[EirProxyKind]
   ): EirProxy = {
     // validate base has an entry constructor of the appropriate nature
-    EirProxy(base.parent, base, collective, isElement)
+    EirProxy(base.parent, base, collective, kind)
+  }
+
+  private def findCorrespondence(
+      t: EirProxy,
+      k: EirProxyKind,
+      getter: () => EirProxy
+  ): Option[EirProxy] = {
+    Option.when(t.kind.contains(k))(t) orElse t.collective.map(_ => getter())
+  }
+
+  private def copyWithKind(t: EirProxy, k: EirProxyKind): EirProxy = {
+    EirProxy(
+      t.parent,
+      t.base,
+      t.collective,
+      Some(k)
+    )
   }
 
   def elementFor(t: EirProxy): Option[EirProxy] = {
-    Option
-      .when(t.isElement)(t)
-      .orElse(t.collective.map(_ => {
+    findCorrespondence(
+      t,
+      EirElementProxy,
+      () => {
         if (!_elements.contains(t)) {
-          _elements += (t -> EirProxy(
-            t.parent,
-            t.base,
-            t.collective,
-            isElement = true
-          ))
+          _elements += (t -> copyWithKind(t, EirElementProxy))
         }
+
         _elements(t)
-      }))
+      }
+    )
+  }
+
+  def sectionFor(t: EirProxy): Option[EirProxy] = {
+    findCorrespondence(
+      t,
+      EirSectionProxy,
+      () => {
+        if (!_sections.contains(t)) {
+          _sections += (t -> copyWithKind(t, EirSectionProxy))
+        }
+
+        _sections(t)
+      }
+    )
   }
 
   def collectiveFor(t: EirProxy): Option[EirProxy] =
-    _proxies.get((t.collective.get, t.base)).filter(_ => t.isElement)
+    _proxies
+      .get((t.collective.get, t.base))
+      .filter(_ => t.isElement || t.isSection)
 
   private def typeFor(
       p: EirProxy,
@@ -102,6 +138,13 @@ object ProxyManager {
     }
   }
 
+  def sectionType(p: EirProxy): EirType = {
+    sectionFor(p) match {
+      case Some(e) => typeFor(e, e.templateArgs)
+      case None    => Errors.missingType(p)
+    }
+  }
+
   def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
     val baseTy = CheckTypes.visit(t.base)
     val baseCls = Find.asClassLike(baseTy)
@@ -115,7 +158,7 @@ object ProxyManager {
     val collective = t.collective.getOrElse("")
     val baseProxy = _proxies.getOrElse(
       (collective, baseCls), {
-        val proxy = checkProxyable(baseCls, t.collective, isElement = false)
+        val proxy = checkProxyable(baseCls, t.collective, t.kind)
         _proxies += ((collective, baseCls) -> proxy)
         proxy
       }

@@ -4,7 +4,9 @@ import java.io.File
 import java.nio.file.Paths
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{
+  EirElementProxy,
   EirLambdaType,
+  EirSectionProxy,
   EirTemplatedType,
   EirTupleType,
   EirType
@@ -255,7 +257,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   val corePupables: Seq[String] = Seq(
     "hypercomm::future_port",
     "hypercomm::port_opener",
-    "hypercomm::forwarding_callback"
+    "hypercomm::forwarding_callback",
+    "hypercomm::inter_callback"
+  )
+
+  val localityPupables: Seq[String] = Seq(
+    "hypercomm::vector_section",
+    "hypercomm::reduction_port",
+    "hypercomm::broadcaster"
   )
 
   def registerPolymorphs(ctx: CodeGenerationContext): Unit = {
@@ -272,6 +281,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << "hypercomm::init_polymorph_registry();"
     ctx << "if(CkMyRank()==0)" << "{"
+
+    ProxyManager.registeredIndices() foreach { x =>
+      localityPupables foreach (y => {
+        ctx << "hypercomm::enroll<" << y
+        ctx << "<" << ctx.typeFor(x, global) << ">>" << "()" << ";"
+      })
+    }
+
     puppables.foreach(x => {
       if (x.templateArgs.isEmpty) {
         ctx << "hypercomm::enroll<" << ctx
@@ -619,26 +636,38 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   type ArgumentList =
     (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
 
-  def visitSystemCall(implicit
-      ctx: CodeGenerationContext,
+  @tailrec
+  def stripSection(
       target: EirExpressionNode,
-      disambiguated: EirNode,
-      args: ArgumentList
-  ): Unit = {
-    val base = target match {
-      case f: EirScopedSymbol[_] => f.target
-      case _                     => target
+      getProxy: Boolean = false
+  ): EirExpressionNode = {
+    target match {
+      case EirScopedSymbol(target, _) => stripSection(target, getProxy)
+      case EirArrayReference(_, target, section :: Nil) =>
+        stripSection(if (getProxy) target else section, getProxy)
+      case _ => target
     }
-    val proxy = disambiguated.parent.to[EirProxy]
-    val system = disambiguated.annotation("system").get
-    val static = system("static").exists(_.toBoolean)
-    val invert = system("invert").exists(_.toBoolean)
-    val invOp = if (invert) "!" else ""
-    val cast = system("cast").exists(_.toBoolean)
-    val name =
-      system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
-    disambiguated.asInstanceOf[EirNamedNode] match {
-      case m @ EirMember(Some(_: EirProxy), _, _) if m.name == "contribute" =>
+  }
+
+  def visitContribute(
+      proxy: EirProxy,
+      target: EirExpressionNode,
+      args: ArgumentList
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    proxy.kind match {
+      case Some(EirSectionProxy) =>
+        val argv = flattenArgs(args)
+        ctx << "this->local_contribution(" << "ergoline::conv2section(" << stripSection(
+          target
+        ) << ")" << {
+          if (argv.size == 1)
+            ", hypercomm::make_unit_value(), ergoline::make_null_combiner()"
+          else ???
+        } << ", hypercomm::intercall(" << visitCallback(
+          argv.last,
+          isReduction = true
+        ) << ")" << ")"
+      case Some(EirElementProxy) =>
         ctx << "ergoline::contribute(this," << {
           visitCallback(
             flattenArgs(args) match {
@@ -651,12 +680,69 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             isReduction = true
           )
         } << ")"
-      case _: EirMember if proxy.isDefined =>
+      case _ => Errors.unreachable()
+    }
+  }
+
+  def epIndexFor(proxy: EirProxy, member: EirMember, hasArgs: Boolean)(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    "CkIndex_" + proxy.baseName + "::" + ctx.nameFor(member) + "(" + {
+      Option.when(hasArgs)("nullptr").getOrElse("")
+    } + ")"
+  }
+
+  def visitMulticast(
+      proxy: EirProxy,
+      member: EirMember,
+      target: EirExpressionNode,
+      args: ArgumentList
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    val hasArgs = (args._1.size + args._2.size) != 0
+
+    {
+      stripSection(target, getProxy = true) match {
+        case s: EirSymbol[_] if CheckTypes.isSelf(s) =>
+          ctx << "this->broadcast("
+        case s => ctx << "hypercomm::broadcast_to(" << s << ","
+      }
+    } << "ergoline::conv2section(" << stripSection(
+      target
+    ) << ").clone()" << "," << {
+      epIndexFor(proxy, member, hasArgs)
+    } << ", hypercomm::pack_to_port({}" << Option.when(hasArgs)(",") << {
+      visitArguments(Some(member), args)
+    } << ")" << ")"
+  }
+
+  def visitSystemCall(implicit
+      ctx: CodeGenerationContext,
+      target: EirExpressionNode,
+      disambiguated: EirNode,
+      args: ArgumentList
+  ): Unit = {
+    val base = target match {
+      case f: EirScopedSymbol[_] => f.target
+      case _                     => target
+    }
+    val system = disambiguated.annotation("system").get
+    val static = system("static").exists(_.toBoolean)
+    val invert = system("invert").exists(_.toBoolean)
+    val invOp = if (invert) "!" else ""
+    val cast = system("cast").exists(_.toBoolean)
+    val name =
+      system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
+    disambiguated match {
+      case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
+        visitContribute(p, target, args)
+      case m @ EirMember(Some(p: EirProxy), _, _) if p.isSection =>
+        visitMulticast(p, m, target, args)
+      case EirMember(Some(p: EirProxy), _, _) =>
         name match {
           case "index" => ctx << selfIndex
           case "parent" =>
-            ctx << s"(CProxy_${proxy.get.baseName}(" << base << {
-              proxy.get.collective match {
+            ctx << s"(CProxy_${p.baseName}(" << base << {
+              p.collective match {
                 case Some("group" | "nodegroup")      => ".ckGetGroupID()))"
                 case Some(s) if s.startsWith("array") => ".ckGetArrayID()))"
               }

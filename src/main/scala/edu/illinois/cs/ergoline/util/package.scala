@@ -26,26 +26,42 @@ package object util {
     }
   }
 
+  def makeMemberFunctionWithArgs(
+      parent: EirClassLike,
+      name: String,
+      args: List[EirFunctionArgument],
+      retTy: EirResolvable[EirType]
+  ): EirMember = {
+    val m = EirMember(Some(parent), null, EirAccessibility.Public)
+    m.annotations +:= EirAnnotation("system", Map())
+    val f = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy)
+    m.member = f
+    args.foreach(_.parent = Some(f))
+    f.functionArgs = args
+    m
+  }
+
   def makeMemberFunction(
       parent: EirClassLike,
       name: String,
       args: List[EirResolvable[EirType]],
       retTy: EirResolvable[EirType]
   ): EirMember = {
-    val m = EirMember(Some(parent), null, EirAccessibility.Public)
-    m.annotations +:= EirAnnotation("system", Map())
-    m.member = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy)
-    m.member.asInstanceOf[EirFunction].functionArgs = args.zipWithIndex.map({
-      case (value, i) =>
-        EirFunctionArgument(
-          Some(m.member),
-          s"x$i",
-          value,
-          isExpansion = false,
-          isSelfAssigning = false
-        )
-    })
-    m
+    makeMemberFunctionWithArgs(
+      parent,
+      name,
+      args.zipWithIndex.map({
+        case (value, i) =>
+          EirFunctionArgument(
+            None,
+            s"x$i",
+            value,
+            isExpansion = false,
+            isSelfAssigning = false
+          )
+      }),
+      retTy
+    )
   }
 
   def resolveToPair(
