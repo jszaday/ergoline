@@ -19,7 +19,7 @@ def sqrt(value: double): double;
         val npPerDim = sqrt(np.toDouble()).toInt();
         val nbPerDim = ((np > 1) && (npPerDim == 1)) ? 2 : npPerDim;
         val nb = nbPerDim * nbPerDim;
-        val blockSize = (args.size() > 1 ? args[1].toInt() : 128) / nbPerDim;
+        val blockSize = ((args.size() > 1) ? args[1].toInt() : 128) / nbPerDim;
         val blockShape = (blockSize, blockSize);
 
         println(`matmul starting with a ${nbPerDim} x ${nbPerDim} mesh on ${np} pes`);

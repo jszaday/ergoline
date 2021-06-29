@@ -5,7 +5,7 @@ import ck;
 
 @main class main {
     @entry def main(args: array<string>) {
-        val n = args.size() > 1 ? args[1].toInt() : 16;
+        val n = (args.size() > 1) ? args[1].toInt() : 16;
         val ts = new ck::tspace<uid, int>(n);
         val arrProxy: hello1d@array1d = new hello1d@array1d(n, n, ts);
         val id = new uid();

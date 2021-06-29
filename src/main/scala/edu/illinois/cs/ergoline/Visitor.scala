@@ -830,13 +830,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       enter(
         EirTernaryOperator(parent, null, null, null),
         (e: EirTernaryOperator) => {
-          e.test = visitAs[EirExpressionNode](ctx.infixExpression())
+          e.test = visitAs[EirExpressionNode](ctx.unaryExpression())
           e.ifTrue = visitAs[EirExpressionNode](ctx.expression())
           e.ifFalse = visitAs[EirExpressionNode](ctx.conditionalExpression())
         }
       )
     } else {
-      visitAs[EirExpressionNode](ctx.infixExpression())
+      visitAs[EirExpressionNode](ctx.unaryExpression())
     }
   }
 
@@ -890,7 +890,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   type InfixPart = Either[EirExpressionNode, String]
 
   def flattenInfix(ctx: InfixExpressionContext): Seq[InfixPart] = {
-    if (ctx.unaryExpression() == null) {
+    if (ctx.conditionalExpression() == null) {
       val (lhs, rhs) = (ctx.infixExpression(0), ctx.infixExpression(1))
       flattenInfix(lhs) ++ {
         Option(ctx.identifier())
@@ -898,7 +898,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           .map(Right(_))
       } ++ flattenInfix(rhs)
     } else {
-      Seq(Left(visitAs[EirExpressionNode](ctx.unaryExpression())))
+      Seq(Left(visitAs[EirExpressionNode](ctx.conditionalExpression())))
     }
   }
 

@@ -85,6 +85,17 @@ ifThenElse
     :   'if' '(' condition=expression ')' (';' | ifTrue=statement) ('else' ifFalse=statement)?
     ;
 
+identifier
+    :   Less
+    |   Equals
+    |   Greater
+    |   PrefixOp
+    |   Identifier
+    |   ExpansionOp
+    |   LeftShift
+    |   RightShift
+    ;
+
 identifierList
     :   (identifier ',')* identifier
     ;
@@ -263,29 +274,18 @@ unaryExpression
     :   PrefixOp? simpleExpression
     ;
 
-identifier
-    :   Less
-    |   Equals
-    |   Greater
-    |   PrefixOp
-    |   Identifier
-    |   ExpansionOp
-    |   LeftShift
-    |   RightShift
+conditionalExpression
+    :   unaryExpression ('?' expression ':' conditionalExpression)?
     ;
 
 infixExpression
-    :   unaryExpression
+    :   conditionalExpression
     |   infixExpression identifier infixExpression
-    ;
-
-conditionalExpression
-    :   infixExpression ('?' expression ':' conditionalExpression)?
     ;
 
 expression
     :   matchStatement
-    |   conditionalExpression
+    |   infixExpression
     ;
 
 typeList

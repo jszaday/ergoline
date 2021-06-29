@@ -4,7 +4,7 @@ import ergoline::_;
 
 @main class main {
     @entry def main(args: array<string>) {
-        val n: int = args.size() > 1 ? args[1].toInt() : 4;
+        val n: int = (args.size() > 1) ? args[1].toInt() : 4;
         val arrProxy: hello2d@array2d = new hello2d@array2d(n, n);
         arrProxy[n - 1, n - 1].sayHi();
     }
