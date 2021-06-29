@@ -952,6 +952,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     var infixes = parts
     var ops = infixes
       .zipWithIndex
+      .reverse
       .collect({
         case (Right(op), i) => (i, precedenceOf(op))
       })
