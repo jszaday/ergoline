@@ -448,21 +448,33 @@ fragment ExpansionChar
     :   '*'
     ;
 
-fragment Opchar
-   : '#' | '%' | '&' | Less | Equals | Greater | '?' | '\\' | '^' | '|' // | ':' | '@'
+fragment Inequalities
+    :   Less
+    |   Greater
+    ;
+
+fragment OpChar
+   :    '#' | '%' | '&' | '?' | '\\' | '^' | '|' // | ':' | '@'
+   |    Equals
+   |    PrefixChar
+   |    ExpansionChar
    ;
+
+fragment NonConsecutiveOp
+    :   Less | Greater | '/'
+    ;
 
 fragment Op
     :   '/'
-    |   '/'? (Opchar | PrefixChar | ExpansionChar)+
+    |   NonConsecutiveOp? (OpChar+ NonConsecutiveOp?)+
     ;
 
 fragment Idstart
-    : NonDigit | '$' | '_'
+    :   NonDigit | '$' | '_'
     ;
 
 fragment Idrest
-   : ( NonDigit | Digit )* ('_' Op)?
+   :    ( Idstart | Digit )* ('_' Op)?
    ;
 
 PrefixOp
