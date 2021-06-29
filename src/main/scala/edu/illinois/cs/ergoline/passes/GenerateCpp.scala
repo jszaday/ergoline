@@ -726,6 +726,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _                     => target
     }
     val system = disambiguated.annotation("system").get
+    val operator = system("operator").exists(_.toBoolean)
     val static = system("static").exists(_.toBoolean)
     val invert = system("invert").exists(_.toBoolean)
     val invOp = if (invert) "!" else ""
@@ -733,6 +734,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val name =
       system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
     disambiguated match {
+      case _ if operator =>
+        val flattened = flattenArgs(args)
+        assert(flattened.size == 1)
+        ctx << "(" << base << name << flattened.head << ")"
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
         visitContribute(p, target, args)
       case m @ EirMember(Some(p: EirProxy), _, _) if p.isSection =>
@@ -1278,24 +1283,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "/* " << (annotations.map(_.toString), " ") << " */ "
   }
 
+  override def visitUnaryExpression(
+      x: EirUnaryExpression
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    x.disambiguation match {
+      case Some(x) => ctx << x
+      case None =>
+        ctx << "(" << x.op << "(" << x.rhs << "))"
+    }
+  }
+
   override def visitBinaryExpression(
       x: EirBinaryExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val target = x.disambiguation.collect {
-      case EirFunctionCall(_, f: EirScopedSymbol[_], _, _) => f.disambiguation
-    }.flatten
-    val isSystem = target.forall(_.isSystem)
-    ctx << Option.when(isSystem)("(") << x.lhs
-    if (isSystem) {
-      ctx << {
-        if (x.op == "===" || x.op == "!==") x.op.init
-        else x.op
-      }
-    } else {
-      val lhs = ctx.resolve(ctx.typeOf(x.lhs))
-      ctx << fieldAccessorFor(lhs) << target.to[EirNamedNode].map(_.name) << "("
+    x.disambiguation match {
+      case Some(x) => ctx << x
+      case None =>
+        ctx << "(" << x.lhs << {
+          Option
+            .when(globals.isIdentityComparator(x.op))(x.op.init)
+            .getOrElse(x.op)
+        } << x.rhs << ")"
     }
-    ctx << x.rhs << ")"
   }
 
   def qualificationsFor(node: EirNode, within: EirNode)(implicit
@@ -1389,11 +1398,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       includeTemplates: Boolean = false,
       usage: Option[EirNode] = None
   ): String = {
+    val system = x.annotation("system")
     val alias =
-      x.annotation("system").flatMap(_("alias")).map(_.stripped)
+      system.flatMap(_("alias")).map(_.stripped)
+    val isOperator = system.flatMap(_("operator")).exists(_.toBoolean)
     val dealiased = alias
       .orElse(x match {
-        case n: EirNamedNode => Some(n.name)
+        case n: EirNamedNode =>
+          if (isOperator || n.name.forall(x => x.isLetterOrDigit || x == '_')) Some(n.name)
+          else Some(globals.encodeOperator(n.name))
         case _               => None
       })
       .map(x => {

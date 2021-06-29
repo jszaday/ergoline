@@ -304,7 +304,10 @@ trait EirClassLike
   var extendsThis: Option[EirResolvable[EirType]]
   var implementsThese: List[EirResolvable[EirType]]
 
+  // TODO sweep parent classes!
   def member(name: String): Option[EirMember] = members.find(_.name == name)
+
+  def hasMember(name: String): Boolean = member(name).isDefined
 
   override def children: List[EirNode] =
     templateArgs ++ extendsThis ++ implementsThese ++ members
@@ -728,7 +731,7 @@ case class EirLiteral(
     `type` match {
       case EirLiteralTypes.String if value == "\"[]\"" => "[]"
       case EirLiteralTypes.String
-          if value.matches("^\"[:a-zA-Z0-9_\\.\\/]+\"$") =>
+          if value.matches("^\"[-:a-zA-Z0-9_\\.\\/]+\"$") =>
         value.substring(1, value.length - 1)
       case _ => throw new RuntimeException(s"cannot strip $this")
     }

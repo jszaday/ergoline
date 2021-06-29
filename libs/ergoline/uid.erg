@@ -29,7 +29,7 @@ struct uid {
         return `${pe}:${time}:${count}`;
     }
 
-    def equals(other : uid): bool {
+    def ==(&other : uid): bool {
         return (pe == other.pe) && (time == other.time) && (count == other.count);
     }
 }

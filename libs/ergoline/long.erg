@@ -2,15 +2,16 @@ package ergoline;
 
 @system(alias="std::int64_t")
 struct long {
-    @system def plus(other: int): long;
-    
-    @system def plus(other: long): long;
-    @system def minus(other: long): long;
-    @system def times(other: long): long;
-    @system def div(other: long): long;
-    @system def rem(other: long): long;
-    @system def equals(other: long): bool;
-    @system def compareTo(other: long): int;
+    @system(operator=true) def +(other: int): long;
+    @system(operator=true) def +(other: long): long;
+
+    @system(operator=true) def -(other: long): long;
+    @system(operator=true) def *(other: long): long;
+    @system(operator=true) def /(other: long): long;
+    @system(operator=true) def %(other: long): long;
+
+    @system(operator=true,alias="-")
+    def <=>(other: long): int;
 
     @system(cast=true) def toInt(): double;
     @system(cast=true) def toDouble(): double;

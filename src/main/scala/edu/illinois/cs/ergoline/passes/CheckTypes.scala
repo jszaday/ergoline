@@ -41,16 +41,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def generateRval(x: EirAssignment): EirExpressionNode = {
-    val operator =
-      Option.unless(x.op == "=")(
-        globals
-          .operatorToFunction(x.op.init)
-          .getOrElse(Errors.unknownOperator(x, x.op))
-      )
+    val operator = Option.unless(x.op == "=")(x.op.init)
     val arrayRef = assertValid[EirArrayReference](x.lval)
     val rval = operator match {
-      case Some(s) => makeMemberCall(generateLval(arrayRef), s, List(x.rval))
-      case None    => x.rval
+      case Some(op) => makeMemberCall(generateLval(arrayRef), op, List(x.rval))
+      case None     => x.rval
     }
     makeMemberCall(arrayRef.target, "set", arrayRef.args :+ rval)
   }
@@ -792,39 +787,66 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitBinaryExpression(
       node: EirBinaryExpression
   )(implicit ctx: TypeCheckContext): EirType = {
-
-    val op = if (node.op == "!=") "==" else node.op
+    val op = node.op
     val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
-    if (op == "===" || op == "!==") {
-      val (lhsTy, rhsTy) = (visit(node.lhs), visit(node.rhs))
+    val (lhsTy, rhsTy) = (visit(node.lhs), visit(node.rhs))
+
+    if (globals.isIdentityComparator(op)) {
       if (lhsTy == rhsTy) {
-        return boolTy
+        boolTy
       } else {
         Errors.unableToUnify(node, lhsTy, rhsTy)
       }
     } else if (op == "&&" || op == "||") {
-      val (lhsTy, rhsTy) = (visit(node.lhs), visit(node.rhs))
       val failure =
         Option
           .when(!lhsTy.canAssignTo(boolTy))(lhsTy)
           .orElse(Option.when(!rhsTy.canAssignTo(boolTy))(rhsTy))
       failure.foreach(Errors.unableToUnify(node, _, boolTy))
-      return boolTy
-    }
-    val func =
-      globals.operatorToFunction(op).getOrElse(Errors.unknownOperator(node, op))
-    val f = makeMemberCall(node.lhs, func, List(node.rhs))
-    node.disambiguation = Some(f)
-    val retTy = visit(f)
-    if (func == "compareTo") {
-      val integer = globals.typeFor(EirLiteralTypes.Integer)
-      if (retTy.canAssignTo(integer)) {
-        boolTy
-      } else {
-        Errors.cannotCast(node, retTy, integer)
-      }
+      boolTy
     } else {
-      retTy
+      val spaceship = globals.spaceshipOperator
+      val lhsClass = Find.asClassLike(lhsTy)
+
+      if (lhsClass.hasMember(op)) {
+        val f = makeMemberCall(node.lhs, op, List(node.rhs))
+        node.disambiguation = Some(f)
+        visit(f)
+      } else if (
+        globals.isComparisonOperator(op) && lhsClass.hasMember(spaceship)
+      ) {
+        val f = makeMemberCall(node.lhs, spaceship, List(node.rhs))
+        val g = EirBinaryExpression(
+          None,
+          f,
+          op,
+          EirLiteral(None, EirLiteralTypes.Integer, "0")
+        )
+        node.disambiguation = Some(g)
+        visit(f)
+        boolTy
+      } else if (globals.isEqualityComparator(op)) {
+        val other = globals.hasEqualityComparator(lhsClass)
+        other match {
+          case Some(invOp) =>
+            val f = makeMemberCall(node.lhs, invOp, List(node.rhs))
+            val g = EirUnaryExpression(
+              None,
+              "!",
+              f
+            )
+            node.disambiguation = Some(g)
+            val retTy = visit(f)
+            if (retTy.canAssignTo(boolTy)) {
+              boolTy
+            } else {
+              Errors.unableToUnify(node, retTy, boolTy)
+            }
+          case _ => Errors.unknownOperator(node, op)
+        }
+      } else {
+        Errors.unknownOperator(node, op)
+      }
     }
   }
 
@@ -1327,4 +1349,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     globals.unitType
   }
+
+  override def visitUnaryExpression(x: EirUnaryExpression)(implicit
+      ctx: TypeCheckContext
+  ): EirType = ???
 }

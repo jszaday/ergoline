@@ -1,7 +1,8 @@
 package ergoline;
 
 @system struct bool {
+    @system(operator=true) def ==(other: bool): bool;
+
     @system(alias="ergoline::bool_toString", static=true)
     def toString(): string;
-    @system def equals(other: bool): bool;
 }

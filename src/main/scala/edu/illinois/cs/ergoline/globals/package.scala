@@ -18,17 +18,52 @@ package object globals {
     Modules.loadedFiles.clear()
   }
 
-  val operators: Map[String, String] = Map(
-    "+" -> "plus",
-    "-" -> "minus",
-    "*" -> "times",
-    "==" -> "equals",
-    ">=" -> "compareTo",
-    ">" -> "compareTo",
-    "<" -> "compareTo",
-    "%" -> "rem",
-    "/" -> "div"
+  val operatorNames: Map[Char, String] = Map(
+    '!' -> "not",
+    '+' -> "plus",
+    '-' -> "minus",
+    '*' -> "times",
+    '=' -> "equals",
+    '<' -> "less",
+    '>' -> "greater",
+    '%' -> "mod",
+    '/' -> "div"
   )
+
+  def encodeOperator(op: String): String = {
+    if (op == "==") {
+      operatorNames('=')
+    } else {
+      (operatorNames(op.head) +: op.tail.toList.map(c => operatorNames(c).capitalize)).mkString("")
+    }
+  }
+
+  val spaceshipOperator: String = "<=>"
+
+  val equalityOperators: Seq[String] = Seq(
+    "!=",
+    "=="
+  )
+
+  val comparisonOperators: Seq[String] = equalityOperators ++ Seq(
+    "<",
+    "<=",
+    ">=",
+    ">"
+  )
+
+  def isEqualityComparator(op: String): Boolean =
+    equalityOperators.contains(op)
+
+  def hasEqualityComparator(c: EirClassLike): Option[String] = {
+    equalityOperators.find(c.hasMember)
+  }
+
+  def isIdentityComparator(op: String): Boolean =
+    op == "===" || op == "!=="
+
+  def isComparisonOperator(op: String): Boolean =
+    isEqualityComparator(op) || comparisonOperators.contains(op)
 
   val implicitProxyName: String = "__proxy__"
 
@@ -69,10 +104,6 @@ package object globals {
   def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
   def ergolineModule: Option[EirNamedNode] =
     Modules("ergoline", EirGlobalNamespace)
-
-  def operatorToFunction(op: String): Option[String] = {
-    Option.when(operators.contains(op))(operators(op))
-  }
 
   def typeFor(litTy: EirLiteralTypes.Value): EirType = {
     val name: String =

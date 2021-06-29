@@ -1,18 +1,19 @@
 package ergoline;
 
 @system struct int {
-    @system(reducer="CkReduction::sum_int")
-    def plus(other: int): int;
+    @system(operator=true,reducer="CkReduction::sum_int")
+    def +(other: int): int;
 
-    @system def minus(other: int): int;
-    @system def times(other: int): int;
-    @system def div(other: int): int;
-    @system def rem(other: int): int;
-    @system def equals(other: int): bool;
-    @system def compareTo(other: int): int;
+    @system(operator=true) def -(other: int): int;
+    @system(operator=true) def *(other: int): int;
+    @system(operator=true) def /(other: int): int;
+    @system(operator=true) def %(other: int): int;
 
-    @system(cast=true) def toDouble(): double;
+    @system(operator=true,alias="-")
+    def <=>(other: int): int;
+
     @system(cast=true) def toLong(): long;
+    @system(cast=true) def toDouble(): double;
 
     @system(alias="std::to_string",static=true)
     def toString(): string;
