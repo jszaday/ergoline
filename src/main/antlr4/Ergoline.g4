@@ -238,10 +238,10 @@ callArgumentList
     ;
 
 postfixExpression
-    :   primaryExpression
+    :   selfExpression identifier
+    |   primaryExpression
     |   postfixExpression '[' arrArgs=sliceExpressionList ']'
     |   postfixExpression specialization? LParen fnArgs=callArgumentList? RParen
-    |   selfExpression identifier
     |   postfixExpression '.' identifier
     ;
 
@@ -270,6 +270,8 @@ identifier
     |   PrefixOp
     |   Identifier
     |   ExpansionOp
+    |   LeftShift
+    |   RightShift
     ;
 
 infixExpression
@@ -329,8 +331,8 @@ proxySuffix
     ;
 
 basicType
-    :   fqn Ellipses
-    |   fqn specialization? proxySuffix?
+    :   fqn specialization? proxySuffix?
+    |   fqn Ellipses
     ;
 
 lambdaType
@@ -424,9 +426,11 @@ fragment Sign
     :   '+' | '-'
     ;
 
-Greater : '>' ;
-Less    : '<' ;
-Equals  : '=' ;
+Greater     : '>' ;
+Less        : '<' ;
+Equals      : '=' ;
+LeftShift   : '<<' ;
+RightShift  : '>>' ;
 
 fragment Digit
     :   [0-9]
@@ -445,7 +449,7 @@ fragment ExpansionChar
     ;
 
 fragment Opchar
-   : '#' | '%' | '&' | Less | Equals | Greater | '?' | '@' | '\\' | '^' | '|' // | ':'
+   : '#' | '%' | '&' | Less | Equals | Greater | '?' | '\\' | '^' | '|' // | ':' | '@'
    ;
 
 fragment Op
@@ -474,9 +478,6 @@ Identifier
     ;
 
 Ellipses: '...';
-
-LeftShift: Less Less ;
-RightShift: Greater Greater ;
 
 LParen : '(' ;
 RParen : ')' ;
