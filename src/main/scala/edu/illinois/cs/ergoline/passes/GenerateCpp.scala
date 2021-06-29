@@ -1242,18 +1242,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val ty = parent.map(ctx.typeFor(_, Some(x)))
         val ourSelf = "self"
 
-        ctx << {
-          Option.unless(pointerParent)("const")
-        } << ty << {
-          if (pointerParent) "*"
-          else "&"
-        } << ourSelf << Option.when(args.nonEmpty)(",")
+        ctx << "const" << ty << "&" << ourSelf << {
+          Option.when(args.nonEmpty)(",")
+        }
 
         Option.when(pointerParent)(ourSelf) orElse
           ty.map(s => s"const_cast<$s*>(&$ourSelf)")
       }
     } else {
-      proxyParent.map(_ => "this->impl_")
+      proxyParent.map(_ => "this->impl_").orElse(Some("this"))
     }
     currSelf.foreach(ctx.pushSelf)
     if (proxyParent.isDefined && (args.nonEmpty || asyncCi)) {
@@ -1278,6 +1275,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Errors.missingBody(x)
     }
 
+    assert(currSelf.nonEmpty)
     visitFunctionBody(x)
 
     currSelf.foreach(_ => ctx.popSelf())
