@@ -483,7 +483,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     } + s"}"
   }
 
-  override def visitUnaryExpression(x: EirUnaryExpression)(implicit ctx: UnparseContext): String = {
+  override def visitUnaryExpression(
+      x: EirUnaryExpression
+  )(implicit ctx: UnparseContext): String = {
     s"(${x.op}(${x.rhs}))"
   }
 }

@@ -34,7 +34,9 @@ package object globals {
     if (op == "==") {
       operatorNames('=')
     } else {
-      (operatorNames(op.head) +: op.tail.toList.map(c => operatorNames(c).capitalize)).mkString("")
+      (operatorNames(op.head) +: op.tail.toList.map(c =>
+        operatorNames(c).capitalize
+      )).mkString("")
     }
   }
 

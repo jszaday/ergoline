@@ -1405,9 +1405,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val dealiased = alias
       .orElse(x match {
         case n: EirNamedNode =>
-          if (isOperator || n.name.forall(x => x.isLetterOrDigit || x == '_')) Some(n.name)
+          if (isOperator || n.name.forall(x => x.isLetterOrDigit || x == '_'))
+            Some(n.name)
           else Some(globals.encodeOperator(n.name))
-        case _               => None
+        case _ => None
       })
       .map(x => {
         if (x == "std::size_t" && ctx.language == "ci") "size_t"
