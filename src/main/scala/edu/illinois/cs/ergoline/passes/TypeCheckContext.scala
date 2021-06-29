@@ -7,15 +7,13 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
-import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.Find.asClassLike
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
 import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
 }
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, isSystem}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -125,7 +123,7 @@ class TypeCheckContext {
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
-    _checked.map {
+    _checked collect {
       case (sp, contexts) =>
         (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
     }

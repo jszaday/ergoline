@@ -211,9 +211,11 @@ object GenerateProxies {
       case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
       case Some(m @ EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
+          ctx.pushSelf("this->impl_")
           ctx << "(([&](void) mutable" << visitFunctionBody(
             f
           )(ctx) << ")())"
+          ctx.popSelf()
         } else {
           ctx << s"this->impl_->${ctx
             .nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"

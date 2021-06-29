@@ -23,10 +23,6 @@ inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& pr
   return manager->make_future();
 }
 
-inline std::string bool_toString(const bool& b) {
-  return b ? "true" : "false";
-}
-
 inline std::int64_t timestamp() {
   auto curr = std::chrono::system_clock::now();
   return std::chrono::duration_cast<std::chrono::seconds>(curr.time_since_epoch()).count();

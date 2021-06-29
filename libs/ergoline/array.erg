@@ -11,7 +11,7 @@ class array<A, N: int = 1> {
     def get(idx: *shape): A;
 
     @system
-    def get(indices: range<shape>): iterable<A>;
+    def get(indices: *((range<int>) .* N)): iterable<A>;
 
     @system(alias="[]")
     def set(idx: *shape, value: A): unit;

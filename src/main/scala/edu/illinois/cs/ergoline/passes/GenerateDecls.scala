@@ -11,7 +11,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
 }
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.util.{assertValid, isSystem}
 
 object GenerateDecls {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit = this.visit
@@ -49,7 +49,13 @@ object GenerateDecls {
   }
 
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
-    if (x.annotation("system").isDefined) return
+    if (isSystem(x)) {
+      x.members.collect {
+        case m @ EirMember(_, f: EirFunction, _) if !isSystem(m) => f
+      } foreach { x => visit(ctx, x) }
+      return
+    }
+
     ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
       x
     )(ctx) << "{"

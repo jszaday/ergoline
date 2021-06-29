@@ -22,6 +22,7 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.{
 import edu.illinois.cs.ergoline.util.{
   Errors,
   assertValid,
+  isSystem,
   resolveToPair,
   validAccessibility
 }
@@ -661,12 +662,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       node: EirClassLike
   )(implicit ctx: TypeCheckContext): EirType = {
     val (_, _, opt) = handleSpecializable(ctx, node)
+    val sys = isSystem(node)
+
     opt.foreach(subCtx => {
       ctx.start(subCtx)
-      CheckClasses.visit(ctx, node)
+      if (!sys) CheckClasses.visit(ctx, node)
       node.members.foreach(visit(_))
       node.inherited.foreach(visit(_))
-      if (node.annotation("main").isDefined) {
+      if (!sys && node.annotation("main").isDefined) {
         visitProxyType(EirProxyType(None, node, None, None))
       }
       ctx.stop(subCtx)
@@ -698,10 +701,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
-  def isSystem(parent: Option[EirMember], node: EirNode): Boolean = {
-    parent.exists(isSystem(None, _)) || node.annotation("system").isDefined
-  }
-
   def handleSpecializable(
       ctx: TypeCheckContext,
       s: EirSpecializable
@@ -712,10 +711,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val isDefined = noArgs || spec.isDefined
     (
       isDefined,
-      member, {
-        if (isSystem(member, s) || !isDefined) None
-        else ctx.mkCheckContext(s, spec)
-      }
+      member,
+      Option.when(isDefined)(ctx.mkCheckContext(s, spec)).flatten
     )
   }
 
