@@ -718,25 +718,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     EirSymbol[EirNamedType](parent, identifiers.toStringList)
   }
 
-  def visitBinaryExpression[T <: ParserRuleContext](
-      ctx: T
-  ): EirExpressionNode = {
-    val children = ctx.children.asScala.toList
-    if (children.length == 1) {
-      visitAs[EirExpressionNode](children.head)
-    } else if (children.length == 3) {
-      enter(
-        EirBinaryExpression(parent, null, children(1).getText, null),
-        (e: EirBinaryExpression) => {
-          e.lhs = visitAs[EirExpressionNode](children.head)
-          e.rhs = visitAs[EirExpressionNode](children.last)
-        }
-      )
-    } else {
-      Errors.cannotParse(ctx)
-    }
-  }
-
   private def pop[T](): T = parents.pop().asInstanceOf[T]
 
   override def visitTupleExpression(
