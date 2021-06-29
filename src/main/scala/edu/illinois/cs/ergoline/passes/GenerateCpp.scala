@@ -1917,6 +1917,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         arg match {
           case Some(x) =>
             ctx << {
+              // TODO eliminate this once (array::shape) is fixed?
               val thisTy = ctx.resolve(tty.children(x.toInt))
               Option.unless(thisTy.isPointer)(
                 "(" + ctx.typeFor(thisTy, Some(arrayRef)) + ")"
@@ -1938,7 +1939,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "(*" << target << ")["
         args.reverse.init.zipWithIndex.foreach {
           case (arg, idx) =>
-            ctx << arg << s"((int)*(" << target << s"->shape[$idx]))" << "+"
+            ctx << arg << "*" << s"(" << target << s"->shape[$idx])" << "+"
         }
         ctx << args.head
         ctx << "]"
