@@ -35,7 +35,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   val defaultMemberAccessibility: EirAccessibility = EirAccessibility.Public
 
   object VisitorSyntax {
-    implicit class RichTerminalNodeList(list: java.util.List[TerminalNode]) {
+    implicit class RichParseTreeList[T <: ParseTree](list: java.util.List[T]) {
       implicit def toStringList: List[String] =
         list.asScala.map(_.getText).toList
     }
@@ -66,11 +66,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  import VisitorSyntax.{
-    RichParserRuleContext,
-    RichTerminalNodeList,
-    RichTypeListContext
-  }
+  import VisitorSyntax._
 
   override def visit(tree: ParseTree): EirNode = {
     val res = super.visit(tree)
@@ -133,7 +129,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     val expectation = file.map(Modules.expectation)
     val topLevel: EirScope =
       Option(ctx.packageStatement())
-        .map(_.fqn().Identifier.toStringList)
+        .map(_.fqn().identifier.toStringList)
         .map(loadPackage(_, file))
         .getOrElse(global)
     // A provisional package sweep will include us, so we'll just drop that...
@@ -186,7 +182,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
-    EirImport(parent, ctx.fqn().Identifier().toStringList)
+    EirImport(parent, ctx.fqn().identifier().toStringList)
   }
 
   override def visitInterpolatedString(
@@ -250,7 +246,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitClassDeclaration(
       ctx: ClassDeclarationContext
   ): EirClassLike = {
-    val name = ctx.Identifier().getText
+    val name = ctx.identifier().getText
     val node: EirClassLike = {
       val isClass = ctx.ClassKwd() != null
       val isStruct = ctx.StructKwd() != null
@@ -306,7 +302,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitNamespace(ctx: NamespaceContext): EirNamespace = {
-    val qualified: List[String] = ctx.fqn().Identifier.toStringList
+    val qualified: List[String] = ctx.fqn().identifier.toStringList
     enter(
       Modules.retrieve(qualified, scope),
       (n: EirNamespace) => {
@@ -347,7 +343,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitAnnotation(ctx: AnnotationContext): EirAnnotation = {
-    val name = ctx.Identifier().getText
+    val name = ctx.identifier().getText
     val opts =
       ctx
         .annotationOptions()
@@ -355,7 +351,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           _.annotationOption(),
           (ctx: AnnotationOptionContext) => {
             (
-              Option(ctx.Identifier()).getOrElse(ctx.StaticKwd()).getText,
+              Option(ctx.identifier()).getOrElse(ctx.StaticKwd()).getText,
               visitAs[EirLiteral](ctx.constant())
             )
           }
@@ -366,7 +362,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(
-      EirFunction(parent, None, ctx.Identifier().getText, Nil, Nil, Nil, null),
+      EirFunction(parent, None, ctx.identifier().getText, Nil, Nil, Nil, null),
       (f: EirFunction) => {
         f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
         f.functionArgs = ctx.functionArgumentList
@@ -402,8 +398,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitInnerStatement(ctx: InnerStatementContext): EirNode = {
-    if (ctx.assignment() != null) visit(ctx.assignment())
-    else if (ctx.expression() != null) visit(ctx.expression())
+    if (ctx.expression() != null) visit(ctx.expression())
     else super.visitInnerStatement(ctx)
   }
 
@@ -459,9 +454,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     enter(
       EirFunctionArgument(
         parent,
-        ctx.Identifier().getText,
+        ctx.identifier().getText,
         null,
-        Option(ctx.expansion).isDefined,
+        isExpansion = ctx.ExpansionOp != null,
         isSelfAssigning = false
       ),
       (arg: EirFunctionArgument) => {
@@ -489,14 +484,14 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: ValueDeclarationContext
   ): EirDeclaration =
     visitDeclaration(
-      ctx.Identifier,
+      ctx.identifier,
       ctx.`type`(),
       ctx.expression(),
       isFinal = true
     )
 
   def visitDeclaration(
-      name: TerminalNode,
+      name: IdentifierContext,
       declaredType: TypeContext,
       expressionContext: ExpressionContext,
       isFinal: Boolean
@@ -517,7 +512,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: FieldDeclarationContext
   ): EirDeclaration =
     visitDeclaration(
-      ctx.Identifier,
+      ctx.identifier,
       ctx.`type`(),
       ctx.expression(),
       isFinal = ctx.ValueKeyword() != null
@@ -527,22 +522,22 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: VariableDeclarationContext
   ): EirDeclaration =
     visitDeclaration(
-      ctx.Identifier,
+      ctx.identifier,
       ctx.`type`(),
       ctx.expression(),
       isFinal = false
     )
 
-  override def visitAssignment(ctx: AssignmentContext): EirAssignment = {
-    enter(
-      EirAssignment(parent, null, null, null),
-      (a: EirAssignment) => {
-        a.lval = visitAs[EirExpressionNode](ctx.postfixExpression())
-        a.op = ctx.assignmentOperator.getText
-        a.rval = visitAs[EirExpressionNode](ctx.expression())
-      }
-    )
-  }
+//  override def visitAssignment(ctx: AssignmentContext): EirAssignment = {
+//    enter(
+//      EirAssignment(parent, null, null, null),
+//      (a: EirAssignment) => {
+//        a.lval = visitAs[EirExpressionNode](ctx.postfixExpression())
+//        a.op = ctx.assignmentOperator.getText
+//        a.rval = visitAs[EirExpressionNode](ctx.expression())
+//      }
+//    )
+//  }
 
   override def visitSliceExpression(ctx: SliceExpressionContext): EirNode = {
     Option(ctx.single)
@@ -571,14 +566,14 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitPostfixExpression(
       ctx: PostfixExpressionContext
   ): EirExpressionNode = {
-    if (ctx.Identifier() != null) {
+    if (ctx.identifier() != null) {
       enter(
         EirScopedSymbol[EirNode](null, null)(parent),
         (f: EirScopedSymbol[EirNode]) => {
           f.target = visitAs[EirExpressionNode](
             Option(ctx.postfixExpression()).getOrElse(ctx.selfExpression())
           )
-          f.pending = symbolize[EirNamedNode](ctx.Identifier())
+          f.pending = symbolize[EirNamedNode](ctx.identifier())
         }
       )
     } else if (ctx.arrArgs != null) {
@@ -615,15 +610,15 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         }
       )
     } else {
-      ctx.typeList().toList.toTupleType(allowUnit = false)(parent)
+      ctx.typeList().toList.toTupleType()(parent)
     }
   }
 
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     if (ctx.Ellipses() != null) {
-      return EirPackExpansion(ctx.fqn.Identifier.toStringList)(parent)
+      return EirPackExpansion(ctx.fqn.identifier.toStringList)(parent)
     }
-    var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.Identifier())
+    var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.identifier())
     val templates = specializationToList(ctx.specialization())
     if (templates.nonEmpty) {
       val templatedType = EirTemplatedType(parent, base, templates)
@@ -650,9 +645,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitPattern(ctx: PatternContext): EirNode = {
-    if (ctx.Identifier() != null) {
+    if (ctx.identifier() != null) {
       enter(
-        EirIdentifierPattern(parent, ctx.Identifier().getText, null),
+        EirIdentifierPattern(parent, ctx.identifier().getText, null),
         (i: EirIdentifierPattern) => {
           i.ty = Option(ctx.basicType())
             .orElse(Option(ctx.tupleType()))
@@ -716,59 +711,59 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     )
   }
 
-  def symbolize[T <: EirNamedNode: ClassTag](
-      identifiers: java.util.List[TerminalNode]
+  def symbolize[T <: EirNamedNode: ClassTag, U <: ParseTree](
+      identifiers: java.util.List[U]
   ): EirSymbol[T] = {
     EirSymbol[T](parent, identifiers.toStringList)
   }
 
   def symbolize[T <: EirNamedNode: ClassTag](
-      identifier: TerminalNode
+      identifier: ParseTree
   ): EirSymbol[T] = {
     EirSymbol[T](parent, List(identifier.getText))
   }
 
-  def symbolizeType(
-      identifiers: java.util.List[TerminalNode]
+  def symbolizeType[T <: ParserRuleContext](
+      identifiers: java.util.List[T]
   ): EirResolvable[EirType] = {
     EirSymbol[EirNamedType](parent, identifiers.toStringList)
   }
 
-  override def visitMultiplicativeExpression(
-      ctx: MultiplicativeExpressionContext
-  ): EirExpressionNode =
-    visitBinaryExpression(ctx)
-
-  override def visitAdditiveExpression(
-      ctx: AdditiveExpressionContext
-  ): EirExpressionNode = visitBinaryExpression(ctx)
-
-  override def visitShiftExpression(
-      ctx: ShiftExpressionContext
-  ): EirExpressionNode = visitBinaryExpression(ctx)
-
-  override def visitRelationalExpression(
-      ctx: RelationalExpressionContext
-  ): EirExpressionNode =
-    visitBinaryExpression(ctx)
-
-  override def visitEqualityExpression(
-      ctx: EqualityExpressionContext
-  ): EirExpressionNode = visitBinaryExpression(ctx)
-
-  override def visitAndExpression(
-      ctx: AndExpressionContext
-  ): EirExpressionNode = visitBinaryExpression(ctx)
-
-  override def visitExclusiveOrExpression(
-      ctx: ExclusiveOrExpressionContext
-  ): EirExpressionNode =
-    visitBinaryExpression(ctx)
-
-  override def visitInclusiveOrExpression(
-      ctx: InclusiveOrExpressionContext
-  ): EirExpressionNode =
-    visitBinaryExpression(ctx)
+//  override def visitMultiplicativeExpression(
+//      ctx: MultiplicativeExpressionContext
+//  ): EirExpressionNode =
+//    visitBinaryExpression(ctx)
+//
+//  override def visitAdditiveExpression(
+//      ctx: AdditiveExpressionContext
+//  ): EirExpressionNode = visitBinaryExpression(ctx)
+//
+//  override def visitShiftExpression(
+//      ctx: ShiftExpressionContext
+//  ): EirExpressionNode = visitBinaryExpression(ctx)
+//
+//  override def visitRelationalExpression(
+//      ctx: RelationalExpressionContext
+//  ): EirExpressionNode =
+//    visitBinaryExpression(ctx)
+//
+//  override def visitEqualityExpression(
+//      ctx: EqualityExpressionContext
+//  ): EirExpressionNode = visitBinaryExpression(ctx)
+//
+//  override def visitAndExpression(
+//      ctx: AndExpressionContext
+//  ): EirExpressionNode = visitBinaryExpression(ctx)
+//
+//  override def visitExclusiveOrExpression(
+//      ctx: ExclusiveOrExpressionContext
+//  ): EirExpressionNode =
+//    visitBinaryExpression(ctx)
+//
+//  override def visitInclusiveOrExpression(
+//      ctx: InclusiveOrExpressionContext
+//  ): EirExpressionNode =
+//    visitBinaryExpression(ctx)
 
   def visitBinaryExpression[T <: ParserRuleContext](
       ctx: T
@@ -791,14 +786,14 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   private def pop[T](): T = parents.pop().asInstanceOf[T]
 
-  override def visitLogicalAndExpression(
-      ctx: LogicalAndExpressionContext
-  ): EirExpressionNode =
-    visitBinaryExpression(ctx)
-
-  override def visitLogicalOrExpression(
-      ctx: LogicalOrExpressionContext
-  ): EirExpressionNode = visitBinaryExpression(ctx)
+//  override def visitLogicalAndExpression(
+//      ctx: LogicalAndExpressionContext
+//  ): EirExpressionNode =
+//    visitBinaryExpression(ctx)
+//
+//  override def visitLogicalOrExpression(
+//      ctx: LogicalOrExpressionContext
+//  ): EirExpressionNode = visitBinaryExpression(ctx)
 
   override def visitTupleExpression(
       ctx: TupleExpressionContext
@@ -831,16 +826,18 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitConditionalExpression(
       ctx: ConditionalExpressionContext
   ): EirExpressionNode = {
-    if (ctx.expression() == null)
-      return visitLogicalOrExpression(ctx.logicalOrExpression())
-    enter(
-      EirTernaryOperator(parent, null, null, null),
-      (e: EirTernaryOperator) => {
-        e.test = visitAs[EirExpressionNode](ctx.logicalOrExpression())
-        e.ifTrue = visitAs[EirExpressionNode](ctx.expression())
-        e.ifFalse = visitAs[EirExpressionNode](ctx.conditionalExpression())
-      }
-    )
+    if (ctx.expression() != null) {
+      enter(
+        EirTernaryOperator(parent, null, null, null),
+        (e: EirTernaryOperator) => {
+          e.test = visitAs[EirExpressionNode](ctx.infixExpression())
+          e.ifTrue = visitAs[EirExpressionNode](ctx.expression())
+          e.ifFalse = visitAs[EirExpressionNode](ctx.conditionalExpression())
+        }
+      )
+    } else {
+      visitAs[EirExpressionNode](ctx.infixExpression())
+    }
   }
 
   override def visitNewExpression(ctx: NewExpressionContext): EirNew = {
@@ -861,14 +858,14 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitUnaryExpression(
       ctx: UnaryExpressionContext
   ): EirExpressionNode = {
-    if (ctx.unaryExpression() != null) {
+    if (ctx.PrefixOp() != null) {
       enter(
-        EirUnaryExpression(parent, ctx.unaryOperator().getText, null),
+        EirUnaryExpression(parent, ctx.PrefixOp().getText, null),
         (u: EirUnaryExpression) =>
-          u.rhs = visitAs[EirExpressionNode](ctx.unaryExpression())
+          u.rhs = visitAs[EirExpressionNode](ctx.simpleExpression())
       )
     } else {
-      visitAs[EirExpressionNode](ctx.children.get(0))
+      visitAs[EirExpressionNode](ctx.simpleExpression())
     }
   }
 
@@ -888,6 +885,101 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         r.expression = visitAs[EirExpressionNode](ctx.expression())
       }
     )
+  }
+
+  type InfixPart = Either[EirExpressionNode, String]
+
+  def flattenInfix(ctx: InfixExpressionContext): Seq[InfixPart] = {
+    if (ctx.unaryExpression() == null) {
+      val (lhs, rhs) = (ctx.infixExpression(0), ctx.infixExpression(1))
+      flattenInfix(lhs) ++ {
+        Option(ctx.identifier())
+          .map(_.getText)
+          .map(Right(_))
+      } ++ flattenInfix(rhs)
+    } else {
+      Seq(Left(visitAs[EirExpressionNode](ctx.unaryExpression())))
+    }
+  }
+
+  def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
+    seq match {
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if assignOperators.contains(op) =>
+        enter(
+          EirAssignment(parent, lhs, op, rhs),
+          (expr: EirAssignment) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil =>
+        enter(
+          EirBinaryExpression(parent, lhs, op, rhs),
+          (expr: EirBinaryExpression) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+      case _ => ???
+    }
+  }
+
+  val precedences: Seq[Seq[Char]] = Seq(
+    Seq('*', '/', '%'),
+    Seq('+', '-'),
+//    Seq(':'),
+    Seq('=', '!'),
+    Seq('<', '>'),
+    Seq('&'),
+    Seq('^'),
+    Seq('|')
+  )
+
+  val assignOperators = Seq(
+    "=", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=",
+  )
+
+  def precedenceOf(op: String): Int = {
+    if (op.head.isLetter) {
+      precedences.size + 2
+    } else {
+      precedences.indexWhere(_.contains(op.head)) + 1
+    }
+  }
+
+  def sortInfixes(parts: Seq[InfixPart]): EirExpressionNode = {
+    var infixes = parts
+    var ops = infixes
+      .zipWithIndex
+      .collect({
+        case (Right(op), i) => (i, precedenceOf(op))
+      })
+      .sortBy(_._2)
+      .map(_._1)
+
+    while (ops.nonEmpty) {
+      val start = ops.head - 1
+      val slice = infixes.slice(start, start + 3)
+      val expr = formBinaryExpression(slice)
+
+      infixes = infixes.patch(start, Seq(Left(expr)), 3)
+      ops = ops.tail.map(x => if (x > start) x - 2 else x)
+    }
+
+    infixes match {
+      case Left(x) :: Nil => x
+      case _ => ???
+    }
+  }
+
+  override def visitInfixExpression(ctx: InfixExpressionContext): EirNode = {
+    val exprs = flattenInfix(ctx)
+
+    exprs match {
+      case Left(x) :: Nil => x
+      case _              => sortInfixes(exprs)
+    }
   }
 
   override def visitInheritanceDecl(ctx: InheritanceDeclContext): EirNode = {
@@ -944,13 +1036,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirCStyleHeader(
         Option(ctx.variableDeclaration()).map(visitVariableDeclaration),
         Option(ctx.test).map(visitAs[EirExpressionNode]),
-        Option(ctx.assignment()).map(visitAssignment)
+        Option(ctx.incr).map(visitAs[EirExpressionNode])
       )
     } else {
       EirForAllHeader(
         parent,
-        ctx.identifierList().Identifier().toStringList,
-        visitAs[EirExpressionNode](ctx.expression())
+        ctx.identifierList().identifier().toStringList,
+        visitAs[EirExpressionNode](ctx.iter)
       )
     }
     null
@@ -1031,12 +1123,16 @@ class Visitor(global: EirScope = EirGlobalNamespace)
             EirSpecializedSymbol(parent, null, null),
             (s: EirSpecializedSymbol) => {
               s.types = specializationToList(spec)
-              s.symbol = symbolize[EirNamedNode with EirSpecializable](
-                ctx.fqn().Identifier()
+              s.symbol = symbolize[
+                EirNamedNode with EirSpecializable,
+                IdentifierContext
+              ](
+                ctx.fqn().identifier()
               )
             }
           )
-        case None => symbolize[EirNamedNode](ctx.fqn().Identifier())
+        case None =>
+          symbolize[EirNamedNode, IdentifierContext](ctx.fqn().identifier())
       }
     Option(ctx.identifierExpression())
       .map(next => {
@@ -1044,7 +1140,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           EirScopedSymbol[EirNode](curr, null)(parent),
           (r: EirScopedSymbol[EirNode]) => {
             r.isStatic = true
-            r.pending = visitIdentifierExpression(next)
+            r.pending = visitAs[EirResolvable[EirNamedNode]](next)
           }
         )
       })
@@ -1053,7 +1149,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitUsingStatement(ctx: UsingStatementContext): EirNode = {
     enter(
-      EirTypeAlias(ctx.Identifier().getText, null, null)(parent),
+      EirTypeAlias(ctx.identifier().getText, null, null)(parent),
       (x: EirTypeAlias) => {
         x.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
         x.value = visitAs[EirResolvable[EirType]](ctx.`type`())
@@ -1081,7 +1177,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitConstExpression(ctx: ConstExpressionContext): EirNode = {
     Option(ctx.fqn())
-      .map(fqn => symbolizeType(fqn.Identifier()))
+      .map(fqn => symbolizeType(fqn.identifier()))
       .getOrElse(visitAs[EirExpressionNode](ctx.constant()))
   }
 

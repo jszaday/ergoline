@@ -24,7 +24,7 @@ importStatement
     ;
 
 usingStatement
-    :   'using' Identifier templateDecl? '=' type ';'
+    :   'using' identifier templateDecl? Equals type ';'
     ;
 
 statement
@@ -32,8 +32,7 @@ statement
     ;
 
 innerStatement
-    :   assignment ';'
-    |   block
+    :   block
     |   forLoop
     |   whileLoop
     |   function
@@ -68,7 +67,7 @@ patternList
     ;
 
 pattern
-    :   Identifier (':' (tupleType | basicType)?)?
+    :   identifier (':' (tupleType | basicType)?)?
     |   constant
     |   expression
     |   '(' patternList ')'
@@ -87,12 +86,12 @@ ifThenElse
     ;
 
 identifierList
-    :   (Identifier ',')* Identifier
+    :   (identifier ',')* identifier
     ;
 
 loopHeader
-    :   (identifierList | '(' identifierList ')') '<-' expression
-    |   (variableDeclaration? | ';') test=expression? ';' assignment?
+    :   (identifierList | '(' identifierList ')') '<-' iter=expression
+    |   (variableDeclaration? | ';') test=expression? ';' incr=expression?
     ;
 
 whileLoop
@@ -112,11 +111,11 @@ block
     ;
 
 templateDeclArg
-    :   name=Identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) ('=' specializationElement)?
+    :   name=identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) (Equals specializationElement)?
     ;
 
 templateDecl
-    :   '<' (templateDeclArg ',')* templateDeclArg '>'
+    :   Less (templateDeclArg ',')* templateDeclArg Greater
     ;
 
 accessModifier
@@ -128,7 +127,7 @@ inheritanceDecl
     ;
 
 classDeclaration
-    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) Identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
     ;
 
 annotatedMember
@@ -144,19 +143,19 @@ namespace
     ;
 
 fqn
-    :   (Identifier '::')* Identifier
+    :   (identifier '::')* identifier
     ;
 
 valueDeclaration
-    :   ValueKeyword Identifier (':' type)? Equals expression ';'
+    :   ValueKeyword identifier (':' type)? Equals expression ';'
     ;
 
 variableDeclaration
-    :   VariableKeyword Identifier (':' type)? (Equals expression)? ';'
+    :   VariableKeyword identifier (':' type)? (Equals expression)? ';'
     ;
 
 fieldDeclaration
-    :   (ValueKeyword | VariableKeyword) Identifier ':' type (Equals expression)? ';'
+    :   (ValueKeyword | VariableKeyword) identifier ':' type (Equals expression)? ';'
     ;
 
 topLevelDeclaration
@@ -164,7 +163,7 @@ topLevelDeclaration
     ;
 
 basicArgument
-    :   Identifier ':' expansion='*'? type
+    :   identifier ':' ExpansionOp? type
     ;
 
 implicitArgument
@@ -176,7 +175,7 @@ implicitArguments
     ;
 
 function
-    :   FunctionKwd Identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? (';' | block)
+    :   FunctionKwd identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? (';' | block)
     ;
 
 functionArgument
@@ -208,24 +207,6 @@ primaryExpression
     |   tupleExpression
     |   lambdaExpression
     ;
-
-assignment
-    :   postfixExpression assignmentOperator expression
-    ;
-
-assignmentOperator
-    : Equals
-	| StarAssign
-	| DivAssign
-	| ModAssign
-	| PlusAssign
-	| MinusAssign
-	| RightShiftAssign
-	| LeftShiftAssign
-	| AndAssign
-	| XorAssign
-	| OrAssign
-	;
 
 tupleExpression
     :   '(' expressionList? ')'
@@ -260,19 +241,8 @@ postfixExpression
     :   primaryExpression
     |   postfixExpression '[' arrArgs=sliceExpressionList ']'
     |   postfixExpression specialization? LParen fnArgs=callArgumentList? RParen
-    |   selfExpression Identifier
-    |   postfixExpression '.' Identifier
-    ;
-
-unaryExpression
-    :   postfixExpression
-    |   newExpression
-    |   awaitExpression
-    |   unaryOperator unaryExpression
-    ;
-
-unaryOperator
-    :   '+' | '-' | '~' | '!'
+    |   selfExpression identifier
+    |   postfixExpression '.' identifier
     ;
 
 awaitExpression
@@ -283,65 +253,32 @@ newExpression
     :   'new' type tupleExpression?
     ;
 
-multiplicativeExpression
+simpleExpression
+    :   postfixExpression
+    |   newExpression
+    |   awaitExpression
+    ;
+
+unaryExpression
+    :   PrefixOp? simpleExpression
+    ;
+
+identifier
+    :   Less
+    |   Equals
+    |   Greater
+    |   PrefixOp
+    |   Identifier
+    |   ExpansionOp
+    ;
+
+infixExpression
     :   unaryExpression
-    |   multiplicativeExpression '*' unaryExpression
-    |   multiplicativeExpression '/' unaryExpression
-    |   multiplicativeExpression '%' unaryExpression
-    ;
-
-additiveExpression
-    :   multiplicativeExpression
-    |   additiveExpression '+' multiplicativeExpression
-    |   additiveExpression '-' multiplicativeExpression
-    ;
-
-shiftExpression
-    :   additiveExpression
-    |   shiftExpression LeftShift additiveExpression
-    |   shiftExpression RightShift additiveExpression
-    ;
-
-relationalExpression
-    :   shiftExpression
-    |   relationalExpression Less shiftExpression
-    |   relationalExpression Greater shiftExpression
-    |   relationalExpression '<=' shiftExpression
-    |   relationalExpression '>=' shiftExpression
-    ;
-
-equalityExpression
-    :   relationalExpression
-    |   relationalExpression ('!=' || '==' || '===' || '!==') equalityExpression
-    ;
-
-andExpression
-    :   equalityExpression
-    |   andExpression Ampersand equalityExpression
-    ;
-
-exclusiveOrExpression
-    :   andExpression
-    |   exclusiveOrExpression '^' andExpression
-    ;
-
-inclusiveOrExpression
-    :   exclusiveOrExpression
-    |   inclusiveOrExpression '|' exclusiveOrExpression
-    ;
-
-logicalAndExpression
-    :   inclusiveOrExpression
-    |   logicalAndExpression '&&' inclusiveOrExpression
-    ;
-
-logicalOrExpression
-    :   logicalAndExpression
-    |   logicalOrExpression '||' logicalAndExpression
+    |   infixExpression identifier infixExpression
     ;
 
 conditionalExpression
-    :   logicalOrExpression ('?' expression ':' conditionalExpression)?
+    :   infixExpression ('?' expression ':' conditionalExpression)?
     ;
 
 expression
@@ -401,17 +338,17 @@ lambdaType
     ;
 
 type
-    :   tupleType
-    |   basicType
+    :   basicType
+    |   tupleType
     |   lambdaType
     ;
 
 annotation
-    :   Atpersand Identifier annotationOptions?
+    :   Atpersand identifier annotationOptions?
     ;
 
 annotationOption
-    :   (StaticKwd | Identifier) Equals constant
+    :   (StaticKwd | identifier) Equals constant
     ;
 
 annotationOptions
@@ -483,44 +420,66 @@ FalseKwd : 'false' ;
 StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
 
-Equals : '=' ;
-PlusAssign: '+=';
-MinusAssign: '-=';
-StarAssign: '*=';
-DivAssign: '/=';
-ModAssign: '%=';
-XorAssign: '^=';
-AndAssign: '&=';
-OrAssign: '|=';
-LeftShiftAssign: LeftShift Equals;
-RightShiftAssign: RightShift Equals;
-Ellipses: '...';
+fragment Sign
+    :   '+' | '-'
+    ;
 
-Greater: '>' ;
-Less: '<' ;
+Greater : '>' ;
+Less    : '<' ;
+Equals  : '=' ;
 
-LeftShift: Less Less ;
-
-RightShift: Greater Greater ;
-
-
-LParen : '(' ;
-RParen : ')' ;
-
-Identifier
-    :   NonDigit
-        (   NonDigit
-        |   Digit
-        )*
+fragment Digit
+    :   [0-9]
     ;
 
 fragment NonDigit
     :   [a-zA-Z_]
     ;
 
-fragment Digit
-    :   [0-9]
+fragment PrefixChar
+    :   Sign | '~' | '!'
     ;
+
+fragment ExpansionChar
+    :   '*'
+    ;
+
+fragment Opchar
+   : '#' | '%' | '&' | Less | Equals | Greater | '?' | '@' | '\\' | '^' | '|' // | ':'
+   ;
+
+fragment Op
+    :   '/'
+    |   '/'? (Opchar | PrefixChar | ExpansionChar)+
+    ;
+
+fragment Idstart
+    : NonDigit | '$' | '_'
+    ;
+
+fragment Idrest
+   : ( NonDigit | Digit )* ('_' Op)?
+   ;
+
+PrefixOp
+    :   PrefixChar
+    ;
+
+ExpansionOp
+    :   ExpansionChar
+    ;
+
+Identifier
+    :   ( Idstart Idrest ) | Op
+    ;
+
+Ellipses: '...';
+
+LeftShift: Less Less ;
+RightShift: Greater Greater ;
+
+LParen : '(' ;
+RParen : ')' ;
 
 IntegerConstant
     :   DecimalConstant IntegerSuffix?
@@ -619,11 +578,6 @@ fragment
 ExponentPart
     :   'e' Sign? DigitSequence
     |   'E' Sign? DigitSequence
-    ;
-
-fragment
-Sign
-    :   '+' | '-'
     ;
 
 DigitSequence

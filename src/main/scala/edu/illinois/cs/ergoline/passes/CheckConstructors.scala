@@ -71,7 +71,7 @@ object CheckConstructors {
       .map(arg => {
         (Find.child[EirMember](cls, withName(arg.name)).headOption, arg)
       })
-    argDeclPairs.isEmpty || argDeclPairs.forall(x =>
+    argDeclPairs.forall(x =>
       x match {
         case (
               Some(EirMember(_, d: EirDeclaration, _)),
