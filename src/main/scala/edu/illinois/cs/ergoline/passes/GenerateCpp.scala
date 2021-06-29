@@ -351,9 +351,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     arrayMember(ctx, Some(found)) match {
       case Some("size") =>
         arrayDim(ctx, ctx.typeOf(x.target)) match {
-          case Some(1) => ctx << x.target << "->shape[0]"
+          case Some(1) => ctx << "(int)" << x.target << "->shape[0]"
           case Some(n) if n > 0 =>
-            ctx << "std::tuple_cat(" << x.target << "->shape)"
+            ctx << "std::tuple_cat(" << x.target << "->shape)" // TODO is this tested?
           case _ => Errors.unreachable()
         }
       case _ =>
@@ -1916,7 +1916,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         )
         arg match {
           case Some(x) =>
-            ctx << s"std::get<" << x << ">(" << arrayRef.target << ")"
+            ctx << {
+              val thisTy = ctx.resolve(tty.children(x.toInt))
+              Option.unless(thisTy.isPointer)(
+                "(" + ctx.typeFor(thisTy, Some(arrayRef)) + ")"
+              )
+            } << s"std::get<" << x << ">(" << arrayRef.target << ")"
           case None => Errors.invalidTupleIndices(tty, arrayRef.args)
         }
       case _ if collective.isDefined =>
@@ -1933,7 +1938,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "(*" << target << ")["
         args.reverse.init.zipWithIndex.foreach {
           case (arg, idx) =>
-            ctx << arg << s"* (" << target << s"->shape[$idx]) +"
+            ctx << arg << s"((int)*(" << target << s"->shape[$idx]))" << "+"
         }
         ctx << args.head
         ctx << "]"
