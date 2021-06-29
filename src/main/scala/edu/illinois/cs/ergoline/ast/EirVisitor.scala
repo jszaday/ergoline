@@ -26,7 +26,6 @@ trait EirVisitor[Context, Value] {
       case x: EirFunction         => visitFunction(x)
       case x: EirAnnotation       => visitAnnotation(x)
       case x: EirFunctionArgument => visitFunctionArgument(x)
-      case x: EirAssignment       => visitAssignment(x)
       case x: EirReturn           => visitReturn(x)
       case x: EirForLoop          => visitForLoop(x)
       case x: EirWhileLoop        => visitWhileLoop(x)
@@ -101,6 +100,7 @@ trait EirVisitor[Context, Value] {
       case x: EirBinaryExpression   => visitBinaryExpression(x)
       case x: EirInterpolatedString => visitInterpolatedString(x)
       case x: EirCallArgument       => visitExpression(x.expr)
+      case x: EirAssignment         => visitAssignment(x)
       case x                        => error(x)
     }
   }

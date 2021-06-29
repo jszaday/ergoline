@@ -605,7 +605,7 @@ case class EirAssignment(
     var lval: EirExpressionNode,
     var op: String,
     var rval: EirExpressionNode
-) extends EirNode {
+) extends EirExpressionNode {
   var isValueInitializer: Boolean = false
 
   override def children: Iterable[EirNode] = Seq(lval, rval)
@@ -865,7 +865,7 @@ trait EirForLoopHeader {
 case class EirCStyleHeader(
     var declaration: Option[EirDeclaration],
     var test: Option[EirExpressionNode],
-    var increment: Option[EirAssignment]
+    var increment: Option[EirExpressionNode]
 ) extends EirForLoopHeader {
   override def children: Iterable[EirNode] = declaration ++ test ++ increment
 
@@ -875,7 +875,7 @@ case class EirCStyleHeader(
     (test.contains(oldNode) && util
       .applyOrFalse[EirExpressionNode](x => test = Some(x), newNode)) ||
     (increment.contains(oldNode) && util
-      .applyOrFalse[EirAssignment](x => increment = Some(x), newNode))
+      .applyOrFalse[EirExpressionNode](x => increment = Some(x), newNode))
   }
 }
 

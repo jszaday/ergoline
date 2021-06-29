@@ -113,9 +113,9 @@ class EirParseTest extends FunSuite {
     EirGlobalNamespace.clear()
     val v = new Visitor
     implicit val ctx: TypeCheckContext = new TypeCheckContext
-    val a = v.visitExpression(parserFromString("1 < 2 ? 1 : 2").expression())
+    val a = v.visitExpression(parserFromString("(1 < 2) ? 1 : 2").expression())
     val b = v.visitExpression(parserFromString("1 ? 1 : 2").expression())
-    val c = v.visitExpression(parserFromString("1 < 2 ? \"potato\" : 2").expression())
+    val c = v.visitExpression(parserFromString("(1 < 2) ? \"potato\" : 2").expression())
     CheckTypes.visit(a) shouldEqual globals.typeFor(EirLiteralTypes.Integer)
     // cannot use non-boolean as test
     assertThrows[EirException](CheckTypes.visit(b))

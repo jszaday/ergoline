@@ -10,7 +10,7 @@ import ck;
     var tally: int = 0;
 
     @entry def main(args: array<string>) {
-        val multiplier = args.size() > 1 ? args[1].toInt() : 16;
+        val multiplier = (args.size() > 1) ? args[1].toInt() : 16;
         n = multiplier * ck::numPes();
 
         arrProxy = new slicecheck@array1d(n, n, self@);

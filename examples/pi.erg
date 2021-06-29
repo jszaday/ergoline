@@ -10,7 +10,7 @@ import ck;
     val numSteps: int;
 
     @entry def main(args: array<string>) {
-        numSteps = args.size() > 1 ? args[1].toInt() : 16;
+        numSteps = (args.size() > 1) ? args[1].toInt() : 16;
         val numPes: int = ck::numPes();
         if (numSteps < (numPes * 4)) {
             numSteps = numPes * 4;
