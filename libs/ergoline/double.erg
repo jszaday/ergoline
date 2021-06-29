@@ -1,16 +1,17 @@
 package ergoline;
 
 @system struct double {
-    @system(reducer="CkReduction::sum_double")
-    def plus(other: double): double;
+    @system(operator=true,reducer="CkReduction::sum_double")
+    def +(other: double): double;
 
-    @system def minus(other: double): double;
-    @system def times(other: double): double;
-    @system def div(other: double): double;
-    @system def equals(other: double): bool;
-    @system def compareTo(other: double): double;
+    @system(operator=true) def -(other: double): double;
+    @system(operator=true) def *(other: double): double;
 
-    @system def div(other: int): double;
+    @system(operator=true) def /(other: int): double;
+    @system(operator=true) def /(other: double): double;
+
+    @system(operator=true,alias="-")
+    def <=>(other: double): double;
 
     @system(alias = "std::to_string", static = true)
     def toString(): string;

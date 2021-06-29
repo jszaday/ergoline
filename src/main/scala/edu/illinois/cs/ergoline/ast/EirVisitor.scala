@@ -95,15 +95,18 @@ trait EirVisitor[Context, Value] {
       case x: EirFunctionCall       => visitFunctionCall(x)
       case x: EirArrayReference     => visitArrayReference(x)
       case x: EirTupleExpression    => visitTupleExpression(x)
-      case x: EirTernaryOperator    => visitTernaryOperator(x)
       case x: EirLambdaExpression   => visitLambdaExpression(x)
+      case x: EirUnaryExpression    => visitUnaryExpression(x)
       case x: EirBinaryExpression   => visitBinaryExpression(x)
+      case x: EirTernaryOperator    => visitTernaryOperator(x)
       case x: EirInterpolatedString => visitInterpolatedString(x)
       case x: EirCallArgument       => visitExpression(x.expr)
       case x: EirAssignment         => visitAssignment(x)
       case x                        => error(x)
     }
   }
+
+  def visitUnaryExpression(x: EirUnaryExpression)(implicit ctx: Context): Value
 
   def visitSlice(x: EirSlice)(implicit ctx: Context): Value
 

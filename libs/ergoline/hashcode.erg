@@ -2,11 +2,13 @@ package ergoline;
 
 @system(alias = "std::size_t")
 struct hashcode {
-    @system def equals(other: hashcode): bool;
-    @system def rem(i: int): hashcode;
+    @system(operator=true) def %(i: int): hashcode;
+    @system(operator=true) def ==(other: hashcode): bool;
+
+    @system(cast = true) def toInt(): int;
     @system(alias = "std::to_string", static = true)
     def toString(): string;
-    @system(cast = true) def toInt(): int;
+
     // TODO enable combining hash codes
     // @system def pipe<A>(a: A): hashcode;
 }

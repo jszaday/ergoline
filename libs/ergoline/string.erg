@@ -1,8 +1,10 @@
 package ergoline;
 
 @system(alias = "std::string") struct string {
+    @system(operator=true) def +(other: string): string;
+    @system(operator=true) def ==(other: string): string;
+
     @system def toString(): string;
-    @system def plus(other: string): string;
 
     @system(alias = "std::stoi", static = true)
     def toInt(): int;

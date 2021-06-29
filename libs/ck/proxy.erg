@@ -9,9 +9,10 @@ class proxy {
     @system def local(): bool;
     @system def collective(): bool;
 
+    @system def ==(&other: proxy): bool;
+
     @system(alias="last_known") def lastKnown(): int;
     @system(alias="node_level") def nodeLevel(): int;
 
-    @system def equals(&other: proxy): bool;
     @system(alias="to_string") def toString(): string;
 }

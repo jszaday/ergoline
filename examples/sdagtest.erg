@@ -58,6 +58,6 @@ class sdagtest {
             }
         }
 
-        self[@]contribute(idx, int::plus, mainProxy.done);
+        self[@]contribute(idx, int::+, mainProxy.done);
     }
 }

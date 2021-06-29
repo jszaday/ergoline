@@ -1,0 +1,27 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class opcheck {
+    @entry def opcheck(args: array<string>) {
+        val a = 2;
+        val b = 3;
+        val c = 4;
+        val d = 5;
+
+        assert(c > b && b < c);
+
+        val e = a + ((b * c) + d);
+        val f = a + b * c + d;
+        assert((e == f) == true);
+
+        val g = a + (b * (c * d));
+        val h = a + b * c * d;
+        assert((g == h) != false);
+
+        println("success> operators appear operational!");
+
+        exit();
+    }
+}

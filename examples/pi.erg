@@ -50,6 +50,6 @@ class pi {
             sum += 4.0 / (1.0 + x * x);
         }
 
-        self[@]contribute(sum, double::plus, mainProxy.done);
+        self[@]contribute(sum, double::+, mainProxy.done);
     }
 }
