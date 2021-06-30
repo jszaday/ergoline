@@ -956,8 +956,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirSymbol[A]
   )(implicit ctx: CodeGenerationContext): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      val m = asMember(x.disambiguation)
-      if (!m.exists(_.isStatic)) m.foreach(_ => ctx << ctx.currentSelf << "->")
+      asMember(x.disambiguation) match {
+        case Some(m: EirMember) if !m.isStatic =>
+          ctx << {
+            if (m.isEntryOnly) { // TODO check whether this is symmetrically handled with (self.<entryOnly>)
+              assert(ctx.proxy.isDefined)
+
+              "this"
+            } else {
+              ctx.currentSelf
+            }
+          } << "->"
+        case _ =>
+      }
     }
     val m = asMember(x.disambiguation) match {
       case Some(m) if m.isEntryOnly =>
