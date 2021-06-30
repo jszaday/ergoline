@@ -54,15 +54,12 @@ package object literals {
   ) extends EirLiteral[String] {
     override def `type`: String = "string"
 
-    val valuePattern: Regex = "^\"[-:a-zA-Z0-9_\\.\\/]+\"$".r
+    val valuePattern: Regex = "[-:a-zA-Z0-9_\\.\\/]+".r
 
     override def strip(): String = {
-      value match {
-        case "\"[]\"" => "[]"
-        case valuePattern(_) =>
-          value.substring(1, value.length - 1)
-        case _ => super.strip()
-      }
+      val quoteless = value.substring(1, value.length - 1)
+      if ((quoteless == "[]") || valuePattern.matches(quoteless)) quoteless
+      else super.strip()
     }
   }
 
