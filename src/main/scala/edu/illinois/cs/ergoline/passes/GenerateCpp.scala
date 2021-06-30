@@ -364,7 +364,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
 
         (if (targetsSelf && isEntryOnly) {
-           assert(ctx.proxy.isDefined)
            ctx << "this"
          } else {
            ctx << x.target
@@ -978,8 +977,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
             if (m.isEntryOnly) {
-              assert(ctx.proxy.isDefined)
-
               "this"
             } else {
               ctx.currentSelf
@@ -1432,12 +1429,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   private def nameForProxyMember(p: Option[EirProxy], x: EirMember)(implicit
       ctx: CodeGenerationContext
   ): String = {
-    ((p, ctx.proxy) match {
-      case _ if !(x.isEntry || x.isEntryOnly) => None
-      case (Some(p), _)                       => p.ordinalFor(x)
-      case (_, Some(_))                       => x.ordinal
-      case _                                  => Errors.unreachable()
-    }) match {
+    Option
+      .when(x.isEntry || x.isEntryOnly)({
+        assert(p.orElse(ctx.proxy).isDefined)
+        x.counterpart.getOrElse(x).ordinal
+      })
+      .flatten match {
       case Some(ord) => s"__${x.name}_${ord}__"
       case _         => x.name
     }
