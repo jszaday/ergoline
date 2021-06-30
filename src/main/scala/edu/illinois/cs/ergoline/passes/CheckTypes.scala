@@ -68,7 +68,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case tupleType: EirTupleType =>
           val lit = Option
             .when(x.args.length == 1)(x.args.head)
-            .map(evaluateConstExpr(_))
+            .map(StaticEvaluator.evaluate(_))
           val idx = lit.collect {
             case x if x.`type` == EirLiteralTypes.Integer => x.toInt
           }
@@ -1176,32 +1176,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     visit(Find.uniqueResolution[EirResolvable[EirType]](x))
   }
 
-  @tailrec
-  def valueWithin(
-      x: EirResolvable[_]
-  )(implicit ctx: TypeCheckContext): EirLiteral = {
-    Find.uniqueResolution[EirNode](x) match {
-      case y: EirConstantFacade   => y.value
-      case x: EirTemplateArgument => valueWithin(visit(x))
-      case _                      => Errors.unableToResolve(x)
-    }
-  }
-
-  def evaluateConstExpr(
-      expr: EirExpressionNode
-  )(implicit ctx: TypeCheckContext): EirLiteral = {
-    expr match {
-      case x: EirSymbol[_] => valueWithin(x)
-      case x: EirLiteral   => x
-      case _               => Errors.invalidConstExpr(expr)
-    }
-  }
-
   override def visitTupleMultiply(
       multiply: types.EirTupleMultiply
   )(implicit ctx: TypeCheckContext): EirType = {
     val lhs = visit(multiply.lhs)
-    val rhs = evaluateConstExpr(multiply.rhs)
+    val rhs = StaticEvaluator.evaluate(multiply.rhs)
     val intTy = EirLiteralTypes.Integer
     if (rhs.`type` != intTy) {
       Errors.unableToUnify(multiply, visit(rhs), globals.typeFor(intTy))

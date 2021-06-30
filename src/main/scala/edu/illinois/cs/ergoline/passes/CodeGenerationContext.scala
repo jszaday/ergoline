@@ -95,13 +95,8 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def eval2const(n: EirNode): EirLiteral =
-    n match {
-      case e: EirExpressionNode => CheckTypes.evaluateConstExpr(e)(typeContext)
-      case c: EirConstantFacade => c.value
-      case r: EirResolvable[_]  => eval2const(resolve[EirNode](r))
-      case _                    => Errors.invalidConstExpr(n)
-    }
+  def eval2const(x: EirNode): EirLiteral =
+    StaticEvaluator.evaluate(x)(typeContext)
 
   def specialize(
       s: EirSpecializable,

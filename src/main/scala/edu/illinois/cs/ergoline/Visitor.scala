@@ -926,7 +926,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitStaticPostfixExpression(
       ctx: StaticPostfixExpressionContext
   ): EirNode = {
-    if (ctx.staticPrimaryExpression() == null) {
+    if (ctx.staticPrimaryExpression() != null) {
       visitAs[EirExpressionNode](ctx.staticPrimaryExpression())
     } else {
       enter(

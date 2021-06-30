@@ -1962,9 +1962,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .flatMap(x => if (!x.isElement) x.collective else None)
     ty match {
       case tty: EirTupleType =>
-        val arg = arrayRef.args.headOption.map(
-          CheckTypes.evaluateConstExpr(_)(ctx.typeContext)
-        )
+        val arg = arrayRef.args.headOption.map(ctx.eval2const(_))
         arg match {
           case Some(x) =>
             ctx << {
