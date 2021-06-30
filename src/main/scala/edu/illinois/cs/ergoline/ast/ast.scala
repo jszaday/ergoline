@@ -1,7 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
-import java.io.File
-
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -16,6 +15,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{globals, util}
 
+import java.io.File
 import scala.collection.mutable
 import scala.reflect.{ClassTag, classTag}
 
@@ -544,11 +544,11 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
   override def resolved: Boolean = _resolved.nonEmpty
 }
 
-case class EirAnnotation(var name: String, var opts: Map[String, EirLiteral])
+case class EirAnnotation(var name: String, var opts: Map[String, EirLiteral[_]])
     extends EirNode
     with EirEncloseExempt {
 
-  def apply(name: String): Option[EirLiteral] = opts.get(name)
+  def apply(name: String): Option[EirLiteral[_]] = opts.get(name)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
   override var parent: Option[EirNode] = None
@@ -719,45 +719,6 @@ case class EirTernaryOperator(
     ((ifFalse == oldNode) && util
       .applyOrFalse[EirExpressionNode](x => ifFalse = x, newNode))
   }
-}
-
-case class EirLiteral(
-    var parent: Option[EirNode],
-    var `type`: EirLiteralTypes.Value,
-    var value: String
-) extends EirExpressionNode {
-
-  def stripped: String = {
-    `type` match {
-      case EirLiteralTypes.String if value == "\"[]\"" => "[]"
-      case EirLiteralTypes.String
-          if value.matches("^\"[-:a-zA-Z0-9_\\.\\/]+\"$") =>
-        value.substring(1, value.length - 1)
-      case _ => throw new RuntimeException(s"cannot strip $this")
-    }
-  }
-
-  def toInt: Int = value.toInt
-
-  def toBoolean: Boolean = value.toBoolean
-
-  def equivalentTo(other: EirLiteral): Boolean = {
-    `type` == other.`type` && value == other.value
-  }
-
-  override def children: Iterable[EirNode] = Nil
-
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
-}
-
-object EirLiteralTypes extends Enumeration {
-  type EirLiteralTypes = Value
-  val String: Value = Value("string")
-  val Integer: Value = Value("int")
-  val Float: Value = Value("float")
-  val Character: Value = Value("char")
-  val Unit: Value = Value("unit")
-  val Boolean: Value = Value("bool")
 }
 
 abstract class EirSymbolLike[+A <: EirNode: ClassTag]
@@ -1073,8 +1034,7 @@ case class EirInterpolatedString(var children: List[EirExpressionNode])(
       .map(children = _)
       .isDefined
   }
-  def append(s: String): Unit =
-    append(EirLiteral(Some(this), EirLiteralTypes.String, s))
+  def append(s: String): Unit = append(EirStringLiteral(s)(Some(this)))
   def append(n: EirExpressionNode): Unit = children :+= n
 }
 
@@ -1122,15 +1082,16 @@ case class EirTypeAlias(
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirConstantFacade(var value: EirLiteral)(var parent: Option[EirNode])
-    extends EirType {
+case class EirConstantFacade(var value: EirLiteral[_])(
+    var parent: Option[EirNode]
+) extends EirType {
   override def children: Iterable[EirNode] = List(value)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case EirConstantFacade(other) => value.equivalentTo(other)
+      case EirConstantFacade(other) => value.equals(other.value)
       case _                        => false
     }
   }

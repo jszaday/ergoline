@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -91,7 +92,7 @@ trait EirVisitor[Context, Value] {
       case x: EirMatch              => visitMatch(x)
       case x: EirSlice              => visitSlice(x)
       case x: EirAwait              => visitAwait(x)
-      case x: EirLiteral            => visitLiteral(x)
+      case x: EirLiteral[_]         => visitLiteral(x)
       case x: EirFunctionCall       => visitFunctionCall(x)
       case x: EirArrayReference     => visitArrayReference(x)
       case x: EirTupleExpression    => visitTupleExpression(x)
@@ -171,7 +172,7 @@ trait EirVisitor[Context, Value] {
   def visitWhileLoop(x: EirWhileLoop)(implicit ctx: Context): Value
   def visitForLoop(x: EirForLoop)(implicit ctx: Context): Value
 
-  def visitLiteral(x: EirLiteral)(implicit ctx: Context): Value
+  def visitLiteral(x: EirLiteral[_])(implicit ctx: Context): Value
 
   def visitSymbol[A <: EirNamedNode](x: EirSymbol[A])(implicit
       ctx: Context

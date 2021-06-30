@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types.{
   EirTemplatedType,
   EirTupleType,
@@ -95,7 +96,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     }
   }
 
-  def eval2const(x: EirNode): EirLiteral =
+  def eval2const(x: EirNode): EirLiteral[_] =
     StaticEvaluator.evaluate(x)(typeContext)
 
   def specialize(

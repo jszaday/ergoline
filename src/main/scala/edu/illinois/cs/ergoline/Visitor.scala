@@ -2,9 +2,16 @@ package edu.illinois.cs.ergoline
 
 import java.io.File
 import java.nio.file.Files
-
 import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirBooleanLiteral,
+  EirCharacterLiteral,
+  EirFloatLiteral,
+  EirIntegerLiteral,
+  EirLiteral,
+  EirStringLiteral
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{
@@ -352,7 +359,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           (ctx: AnnotationOptionContext) => {
             (
               Option(ctx.identifier()).getOrElse(ctx.StaticKwd()).getText,
-              visitAs[EirLiteral](ctx.constant())
+              visitAs[EirLiteral[_]](ctx.constant())
             )
           }
         )
@@ -420,7 +427,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       enter(
         EirConstantFacade(null)(parent),
         (x: EirConstantFacade) => {
-          x.value = visitAs[EirLiteral](ctx.constant())
+          x.value = visitAs[EirLiteral[_]](ctx.constant())
         }
       )
     } else if (ctx.`type`() != null) {
@@ -1146,33 +1153,30 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     visitAs[EirExpressionNode](ctx.children.get(0))
   }
 
-  override def visitBoolLiteral(ctx: BoolLiteralContext): EirLiteral =
-    EirLiteral(
-      parent,
-      EirLiteralTypes.Boolean,
-      Option(ctx.FalseKwd()).getOrElse(ctx.TrueKwd()).getText
-    )
+  override def visitBoolLiteral(ctx: BoolLiteralContext): EirLiteral[_] = {
+    val value =
+      Option(ctx.FalseKwd()).getOrElse(ctx.TrueKwd()).getText.toBoolean
+    EirBooleanLiteral(value)(parent)
+  }
 
-  override def visitConstant(ctx: ConstantContext): EirLiteral = {
+  override def visitConstant(ctx: ConstantContext): EirLiteral[_] = {
     if (ctx.IntegerConstant() != null) {
-      EirLiteral(parent, EirLiteralTypes.Integer, ctx.IntegerConstant().getText)
+      val raw = ctx.IntegerConstant().getText
+      EirIntegerLiteral(raw.toInt)(parent)
     } else if (ctx.FloatingConstant() != null) {
-      EirLiteral(parent, EirLiteralTypes.Float, ctx.FloatingConstant().getText)
+      val raw = ctx.FloatingConstant().getText
+      EirFloatLiteral(raw.toFloat)(parent)
     } else if (Option(ctx.StringLiteral()).exists(_.size() >= 1)) {
-      EirLiteral(
-        parent,
-        EirLiteralTypes.String,
+      EirStringLiteral(
         ctx.StringLiteral().asScala.map(_.getText).reduce(_ + _)
-      )
+      )(parent)
     } else if (ctx.boolLiteral() != null) {
       visitBoolLiteral(ctx.boolLiteral())
     } else {
       assert(ctx.CharacterConstant() != null)
-      EirLiteral(
-        parent,
-        EirLiteralTypes.Character,
-        ctx.CharacterConstant().getText
-      )
+      val raw = ctx.CharacterConstant().getText
+      val escaped = StringContext.processEscapes(raw.slice(1, raw.length - 1))
+      EirCharacterLiteral(escaped.head)(parent)
     }
   }
 

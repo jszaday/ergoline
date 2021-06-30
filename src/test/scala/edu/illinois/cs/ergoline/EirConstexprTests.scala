@@ -1,11 +1,11 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.{EirConstantFacade, EirExpressionNode, EirGlobalNamespace, EirLiteral}
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
+import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirGlobalNamespace}
+import edu.illinois.cs.ergoline.passes.{StaticEvaluator, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.Modules
-import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.FunSuite
-import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
+import org.scalatest.Matchers.convertToAnyShouldWrapper
 
 class EirConstexprTests extends FunSuite {
 
@@ -17,13 +17,23 @@ class EirConstexprTests extends FunSuite {
     })
   }
 
-  test("a number is found") {
-    val expected = "42"
-    val result = parseExpression(expected)
+  def evaluateExpression(x: EirExpressionNode, opt: Option[TypeCheckContext] = None): EirLiteral[_] = {
+    StaticEvaluator.evaluate(x)(opt.getOrElse(new TypeCheckContext()))
+  }
 
-    result should matchPattern {
-      case EirLiteral(_, _, actual) if expected == actual =>
-    }
+  test("a number is found") {
+    val result = evaluateExpression(parseExpression("(21 + 21) * 42"))
+    result.toInt shouldEqual (42 * 42)
+  }
+
+  test("relational ops I") {
+    val result = evaluateExpression(parseExpression("(21 + 21) != 42"))
+    result.toBoolean shouldEqual false
+  }
+
+  test("relational ops II") {
+    val result = evaluateExpression(parseExpression("((21 + 21) == 42) && false"))
+    result.toBoolean shouldEqual false
   }
 
 }

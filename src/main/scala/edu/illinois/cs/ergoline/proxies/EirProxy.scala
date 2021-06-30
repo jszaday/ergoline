@@ -163,7 +163,7 @@ case class EirProxy(
 
   private def indices: Option[List[EirType]] = {
     val n = collective.map(ProxyManager.dimensionality)
-    val i = globals.typeFor(EirLiteralTypes.Integer)
+    val i = globals.integerType
     n.map(List.fill(_)(i))
   }
 
@@ -193,7 +193,7 @@ case class EirProxy(
     val idxTy = idx.toTupleType()(None)
     val eleTy = ProxyManager.elementType(this)
     val secTy = ProxyManager.sectionType(this)
-    val unitTy = globals.typeFor(EirLiteralTypes.Unit)
+    val unitTy = globals.unitType
     val arrayTy = // TODO iterable could be used here instead?
       EirTemplatedType(None, globals.arrayType, List(idxTy))
     val rangeTys =
