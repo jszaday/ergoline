@@ -595,7 +595,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         EirTupleMultiply(null, null)(parent),
         (x: EirTupleMultiply) => {
           x.lhs = visitAs[EirResolvable[EirType]](ctx.tupleType())
-          x.rhs = visitAs[EirExpressionNode](ctx.constExpression())
+          x.rhs = visitAs[EirExpressionNode](ctx.staticPrimaryExpression())
         }
       )
     } else {
@@ -814,16 +814,16 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   type InfixPart = Either[EirExpressionNode, String]
 
-  def flattenInfix(ctx: InfixExpressionContext): Seq[InfixPart] = {
-    if (ctx.conditionalExpression() == null) {
-      val (lhs, rhs) = (ctx.infixExpression(0), ctx.infixExpression(1))
+  def flattenInfix[T <: ParseTree](ctx: T): Seq[InfixPart] = {
+    if (ctx.getChildCount == 3) {
+      val (lhs, rhs) = (ctx.getChild(0), ctx.getChild(2))
       flattenInfix(lhs) ++ {
-        Option(ctx.identifier())
+        Option(ctx.getChild(1))
           .map(_.getText)
           .map(Right(_))
       } ++ flattenInfix(rhs)
     } else {
-      Seq(Left(visitAs[EirExpressionNode](ctx.conditionalExpression())))
+      Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
     }
   }
 
@@ -906,12 +906,57 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  override def visitInfixExpression(ctx: InfixExpressionContext): EirNode = {
+  private def visitInfixLikeExpression[T <: ParseTree](
+      ctx: T
+  ): EirNode = {
     val exprs = flattenInfix(ctx)
 
     exprs match {
       case Left(x) :: Nil => x
       case _              => sortInfixes(exprs)
+    }
+  }
+
+  override def visitInfixExpression(ctx: InfixExpressionContext): EirNode =
+    visitInfixLikeExpression(ctx)
+
+  override def visitStaticExpression(ctx: StaticExpressionContext): EirNode =
+    visitInfixLikeExpression(ctx)
+
+  override def visitStaticPostfixExpression(
+      ctx: StaticPostfixExpressionContext
+  ): EirNode = {
+    if (ctx.staticPrimaryExpression() == null) {
+      visitAs[EirExpressionNode](ctx.staticPrimaryExpression())
+    } else {
+      enter(
+        EirArrayReference(parent, null, Nil),
+        (ref: EirArrayReference) => {
+          ref.target = visitAs[EirExpressionNode](ctx.staticPostfixExpression())
+          ref.args = ctx
+            .staticExpressionList()
+            .staticExpression()
+            .asScala
+            .map(visitAs[EirExpressionNode])
+            .toList
+        }
+      )
+    }
+  }
+
+  override def visitStaticTupleExpression(
+      ctx: StaticTupleExpressionContext
+  ): EirNode = {
+    val expressions = ctx.staticExpressionList().staticExpression()
+    if (expressions.size() == 1) visitAs[EirExpressionNode](expressions.get(0))
+    else {
+      enter(
+        EirTupleExpression(parent, null),
+        (t: EirTupleExpression) => {
+          t.expressions =
+            expressions.asScala.map(visitAs[EirExpressionNode]).toList
+        }
+      )
     }
   }
 
@@ -1107,12 +1152,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirLiteralTypes.Boolean,
       Option(ctx.FalseKwd()).getOrElse(ctx.TrueKwd()).getText
     )
-
-  override def visitConstExpression(ctx: ConstExpressionContext): EirNode = {
-    Option(ctx.fqn())
-      .map(fqn => symbolizeType(fqn.identifier()))
-      .getOrElse(visitAs[EirExpressionNode](ctx.constant()))
-  }
 
   override def visitConstant(ctx: ConstantContext): EirLiteral = {
     if (ctx.IntegerConstant() != null) {
