@@ -158,9 +158,21 @@ package object util {
   // TODO implement this
   def deepCloneTree[T <: EirNode](node: T): T = node
 
+  def isSystem(node: EirNode): Boolean = {
+    node.parent
+      .collect({
+        case m: EirMember => m
+      })
+      .getOrElse(node)
+      .annotation("system")
+      .isDefined
+  }
+
   object EirUtilitySyntax {
 
     implicit class RichEirNode(node: EirNode) {
+      def isSystem: Boolean = util.isSystem(node)
+
       def canAccess(other: EirNode): Boolean = xCanAccessY(node, other)
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)

@@ -51,7 +51,7 @@ class pingpong {
                 }
 
                 when receive(src, msg: pong) if src == it =>
-                    acknowledge(src, msg);
+                    self.acknowledge(src, msg);
             }
         }
 

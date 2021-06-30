@@ -1,16 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
-import java.io.File
-import java.nio.file.Paths
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{
-  EirElementProxy,
-  EirLambdaType,
-  EirSectionProxy,
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   getMailboxType,
@@ -21,7 +12,10 @@ import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util
 
+import java.io.File
+import java.nio.file.Paths
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
@@ -33,11 +27,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   object GenCppSyntax {
     implicit class RichEirNode(self: EirNode) {
-      def isSystem: Boolean =
-        self.parent match {
-          case Some(m: EirMember) => m.isSystem
-          case _                  => self.annotation("system").isDefined
-        }
+      def isSystem: Boolean = util.isSystem(self)
     }
 
     implicit class RichEirType(self: EirType) {
@@ -88,6 +78,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def forwardDecl(
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
+    if (x.isSystem) return
+
     visitTemplateArgs(x.templateArgs)
     ctx << s"struct ${ctx.nameFor(x)};"
 
@@ -358,7 +350,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       case _ =>
         val targetTy: EirType = ctx.exprType(x.target)
-        ctx << x.target << fieldAccessorFor(targetTy) << ctx.nameFor(found)
+        val isEntryOnly = found match {
+          case m: EirMember => m.isEntryOnly
+          case _            => false
+        }
+        val targetsSelf = x.target match {
+          case s: EirSymbol[_] =>
+            s.qualifiedName match {
+              case "self" :: Nil => true
+              case _             => false
+            }
+          case _ => false
+        }
+
+        (if (targetsSelf && isEntryOnly) {
+           ctx << "this"
+         } else {
+           ctx << x.target
+         }) << fieldAccessorFor(targetTy) << ctx.nameFor(found)
     }
   }
 
@@ -953,14 +962,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def selfFor(ctx: CodeGenerationContext, x: EirMember): String = {
-    ctx.proxy
-      .collect({
-        case _ if x.isImplOnly => "impl_"
-      })
-      .getOrElse("this")
-  }
-
   def asMember(x: Option[EirNode]): Option[EirMember] = {
     x match {
       case Some(m: EirMember) => Some(m)
@@ -972,15 +973,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirSymbol[A]
   )(implicit ctx: CodeGenerationContext): Unit = {
     if (!CheckTypes.isSelf(x)) {
-      val m = asMember(x.disambiguation)
-      if (!m.exists(_.isStatic)) m.foreach(ctx << selfFor(ctx, _) << "->")
+      asMember(x.disambiguation) match {
+        case Some(m: EirMember) if !m.isStatic =>
+          ctx << {
+            if (m.isEntryOnly) {
+              "this"
+            } else {
+              ctx.currentSelf
+            }
+          } << "->"
+        case _ =>
+      }
     }
-    val m = asMember(x.disambiguation) match {
-      case Some(m) if m.isEntryOnly =>
-        Some(Find.namedChild[EirMember](ctx.proxy, m.name))
-      case _ => None
-    }
-    ctx << m.map(ctx.nameFor(_)).getOrElse(ctx.nameFor(x, Some(x)))
+
+    ctx << asMember(x.disambiguation)
+      .filter(_.isEntryOnly)
+      .map(ctx.nameFor(_))
+      .getOrElse(ctx.nameFor(x, Some(x)))
   }
 
   override def visitDeclaration(
@@ -1120,9 +1129,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
     if (x.templateArgs.isEmpty) {
-      val isSystem = x.annotation("system").isDefined
-      ctx << x.members.filter(_.member.isInstanceOf[EirFunction])
-      if (!x.isTrait && !isSystem && !GenerateDecls.hasPup(x)) {
+      ctx << x.members.collect {
+        case m @ EirMember(_, _: EirFunction, _) if !m.isSystem => m
+      }
+
+      if (!x.isSystem && !x.isTrait && !GenerateDecls.hasPup(x)) {
         makePupper(ctx, x)
       }
     }
@@ -1157,11 +1168,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (member.exists(_.isConstructor)) {
       val parent = assertValid[EirClassLike](member.flatMap(_.parent))
-      val parentClass =
-        parent.extendsThis.map(ctx.resolve).flatMap(Find.tryClassLike)
 
+      val currSelf = ctx.currentSelf
       val encapsulated = ctx.proxy.nonEmpty
-      val currSelf = if (encapsulated) "impl_" else "this"
       val assignments = x.functionArgs.filter(_.isSelfAssigning)
       val declarations = parent.members collect {
         case m @ EirMember(_, d: EirDeclaration, _)
@@ -1214,24 +1223,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val member = x.parent.to[EirMember]
     val parent = member.flatMap(_.parent).to[EirClassLike]
     val entryOnly = member.exists(_.isEntryOnly) && ctx.proxy.isEmpty
-    val system = member
-      .flatMap(_.annotation("system"))
-      .orElse(x.annotation("system"))
-      .isDefined
     val abstractMember =
       !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
     val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
-    if ((!langCi && entryOnly) || system || abstractMember || isTempl) {
+    if ((!langCi && entryOnly) || x.isSystem || abstractMember || isTempl) {
       return
     }
+
+    val isConstructor = member.exists(_.isConstructor)
+    val hasSystemParent = parent.exists(_.isSystem)
+    val proxyParent = parent.to[EirProxy]
+
     val asyncCi =
       langCi && isMember && member.flatMap(_.annotation("async")).isDefined
-    val isConstructor = member.exists(_.isConstructor)
     val overrides =
       Option.when(isMember && member.exists(_.isOverride))(" override")
     val name = parent match {
       case Some(p: EirProxy) if langCi && isConstructor => p.baseName
+      case Some(classLike) if hasSystemParent =>
+        ctx.nameFor(classLike) + "_" + ctx.nameFor(x)
       case Some(classLike) if !isMember =>
         ctx.nameFor(classLike) + "::" + ctx.nameFor(x)
       case _ => ctx.nameFor(x)
@@ -1248,7 +1259,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     val args = x.functionArgs ++ x.implicitArgs
     ctx << name << "("
-    if (parent.exists(_.isInstanceOf[EirProxy]) && (args.nonEmpty || asyncCi)) {
+    val currSelf = if (hasSystemParent) {
+      if (proxyParent.isDefined) {
+        Errors.unreachable()
+      } else {
+        val pointerParent = parent.exists(_.isPointer)
+        val ty = parent.map(ctx.typeFor(_, Some(x)))
+        val ourSelf = "self"
+
+        ctx << "const" << ty << "&" << ourSelf << {
+          Option.when(args.nonEmpty)(",")
+        }
+
+        Option.when(pointerParent)(ourSelf) orElse
+          ty.map(s => s"const_cast<$s*>(&$ourSelf)")
+      }
+    } else {
+      proxyParent.map(_ => "this->impl_").orElse(Some("this"))
+    }
+    currSelf.foreach(ctx.pushSelf)
+    if (proxyParent.isDefined && (args.nonEmpty || asyncCi)) {
       ctx << "CkMessage* __msg__"
     } else {
       ctx << (args, ",")
@@ -1269,7 +1299,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (x.body.isEmpty) {
       Errors.missingBody(x)
     }
+
+    assert(currSelf.nonEmpty)
     visitFunctionBody(x)
+
+    currSelf.foreach(_ => ctx.popSelf())
   }
 
   override def visitFunction(
@@ -1388,7 +1422,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (ty.isPointer) {
       "(" + nameFor(ctx, ty, includeTemplates = true) + "::shared_from_this())"
     } else {
-      "*this"
+      "*" + ctx.currentSelf
+    }
+  }
+
+  private def nameForProxyMember(p: Option[EirProxy], x: EirMember)(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    Option
+      .when(x.isEntry || x.isEntryOnly)({
+        assert(p.orElse(ctx.proxy).isDefined)
+        x.counterpart.getOrElse(x).ordinal
+      })
+      .flatten match {
+      case Some(ord) => s"__${x.name}_${ord}__"
+      case _         => x.name
     }
   }
 
@@ -1437,12 +1485,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             case _ => Errors.unableToResolve(s)
           }
         }
-      case _: EirMember | _: EirFunction if proxy.isDefined =>
-        (x, proxy.flatMap(_.ordinalFor(x))) match {
-          case (x: EirNamedNode, Some(ord)) => s"__${x.name}_${ord}__"
-          case (x: EirNamedNode, _)         => x.name
-          case (_, _)                       => Errors.unreachable()
-        }
+      case m: EirMember if m.isEntryOnly || proxy.isDefined =>
+        nameForProxyMember(
+          {
+            proxy.orElse(m.counterpart.flatMap(_.parent).to[EirProxy])
+          },
+          m
+        )(ctx)
+      case f: EirFunction if proxy.isDefined =>
+        nameForProxyMember(proxy, asMember(opt).get)(ctx)
       case _ if proxy.isDefined =>
         val prefix =
           if (proxy.exists(_.singleton)) "CProxyElement_" else "CProxy_"

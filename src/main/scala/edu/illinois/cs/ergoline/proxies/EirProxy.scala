@@ -239,8 +239,6 @@ case class EirProxy(
     internalMembers
   }
 
-  def ordinalFor(node: EirNode): Option[Int] =
-    asMember(Some(node)).flatMap(ordinalFor)
   def ordinalFor(member: EirMember): Option[Int] =
     member.counterpart.flatMap(_.ordinal)
 
