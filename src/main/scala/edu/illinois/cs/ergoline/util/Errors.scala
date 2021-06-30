@@ -107,7 +107,7 @@ object Errors {
   }
 
   def invalidTupleIndices(
-      tuple: EirTupleType,
+      tuple: EirNode,
       nodes: Iterable[EirNode]
   ): Nothing = {
     exit(

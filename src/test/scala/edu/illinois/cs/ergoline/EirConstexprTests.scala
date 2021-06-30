@@ -1,8 +1,9 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.literals.EirLiteral
-import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirGlobalNamespace}
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirLiteralType}
+import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirScope}
 import edu.illinois.cs.ergoline.passes.{StaticEvaluator, TypeCheckContext}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.resolution.Modules
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
@@ -12,7 +13,8 @@ class EirConstexprTests extends FunSuite {
   def parseExpression(s: String): EirExpressionNode = {
     EirImportTests.setupEnv()
 
-    new Visitor(EirGlobalNamespace).visitAs[EirExpressionNode]({
+    val module = globals.ergolineModule.to[EirScope]
+    new Visitor(module.get).visitAs[EirExpressionNode]({
       Modules.parserFromString(s).staticExpression()
     })
   }
@@ -36,4 +38,23 @@ class EirConstexprTests extends FunSuite {
     result.toBoolean shouldEqual false
   }
 
+  test("tuple check") {
+    val result = evaluateExpression(parseExpression("(21, 42, 63)[1] == 42"))
+    result.toBoolean shouldEqual true
+  }
+
+  test("type check") {
+    val result = evaluateExpression(parseExpression("(int, bool, string)[1] == bool"))
+    result.toBoolean shouldEqual true
+  }
+
+  test("upper bound check") {
+    val result = evaluateExpression(parseExpression("range<int> <: iterable<int>"))
+    result.toBoolean shouldEqual true
+  }
+
+  test("lower bound check") {
+    val result = evaluateExpression(parseExpression("iterable<int> >: range<int>"))
+    result.toBoolean shouldEqual true
+  }
 }

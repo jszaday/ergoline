@@ -1,6 +1,8 @@
 package edu.illinois.cs.ergoline.ast
 
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.reflect.ClassTag
@@ -83,10 +85,27 @@ package object literals {
     override def `type`: String = "unit"
   }
 
-  //  val String: Value = Value("string")
-  //  val Integer: Value = Value("int")
-  //  val Float: Value = Value("float")
-  //  val Character: Value = Value("char")
-  //  val Unit: Value = Value("unit")
-  //  val Boolean: Value = Value("bool")
+  case class EirLiteralTuple(var value: List[EirLiteral[_]])(
+      override var parent: Option[EirNode]
+  ) extends EirLiteral[List[EirLiteral[_]]] {
+    override def children: Iterable[EirNode] = value
+
+    override def `type`: String = s"(${value.map(_.`type`) mkString ","})"
+  }
+
+  case class EirLiteralSymbol(var value: EirResolvable[EirNode])(
+      override var parent: Option[EirNode]
+  ) extends EirLiteral[EirResolvable[EirNode]] {
+    override def children: Iterable[EirNode] = Seq(value)
+
+    override def `type`: String = value.toString
+  }
+
+  case class EirLiteralType(var value: EirType)(
+      override var parent: Option[EirNode]
+  ) extends EirLiteral[EirType] {
+    override def children: Iterable[EirNode] = Seq(value)
+
+    override def `type`: String = value.toString
+  }
 }

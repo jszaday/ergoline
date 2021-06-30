@@ -164,7 +164,7 @@ class EirImportTests extends FunSuite {
     Processes.onLoad(module)
   }
 
-  test("check lower type bounds") {
+  test("check upper & lower type bounds") {
     setupEnv()
     val module = Modules.load("""
       |package foo;

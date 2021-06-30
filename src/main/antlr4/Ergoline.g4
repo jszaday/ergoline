@@ -122,8 +122,15 @@ block
     :   '{' statement* '}'
     ;
 
+LowerBound : '>:' ;
+UpperBound : '<:' ;
+
+boundOperator
+    :   LowerBound | UpperBound
+    ;
+
 templateDeclArg
-    :   name=identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) (Equals specializationElement)?
+    :   name=identifier ellipses=Ellipses? ((UpperBound upperBound=type)? (LowerBound lowerBound=type)? | ':' argTy=type?) (Equals specializationElement)?
     ;
 
 templateDecl
@@ -303,6 +310,8 @@ staticPrimaryExpression
     |   staticTupleExpression
     ;
 
+// TODO add static conditional and unary ops!
+
 staticExpressionList
     :   (staticExpression ',')* staticExpression
     ;
@@ -318,7 +327,7 @@ staticPostfixExpression
 
 staticExpression
     :   staticPostfixExpression
-    |   staticExpression identifier staticExpression
+    |   staticExpression (boundOperator | identifier) staticExpression
     ;
 
 tupleType

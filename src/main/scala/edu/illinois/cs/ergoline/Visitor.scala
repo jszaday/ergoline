@@ -1,18 +1,9 @@
 package edu.illinois.cs.ergoline
 
-import java.io.File
-import java.nio.file.Files
 import edu.illinois.cs.ergoline.ErgolineParser._
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirBooleanLiteral,
-  EirCharacterLiteral,
-  EirFloatLiteral,
-  EirIntegerLiteral,
-  EirLiteral,
-  EirStringLiteral
-}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.literals._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
@@ -27,8 +18,10 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
 }
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
+import org.antlr.v4.runtime.tree.ParseTree
 
+import java.io.File
+import java.nio.file.Files
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -930,9 +923,19 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitStaticExpression(ctx: StaticExpressionContext): EirNode =
     visitInfixLikeExpression(ctx)
 
+  override def visitStaticPrimaryExpression(
+      ctx: StaticPrimaryExpressionContext
+  ): EirExpressionNode = {
+    super.visitStaticPrimaryExpression(ctx) match {
+      case x: EirExpressionNode => x
+      case x: EirResolvable[_]  => EirLiteralSymbol(x)(parent)
+      case x                    => Errors.incorrectType(x, classOf[EirExpressionNode])
+    }
+  }
+
   override def visitStaticPostfixExpression(
       ctx: StaticPostfixExpressionContext
-  ): EirNode = {
+  ): EirExpressionNode = {
     if (ctx.staticPrimaryExpression() != null) {
       visitAs[EirExpressionNode](ctx.staticPrimaryExpression())
     } else {
@@ -955,7 +958,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: StaticTupleExpressionContext
   ): EirNode = {
     val expressions = ctx.staticExpressionList().staticExpression()
-    if (expressions.size() == 1) visitAs[EirExpressionNode](expressions.get(0))
+    if (expressions.isEmpty) EirUnitLiteral()(parent)
+    else if (expressions.size() == 1)
+      visitAs[EirExpressionNode](expressions.get(0))
     else {
       enter(
         EirTupleExpression(parent, null),
