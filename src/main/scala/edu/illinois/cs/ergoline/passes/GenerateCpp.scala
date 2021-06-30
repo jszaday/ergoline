@@ -1435,10 +1435,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ((p, ctx.proxy) match {
       case _ if !(x.isEntry || x.isEntryOnly) => None
       case (Some(p), _)                       => p.ordinalFor(x)
-      case (_, Some(p))                       =>
-        // TODO perform a more exacting search here!
-        p.ordinalFor(Find.namedChild[EirMember](ctx.proxy, x.name))
-      case _ => Errors.unreachable()
+      case (_, Some(_))                       => x.ordinal
+      case _                                  => Errors.unreachable()
     }) match {
       case Some(ord) => s"__${x.name}_${ord}__"
       case _         => x.name
