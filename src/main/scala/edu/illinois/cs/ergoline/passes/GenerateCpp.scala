@@ -350,7 +350,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       case _ =>
         val targetTy: EirType = ctx.exprType(x.target)
-        ctx << x.target << fieldAccessorFor(targetTy) << ctx.nameFor(found)
+        val isEntryOnly = found match {
+          case m: EirMember => m.isEntryOnly
+          case _            => false
+        }
+        val targetsSelf = x.target match {
+          case s: EirSymbol[_] =>
+            s.qualifiedName match {
+              case "self" :: Nil => true
+              case _             => false
+            }
+          case _ => false
+        }
+
+        (if (targetsSelf && isEntryOnly) {
+           assert(ctx.proxy.isDefined)
+           ctx << "this"
+         } else {
+           ctx << x.target
+         }) << fieldAccessorFor(targetTy) << ctx.nameFor(found)
     }
   }
 
@@ -959,7 +977,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       asMember(x.disambiguation) match {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
-            if (m.isEntryOnly) { // TODO check whether this is symmetrically handled with (self.<entryOnly>)
+            if (m.isEntryOnly) {
               assert(ctx.proxy.isDefined)
 
               "this"
@@ -970,6 +988,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case _ =>
       }
     }
+    // TODO eliminate redundancy wrt nameForProxyMember
     val m = asMember(x.disambiguation) match {
       case Some(m) if m.isEntryOnly =>
         Some(Find.namedChild[EirMember](ctx.proxy, m.name))
@@ -1412,6 +1431,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  private def nameForProxyMember(p: Option[EirProxy], x: EirMember)(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    ((p, ctx.proxy) match {
+      case _ if !(x.isEntry || x.isEntryOnly) => None
+      case (Some(p), _)                       => p.ordinalFor(x)
+      case (_, Some(p))                       =>
+        // TODO perform a more exacting search here!
+        p.ordinalFor(Find.namedChild[EirMember](ctx.proxy, x.name))
+      case _ => Errors.unreachable()
+    }) match {
+      case Some(ord) => s"__${x.name}_${ord}__"
+      case _         => x.name
+    }
+  }
+
   def nameFor(
       ctx: CodeGenerationContext,
       x: EirNode,
@@ -1457,12 +1492,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             case _ => Errors.unableToResolve(s)
           }
         }
-      case _: EirMember | _: EirFunction if proxy.isDefined =>
-        (x, proxy.flatMap(_.ordinalFor(x))) match {
-          case (x: EirNamedNode, Some(ord)) => s"__${x.name}_${ord}__"
-          case (x: EirNamedNode, _)         => x.name
-          case (_, _)                       => Errors.unreachable()
-        }
+      case m: EirMember if m.isEntryOnly || proxy.isDefined =>
+        nameForProxyMember(
+          {
+            proxy.orElse(m.counterpart.flatMap(_.parent).to[EirProxy])
+          },
+          m
+        )(ctx)
+      case f: EirFunction if proxy.isDefined =>
+        nameForProxyMember(proxy, asMember(opt).get)(ctx)
       case _ if proxy.isDefined =>
         val prefix =
           if (proxy.exists(_.singleton)) "CProxyElement_" else "CProxy_"
