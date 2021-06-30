@@ -748,21 +748,33 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     )
   }
 
-  override def visitConditionalExpression(
-      ctx: ConditionalExpressionContext
+  def visitTernaryLikeExpression(
+      test: ParseTree,
+      ifTrue: ParseTree,
+      ifFalse: ParseTree
   ): EirExpressionNode = {
-    if (ctx.expression() != null) {
+    if (ifTrue != null && ifFalse != null) {
       enter(
         EirTernaryOperator(parent, null, null, null),
         (e: EirTernaryOperator) => {
-          e.test = visitAs[EirExpressionNode](ctx.unaryExpression())
-          e.ifTrue = visitAs[EirExpressionNode](ctx.expression())
-          e.ifFalse = visitAs[EirExpressionNode](ctx.conditionalExpression())
+          e.test = visitAs[EirExpressionNode](test)
+          e.ifTrue = visitAs[EirExpressionNode](ifTrue)
+          e.ifFalse = visitAs[EirExpressionNode](ifFalse)
         }
       )
     } else {
-      visitAs[EirExpressionNode](ctx.unaryExpression())
+      visitAs[EirExpressionNode](test)
     }
+  }
+
+  override def visitConditionalExpression(
+      ctx: ConditionalExpressionContext
+  ): EirExpressionNode = {
+    visitTernaryLikeExpression(
+      ctx.unaryExpression(),
+      ctx.expression(),
+      ctx.conditionalExpression()
+    )
   }
 
   override def visitNewExpression(ctx: NewExpressionContext): EirNew = {
@@ -783,15 +795,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitUnaryExpression(
       ctx: UnaryExpressionContext
   ): EirExpressionNode = {
-    if (ctx.PrefixOp() != null) {
-      enter(
-        EirUnaryExpression(parent, ctx.PrefixOp().getText, null),
-        (u: EirUnaryExpression) =>
-          u.rhs = visitAs[EirExpressionNode](ctx.simpleExpression())
-      )
-    } else {
-      visitAs[EirExpressionNode](ctx.simpleExpression())
-    }
+    visitPrefixLikeExpression(Option(ctx.PrefixOp()), ctx.simpleExpression())
   }
 
   override def visitAwaitExpression(ctx: AwaitExpressionContext): EirNode = {
@@ -933,19 +937,39 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
+  def visitPrefixLikeExpression(
+      opt: Option[ParseTree],
+      rhs: ParseTree
+  ): EirExpressionNode = {
+    opt match {
+      case Some(op) =>
+        enter(
+          EirUnaryExpression(parent, op.getText, null),
+          (x: EirUnaryExpression) => {
+            x.rhs = visitAs[EirExpressionNode](rhs)
+          }
+        )
+      case None => visitAs[EirExpressionNode](rhs)
+    }
+  }
+
+  override def visitStaticConditionalExpression(
+      ctx: StaticConditionalExpressionContext
+  ): EirExpressionNode = {
+    visitTernaryLikeExpression(
+      ctx.staticPrefixExpression(),
+      ctx.staticExpression(),
+      ctx.staticConditionalExpression()
+    )
+  }
+
   override def visitStaticPrefixExpression(
       ctx: StaticPrefixExpressionContext
   ): EirExpressionNode = {
-    if (ctx.PrefixOp() != null) {
-      enter(
-        EirUnaryExpression(parent, ctx.PrefixOp().getText, null),
-        (x: EirUnaryExpression) => {
-          x.rhs = visitAs[EirExpressionNode](ctx.staticPostfixExpression())
-        }
-      )
-    } else {
-      visitAs[EirExpressionNode](ctx.staticPostfixExpression())
-    }
+    visitPrefixLikeExpression(
+      Option(ctx.PrefixOp()),
+      ctx.staticPostfixExpression()
+    )
   }
 
   override def visitStaticPostfixExpression(
@@ -1157,7 +1181,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirTypeAlias(ctx.identifier().getText, null, null)(parent),
       (x: EirTypeAlias) => {
         x.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
-        x.value = visitAs[EirResolvable[EirType]](ctx.`type`())
+        x.value = visitAs[EirLiteral[_]](ctx.staticExpression())
       }
     )
   }

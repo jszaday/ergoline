@@ -1062,22 +1062,16 @@ case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode])
 case class EirTypeAlias(
     var name: String,
     var templateArgs: List[EirTemplateArgument],
-    var value: EirResolvable[EirType]
+    var value: EirLiteral[_]
 )(var parent: Option[EirNode])
     extends EirNamedNode
     with EirType
     with EirSpecializable {
   override def children: Iterable[EirNode] = templateArgs :+ value
 
-  override def resolved: Boolean = value.resolved
+  override def resolved: Boolean = false
 
-  override def resolve(): Seq[EirNode] = {
-    if (templateArgs.nonEmpty) {
-      ???
-    } else {
-      Find.resolutions[EirNode](value).toSeq
-    }
-  }
+  override def resolve(): Seq[EirNode] = Seq(value)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }

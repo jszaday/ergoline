@@ -442,7 +442,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTupleMultiply(
       multiply: EirTupleMultiply
   )(implicit ctx: UnparseContext): String = {
-    s"s${nameFor(multiply.lhs)} .* ${visit(multiply)}"
+    s"${nameFor(multiply.lhs)} .* ${visit(multiply.rhs)}"
   }
 
   override def visitConstantFacade(

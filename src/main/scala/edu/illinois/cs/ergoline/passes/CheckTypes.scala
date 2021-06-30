@@ -4,7 +4,12 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
-import edu.illinois.cs.ergoline.ast.literals.{EirIntegerLiteral, EirLiteral}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirLiteralSymbol,
+  EirLiteralType
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -329,7 +334,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitLiteral(
       value: EirLiteral[_]
   )(implicit ctx: TypeCheckContext): EirType = {
-    globals.typeFor(value)
+    value match {
+      case EirLiteralType(ty)   => visit(ty)
+      case EirLiteralSymbol(ty) => visit(ty)
+      case _                    => globals.typeFor(value)
+    }
   }
 
   def isSelf(value: EirSymbol[_]): Boolean =
@@ -1172,7 +1181,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTypeAlias(
       x: EirTypeAlias
   )(implicit ctx: TypeCheckContext): EirType = {
-    visit(Find.uniqueResolution[EirResolvable[EirType]](x))
+    StaticEvaluator.evaluateToType(x.value)
   }
 
   override def visitTupleMultiply(

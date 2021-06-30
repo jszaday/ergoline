@@ -24,7 +24,7 @@ importStatement
     ;
 
 usingStatement
-    :   'using' identifier templateDecl? Equals type ';'
+    :   'using' identifier templateDecl? Equals staticExpression ';'
     ;
 
 statement
@@ -327,10 +327,12 @@ staticPrefixExpression
     :   PrefixOp? staticPostfixExpression
     ;
 
-// TODO add static conditional!
+staticConditionalExpression
+    :   staticPrefixExpression ('?' staticExpression ':' staticConditionalExpression)?
+    ;
 
 staticExpression
-    :   staticPrefixExpression
+    :   staticConditionalExpression
     |   staticExpression (boundOperator | identifier) staticExpression
     ;
 

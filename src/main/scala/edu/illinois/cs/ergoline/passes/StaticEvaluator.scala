@@ -22,23 +22,44 @@ object StaticEvaluator {
   private def valueWithin(
       x: EirResolvable[_]
   )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
-    evaluate(CheckTypes.visit(x) match {
+    val result = CheckTypes.visit(x)
+
+    result match {
       case x: EirConstantFacade => x.value
       case x: EirType           => EirLiteralType(x)(None)
-    })
+    }
+  }
+
+  def evaluateToType[T <: EirNode](
+      x: T
+  )(implicit ctx: TypeCheckContext): EirType = {
+    val result = evaluate(x)
+
+    result match {
+      case EirLiteralType(ty) => ty
+      case lit                => EirConstantFacade(lit)(None)
+    }
   }
 
   def evaluate(x: EirNode)(implicit ctx: TypeCheckContext): EirLiteral[_] = {
     x match {
-      case x: EirConstantFacade   => x.value
+      case x: EirConstantFacade   => evaluate(x.value)
       case x: EirSymbol[_]        => valueWithin(x)
-      case x: EirLiteralSymbol    => valueWithin(x.value)
-      case x: EirLiteral[_]       => x
+      case x: EirLiteral[_]       => evaluate(x)
       case x: EirTupleExpression  => evaluate(x)
       case x: EirBinaryExpression => evaluate(x)
       case x: EirUnaryExpression  => evaluate(x)
       case x: EirArrayReference   => evaluate(x)
       case _                      => Errors.invalidConstExpr(x)
+    }
+  }
+
+  def evaluate(
+      x: EirLiteral[_]
+  )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
+    x match {
+      case x: EirLiteralSymbol => valueWithin(x.value)
+      case _                   => x
     }
   }
 
