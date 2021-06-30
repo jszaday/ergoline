@@ -310,8 +310,6 @@ staticPrimaryExpression
     |   staticTupleExpression
     ;
 
-// TODO add static conditional and unary ops!
-
 staticExpressionList
     :   (staticExpression ',')* staticExpression
     ;
@@ -325,8 +323,14 @@ staticPostfixExpression
     |   staticPostfixExpression '[' staticExpressionList ']'
     ;
 
+staticPrefixExpression
+    :   PrefixOp? staticPostfixExpression
+    ;
+
+// TODO add static conditional!
+
 staticExpression
-    :   staticPostfixExpression
+    :   staticPrefixExpression
     |   staticExpression (boundOperator | identifier) staticExpression
     ;
 

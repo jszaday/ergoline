@@ -36,6 +36,7 @@ object StaticEvaluator {
       case x: EirLiteral[_]       => x
       case x: EirTupleExpression  => evaluate(x)
       case x: EirBinaryExpression => evaluate(x)
+      case x: EirUnaryExpression  => evaluate(x)
       case x: EirArrayReference   => evaluate(x)
       case _                      => Errors.invalidConstExpr(x)
     }
@@ -64,6 +65,17 @@ object StaticEvaluator {
     assert(x.children.size > 1)
 
     EirLiteralTuple(x.children.map(evaluate(_)).toList)(None)
+  }
+
+  def evaluate(
+      expr: EirUnaryExpression
+  )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
+    (expr.op, evaluate(expr.rhs)) match {
+      case ("!", EirBooleanLiteral(x)) => mkBoolLiteral(!x)
+      case ("+", EirIntegerLiteral(x)) => mkIntLiteral(+x)
+      case ("-", EirIntegerLiteral(x)) => mkIntLiteral(-x)
+      case _                           => Errors.unknownOperator(expr, expr.op)
+    }
   }
 
   def evaluate(

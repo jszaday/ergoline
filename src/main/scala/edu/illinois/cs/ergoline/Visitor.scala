@@ -933,6 +933,21 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
+  override def visitStaticPrefixExpression(
+      ctx: StaticPrefixExpressionContext
+  ): EirExpressionNode = {
+    if (ctx.PrefixOp() != null) {
+      enter(
+        EirUnaryExpression(parent, ctx.PrefixOp().getText, null),
+        (x: EirUnaryExpression) => {
+          x.rhs = visitAs[EirExpressionNode](ctx.staticPostfixExpression())
+        }
+      )
+    } else {
+      visitAs[EirExpressionNode](ctx.staticPostfixExpression())
+    }
+  }
+
   override def visitStaticPostfixExpression(
       ctx: StaticPostfixExpressionContext
   ): EirExpressionNode = {

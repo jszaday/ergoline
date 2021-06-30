@@ -57,4 +57,9 @@ class EirConstexprTests extends FunSuite {
     val result = evaluateExpression(parseExpression("iterable<int> >: range<int>"))
     result.toBoolean shouldEqual true
   }
+
+  test("prefix op check") {
+    val result = evaluateExpression(parseExpression("!(-(0 - 5) <= 0)"))
+    result.toBoolean shouldEqual true
+  }
 }
