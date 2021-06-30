@@ -988,13 +988,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case _ =>
       }
     }
-    // TODO eliminate redundancy wrt nameForProxyMember
-    val m = asMember(x.disambiguation) match {
-      case Some(m) if m.isEntryOnly =>
-        Some(Find.namedChild[EirMember](ctx.proxy, m.name))
-      case _ => None
-    }
-    ctx << m.map(ctx.nameFor(_)).getOrElse(ctx.nameFor(x, Some(x)))
+
+    ctx << asMember(x.disambiguation)
+      .filter(_.isEntryOnly)
+      .map(ctx.nameFor(_))
+      .getOrElse(ctx.nameFor(x, Some(x)))
   }
 
   override def visitDeclaration(
