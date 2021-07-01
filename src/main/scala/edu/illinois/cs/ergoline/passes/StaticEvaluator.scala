@@ -12,10 +12,11 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 import scala.annotation.tailrec
+import scala.reflect.ClassTag
 
 object StaticEvaluator {
 
@@ -47,8 +48,9 @@ object StaticEvaluator {
       case x: EirSymbol[_]        => valueWithin(x)
       case x: EirLiteral[_]       => evaluate(x)
       case x: EirTupleExpression  => evaluate(x)
-      case x: EirBinaryExpression => evaluate(x)
       case x: EirUnaryExpression  => evaluate(x)
+      case x: EirBinaryExpression => evaluate(x)
+      case x: EirTernaryOperator  => evaluate(x)
       case x: EirArrayReference   => evaluate(x)
       case _                      => Errors.invalidConstExpr(x)
     }
@@ -100,15 +102,28 @@ object StaticEvaluator {
   }
 
   def evaluate(
+      expr: EirTernaryOperator
+  )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
+    if (valueAs[Boolean](() => evaluate(expr.test))) {
+      evaluate(expr.ifTrue)
+    } else {
+      evaluate(expr.ifFalse)
+    }
+  }
+
+  def evaluate(
       expr: EirBinaryExpression
   )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
-    (evaluate(expr.lhs), evaluate(expr.rhs)) match {
-      case (EirIntegerLiteral(x), EirIntegerLiteral(y)) =>
-        evaluateIntBinop(x, expr, y)
-      case (EirBooleanLiteral(x), EirBooleanLiteral(y)) =>
-        evaluateBoolBinop(x, expr, y)
-      case (EirLiteralType(x), EirLiteralType(y)) =>
-        evaluateTypeBinop(x, expr, y)
+    val lhs = evaluate(expr.lhs)
+    val rhs = () => evaluate(expr.rhs)
+
+    lhs match {
+      case EirIntegerLiteral(x) =>
+        evaluateIntBinop(x, expr, valueAs[Int](rhs))
+      case EirBooleanLiteral(x) =>
+        evaluateBoolBinop(x, expr, rhs)
+      case EirLiteralType(x) =>
+        evaluateTypeBinop(x, expr, valueAs[EirType](rhs))
       case _ => Errors.unknownOperator(expr, expr.op)
     }
   }
@@ -119,6 +134,10 @@ object StaticEvaluator {
 
   private def mkIntLiteral(x: Int): EirLiteral[_] = {
     EirIntegerLiteral(x)(None)
+  }
+
+  def valueAs[A: ClassTag](rhs: () => EirLiteral[_]): A = {
+    assertValid[EirLiteral[A]](rhs()).value
   }
 
   def evaluateTypeBinop(
@@ -138,14 +157,25 @@ object StaticEvaluator {
   private def evaluateBoolBinop(
       lval: Boolean,
       x: EirBinaryExpression,
-      rval: Boolean
+      rhs: () => EirLiteral[_]
   ): EirLiteral[_] = {
     x.op match {
-      case "&&" => mkBoolLiteral(lval && rval)
-      case "||" => mkBoolLiteral(lval && rval)
-      case "==" => mkBoolLiteral(lval == rval)
-      case "!=" => mkBoolLiteral(lval != rval)
-      case _    => Errors.unknownOperator(x, x.op)
+      case "&&" =>
+        mkBoolLiteral(if (lval) {
+          valueAs[Boolean](rhs)
+        } else false)
+      case "||" =>
+        mkBoolLiteral(
+          if (lval) true
+          else {
+            valueAs[Boolean](rhs)
+          }
+        )
+      case "==" =>
+        mkBoolLiteral(lval == valueAs[Boolean](rhs))
+      case "!=" =>
+        mkBoolLiteral(lval != valueAs[Boolean](rhs))
+      case _ => Errors.unknownOperator(x, x.op)
     }
   }
 

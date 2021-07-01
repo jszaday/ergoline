@@ -62,4 +62,9 @@ class EirConstexprTests extends FunSuite {
     val result = evaluateExpression(parseExpression("!(-(0 - 5) <= 0)"))
     result.toBoolean shouldEqual true
   }
+
+  test("conditional op check") {
+    val result = evaluateExpression(parseExpression("(((1 >= 0) ? int : bool) == int) && (((1 < 0) ? int : bool) == bool)"))
+    result.toBoolean shouldEqual true
+  }
 }
