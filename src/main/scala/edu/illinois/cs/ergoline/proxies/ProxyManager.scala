@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline.proxies
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirLiteralTypes}
+import edu.illinois.cs.ergoline.ast.EirClassLike
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
@@ -28,7 +28,7 @@ object ProxyManager {
     Map()
 
   def registeredIndices(): Set[EirType] = {
-    (globals.typeFor(EirLiteralTypes.Integer) +: _proxies.values
+    (globals.integerType +: _proxies.values
       .flatMap(_.indexType)
       .toList).toSet
   }

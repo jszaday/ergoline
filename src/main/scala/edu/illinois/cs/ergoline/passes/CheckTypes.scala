@@ -4,6 +4,12 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirLiteralSymbol,
+  EirLiteralType
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -68,10 +74,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         case tupleType: EirTupleType =>
           val lit = Option
             .when(x.args.length == 1)(x.args.head)
-            .map(evaluateConstExpr(_))
-          val idx = lit.collect {
-            case x if x.`type` == EirLiteralTypes.Integer => x.toInt
-          }
+            .map(StaticEvaluator.evaluate(_))
+          val idx = lit.map(_.toInt)
           if (idx.exists(_ < tupleType.children.length)) {
             visit(tupleType.children(idx.get))
           } else {
@@ -328,9 +332,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitLiteral(
-      value: EirLiteral
+      value: EirLiteral[_]
   )(implicit ctx: TypeCheckContext): EirType = {
-    globals.typeFor(value)
+    value match {
+      case EirLiteralType(ty)   => visit(ty)
+      case EirLiteralSymbol(ty) => visit(ty)
+      case _                    => globals.typeFor(value)
+    }
   }
 
   def isSelf(value: EirSymbol[_]): Boolean =
@@ -608,7 +616,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       .toList
 
     if (retTys.isEmpty) {
-      globals.typeFor(EirLiteralTypes.Unit)
+      globals.unitType
     } else {
       Find.unionType(retTys) match {
         case Some(x) => x
@@ -785,7 +793,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       node: EirBinaryExpression
   )(implicit ctx: TypeCheckContext): EirType = {
     val op = node.op
-    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
+    val boolTy = globals.boolType
     val (lhsTy, rhsTy) = (visit(node.lhs), visit(node.rhs))
 
     if (globals.isIdentityComparator(op)) {
@@ -817,7 +825,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           None,
           f,
           op,
-          EirLiteral(None, EirLiteralTypes.Integer, "0")
+          EirIntegerLiteral(0)(None)
         )
         node.disambiguation = Some(g)
         visit(f)
@@ -1031,7 +1039,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     checkCondition(x.condition)
 
     visit(x.patterns)
-    x.body.map(visit(_)).getOrElse(globals.typeFor(EirLiteralTypes.Unit))
+    x.body.map(visit(_)).getOrElse(globals.unitType)
   }
 
   override def visitPatternList(
@@ -1173,44 +1181,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTypeAlias(
       x: EirTypeAlias
   )(implicit ctx: TypeCheckContext): EirType = {
-    visit(Find.uniqueResolution[EirResolvable[EirType]](x))
-  }
-
-  @tailrec
-  def valueWithin(
-      x: EirResolvable[_]
-  )(implicit ctx: TypeCheckContext): EirLiteral = {
-    Find.uniqueResolution[EirNode](x) match {
-      case y: EirConstantFacade   => y.value
-      case x: EirTemplateArgument => valueWithin(visit(x))
-      case _                      => Errors.unableToResolve(x)
-    }
-  }
-
-  def evaluateConstExpr(
-      expr: EirExpressionNode
-  )(implicit ctx: TypeCheckContext): EirLiteral = {
-    expr match {
-      case x: EirSymbol[_] => valueWithin(x)
-      case x: EirLiteral   => x
-      case _               => Errors.invalidConstExpr(expr)
-    }
+    StaticEvaluator.evaluateToType(x.value)
   }
 
   override def visitTupleMultiply(
       multiply: types.EirTupleMultiply
   )(implicit ctx: TypeCheckContext): EirType = {
     val lhs = visit(multiply.lhs)
-    val rhs = evaluateConstExpr(multiply.rhs)
-    val intTy = EirLiteralTypes.Integer
-    if (rhs.`type` != intTy) {
-      Errors.unableToUnify(multiply, visit(rhs), globals.typeFor(intTy))
-    } else {
-      rhs.toInt match {
-        case 0 => globals.unitType
-        case 1 => lhs
-        case n => ctx.getTupleType(List.fill(n)(lhs))
-      }
+    val rhs = StaticEvaluator.evaluate(multiply.rhs)
+
+    rhs match {
+      case EirIntegerLiteral(0) => globals.unitType
+      case EirIntegerLiteral(1) => lhs
+      case EirIntegerLiteral(n) => ctx.getTupleType(List.fill(n)(lhs))
+      case _                    => Errors.cannotCast(multiply, rhs.`type`, globals.integerType)
     }
   }
 
@@ -1221,7 +1205,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def checkCondition(
       x: EirExpressionNode
   )(implicit ctx: TypeCheckContext): Unit = {
-    val boolTy = globals.typeFor(EirLiteralTypes.Boolean)
+    val boolTy = globals.boolType
     val condTy = visit(x)
     if (!condTy.canAssignTo(boolTy)) {
       Errors.cannotCast(x, condTy, boolTy)
@@ -1262,12 +1246,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val isHead = arrRef.flatMap(_.args.headOption).contains(slice)
     val isLast = arrRef.flatMap(_.args.lastOption).contains(slice)
     val targetType = arrRef.map(_.target).map(visit)
-    val one = EirLiteral(None, EirLiteralTypes.Integer, "1")
+    val one = EirIntegerLiteral(1)(None)
 
     // TODO changeover to begin/end using iterators/indices?
     val start = slice.start getOrElse {
       if (isHead) {
-        EirLiteral(None, EirLiteralTypes.Integer, "0")
+        EirIntegerLiteral(0)(None)
       } else {
         val prev = arrRef
           .map(_.args.indexOf(slice) - 1)

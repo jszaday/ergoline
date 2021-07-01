@@ -24,7 +24,7 @@ importStatement
     ;
 
 usingStatement
-    :   'using' identifier templateDecl? Equals type ';'
+    :   'using' identifier templateDecl? Equals staticExpression ';'
     ;
 
 statement
@@ -94,6 +94,7 @@ identifier
     |   ExpansionOp
     |   LeftShift
     |   RightShift
+    |   WhereKwd
     ;
 
 identifierList
@@ -121,8 +122,15 @@ block
     :   '{' statement* '}'
     ;
 
+LowerBound : '>:' ;
+UpperBound : '<:' ;
+
+boundOperator
+    :   LowerBound | UpperBound
+    ;
+
 templateDeclArg
-    :   name=identifier ellipses=Ellipses? (('<:' upperBound=type)? ('>:' lowerBound=type)? | ':' argTy=type?) (Equals specializationElement)?
+    :   name=identifier ellipses=Ellipses? ((UpperBound upperBound=type)? (LowerBound lowerBound=type)? | ':' argTy=type?) (Equals specializationElement)?
     ;
 
 templateDecl
@@ -137,8 +145,12 @@ inheritanceDecl
     :   ('extends' type)? ('with' type ('and' type)*)?
     ;
 
+whereClause
+    :   WhereKwd staticExpression
+    ;
+
 classDeclaration
-    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) identifier templateDecl? inheritanceDecl '{' annotatedMember* '}'
+    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) identifier templateDecl? inheritanceDecl whereClause? '{' annotatedMember* '}'
     ;
 
 annotatedMember
@@ -292,14 +304,41 @@ typeList
     :   (type ',')* type
     ;
 
-constExpression
-    :   constant
-    |   fqn
+staticPrimaryExpression
+    :   type
+    |   constant
+    |   staticTupleExpression
+    ;
+
+staticExpressionList
+    :   (staticExpression ',')* staticExpression
+    ;
+
+staticTupleExpression
+    :   '(' staticExpressionList ')'
+    ;
+
+staticPostfixExpression
+    :   staticPrimaryExpression
+    |   staticPostfixExpression '[' staticExpressionList ']'
+    ;
+
+staticPrefixExpression
+    :   PrefixOp? staticPostfixExpression
+    ;
+
+staticConditionalExpression
+    :   staticPrefixExpression ('?' staticExpression ':' staticConditionalExpression)?
+    ;
+
+staticExpression
+    :   staticConditionalExpression
+    |   staticExpression (boundOperator | identifier) staticExpression
     ;
 
 tupleType
     :   '(' typeList ')'
-    |   tupleType multiply='.*' constExpression
+    |   tupleType multiply='.*' staticPrimaryExpression
     ;
 
 specializationElement
@@ -421,6 +460,7 @@ TrueKwd : 'true' ;
 FalseKwd : 'false' ;
 StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
+WhereKwd : 'where' ;
 
 fragment Sign
     :   '+' | '-'

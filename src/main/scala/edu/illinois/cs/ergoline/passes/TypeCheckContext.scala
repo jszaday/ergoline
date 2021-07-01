@@ -20,10 +20,20 @@ import scala.reflect.ClassTag
 
 object TypeCheckContext {
   type Context = (Option[EirClassLike], Option[EirSpecialization])
+
+  // B >: A refers to B is a supertype of A
+  def lowerBound(x: EirType, y: EirType): Boolean = {
+    Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
+  }
+
+  // B <: A refers to B is a subtype of A
+  def upperBound(x: EirType, y: EirType): Boolean = {
+    Find.asClassLike(y).isDescendantOf(Find.asClassLike(x))
+  }
 }
 
 class TypeCheckContext {
-  import TypeCheckContext.Context
+  import TypeCheckContext._
 
   object TypeCheckSyntax {
     implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
@@ -49,21 +59,11 @@ class TypeCheckContext {
           ) && (
             // Upper Bounds:
             // a must be a subclass of b
-            ub.zip(Some(b)) map {
-              case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
-            } forall {
-              case (a, b) => b.isDescendantOf(a)
-              case _      => false
-            }
+            ub.forall(a => upperBound(a, b))
           ) && (
             // Lower Bounds:
             // a must be a supertype of b
-            lb.zip(Some(b)) map {
-              case (a, b) => (Find.asClassLike(a), Find.asClassLike(b))
-            } forall {
-              case (a, b) => a.isDescendantOf(b)
-              case _      => false
-            }
+            lb.forall(a => lowerBound(a, b))
           )
         })
       }

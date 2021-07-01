@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
@@ -248,9 +249,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     value.qualifiedName mkString "::"
   }
 
-  override def visitLiteral(value: EirLiteral)(implicit
+  override def visitLiteral(x: EirLiteral[_])(implicit
       ctx: UnparseContext
-  ): String = value.value
+  ): String = x.value.toString
 
   override def visitWhileLoop(
       loop: EirWhileLoop
@@ -427,8 +428,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       x: EirInterpolatedString
   )(implicit ctx: UnparseContext): String = {
     "`" + (x.children.map {
-      case x: EirLiteral => x.value
-      case x             => "${" + visit(x) + "}"
+      case EirStringLiteral(value) => value
+      case x                       => "${" + visit(x) + "}"
     } mkString "") + "`"
   }
 
@@ -441,7 +442,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTupleMultiply(
       multiply: EirTupleMultiply
   )(implicit ctx: UnparseContext): String = {
-    s"s${nameFor(multiply.lhs)} .* ${visit(multiply)}"
+    s"${nameFor(multiply.lhs)} .* ${visit(multiply.rhs)}"
   }
 
   override def visitConstantFacade(

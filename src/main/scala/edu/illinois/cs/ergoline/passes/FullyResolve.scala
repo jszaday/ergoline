@@ -19,7 +19,7 @@ object FullyResolve {
         // TODO this PROBABLY should happen somewhere else.
         Processes.cppIncludes ++= x
           .annotation("system")
-          .flatMap(_.opts.get("fromHeader").map(_.stripped))
+          .flatMap(_.opts.get("fromHeader").map(_.strip()))
         x
       case child => seekImports(child, stack :+ node)
     })

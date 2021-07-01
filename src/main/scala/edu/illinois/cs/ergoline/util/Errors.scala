@@ -59,6 +59,10 @@ object Errors {
     exit(format(ctx, "%s cannot be cast to %s", a, b))
   }
 
+  def cannotCast(ctx: EirNode, a: String, b: EirType): Nothing = {
+    exit(format(ctx, "%s cannot be cast to %s", a, b))
+  }
+
   def missingField(ctx: EirNode, a: EirType, field: String): Nothing = {
     exit(format(ctx, "cannot resolve field '%s' of %s", field, a))
   }
@@ -103,7 +107,7 @@ object Errors {
   }
 
   def invalidTupleIndices(
-      tuple: EirTupleType,
+      tuple: EirNode,
       nodes: Iterable[EirNode]
   ): Nothing = {
     exit(
@@ -230,6 +234,10 @@ object Errors {
 
   def missingSuperConstructor(cons: EirMember): Nothing = {
     exit(format(cons, "%s must call super constructor", cons))
+  }
+
+  def cannotStrip(x: EirNode): Nothing = {
+    exit(format(x, "unable to strip value of %s", x))
   }
 
   def expectedParameterPack(expansion: EirPackExpansion): Nothing = {

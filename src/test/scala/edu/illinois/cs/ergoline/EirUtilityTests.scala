@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirUnitLiteral}
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
@@ -19,7 +20,7 @@ class EirUtilityTests extends FunSuite {
       parserFromString("{ val x : int = 42; val y : int = 16; }").block())
     // test a fairly elaborate query
     val pos =
-      Find.within[EirLiteral](b, _.value == "16")
+      Find.within[EirLiteral[_]](b, _.toInt == 16)
         .flatMap(b.findPositionOf(_)).headOption
     pos shouldEqual Some(1)
     b.children.zipWithIndex.foreach({
@@ -27,7 +28,7 @@ class EirUtilityTests extends FunSuite {
         Option.when(!x.isInstanceOf[EirResolvable[_]])(b.findPositionOf(x) shouldEqual Some(i))
       })
     })
-    val dummy = EirLiteral(None, null, null)
+    val dummy = EirUnitLiteral()(None)
     b.findPositionOf(dummy) shouldEqual None
   }
 

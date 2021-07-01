@@ -1,13 +1,14 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirUnitLiteral}
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode =
-    EirLiteral(parent, EirLiteralTypes.Unit, "()")
+    EirUnitLiteral()(parent)
 
   var strict: Boolean = false
   var verbose: Boolean = false
@@ -97,28 +98,28 @@ package object globals {
     Find.namedChild[EirClassLike](ckModule, "proxy")
   }
 
-  def unitType: EirType = typeFor(EirLiteralTypes.Unit)
+  def unitType: EirType = typeFor("unit")
 
-  def stringType: EirType = typeFor(EirLiteralTypes.String)
+  def stringType: EirType = typeFor("string")
 
-  def boolType: EirType = typeFor(EirLiteralTypes.Boolean)
+  def boolType: EirType = typeFor("bool")
+
+  def integerType: EirType = typeFor("int")
 
   def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
   def ergolineModule: Option[EirNamedNode] =
     Modules("ergoline", EirGlobalNamespace)
 
-  def typeFor(litTy: EirLiteralTypes.Value): EirType = {
-    val name: String =
-      if (litTy == EirLiteralTypes.Float) "double"
-      else litTy.toString.toLowerCase
+  private def typeFor(name: String): EirType = {
     this.ergolineModule
       .flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
       .collect({
         case f: EirFileSymbol => Find.uniqueResolution[EirClassLike](f)
         case c: EirClassLike  => c
       })
-      .getOrElse(throw new RuntimeException(s"could not find type of $litTy"))
+      .getOrElse(throw new RuntimeException(s"could not find type $name"))
   }
 
-  def typeFor(literal: EirLiteral): EirType = typeFor(literal.`type`)
+  def typeFor(literal: EirLiteral[_]): EirType =
+    typeFor(literal.`type`) // typeFor(literal.`type`)
 }

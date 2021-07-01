@@ -71,7 +71,7 @@ object TypeCompatibility {
         case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
           x.base.canAssignTo(y)
         case (x: EirConstantFacade, y: EirConstantFacade) =>
-          x.value.equivalentTo(y.value)
+          x.value.equals(y.value)
         case _ => false
       })
   }

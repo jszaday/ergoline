@@ -1,5 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirStringLiteral,
+  EirUnitLiteral
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -521,9 +527,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val annotation =
       target.flatMap(_.annotation("system")).flatMap(_("reducer"))
     annotation match {
-      case Some(l @ EirLiteral(_, EirLiteralTypes.String, _)) =>
-        ctx << l.stripped
-      case _ => Errors.expectedReducer(_target)
+      case Some(x: EirStringLiteral) => ctx << x.strip()
+      case _                         => Errors.expectedReducer(_target)
     }
   }
 
@@ -741,7 +746,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val invOp = if (invert) "!" else ""
     val cast = system("cast").exists(_.toBoolean)
     val name =
-      system("alias").map(_.stripped).getOrElse(ctx.nameFor(disambiguated))
+      system("alias").map(_.strip()).getOrElse(ctx.nameFor(disambiguated))
     disambiguated match {
       case _ if operator =>
         val flattened = flattenArgs(args)
@@ -953,12 +958,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitLiteral(
-      x: EirLiteral
+      x: EirLiteral[_]
   )(implicit ctx: CodeGenerationContext): Unit = {
-    x.`type` match {
-      case EirLiteralTypes.Unit   =>
-      case EirLiteralTypes.String => ctx << s"std::string(${x.value})"
-      case _                      => ctx << x.value
+    x match {
+      case EirStringLiteral(value) => ctx << s"std::string($value)"
+      case EirUnitLiteral(_)       =>
+      case _                       => ctx << x.value.toString
     }
   }
 
@@ -1448,7 +1453,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   ): String = {
     val system = x.annotation("system")
     val alias =
-      system.flatMap(_("alias")).map(_.stripped)
+      system.flatMap(_("alias")).map(_.strip())
     val isOperator = system.flatMap(_("operator")).exists(_.toBoolean)
     val dealiased = alias
       .orElse(x match {
@@ -1539,7 +1544,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t: EirTupleType =>
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
       case _: EirNamedNode      => dealiased.get
-      case s: EirConstantFacade => s.value.value
+      case s: EirConstantFacade => s.value.toString
       case x: EirLambdaExpression =>
         _lambda_names.get(x) match {
           case Some(name) => name
@@ -1925,7 +1930,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val exprType = parent.map(_.expression).map(ctx.exprType)
     val isUnit = parent
       .map(ctx.exprType)
-      .contains(globals.typeFor(EirLiteralTypes.Unit))
+      .contains(globals.unitType)
     ctx << "{" << visitPatternDecl(ctx, x.patterns, ctx.temporary).split(n)
     val conditions = visitPatternCond(ctx, x.patterns, ctx.temporary, exprType)
       .mkString(" && ")
@@ -1962,19 +1967,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .flatMap(x => if (!x.isElement) x.collective else None)
     ty match {
       case tty: EirTupleType =>
-        val arg = arrayRef.args.headOption.map(
-          CheckTypes.evaluateConstExpr(_)(ctx.typeContext)
-        )
+        val arg = arrayRef.args.headOption.map(ctx.eval2const(_))
         arg match {
-          case Some(x) =>
+          case Some(EirIntegerLiteral(x)) =>
             ctx << {
               // TODO eliminate this once (array::shape) is fixed?
-              val thisTy = ctx.resolve(tty.children(x.toInt))
+              val thisTy = ctx.resolve(tty.children(x))
               Option.unless(thisTy.isPointer)(
                 "(" + ctx.typeFor(thisTy, Some(arrayRef)) + ")"
               )
-            } << s"std::get<" << x << ">(" << arrayRef.target << ")"
-          case None => Errors.invalidTupleIndices(tty, arrayRef.args)
+            } << s"std::get<" << x.toString << ">(" << arrayRef.target << ")"
+          case _ => Errors.invalidTupleIndices(tty, arrayRef.args)
         }
       case _ if collective.isDefined =>
         ctx << arrayRef.target << "[" << "hypercomm::conv2idx<CkArrayIndex>(" << {
@@ -2086,7 +2089,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def isPlainArrayRef(x: EirArrayReference): Boolean = {
     val system = arrayRefIsSystem(x)
-    system.flatMap(_("alias").map(_.stripped)).contains("[]")
+    system.flatMap(_("alias").map(_.strip())).contains("[]")
   }
 
   def implicitCast(
@@ -2164,8 +2167,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         // TODO is this right?? Idk...
         case x if x.disambiguation.isDefined =>
           ctx << "(([&](){ return " << visit(x.disambiguation.get) << "; })())"
-        case x: EirLiteral if !x.value.startsWith("\"") =>
-          ctx << escapeInterpString(x.value)
+        case EirStringLiteral(value) if !value.startsWith("\"") =>
+          ctx << escapeInterpString(value)
         case _ => ctx << x
       }
     }

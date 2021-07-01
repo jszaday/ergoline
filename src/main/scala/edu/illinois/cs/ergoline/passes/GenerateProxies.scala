@@ -334,9 +334,7 @@ object GenerateProxies {
     } else {
       if (isAsync) {
         ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
-      } else if (
-        ctx.resolve(f.returnType) != globals.typeFor(EirLiteralTypes.Unit)
-      ) {
+      } else if (ctx.resolve(f.returnType) != globals.unitType) {
         ctx << "return "
       }
       makeEntryBody(ctx, x)
