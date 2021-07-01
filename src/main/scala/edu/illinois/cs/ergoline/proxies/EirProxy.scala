@@ -1,23 +1,15 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{
-  EirElementProxy,
-  EirLambdaType,
-  EirProxyKind,
-  EirSectionProxy,
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
-import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
   RichResolvableTypeIterable
 }
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.{globals, util}
 
 case class EirProxy(
     var parent: Option[EirNode],
@@ -30,6 +22,9 @@ case class EirProxy(
 
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)
+
+  def predicate: Option[EirExpressionNode] = base.predicate
+  override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???
 
   override def selfDeclarations: List[EirMember] =
     base.selfDeclarations ++ {

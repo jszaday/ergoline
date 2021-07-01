@@ -37,7 +37,7 @@ class EirUtilityTests extends FunSuite {
     val symbols = Find.within[EirSymbol[EirNamedNode]](foo, _ => true)
     val found = symbols.headOption.map(Find.uniqueResolution[EirNode](_))
     found should matchPattern {
-      case Some(EirClass(_, _, "bar", _, _, _, _)) =>
+      case Some(c: EirClass) if c.name == "bar" =>
     }
   }
 

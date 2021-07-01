@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace, EirNode, EirTrait}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNode, EirTrait}
 import edu.illinois.cs.ergoline.passes.{CheckConstructors, CheckEnclose, CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors.EirException
@@ -102,5 +102,29 @@ class EirConstructorTests extends FunSuite {
       case c: EirTrait if c.name == "c" => c
     })
     c.map(_.derived.toList.length) shouldEqual Some(3)
+  }
+
+  private def enablerCheckModule(pass: Boolean): EirNode = {
+    val clause = s"${if (pass) "" else "!"}(A <: a)"
+    EirImportTests.setupEnv()
+    Modules.load(
+      s"""package foo;
+         |trait a { }
+         |trait b extends a { }
+         |class c<A> where $clause { }
+         |class d {
+         |  var e: c<b>;
+         |}
+         |""".stripMargin
+    )
+  }
+
+  test("enabler check (should fail)") {
+    val module = enablerCheckModule(false)
+    assertThrows[EirException](CheckTypes.visit(module))
+  }
+
+  test("enabler check (should pass)") {
+    CheckTypes.visit(enablerCheckModule(true))
   }
 }

@@ -251,9 +251,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       val isClass = ctx.ClassKwd() != null
       val isStruct = ctx.StructKwd() != null
       if (isClass || isStruct) {
-        EirClass(parent, null, name, null, None, Nil, isStruct)
+        EirClass(parent, null, name, null, None, Nil, None, isStruct)
       } else {
-        EirTrait(parent, null, name, null, None, Nil)
+        EirTrait(parent, null, name, null, None, Nil, None)
       }
     }
     enter(
@@ -263,6 +263,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
         c.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
         c.members = ctx.mapOrEmpty(_.annotatedMember, visitAs[EirMember])
+        c.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
       }
     )
   }

@@ -267,12 +267,18 @@ object EirClassLike {
   }
 }
 
+trait EirPredicated {
+  def predicate: Option[EirExpressionNode]
+  def predicate_=(expr: Option[EirExpressionNode]): Unit
+}
+
 trait EirClassLike
     extends EirNode
+    with EirType
     with EirScope
     with EirNamedNode
-    with EirType
-    with EirSpecializable {
+    with EirSpecializable
+    with EirPredicated {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
@@ -310,7 +316,7 @@ trait EirClassLike
   def hasMember(name: String): Boolean = member(name).isDefined
 
   override def children: List[EirNode] =
-    templateArgs ++ extendsThis ++ implementsThese ++ members
+    templateArgs ++ extendsThis ++ implementsThese ++ predicate ++ members
 
   def needsInitialization: List[EirMember] =
     members.collect {
@@ -363,6 +369,7 @@ case class EirClass(
     var templateArgs: List[EirTemplateArgument],
     var extendsThis: Option[EirResolvable[EirType]],
     var implementsThese: List[EirResolvable[EirType]],
+    var predicate: Option[EirExpressionNode],
     var valueType: Boolean = false
 ) extends EirNode
     with EirClassLike
@@ -373,7 +380,8 @@ case class EirTrait(
     var name: String,
     var templateArgs: List[EirTemplateArgument],
     var extendsThis: Option[EirResolvable[EirType]],
-    var implementsThese: List[EirResolvable[EirType]]
+    var implementsThese: List[EirResolvable[EirType]],
+    var predicate: Option[EirExpressionNode]
 ) extends EirNode
     with EirClassLike {
   isAbstract = true
