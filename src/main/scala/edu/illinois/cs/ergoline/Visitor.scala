@@ -363,7 +363,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(
-      EirFunction(parent, None, ctx.identifier().getText, Nil, Nil, Nil, null),
+      EirFunction(parent, None, ctx.identifier().getText, Nil, Nil, Nil, null, None),
       (f: EirFunction) => {
         f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
         f.functionArgs = ctx.functionArgumentList
@@ -375,6 +375,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         f.returnType = Option(ctx.`type`())
           .map(visitAs[EirResolvable[EirType]](_))
           .getOrElse(globals.unitType)
+        f.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
         f.body = Option(ctx.block()).map(visitAs[EirBlock])
       }
     )

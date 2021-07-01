@@ -491,10 +491,12 @@ case class EirFunction(
     var templateArgs: List[EirTemplateArgument],
     var functionArgs: List[EirFunctionArgument],
     var implicitArgs: List[EirFunctionArgument],
-    var returnType: EirResolvable[EirType]
+    var returnType: EirResolvable[EirType],
+    var predicate: Option[EirExpressionNode]
 ) extends EirNode
     with EirScope
     with EirNamedNode
+    with EirPredicated
     with EirSpecializable {
   override def children: Iterable[EirNode] =
     body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType

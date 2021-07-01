@@ -34,7 +34,7 @@ package object util {
   ): EirMember = {
     val m = EirMember(Some(parent), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
-    val f = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy)
+    val f = EirFunction(Some(m), None, name, Nil, Nil, Nil, retTy, None)
     m.member = f
     args.foreach(_.parent = Some(f))
     f.functionArgs = args

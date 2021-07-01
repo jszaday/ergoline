@@ -63,6 +63,10 @@ object CheckFunctions {
     val mailbox = member.exists(_.isMailbox)
     val hasBody = function.body.isDefined
 
+    if (function.templateArgs.isEmpty && function.predicate.nonEmpty) {
+      ???
+    }
+
     if (system.isDefined || mailbox) {
       if (hasBody) Errors.systemFnHasBody(function)
     } else if (!hasBody && !member.exists(_.base.isAbstract)) {

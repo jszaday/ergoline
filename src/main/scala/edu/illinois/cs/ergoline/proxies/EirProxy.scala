@@ -74,7 +74,7 @@ case class EirProxy(
     val m = EirMember(Some(this), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
     val f =
-      EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType)
+      EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType, None)
     val (from, to) =
       (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
     val (fromExp, toExp) =
@@ -137,7 +137,8 @@ case class EirProxy(
       theirs.templateArgs,
       null,
       null,
-      null
+      null,
+      theirs.predicate
     )
     ours.returnType = if (isAsync) {
       EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))
