@@ -12,16 +12,16 @@ import java.nio.file.Paths
 class EirProcessTests extends FunSuite {
   Errors.useDebugAction()
 
-  def files(path: String = "examples"): List[File] =
-    Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile).toList.sortBy(_.getName)
-
   private val wd = os.pwd
   private val tmp = os.temp.dir()
+
+  def files(path: String = "examples"): List[File] =
+    Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile).toList.sortBy(_.getName)
 
   def test(f: File): Unit = {
     val out1 = os.proc("java", "-jar", "ergc.jar", f.getCanonicalPath, "-o", tmp / "a.out").call().out.text()
     println(out1)
-   println("starting process...")
+    println("starting process...")
     val out2 = charmc.map(_ => os.proc(tmp / "a.out", "16", "+p1", "++local").call(cwd = wd).out.text())
     out2.foreach(println(_))
     println("(moving .cc file...)\n")
@@ -45,8 +45,11 @@ class EirProcessTests extends FunSuite {
         case t: Throwable => failures +:= (f, t)
       }
     }
-    failures.foreach({
-      case (f, t) => throw EirException(s"failure on ${f.getName} due to $t")
-    })
+
+    if (failures.nonEmpty) {
+      throw EirException(
+        s"failures in [ ${failures.map(_._1.getName) mkString ", "} ]!"
+      )
+    }
   }
 }
