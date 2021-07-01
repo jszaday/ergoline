@@ -239,7 +239,7 @@ case class EirFileSymbol(var parent: Option[EirNode], var file: File)
   override def toString: String = s"UNLOADED($name)"
 }
 
-trait EirSpecializable extends EirNode {
+trait EirSpecializable extends EirNode with EirPredicated {
   var templateArgs: List[EirTemplateArgument]
 }
 
@@ -277,8 +277,7 @@ trait EirClassLike
     with EirType
     with EirScope
     with EirNamedNode
-    with EirSpecializable
-    with EirPredicated {
+    with EirSpecializable {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
@@ -496,7 +495,6 @@ case class EirFunction(
 ) extends EirNode
     with EirScope
     with EirNamedNode
-    with EirPredicated
     with EirSpecializable {
   override def children: Iterable[EirNode] =
     body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType
@@ -1077,6 +1075,10 @@ case class EirTypeAlias(
     extends EirNamedNode
     with EirType
     with EirSpecializable {
+
+  override def predicate: Option[EirExpressionNode] = None
+  override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???
+
   override def children: Iterable[EirNode] = templateArgs :+ value
 
   override def resolved: Boolean = false

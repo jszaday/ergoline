@@ -40,7 +40,8 @@ package object types {
       var parent: Option[EirNode],
       var from: List[EirResolvable[EirType]],
       var to: EirResolvable[EirType],
-      var templateArgs: List[EirTemplateArgument] = Nil
+      var templateArgs: List[EirTemplateArgument],
+      var predicate: Option[EirExpressionNode]
   ) extends EirType
       with EirSpecializable {
     override def children: List[EirResolvable[EirType]] = from ++ List(to)
@@ -56,7 +57,8 @@ package object types {
 
     override def equals(any: Any): Boolean = {
       any match {
-        case EirLambdaType(_, theirFrom, theirTo, theirArgs) =>
+        // TODO accommodate predicates in this comparison?
+        case EirLambdaType(_, theirFrom, theirTo, theirArgs, _) =>
           (from == theirFrom) && (theirTo == to) && (theirArgs == templateArgs)
         case _ => false
       }

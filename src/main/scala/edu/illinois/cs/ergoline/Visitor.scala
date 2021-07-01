@@ -363,7 +363,16 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(
-      EirFunction(parent, None, ctx.identifier().getText, Nil, Nil, Nil, null, None),
+      EirFunction(
+        parent,
+        None,
+        ctx.identifier().getText,
+        Nil,
+        Nil,
+        Nil,
+        null,
+        None
+      ),
       (f: EirFunction) => {
         f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
         f.functionArgs = ctx.functionArgumentList
@@ -813,7 +822,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     enter(
       EirReturn(parent, null),
       (r: EirReturn) => {
-        r.expression = visitAs[EirExpressionNode](ctx.expression())
+        r.expression = Option(ctx.expression())
+          .map(visitAs[EirExpressionNode])
+          .getOrElse(globals.unitLiteral(parent))
       }
     )
   }
@@ -1081,7 +1092,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitLambdaType(ctx: LambdaTypeContext): EirType = {
     val children: List[ParseTree] = ctx.children.asScala.toList
-    val l = EirLambdaType(parent, null, null)
+    val l = EirLambdaType(parent, null, null, Nil, None)
     parents.push(l)
     l.from = children.head match {
       case x: TupleTypeContext =>

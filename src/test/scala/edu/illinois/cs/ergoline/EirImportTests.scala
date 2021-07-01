@@ -187,4 +187,37 @@ class EirImportTests extends FunSuite {
       |""".stripMargin)
     Processes.onLoad(module)
   }
+
+  test("use predicates to disambiguate functions") {
+    setupEnv()
+    val module = Modules.load("""
+      |package foo;
+      |
+      |abstract class bird {}
+      |
+      |class owl extends bird {
+      |   def owl() {}
+      |   def hoot() {}
+      |}
+      |
+      |class duck extends bird {
+      |  def duck() {}
+      |  def quack() {}
+      |}
+      |
+      |def bar<A>(a: A) where (A == owl) {
+      |  a.hoot();
+      |}
+      |
+      |def bar<A>(a: A) where (A == duck) {
+      |  a.quack();
+      |}
+      |
+      |def baz() {
+      |    bar(new owl());
+      |    bar(new duck());
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
+  }
 }

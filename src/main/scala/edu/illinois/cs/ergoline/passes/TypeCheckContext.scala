@@ -346,22 +346,33 @@ class TypeCheckContext {
 
   type ResolvableType = EirResolvable[EirType]
 
+  type LambdaCharacteristics = (
+      List[ResolvableType],
+      ResolvableType,
+      List[EirTemplateArgument],
+      Option[EirExpressionNode]
+  )
+
   private val lambdaBank: mutable.Map[
-    (List[ResolvableType], ResolvableType, List[EirTemplateArgument]),
+    LambdaCharacteristics,
     EirLambdaType
   ] = mutable.Map()
 
   def lambdaWith(
       from: List[ResolvableType],
       to: ResolvableType,
-      args: List[EirTemplateArgument] = Nil
+      args: List[EirTemplateArgument] = Nil,
+      predicate: Option[EirExpressionNode] = None
   ): EirLambdaType = {
-    val triple = (from, to, args)
+    val characteristics = (from, to, args, predicate)
 
-    if (!lambdaBank.contains(triple)) {
-      lambdaBank.put(triple, EirLambdaType(None, from, to, args))
+    if (!lambdaBank.contains(characteristics)) {
+      lambdaBank.put(
+        characteristics,
+        EirLambdaType(None, from, to, args, predicate)
+      )
     }
 
-    lambdaBank(triple)
+    lambdaBank(characteristics)
   }
 }
