@@ -12,6 +12,17 @@ package ergoline;
     @system(operator=true,alias="-")
     def <=>(other: int): int;
 
+    @system(operator=true) def unary_+(): int;
+    @system(operator=true) def unary_-(): int;
+
+    @system(operator=true) def unary_~(): int;
+    @system(operator=true) def ^(other: int): int;
+    @system(operator=true) def |(other: int): int;
+    @system(operator=true) def &(other: int): int;
+    @system(operator=true) def <<(other: int): int;
+    @system(operator=true) def >>(other: int): int;
+
+    @system(cast=true) def toBool(): bool;
     @system(cast=true) def toLong(): long;
     @system(cast=true) def toDouble(): double;
 

@@ -891,8 +891,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     "|="
   )
 
+  def isAssignOperator(op: String): Boolean = assignOperators.contains(op)
+
   def precedenceOf(op: String): Int = {
-    if (op.head.isLetter) {
+    if (op.head.isLetter || isAssignOperator(op)) {
       precedences.size + 2
     } else {
       precedences.indexWhere(_.contains(op.head)) + 1

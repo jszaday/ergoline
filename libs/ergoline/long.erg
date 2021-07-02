@@ -13,6 +13,9 @@ struct long {
     @system(operator=true,alias="-")
     def <=>(other: long): int;
 
+    @system(operator=true) def unary_+(): long;
+    @system(operator=true) def unary_-(): long;
+
     @system(cast=true) def toInt(): double;
     @system(cast=true) def toDouble(): double;
 

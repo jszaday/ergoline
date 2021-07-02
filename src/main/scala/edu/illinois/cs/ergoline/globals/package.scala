@@ -41,6 +41,12 @@ package object globals {
     }
   }
 
+  val unaryPrefix: String = "unary_"
+
+  def prefixOperatorMethod(op: String): String = {
+    unaryPrefix + op
+  }
+
   val spaceshipOperator: String = "<=>"
 
   val equalityOperators: Seq[String] = Seq(

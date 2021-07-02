@@ -1347,5 +1347,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitUnaryExpression(x: EirUnaryExpression)(implicit
       ctx: TypeCheckContext
-  ): EirType = ???
+  ): EirType = {
+    val name = globals.prefixOperatorMethod(x.op)
+    val fc = makeMemberCall(x.rhs, name, Nil)
+    x.disambiguation = Some(fc)
+    visit(fc)
+  }
 }
