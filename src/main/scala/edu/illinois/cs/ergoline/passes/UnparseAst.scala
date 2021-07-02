@@ -148,8 +148,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       node: EirClassLike
   )(implicit ctx: UnparseContext): String = {
     val keyword = node match {
-      case _: EirClass => "class"
-      case _: EirTrait => "trait"
+      case c: EirClass if c.valueType => "struct"
+      case c: EirClass                => "class"
+      case _: EirTrait                => "trait"
     }
     val decl = node.templateArgs match {
       case Nil => ""
@@ -164,7 +165,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
             case (x, _) => s" and ${visit(x)}"
           }
           .mkString("")
-    s"$keyword ${node.name}$decl$inheritance $body$n"
+    val clause = node.predicate.map(visit).map(s => s" where $s").getOrElse("")
+    s"$keyword ${node.name}$decl$inheritance$clause $body$n"
   }
 
   override def visitClass(node: EirClass)(implicit

@@ -142,7 +142,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitLambdaType(
       x: types.EirLambdaType
   )(implicit ctx: TypeCheckContext): EirType = {
-    ctx.lambdaWith(x.from.map(visit(_)), visit(x.to), x.templateArgs)
+    ctx.lambdaWith(
+      x.from.map(visit(_)),
+      visit(x.to),
+      x.templateArgs,
+      x.predicate
+    )
   }
 
   override def visitTemplatedType(
@@ -255,7 +260,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     // everything else should be resolved already, or resolved "above" the specialization
     target match {
-      case EirLambdaType(_, args, retTy, _)
+      // TODO do we need to track predicates here?
+      case EirLambdaType(_, args, retTy, _, _)
           if argumentsMatch(ours, args.map(visit(_))) =>
         retTy match {
           case t: EirType => t
@@ -450,6 +456,68 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
+  private def screenCandidate(
+      argsrc: Option[EirExpressionNode]
+  )(candidate: EirNamedNode, member: EirType)(implicit
+      ctx: TypeCheckContext
+  ): (Boolean, Option[(EirNamedNode, EirType)]) = {
+    val (ispec, args) = handleSpecialization(member) match {
+      case Left(s) =>
+        val args = getArguments(argsrc)
+        val sp = args
+          .flatMap(inferSpecialization(s, _))
+          .flatMap(ctx.trySpecialize(s, _))
+          .getOrElse(return (false, None))
+        (sp, args)
+      case Right(sp) => (sp, getArguments(argsrc))
+    }
+
+    val found = (member, args) match {
+      case (
+            EirTemplatedType(_, _: EirClassLike, _) | _: EirClassLike,
+            Some(_)
+          ) =>
+        // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
+        val sp = Option(member)
+          .to[EirTemplatedType]
+          .map(s =>
+            handleSpecialization(s) match {
+              case Left(s)   => Errors.missingSpecialization(s)
+              case Right(sp) => sp
+            }
+          )
+          .orNull
+        val candidates =
+          Find.accessibleMember(Find.asClassLike(member), argsrc.get, "apply")
+        val found = screenCandidates(
+          argsrc,
+          candidates.view.zip(candidates.map(visit(_)))
+        )
+        ctx.leave(sp)
+        (false, found)
+      case (_: EirLambdaType, Some(ours)) =>
+        val missing = screenImplicitArgs(candidate)
+        if (missing.nonEmpty) {
+          (missing.exists(_.name == globals.implicitProxyName), None)
+        } else {
+          val t = assertValid[EirLambdaType](visit(candidate))
+
+          if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
+            // NOTE the double check is necessary here to visit candidate if it hasn't
+            // already been visited... and since visitFunction doesn't resolve its types
+            (false, Some((candidate, t)))
+          } else {
+            (false, None)
+          }
+        }
+      case (x, None)    => (false, Some(candidate, visit(x)))
+      case (_, Some(_)) => (false, None)
+    }
+
+    ctx.leave(ispec)
+    found
+  }
+
   def screenCandidates(
       argsrc: Option[EirExpressionNode],
       candidates: Iterable[(EirNamedNode, EirType)]
@@ -457,67 +525,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): Option[(EirNamedNode, EirType)] = {
     var missingSelf = false
-    val results = candidates.flatMap(pair => {
-      val (candidate, member) = pair
-
-      val (ispec, args) = handleSpecialization(member) match {
-        case Left(s) =>
-          val args = getArguments(argsrc)
-          val sp = args
-            .flatMap(inferSpecialization(s, _))
-            .flatMap(ctx.trySpecialize(s, _))
-            .getOrElse(return None)
-          (sp, args)
-        case Right(sp) => (sp, getArguments(argsrc))
-      }
-
-      val found = (member, args) match {
-        case (
-              EirTemplatedType(_, _: EirClassLike, _) | _: EirClassLike,
-              Some(_)
-            ) =>
-          // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
-          val sp = Option(member)
-            .to[EirTemplatedType]
-            .map(s =>
-              handleSpecialization(s) match {
-                case Left(s)   => Errors.missingSpecialization(s)
-                case Right(sp) => sp
-              }
-            )
-            .orNull
-          val candidates =
-            Find.accessibleMember(Find.asClassLike(member), argsrc.get, "apply")
-          val found = screenCandidates(
-            argsrc,
-            candidates.view.zip(candidates.map(visit(_)))
-          )
-          ctx.leave(sp)
-          found
-        case (_: EirLambdaType, Some(ours)) =>
-          val missing = screenImplicitArgs(candidate)
-          if (missing.nonEmpty) {
-            missingSelf = missingSelf ||
-              missing.exists(_.name == globals.implicitProxyName)
-            None
-          } else {
-            val t = assertValid[EirLambdaType](visit(candidate))
-
-            if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
-              // NOTE the double check is necessary here to visit candidate if it hasn't
-              // already been visited... and since visitFunction doesn't resolve its types
-              Some((candidate, t))
-            } else {
-              None
-            }
-          }
-        case (x, None)    => Some(candidate, visit(x))
-        case (_, Some(_)) => None
-      }
-
-      ctx.leave(ispec)
-      found
-    })
+    val results = candidates.flatMap {
+      case (candidate, pair) =>
+        val res = screenCandidate(argsrc)(candidate, pair)
+        missingSelf = missingSelf || res._1
+        res._2
+    }
 
     val found = results.headOption
     if (missingSelf && found.isEmpty) {
@@ -768,7 +781,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx.lambdaWith(
         node.functionArgs.map(_.declaredType),
         node.returnType,
-        node.templateArgs
+        node.templateArgs,
+        node.predicate
       )
     }
   }

@@ -148,8 +148,8 @@ object StaticEvaluator {
     expr.op match {
       case "==" => mkBoolLiteral(x == y)
       case "!=" => mkBoolLiteral(x != y)
-      case ">:" => mkBoolLiteral(TypeCheckContext.lowerBound(y, x))
-      case "<:" => mkBoolLiteral(TypeCheckContext.upperBound(y, x))
+      case ">:" => mkBoolLiteral(TypeCheckContext.lowerBound(x, y))
+      case "<:" => mkBoolLiteral(TypeCheckContext.upperBound(x, y))
       case _    => Errors.unknownOperator(expr, expr.op)
     }
   }

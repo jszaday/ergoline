@@ -106,7 +106,7 @@ class EirParseTest extends FunSuite {
     val fs =
       Find.within[EirFunction](ns, _.annotation("entry").isDefined).headOption
     fs should matchPattern {
-      case Some(EirFunction(_, _, "bar", _, _, _, _)) =>
+      case Some(f: EirFunction) if f.name == "bar" =>
     }
   }
   test("type-check ternary operator") {

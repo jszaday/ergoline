@@ -1,23 +1,15 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{
-  EirElementProxy,
-  EirLambdaType,
-  EirProxyKind,
-  EirSectionProxy,
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
-import edu.illinois.cs.ergoline.passes.GenerateCpp.asMember
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.{globals, util}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
   RichResolvableTypeIterable
 }
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.{globals, util}
 
 case class EirProxy(
     var parent: Option[EirNode],
@@ -30,6 +22,9 @@ case class EirProxy(
 
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)
+
+  def predicate: Option[EirExpressionNode] = base.predicate
+  override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???
 
   override def selfDeclarations: List[EirMember] =
     base.selfDeclarations ++ {
@@ -79,7 +74,16 @@ case class EirProxy(
     val m = EirMember(Some(this), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
     val f =
-      EirFunction(Some(m), None, "contribute", Nil, Nil, Nil, globals.unitType)
+      EirFunction(
+        Some(m),
+        None,
+        "contribute",
+        Nil,
+        Nil,
+        Nil,
+        globals.unitType,
+        None
+      )
     val (from, to) =
       (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
     val (fromExp, toExp) =
@@ -96,14 +100,14 @@ case class EirProxy(
       EirFunctionArgument(
         Some(f),
         "reducer",
-        EirLambdaType(None, List(toExp, fromExp), toExp),
+        EirLambdaType(None, List(toExp, fromExp), toExp, Nil, None),
         isExpansion = false,
         isSelfAssigning = false
       ),
       EirFunctionArgument(
         Some(f),
         "callback",
-        EirLambdaType(None, List(toExp), globals.unitType),
+        EirLambdaType(None, List(toExp), globals.unitType, Nil, None),
         isExpansion = false,
         isSelfAssigning = false
       )
@@ -120,7 +124,7 @@ case class EirProxy(
         EirFunctionArgument(
           None,
           "callback",
-          EirLambdaType(None, Nil, globals.unitType),
+          EirLambdaType(None, Nil, globals.unitType, Nil, None),
           isExpansion = false,
           isSelfAssigning = false
         )
@@ -142,7 +146,8 @@ case class EirProxy(
       theirs.templateArgs,
       null,
       null,
-      null
+      null,
+      theirs.predicate
     )
     ours.returnType = if (isAsync) {
       EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))

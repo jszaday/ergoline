@@ -23,12 +23,12 @@ object TypeCheckContext {
 
   // B >: A refers to B is a supertype of A
   def lowerBound(x: EirType, y: EirType): Boolean = {
-    Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
+    Find.asClassLike(y).isDescendantOf(Find.asClassLike(x))
   }
 
   // B <: A refers to B is a subtype of A
   def upperBound(x: EirType, y: EirType): Boolean = {
-    Find.asClassLike(y).isDescendantOf(Find.asClassLike(x))
+    Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
   }
 }
 
@@ -49,21 +49,21 @@ class TypeCheckContext {
             t.children.map(_.asInstanceOf[EirType])
           case t => List(t)
         }
-        theirs.forall(b => {
+        theirs.forall(a => {
           (
-            ty.zip(Some(b)) forall {
-              case (a, b: EirConstantFacade) =>
-                CheckTypes.visit(b.value).canAssignTo(a)
+            ty.zip(Some(a)) forall {
+              case (b, a: EirConstantFacade) =>
+                CheckTypes.visit(a.value).canAssignTo(b)
               case _ => false
             }
           ) && (
             // Upper Bounds:
             // a must be a subclass of b
-            ub.forall(a => upperBound(a, b))
+            ub.forall(b => upperBound(a, b))
           ) && (
             // Lower Bounds:
             // a must be a supertype of b
-            lb.forall(a => lowerBound(a, b))
+            lb.forall(b => lowerBound(a, b))
           )
         })
       }
@@ -204,24 +204,26 @@ class TypeCheckContext {
     EirSyntheticSpecialization(types)
   }
 
+  def checkPredicate(pred: EirPredicated): Boolean = {
+    pred.predicate.map(StaticEvaluator.evaluate(_)(this)).forall(_.toBoolean)
+  }
+
   def trySpecialize(
       s: EirSpecializable,
       spec: EirSpecialization
   ): Option[EirSpecialization] = {
     val types = s.accepts(spec)(this)
-    Option.when(types.forall(_.isDefined))({
-      val sp = Option
-        .when(types.length == spec.types.length)(spec)
-        .getOrElse({ synthesize(types.map(_.get)) })
-      Option
-        .unless(s.sameAs(sp))({
-          // TODO this needs to substitute template arguments with
-          //      whatever is currently in the context~!
-          _substitutions +:= (s -> sp)
-          sp
-        })
-        .orNull
-    })
+    Option
+      .when(types.forall(_.isDefined))({
+        if (types.length == spec.types.length) spec
+        else synthesize(types.map(_.get))
+      })
+      .map(enter(s, _))
+      .filter(sp => {
+        checkPredicate(s) || {
+          leave(sp); false
+        }
+      })
   }
 
   def specialize(
@@ -229,6 +231,18 @@ class TypeCheckContext {
       sp: EirSpecialization
   ): EirSpecialization = {
     trySpecialize(s, sp).getOrElse(Errors.missingSpecialization(sp))
+  }
+
+  private def enter(
+      s: EirSpecializable,
+      sp: EirSpecialization
+  ): EirSpecialization = {
+    Option
+      .unless(s.sameAs(sp))({
+        _substitutions +:= (s -> sp)
+        sp
+      })
+      .orNull
   }
 
   def leave(ours: EirSpecialization): Unit = {
@@ -325,22 +339,33 @@ class TypeCheckContext {
 
   type ResolvableType = EirResolvable[EirType]
 
+  type LambdaCharacteristics = (
+      List[ResolvableType],
+      ResolvableType,
+      List[EirTemplateArgument],
+      Option[EirExpressionNode]
+  )
+
   private val lambdaBank: mutable.Map[
-    (List[ResolvableType], ResolvableType, List[EirTemplateArgument]),
+    LambdaCharacteristics,
     EirLambdaType
   ] = mutable.Map()
 
   def lambdaWith(
       from: List[ResolvableType],
       to: ResolvableType,
-      args: List[EirTemplateArgument] = Nil
+      args: List[EirTemplateArgument] = Nil,
+      predicate: Option[EirExpressionNode] = None
   ): EirLambdaType = {
-    val triple = (from, to, args)
+    val characteristics = (from, to, args, predicate)
 
-    if (!lambdaBank.contains(triple)) {
-      lambdaBank.put(triple, EirLambdaType(None, from, to, args))
+    if (!lambdaBank.contains(characteristics)) {
+      lambdaBank.put(
+        characteristics,
+        EirLambdaType(None, from, to, args, predicate)
+      )
     }
 
-    lambdaBank(triple)
+    lambdaBank(characteristics)
   }
 }

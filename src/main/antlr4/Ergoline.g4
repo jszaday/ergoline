@@ -198,7 +198,7 @@ implicitArguments
     ;
 
 function
-    :   FunctionKwd identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? (';' | block)
+    :   FunctionKwd identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? whereClause? (';' | block)
     ;
 
 functionArgument

@@ -251,9 +251,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       val isClass = ctx.ClassKwd() != null
       val isStruct = ctx.StructKwd() != null
       if (isClass || isStruct) {
-        EirClass(parent, null, name, null, None, Nil, isStruct)
+        EirClass(parent, null, name, null, None, Nil, None, isStruct)
       } else {
-        EirTrait(parent, null, name, null, None, Nil)
+        EirTrait(parent, null, name, null, None, Nil, None)
       }
     }
     enter(
@@ -263,6 +263,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
         c.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
         c.members = ctx.mapOrEmpty(_.annotatedMember, visitAs[EirMember])
+        c.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
       }
     )
   }
@@ -362,7 +363,16 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitFunction(ctx: FunctionContext): EirFunction = {
     enter(
-      EirFunction(parent, None, ctx.identifier().getText, Nil, Nil, Nil, null),
+      EirFunction(
+        parent,
+        None,
+        ctx.identifier().getText,
+        Nil,
+        Nil,
+        Nil,
+        null,
+        None
+      ),
       (f: EirFunction) => {
         f.templateArgs = visitTemplateDeclaration(ctx.templateDecl)
         f.functionArgs = ctx.functionArgumentList
@@ -374,6 +384,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         f.returnType = Option(ctx.`type`())
           .map(visitAs[EirResolvable[EirType]](_))
           .getOrElse(globals.unitType)
+        f.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
         f.body = Option(ctx.block()).map(visitAs[EirBlock])
       }
     )
@@ -811,7 +822,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     enter(
       EirReturn(parent, null),
       (r: EirReturn) => {
-        r.expression = visitAs[EirExpressionNode](ctx.expression())
+        r.expression = Option(ctx.expression())
+          .map(visitAs[EirExpressionNode])
+          .getOrElse(globals.unitLiteral(parent))
       }
     )
   }
@@ -1079,7 +1092,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitLambdaType(ctx: LambdaTypeContext): EirType = {
     val children: List[ParseTree] = ctx.children.asScala.toList
-    val l = EirLambdaType(parent, null, null)
+    val l = EirLambdaType(parent, null, null, Nil, None)
     parents.push(l)
     l.from = children.head match {
       case x: TupleTypeContext =>

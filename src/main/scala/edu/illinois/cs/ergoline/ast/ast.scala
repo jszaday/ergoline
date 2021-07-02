@@ -239,7 +239,7 @@ case class EirFileSymbol(var parent: Option[EirNode], var file: File)
   override def toString: String = s"UNLOADED($name)"
 }
 
-trait EirSpecializable extends EirNode {
+trait EirSpecializable extends EirNode with EirPredicated {
   var templateArgs: List[EirTemplateArgument]
 }
 
@@ -267,11 +267,16 @@ object EirClassLike {
   }
 }
 
+trait EirPredicated {
+  def predicate: Option[EirExpressionNode]
+  def predicate_=(expr: Option[EirExpressionNode]): Unit
+}
+
 trait EirClassLike
     extends EirNode
+    with EirType
     with EirScope
     with EirNamedNode
-    with EirType
     with EirSpecializable {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
@@ -310,7 +315,7 @@ trait EirClassLike
   def hasMember(name: String): Boolean = member(name).isDefined
 
   override def children: List[EirNode] =
-    templateArgs ++ extendsThis ++ implementsThese ++ members
+    templateArgs ++ extendsThis ++ implementsThese ++ predicate ++ members
 
   def needsInitialization: List[EirMember] =
     members.collect {
@@ -363,6 +368,7 @@ case class EirClass(
     var templateArgs: List[EirTemplateArgument],
     var extendsThis: Option[EirResolvable[EirType]],
     var implementsThese: List[EirResolvable[EirType]],
+    var predicate: Option[EirExpressionNode],
     var valueType: Boolean = false
 ) extends EirNode
     with EirClassLike
@@ -373,7 +379,8 @@ case class EirTrait(
     var name: String,
     var templateArgs: List[EirTemplateArgument],
     var extendsThis: Option[EirResolvable[EirType]],
-    var implementsThese: List[EirResolvable[EirType]]
+    var implementsThese: List[EirResolvable[EirType]],
+    var predicate: Option[EirExpressionNode]
 ) extends EirNode
     with EirClassLike {
   isAbstract = true
@@ -483,7 +490,8 @@ case class EirFunction(
     var templateArgs: List[EirTemplateArgument],
     var functionArgs: List[EirFunctionArgument],
     var implicitArgs: List[EirFunctionArgument],
-    var returnType: EirResolvable[EirType]
+    var returnType: EirResolvable[EirType],
+    var predicate: Option[EirExpressionNode]
 ) extends EirNode
     with EirScope
     with EirNamedNode
@@ -1067,6 +1075,10 @@ case class EirTypeAlias(
     extends EirNamedNode
     with EirType
     with EirSpecializable {
+
+  override def predicate: Option[EirExpressionNode] = None
+  override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???
+
   override def children: Iterable[EirNode] = templateArgs :+ value
 
   override def resolved: Boolean = false
