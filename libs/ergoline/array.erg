@@ -2,23 +2,26 @@ package ergoline;
 
 @system(alias="ergoline::array")
 class array<A, N: int = 1> {
-    using shape = (int) .* N;
+    using shapeType = (int) .* N;
+
+    @system val shape: shapeType;
 
     @system def array();
-    @system def array(n: *shape);
+    @system def array(n: *shapeType);
 
     @system(alias="[]")
-    def get(idx: *shape): A;
+    def get(idx: *shapeType): A;
 
     @system
     def get(indices: *((range<int>) .* N)): iterable<A>;
 
     @system(alias="[]")
-    def set(idx: *shape, value: A): unit;
-    @system def size(): shape;
+    def set(idx: *shapeType, value: A): unit;
+
+    @system def size(): int; // where N == 1
 
     @system def getOrNone(idx: int): option<A>;
 
     @system
-    static def fill(idx: shape, value: A): array<A, N>;
+    static def fill(idx: shapeType, value: A): array<A, N>;
 }
