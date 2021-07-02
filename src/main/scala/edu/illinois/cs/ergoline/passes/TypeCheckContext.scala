@@ -215,23 +215,15 @@ class TypeCheckContext {
     val types = s.accepts(spec)(this)
     Option
       .when(types.forall(_.isDefined))({
-        val sp = Option
-          .when(types.length == spec.types.length)(spec)
-          .getOrElse({ synthesize(types.map(_.get)) })
-
-        Some(if (s.sameAs(sp)) null else sp)
-          .map(enter(s, _))
-          .filter(sp => {
-            s match {
-              case p: EirPredicated =>
-                checkPredicate(p) || {
-                  leave(sp); false
-                }
-              case _ => true
-            }
-          })
+        if (types.length == spec.types.length) spec
+        else synthesize(types.map(_.get))
       })
-      .flatten
+      .map(enter(s, _))
+      .filter(sp => {
+        checkPredicate(s) || {
+          leave(sp); false
+        }
+      })
   }
 
   def specialize(
@@ -245,11 +237,12 @@ class TypeCheckContext {
       s: EirSpecializable,
       sp: EirSpecialization
   ): EirSpecialization = {
-    if (sp != null) {
-      _substitutions +:= (s -> sp)
-    }
-
-    sp
+    Option
+      .unless(s.sameAs(sp))({
+        _substitutions +:= (s -> sp)
+        sp
+      })
+      .orNull
   }
 
   def leave(ours: EirSpecialization): Unit = {
