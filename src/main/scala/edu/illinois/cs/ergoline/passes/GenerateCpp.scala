@@ -750,8 +750,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     disambiguated match {
       case _ if operator =>
         val flattened = flattenArgs(args)
-        assert(flattened.size == 1)
-        ctx << "(" << base << name << flattened.head << ")"
+        if (flattened.isEmpty) {
+          assert(name.startsWith(globals.unaryPrefix))
+          ctx << "(" << name.substring(globals.unaryPrefix.length) << base << ")"
+        } else {
+          assert(flattened.size == 1)
+          ctx << "(" << base << name << flattened.head << ")"
+        }
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
         visitContribute(p, target, args)
       case m @ EirMember(Some(p: EirProxy), _, _) if p.isSection =>

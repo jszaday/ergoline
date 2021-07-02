@@ -4,12 +4,23 @@ import ergoline::_;
 import ck;
 
 @main class opcheck {
+    def countOnes(x: int): int {
+        var i = x;
+        var n = 0;
+
+        while (i != 0) {
+            i = i & (i - 1);
+            n += 1;
+        }
+
+        return n;
+    }
+
     @entry def opcheck(args: array<string>) {
         val a = 2;
         val b = 3;
         val c = 4;
         val d = 5;
-
         assert(c > b && b < c);
 
         val e = a + ((b * c) + d);
@@ -19,6 +30,14 @@ import ck;
         val g = a + (b * (c * d));
         val h = a + b * c * d;
         assert((g == h) != false);
+
+        val i = -5;
+        val j = !(i < 0);
+        assert(!j);
+
+        val numOnes = countOnes(d);
+        println(`info> there are ${numOnes} ones in ${d} :3`);
+        assert(numOnes == 2);
 
         println("success> operators appear operational!");
 

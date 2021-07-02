@@ -94,6 +94,7 @@ identifier
     |   ExpansionOp
     |   LeftShift
     |   RightShift
+    |   Ampersand
     |   WhereKwd
     ;
 
@@ -253,7 +254,7 @@ sliceExpressionList
     ;
 
 callArgument
-    :   '&'? expression
+    :   Ampersand? expression
     ;
 
 callArgumentList

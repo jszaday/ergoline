@@ -13,6 +13,9 @@ package ergoline;
     @system(operator=true,alias="-")
     def <=>(other: double): double;
 
+    @system(operator=true) def unary_+(): double;
+    @system(operator=true) def unary_-(): double;
+
     @system(alias = "std::to_string", static = true)
     def toString(): string;
 
