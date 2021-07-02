@@ -413,13 +413,20 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     else super.visitInnerStatement(ctx)
   }
 
+  def forceEnclosed(opt: Option[EirNode]): Option[EirBlock] = {
+    opt.collect {
+      case x: EirBlock => x
+      case x           => AstManipulation.encloseNodes(x)
+    }
+  }
+
   override def visitIfThenElse(ctx: IfThenElseContext): EirIfElse = {
     enter(
       EirIfElse(parent, null, null, null),
       (f: EirIfElse) => {
         f.test = visitAs[EirExpressionNode](ctx.condition)
-        f.ifTrue = Option(ctx.ifTrue).map(visit)
-        f.ifFalse = Option(ctx.ifFalse).map(visit)
+        f.ifTrue = forceEnclosed(Option(ctx.ifTrue).map(visit))
+        f.ifFalse = forceEnclosed(Option(ctx.ifFalse).map(visit))
       }
     )
   }
