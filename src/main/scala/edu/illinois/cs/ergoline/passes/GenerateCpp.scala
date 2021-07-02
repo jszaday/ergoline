@@ -927,10 +927,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
-        ctx << s"for (" <| (declaration, ";") << test << ";" << {
-          increment.foreach(_ => ctx.ignoreNext(";"))
-          increment
-        } << ")" << x.body
+        ctx << s"for (" <| (declaration, ";") << test << ";" << increment << ")" << x.body
       case h: EirForAllHeader =>
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))
         // TODO find a better name than it_
@@ -2126,9 +2123,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val lhsTy = ctx.resolve(ctx.typeOf(x.lval))
 
     x.lval match {
-      case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x << ";"
+      case x: EirArrayReference if !isPlainArrayRef(x) =>
+        ctx << x
       case _ =>
-        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval) << ";"
+        ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval)
     }
   }
 
