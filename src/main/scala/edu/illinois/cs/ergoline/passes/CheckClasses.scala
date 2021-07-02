@@ -6,6 +6,7 @@ import edu.illinois.cs.ergoline.resolution.EirResolvable
 import edu.illinois.cs.ergoline.resolution.Find.asClassLike
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 object CheckClasses {
 
@@ -27,6 +28,28 @@ object CheckClasses {
     if (node.templateArgs.isEmpty && node.predicate.nonEmpty) {
       ???
     }
+
+    val nested = node.parent.to[EirMember]
+
+    nested
+      .filter(_.isPublic)
+      .foreach(_ => {
+        Errors.unsupportedOperation(
+          node,
+          "nested classes must be non-public",
+          "c++ codegen constraints"
+        )
+      })
+
+    nested
+      .filterNot(_ => node.isTransient)
+      .foreach(_ => {
+        Errors.unsupportedOperation(
+          node,
+          "nested classes must be @transient",
+          "c++ codegen constraints"
+        )
+      })
 
     node match {
       case c: EirClass => visitClass(ctx, c)

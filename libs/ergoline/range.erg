@@ -8,14 +8,14 @@ struct range<A> with iterable<A> {
     def range(=start: A, =step: A, =end: A) { }
 
     override def iter(): iterator<A> {
-        return new range_iterator<A>(self);
+        return new range_iterator(self);
     }
 
-    @transient class range_iterator<B> with iterator<B> {
-        val r: range<B>;
-        var current: B;
+    @transient private class range_iterator with iterator<A> {
+        val r: range<A>;
+        var current: A;
 
-        def range_iterator(=r: range<B>) {
+        def range_iterator(=r: range<A>) {
             current = r.start;
         }
 
@@ -23,7 +23,7 @@ struct range<A> with iterable<A> {
             return current < r.end;
         }
 
-        override def next(): B {
+        override def next(): A {
             val t = current;
             current += r.step;
             return t;

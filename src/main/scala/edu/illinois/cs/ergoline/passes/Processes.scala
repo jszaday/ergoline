@@ -100,7 +100,7 @@ object Processes {
 
     val sorted = ctx.checked.keys
       .collect({
-        case c: EirClassLike if !c.isInstanceOf[EirProxy] => c
+        case c: EirClassLike if !(c.isNested || c.isInstanceOf[EirProxy]) => c
       })
       .toList
       .dependenceSort()

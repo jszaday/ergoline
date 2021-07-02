@@ -69,11 +69,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           // TODO use specialization?
           case _: EirTemplateArgument => false
           case _: EirLambdaType       => false
-          case _: EirClassLike =>
-            x.parent.exists(_.isInstanceOf[EirMember]) || x
-              .annotation("transient")
-              .isDefined
-          case t: EirType => Find.asClassLike(t).isTransient
+          case x: EirClassLike        => x.isTransient
+          case t: EirType             => Find.asClassLike(t).isTransient
         }
       }
     }
@@ -752,7 +749,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val flattened = flattenArgs(args)
         if (flattened.isEmpty) {
           assert(name.startsWith(globals.unaryPrefix))
-          ctx << "(" << name.substring(globals.unaryPrefix.length) << base << ")"
+          ctx << "(" << name.substring(
+            globals.unaryPrefix.length
+          ) << base << ")"
         } else {
           assert(flattened.size == 1)
           ctx << "(" << base << name << flattened.head << ")"
@@ -1171,6 +1170,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       })
   }
 
+  def hasDependentScope(x: EirSpecializable): Boolean = {
+    x.dependentScope().nonEmpty
+  }
+
   def visitFunctionBody(
       x: EirFunction
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -1298,11 +1301,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
         return
-      } else if (
-        langCi || (!parent.exists(
-          _.templateArgs.nonEmpty
-        ) && x.templateArgs.isEmpty)
-      ) {
+      } else if (langCi || (x.templateArgs.isEmpty && !hasDependentScope(x))) {
         ctx << ";"
         return
       }

@@ -6,6 +6,7 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirType
 }
 import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirConstantFacade}
+import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
@@ -49,7 +50,7 @@ object TypeCompatibility {
 
   implicit class RichEirType(ours: EirType) {
 
-    def canAssignTo(theirs: EirType): Boolean =
+    def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean =
       (ours == theirs) || ((ours, theirs) match {
         case (x: EirTemplatedType, y: EirTemplatedType) =>
           // TODO add checking for default arguments
@@ -67,7 +68,7 @@ object TypeCompatibility {
                 case (a, b) => a.canAssignTo(b)
               })
         case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
-          x.inherited.exists(_.canAssignTo(y))
+          x.inherited.map(CheckTypes.visit(_)).exists(_.canAssignTo(y))
         case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
           x.base.canAssignTo(y)
         case (x: EirConstantFacade, y: EirConstantFacade) =>
@@ -81,15 +82,14 @@ object TypeCompatibility {
   ) {
     // A resolver must be able to resolve an unspecialized specializable for it to be used here!!
     // For example, EirSymbol(..., "foo") must resolve to foo even if when it's declared as ``trait foo<A> ...``
-    def canAssignTo(theirs: EirResolvable[T]): Boolean = {
-      val (a, b) =
-        (Find.uniqueResolution[T](ours), Find.uniqueResolution[T](theirs))
-      a.canAssignTo(b)
+    def canAssignTo(
+        theirs: EirResolvable[T]
+    )(implicit ctx: TypeCheckContext): Boolean = {
+      CheckTypes.visit(ours).canAssignTo(CheckTypes.visit(theirs))
     }
 
-    def canAssignTo(b: EirType): Boolean = {
-      val a = Find.uniqueResolution[T](ours)
-      a.canAssignTo(b)
+    def canAssignTo(b: EirType)(implicit ctx: TypeCheckContext): Boolean = {
+      CheckTypes.visit(ours).canAssignTo(b)
     }
   }
 }

@@ -277,4 +277,15 @@ object Errors {
       )
     )
   }
+
+  def unsupportedOperation(node: EirNode, what: String, why: String): Unit = {
+    exit(
+      format(
+        node,
+        "due to %s, %s",
+        why,
+        what
+      )
+    )
+  }
 }

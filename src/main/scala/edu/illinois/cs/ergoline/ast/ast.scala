@@ -241,6 +241,12 @@ case class EirFileSymbol(var parent: Option[EirNode], var file: File)
 
 trait EirSpecializable extends EirNode with EirPredicated {
   var templateArgs: List[EirTemplateArgument]
+
+  def dependentScope(): Option[EirSpecializable] = {
+    Find.ancestors(this) collectFirst {
+      case x: EirSpecializable if x.templateArgs.nonEmpty => x
+    }
+  }
 }
 
 trait EirSpecialization extends EirNode {
@@ -280,6 +286,13 @@ trait EirClassLike
     with EirSpecializable {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
+
+  // TODO make this more robust?
+  def isNested: Boolean = parent.exists(_.isInstanceOf[EirMember])
+
+  def isTransient: Boolean = {
+    isNested || annotation("transient").isDefined
+  }
 
   def asType: EirResolvable[EirType] = {
     EirPlaceholder[EirType](
@@ -392,10 +405,19 @@ case class EirMember(
     var accessibility: EirAccessibility.Value
 ) extends EirNamedNode {
   var isOverride: Boolean = false
-  var isStatic: Boolean = false
+  var _isStatic: Boolean = false
   var counterpart: Option[EirMember] = None
   private var entryOnly: Boolean = false
   private var _hasOverloads: Boolean = false
+
+  def isStatic_=(yes: Boolean): Unit = _isStatic = yes
+  def isStatic: Boolean =
+    _isStatic || {
+      member match {
+        case _: EirClassLike | _: EirTypeAlias => true
+        case _                                 => false
+      }
+    }
 
   def hasOverloads_=(yes: Boolean): Unit = _hasOverloads = yes
   def hasOverloads: Boolean =

@@ -28,15 +28,20 @@ object GenerateDecls {
       case x: EirDeclaration      => visitDeclaration(ctx, x)
       case x: EirFunctionArgument => GenerateCpp.visitFunctionArgument(x)(ctx)
       case _: EirImport           =>
+      case _: EirTypeAlias        =>
       case _: EirFileSymbol       =>
     }
   }
 
   def visitMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
-    ctx << Option.when(x.isStatic)({
+    ctx << Option.when(x.member match {
+      case _: EirClassLike | _: EirTypeAlias => false
+      case _                                 => x.isStatic
+    })({
       if (x.member.isInstanceOf[EirDeclaration]) "thread_local static"
       else "static"
     })
+
     visit(ctx, x.member)
   }
 
@@ -51,7 +56,7 @@ object GenerateDecls {
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
     if (isSystem(x)) {
       x.members.collect {
-        case m @ EirMember(_, f: EirFunction, _) if !isSystem(m) => f
+        case m @ EirMember(_, x: EirNode, _) if !isSystem(x) => x
       } foreach { x => visit(ctx, x) }
       return
     }
@@ -60,12 +65,16 @@ object GenerateDecls {
       x
     )(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
-      if (!hasPup(x)) {
-        if (x.templateArgs.isEmpty)
-          ctx << "virtual void __pup__(hypercomm::serdes&) override;"
-        else makePupper(ctx, x, isMember = true)
-      }
       if (!hasHash(x)) makeHasher(ctx, x)
+
+      if (!hasPup(x)) {
+        if (x.templateArgs.nonEmpty || x.isTransient) {
+          makePupper(ctx, x, isMember = true)
+        } else {
+          ctx << "virtual void __pup__(hypercomm::serdes&) override;"
+        }
+      }
+
       val parent = x.extendsThis
         .map(Find.uniqueResolution[EirType])
         .map(ctx.nameFor(_, Some(x)))
