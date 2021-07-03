@@ -6,42 +6,80 @@ import ergoline::_;
     var count: int = 0;
 
     @entry def activator() {
+        self@activate(new duck());
         self@activate(new lion());
     }
 
-    @entry def activate(a: animal): unit {
-        val canFly: bool = match(a) {
-            case b: bird => true;
-            case _ => false;
+    def isBird(a: animal): bool {
+        return match (a) {
+            case _: bird => true;
+            case _       => false;
         };
+    }
 
-        println(`A ${a.species()} ${a.vocalization()} ${
-                 canFly ? "and can" : "but cannot"} fly.`);
+    @entry def activate(a: animal): unit {
+        match (a) {
+            case d: duck => {
+                identify(d);
+                makeSound(d);
+            }
+            case l: lion => {
+                identify(l);
+                makeSound(l);
+            }
+        }
 
-        if (count == 0) {
-            count += 1;
-            self@activate(new duck());
-        } else {
+        if (isBird(a)) println("hey> it's a bird!");
+
+        count += 1;
+        if (count >= 2) {
             exit();
         }
     }
 }
 
+def makeSound<A>(a: A) where A == lion {
+    println("hey> a lion roars!");
+}
+
+def makeSound<A>(a: A) where A == duck {
+    println("hey> a duck quacks!");
+}
+
+def identify<A <: animal>(a: A) where (bird >: A) {
+    val tid = typeid(a);
+    println(`hey> a(n) ${tid.name()} has ${a.numLegs()} legs and a ${a.beak()}!`);
+}
+
+def identify<A <: animal>(a: A) where !(A <: bird) {
+    val tid = typeid(a);
+    println(`hey> a(n) ${tid.name()} has ${a.numLegs()} legs!`);
+}
+
 class lion with animal {
-    def lion(): unit { }
-    override def vocalization(): string { return "roars"; }
-    override def species(): string { return "lion"; }
+    def lion(): unit {}
+
+    override def numLegs(): int {
+        return 4;
+    }
 }
 
 class duck with bird {
-    def duck(): unit { }
-    override def vocalization(): string { return "quacks"; }
-    override def species(): string { return "duck"; }
+    def duck(): unit {}
+
+    override def beak(): string {
+        return "bill";
+    }
+
+    override def numLegs(): int {
+        return 2;
+    }
 }
 
-trait bird with animal { }
+trait bird extends animal {
+    def beak(): string;
+}
 
 trait animal {
-    def vocalization(): string;
-    def species(): string;
+    def numLegs(): int;
 }

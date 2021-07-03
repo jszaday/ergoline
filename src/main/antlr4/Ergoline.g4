@@ -46,8 +46,12 @@ innerStatement
     |   awaitManyStatement
     ;
 
+body
+    :   statement | ';'
+    ;
+
 whenStatement
-    :   'when' whenFnList ('if' condition=expression)? LambdaArrow (block | bodyExpr=expression ';')
+    :   'when' whenFnList ('if' condition=expression)? LambdaArrow body
     ;
 
 awaitManyStatement
@@ -74,7 +78,7 @@ pattern
     ;
 
 caseStatement
-    :   'case' patternList ('if' condition=expression)? LambdaArrow bodyExpression=expression? ';'
+    :   'case' patternList ('if' condition=expression)? LambdaArrow body
     ;
 
 matchStatement
@@ -82,7 +86,7 @@ matchStatement
     ;
 
 ifThenElse
-    :   'if' '(' condition=expression ')' (';' | ifTrue=statement) ('else' ifFalse=statement)?
+    :   'if' '(' condition=expression ')' ifTrue=body ('else' ifFalse=body)?
     ;
 
 identifier
@@ -108,11 +112,11 @@ loopHeader
     ;
 
 whileLoop
-    :   'while' '(' expression ')' (block | statement)
+    :   'while' '(' expression ')' body
     ;
 
 forLoop
-    :   'for' '(' loopHeader ')' (block | statement)
+    :   'for' '(' loopHeader ')' body
     ;
 
 returnStatement

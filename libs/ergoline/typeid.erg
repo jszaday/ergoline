@@ -1,0 +1,9 @@
+package ergoline;
+
+@system(alias="std::type_index") struct typeid {
+    @system(applyArg="typeid")
+    static def apply<A>(&a: A): typeid;
+
+    @system(applyResult="std::string")
+    def name(): string;
+}
