@@ -277,6 +277,41 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     s.matches(ptn)
   }
 
+  private def shouldCollapseAt(idx: Int): Option[Int] = {
+    var count = 0
+    for (i <- (idx to lines.size)) {
+      if (lines(i) == "}" && count == 0) {
+        if ((i + 1) < lines.size) {
+          if (lines(i) == "}") {
+            return Some(i)
+          }
+        }
+      } else if (count < 0) {
+        return None
+      }
+
+      count = count + lines(i).count(_ == '{') - lines(i).count(_ == '}')
+    }
+
+    ???
+  }
+
+  private def flattened(): Iterable[String] = {
+    val collapsible = lines.indices filter {
+      idx => (idx + 1) < lines.size && lines(idx).endsWith("{") && (lines(idx + 1) == "{")
+    } map {
+      idx => (idx, shouldCollapseAt(idx + 2))
+    } collect {
+      case (i, Some(j)) => (i + 1, j)
+    } flatten {
+      case (i, j) => IndexedSeq(i, j)
+    }
+
+    lines.zipWithIndex filterNot {
+      case (_, idx) => collapsible.contains(idx)
+    } map (_._1)
+  }
+
   override def toString: String = {
     if (current.nonEmpty) {
       lines :+= current.toString()
@@ -285,7 +320,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     val output = new StringBuilder
     var numTabs = 0
     def t: String = List.fill(numTabs)(tab).mkString("")
-    for (line <- lines) {
+    for (line <- flattened()) {
       val count = seekUnbalanced(line).sign
       if (count < 0) numTabs = Math.max(numTabs + count, 0)
       if (!skip(line)) output.append(t).append(line).append(n)

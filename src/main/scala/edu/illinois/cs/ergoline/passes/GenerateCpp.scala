@@ -1178,7 +1178,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirFunction
   )(implicit ctx: CodeGenerationContext): Unit = {
     val member = x.parent.to[EirMember]
+    val emptyBody = x.body.forall(_.children.isEmpty)
     var shouldEnclose = false
+
 
     if (member.exists(_.isConstructor)) {
       val parent = assertValid[EirClassLike](member.flatMap(_.parent))
@@ -1211,7 +1213,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }), ",")
       }
 
-      ctx << Option.when(shouldEnclose)("{")
+      ctx << Option.when(shouldEnclose && !emptyBody)("{")
 
       if (encapsulated) {
         ctx << assignments.map(arg => {
@@ -1228,7 +1230,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     ctx <| (x.body, ";")
-    ctx << Option.when(shouldEnclose)("}")
+    ctx << Option.when(shouldEnclose && !emptyBody)("}")
   }
 
   def generateReturnType(x: EirFunction, isAsyncCi: Boolean)(implicit
