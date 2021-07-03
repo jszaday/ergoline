@@ -703,7 +703,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       (m: EirMatchCase) => {
         m.patterns = visitAs[EirPatternList](ctx.patternList())
         m.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-        m.body = Option(ctx.bodyExpression).map(visitAs[EirExpressionNode])
+        m.body = bodyToOptional(ctx.body)
       }
     )
   }
@@ -848,6 +848,20 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       } ++ flattenInfix(rhs)
     } else {
       Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
+    }
+  }
+
+  override def visitBody(ctx: BodyContext): EirNode = {
+    Option(ctx.statement()).map(visit(_)).orNull
+  }
+
+  def bodyToOptional(ctx: BodyContext): Option[EirBlock] = {
+    forceEnclosed(Option(visit(ctx)))
+  }
+
+  def bodyToDefinite(ctx: BodyContext): EirBlock = {
+    bodyToOptional(ctx) getOrElse {
+      EirBlock(parent, Nil)
     }
   }
 
@@ -1058,11 +1072,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirWhileLoop(parent, null, null),
       (l: EirWhileLoop) => {
         l.condition = Option(ctx.expression()).map(visitAs[EirExpressionNode])
-        l.body = Option(ctx.block())
-          .map(visitBlock)
-          .getOrElse(
-            AstManipulation.encloseNodes(visitStatement(ctx.statement()))
-          )
+        l.body = bodyToDefinite(ctx.body())
       }
     )
   }
@@ -1072,11 +1082,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirForLoop(parent, null, null),
       (f: EirForLoop) => {
         visitLoopHeader(ctx.loopHeader())
-        f.body = Option(ctx.block())
-          .map(visitBlock)
-          .getOrElse(
-            AstManipulation.encloseNodes(visitStatement(ctx.statement()))
-          )
+        f.body = bodyToDefinite(ctx.body())
       }
     )
   }
@@ -1260,10 +1266,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           )
         )
         n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-        n.body = Option(ctx.bodyExpr)
-          .map(visitAs[EirExpressionNode])
-          .map(AstManipulation.encloseNodes(_)(addReturn = true))
-          .getOrElse(visitAs[EirBlock](ctx.block()))
+        n.body = bodyToDefinite(ctx.body())
       }
     )
   }

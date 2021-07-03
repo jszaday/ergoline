@@ -2070,12 +2070,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitBlock(
       x: EirBlock
   )(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << "{"
+    val topLevel = x.parent.exists(_.isInstanceOf[EirFunction])
+    val singleStatement = x.children.length == 1
+
+    ctx << Option.unless(!topLevel && singleStatement)("{")
     x.children.foreach {
       case x: EirExpressionNode => ctx << x << ";"
       case x                    => ctx << x
     }
-    ctx << "}"
+    ctx << Option.unless(!topLevel && singleStatement)("}")
   }
 
   override def visitNamespace(

@@ -140,6 +140,8 @@ trait EirSimpleContainer extends EirNode with EirScope {
 
 case class EirBlock(var parent: Option[EirNode], var children: List[EirNode])
     extends EirSimpleContainer {
+  var implicitReturn: Boolean = false
+
   def findPositionOf(node: EirNode): Option[Int] = {
     val ancestors = Find.ancestors(node)
     (node +: ancestors).sliding(2).collectFirst {
@@ -982,7 +984,7 @@ case class EirMatchCase(
     var parent: Option[EirNode],
     var patterns: EirPatternList,
     var condition: Option[EirExpressionNode],
-    var body: Option[EirExpressionNode]
+    var body: Option[EirBlock]
 ) extends EirNode
     with EirScope {
   def declarations: List[EirDeclaration] = patterns.declarations

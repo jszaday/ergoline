@@ -7,7 +7,8 @@ import edu.illinois.cs.ergoline.ast.{
   EirNamedNode,
   EirNode,
   EirSymbol,
-  EirTemplateArgument
+  EirTemplateArgument,
+  EirUnaryExpression
 }
 
 import scala.reflect.ClassTag
@@ -28,6 +29,7 @@ object StaticGenerator {
       x: EirExpressionNode
   )(implicit ctx: CodeGenerationContext): Unit = {
     x match {
+      case x: EirUnaryExpression  => visit(x)
       case x: EirBinaryExpression => visit(x)
       case x: EirSymbol[_]        => visit(x.asInstanceOf[EirSymbol[EirNamedNode]])
     }
@@ -43,6 +45,12 @@ object StaticGenerator {
   }
 
   def visit(
+      x: EirUnaryExpression
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    ctx << x.op << x.rhs
+  }
+
+  def visit(
       x: EirBinaryExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
     x.op match {
@@ -50,6 +58,13 @@ object StaticGenerator {
         ctx << Option.when(x.op == "!=")(
           "!"
         ) << "(std::is_same<" << x.lhs << "," << x.rhs << ">::value)"
+      case "<:" | ">:" =>
+        val flip = x.op == ">:"
+        ctx << "std::is_base_of<ergoline::extricate_t<" << {
+          if (flip) x.lhs else x.rhs
+        } << ">,ergoline::extricate_t<" << {
+          if (flip) x.rhs else x.lhs
+        } << ">>::value"
     }
   }
 }

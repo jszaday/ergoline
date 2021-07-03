@@ -609,11 +609,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
+  private def seekType(
+      list: List[EirNode]
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
+    if (list.nonEmpty) list.init.foreach(visit(_))
+    list.lastOption.map(visit(_)).filterNot(_ == null)
+  }
+
   // TODO when the last statement in a block is an expression, put a "return" there
   override def visitBlock(
       node: EirBlock
   )(implicit ctx: TypeCheckContext): EirType = {
-    node.children.foreach(visit(_))
+    val lastTy = seekType(node.children)
 
     val retTys: List[EirType] = Find
       .descendant(
@@ -625,15 +632,20 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case _                      => Some(false)
         }
       )
-      .map(visit(_))
+      .map(_.asInstanceOf[EirReturn])
+      .map(r => visit(r.expression))
       .toList
 
-    if (retTys.isEmpty) {
+    val implicitReturn = retTys.isEmpty && lastTy.nonEmpty
+    node.implicitReturn = implicitReturn
+
+    val types = if (implicitReturn) lastTy.toList else retTys
+    if (types.isEmpty) {
       globals.unitType
     } else {
-      Find.unionType(retTys) match {
+      Find.unionType(types) match {
         case Some(x) => x
-        case None    => Errors.unableToUnify(node, retTys)
+        case None    => Errors.unableToUnify(node, types)
       }
     }
   }
@@ -752,9 +764,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           CheckFunctions.visit(ctx, node)
           ctx.start(subCtx)
           val bodyType = node.body.map(visit(_))
+          val implicitReturn = node.body.exists(_.implicitReturn)
           val retTy = visit(node.returnType)
-          if (!bodyType.forall(_.canAssignTo(retTy))) {
-            Errors.unableToUnify(node, bodyType.get, retTy)
+          if (!(implicitReturn && retTy == globals.unitType)) {
+            if (!bodyType.forall(_.canAssignTo(retTy))) {
+              Errors.unableToUnify(node, bodyType.get, retTy)
+            }
           }
           ctx.stop(subCtx)
         } catch {
@@ -957,6 +972,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       node: EirReturn
   )(implicit ctx: TypeCheckContext): EirType = {
     visit(node.expression)
+
+    null // TODO change to Nothing when it is extant
   }
 
   final case class TypeCheckException(message: String)
