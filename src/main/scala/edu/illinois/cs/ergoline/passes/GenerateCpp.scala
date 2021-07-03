@@ -1181,7 +1181,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val emptyBody = x.body.forall(_.children.isEmpty)
     var shouldEnclose = false
 
-
     if (member.exists(_.isConstructor)) {
       val parent = assertValid[EirClassLike](member.flatMap(_.parent))
 

@@ -297,10 +297,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   }
 
   private def flattened(): Iterable[String] = {
-    val collapsible = lines.indices filter {
-      idx => (idx + 1) < lines.size && lines(idx).endsWith("{") && (lines(idx + 1) == "{")
-    } map {
-      idx => (idx, shouldCollapseAt(idx + 2))
+    val collapsible = lines.indices filter { idx =>
+      (idx + 1) < lines.size && lines(idx).endsWith("{") && (lines(
+        idx + 1
+      ) == "{")
+    } map { idx =>
+      (idx, shouldCollapseAt(idx + 2))
     } collect {
       case (i, Some(j)) => (i + 1, j)
     } flatten {
