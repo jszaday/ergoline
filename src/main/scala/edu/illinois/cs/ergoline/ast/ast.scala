@@ -943,8 +943,8 @@ case class EirSpecializedSymbol(
 case class EirIfElse(
     var parent: Option[EirNode],
     var test: EirExpressionNode,
-    var ifTrue: Option[EirNode],
-    var ifFalse: Option[EirNode]
+    var ifTrue: Option[EirBlock],
+    var ifFalse: Option[EirBlock]
 ) extends EirNode {
   override def children: Iterable[EirNode] = Seq(test) ++ ifTrue ++ ifFalse
 
@@ -952,9 +952,9 @@ case class EirIfElse(
     ((test == oldNode) && util
       .applyOrFalse[EirExpressionNode](test = _, newNode)) ||
     (ifTrue.contains(oldNode) && util
-      .applyOrFalse[EirNode](x => ifTrue = Some(x), newNode)) ||
+      .applyOrFalse[EirBlock](x => ifTrue = Some(x), newNode)) ||
     (ifFalse.contains(oldNode) && util
-      .applyOrFalse[EirNode](x => ifFalse = Some(x), newNode))
+      .applyOrFalse[EirBlock](x => ifFalse = Some(x), newNode))
   }
 }
 
