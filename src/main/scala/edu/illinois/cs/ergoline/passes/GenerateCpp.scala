@@ -2070,7 +2070,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitBlock(
       x: EirBlock
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val topLevel = x.parent.exists(_.isInstanceOf[EirFunction])
+    val topLevel = x.parent exists {
+      case _: EirLambdaExpression => true
+      case _: EirFunction         => true
+      case _: EirSdagWhen         => true
+      case _: EirForLoop          => true
+      case _                      => false // TODO cleanup these exclusions?
+    }
+
     val singleStatement = x.children.length == 1
 
     ctx << Option.unless(!topLevel && singleStatement)("{")
