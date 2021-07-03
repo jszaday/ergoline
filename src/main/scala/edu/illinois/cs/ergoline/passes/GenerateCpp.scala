@@ -443,11 +443,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _                    => false
     }
 
-    val goal = ctx.typeOf(t._1) // Find.resolutions[EirType](t._2.declaredType)
-    val shouldDeref = goal.isPointer && t._2.isReference
+    val (ours, theirs) =
+      (ctx.typeOf(t._1), Find.uniqueResolution[EirType](t._2.declaredType))
+    val shouldDeref = ours.isPointer && t._2.isReference
+
     ctx << Option.when(shouldDeref)("*(") << implicitCast(
-      goal,
-      t._1,
+      (t._1, ours),
+      theirs,
       requiresRef
     ) << Option.when(shouldDeref)(")")
   }
@@ -2109,14 +2111,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def implicitCast(
+      pair: (EirExpressionNode, EirType),
       goal: EirType,
-      value: EirExpressionNode,
       requiresRef: Boolean
   )(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
-    val valueTy = ctx.resolve(ctx.typeOf(value))
-
+    val (value, valueTy) = pair
     (Find.tryClassLike(goal), Find.tryClassLike(valueTy)) match {
       case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
         ctx << ctx.nameFor(a) << "(" << value << ")"
@@ -2129,7 +2130,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def assignmentRhs(lhsTy: EirType, op: String, rhs: EirExpressionNode)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
-    ctx << op << implicitCast(lhsTy, rhs, requiresRef = false)
+    val rhsPair = (rhs, ctx.typeOf(rhs))
+    ctx << op << implicitCast(rhsPair, lhsTy, requiresRef = false)
   }
 
   override def visitAssignment(
