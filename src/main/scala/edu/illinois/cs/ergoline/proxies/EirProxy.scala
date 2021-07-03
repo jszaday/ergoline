@@ -168,8 +168,9 @@ case class EirProxy(
 
   private def indices: Option[List[EirType]] = {
     val n = collective.map(ProxyManager.dimensionality)
-    val i = globals.integerType
-    n.map(List.fill(_)(i))
+    val ty =
+      n.filter(_ > 3).map(_ => globals.shortType).getOrElse(globals.integerType)
+    n.map(List.fill(_)(ty))
   }
 
   def indexType: Option[EirType] = {

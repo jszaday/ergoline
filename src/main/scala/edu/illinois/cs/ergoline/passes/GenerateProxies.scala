@@ -146,11 +146,14 @@ object GenerateProxies {
     } */
   }
 
-  def indexForProxy(x: EirProxy): String = {
-    ProxyManager.dimensionality(x.collective.getOrElse("array2d")) match {
-      case 1 => "int"
-      case n => "std::tuple<" + ((0 until n).map(_ => "int") mkString ",") + ">"
-    }
+  def indexForProxy(ctx: CodeGenerationContext, x: EirProxy): String = {
+    x.indexType
+      .map(ctx.typeFor(_))
+      .getOrElse({
+        assert(x.collective.isEmpty)
+
+        "std::tuple<int,int>"
+      })
   }
 
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
@@ -164,6 +167,7 @@ object GenerateProxies {
     val mailboxes = x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
 
     ctx << s"struct $name: public hypercomm::vil<CBase_$name$args" << "," << indexForProxy(
+      ctx,
       x
     ) << ">" << "{"
 

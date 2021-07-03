@@ -1,0 +1,27 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def main(args: array<string>) {
+        val n = ((args.size() > 1) ? args[1].toInt() : 8).toShort();
+        val arrProxy: hello6d@array6d = new hello6d@array6d();
+
+        for (var i = (0).toShort(); i < n; i += (1).toShort()) {
+            arrProxy[i, i, i, i, i, i].sayHi();
+        }
+
+        ck::exitAfterQuiescence();
+    }
+}
+
+class hello6d {
+    @entry def hello6d() { }
+
+    @entry @createhome def sayHi(): unit {
+        val mine = self[@]index();
+
+        println(`(${mine[0]}, ${mine[1]}, ${mine[2]}, ${mine[3]}, ${mine[4]}, ${mine[5]},)> hello!`);
+    }
+}

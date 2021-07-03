@@ -9,6 +9,8 @@ import ergoline::unit;
 
 @system(alias="CkWaitQD") def awaitQuiescence(): unit;
 
+@system(alias="CkExitAfterQuiescence") def exitAfterQuiescence(): unit;
+
 /* Charm++ recognizes two logical machine entities: “node” and PE (processing element).
  * The following functions provide basic information about such logical machine that a Charm++ program runs on.
  * PE and “node” are numbered starting from zero. */

@@ -110,6 +110,7 @@ package object globals {
 
   def boolType: EirType = typeFor("bool")
 
+  def shortType: EirType = typeFor("short")
   def integerType: EirType = typeFor("int")
 
   def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
