@@ -443,16 +443,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _                    => false
     }
 
-    Find.resolutions[EirType](t._2.declaredType) match {
-      case goal :: _ =>
-        val shouldDeref = goal.isPointer && t._2.isReference
-        ctx << Option.when(shouldDeref)("*(") << implicitCast(
-          goal,
-          t._1,
-          requiresRef
-        ) << Option.when(shouldDeref)(")")
-      case Nil => ???
-    }
+    val goal = ctx.typeOf(t._1) // Find.resolutions[EirType](t._2.declaredType)
+    val shouldDeref = goal.isPointer && t._2.isReference
+    ctx << Option.when(shouldDeref)("*(") << implicitCast(
+      goal,
+      t._1,
+      requiresRef
+    ) << Option.when(shouldDeref)(")")
   }
 
   def visitArguments(
@@ -744,6 +741,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val cast = system("cast").exists(_.toBoolean)
     val name =
       system("alias").map(_.strip()).getOrElse(ctx.nameFor(disambiguated))
+    val argWrapper = system("applyArg").map(_.strip())
+    val resWrapper = system("applyResult").map(_.strip())
+    if (!argWrapper.forall(_ => name == "apply")) ???
+    resWrapper.foreach(x => ctx << s"$x(")
     disambiguated match {
       case _ if operator =>
         val flattened = flattenArgs(args)
@@ -785,10 +786,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << s"((" << ctx.typeFor(f.returnType) << ")" << base << ")"
       case m: EirMember =>
         if (name == "apply")
-          ctx << base << s"(" << visitArguments(
+          ctx << base << s"(" << argWrapper.map(x => s"$x(") << visitArguments(
             Some(disambiguated),
             args
-          ) << ")"
+          ) << argWrapper.map(_ => ")") << ")"
         else {
           val fqnOrDot =
             if (m.isStatic) "::" else fieldAccessorFor(ctx.exprType(base))
@@ -807,6 +808,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           args
         ) << "))"
     }
+    resWrapper.foreach(_ => ctx << ")")
   }
 
   def disambiguate(
@@ -1227,6 +1229,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx <| (x.body, ";")
   }
 
+  def generateReturnType(x: EirFunction, isAsyncCi: Boolean)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = {
+    if (isAsyncCi) {
+      ctx << "void"
+    } else {
+      val retTy = ctx.typeFor(x.returnType)
+      x.predicate match {
+        case Some(p) =>
+          ctx << "typename" << "std::enable_if<" << StaticGenerator.visit(
+            p
+          ) << "," << retTy << ">::type"
+        case None => ctx << retTy
+      }
+    }
+  }
+
   def visitFunction(x: EirFunction, isMember: Boolean)(implicit
       ctx: CodeGenerationContext
   ): Unit = {
@@ -1262,11 +1281,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     visitTemplateArgs(x.templateArgs)
     ctx << virtual
     // TODO add templates when !isMember
-    if (asyncCi) {
-      ctx << "void"
-    } else {
-      ctx << Option.when(!isConstructor)(ctx.typeFor(x.returnType))
-    }
+    if (!isConstructor) generateReturnType(x, asyncCi)
     val args = x.functionArgs ++ x.implicitArgs
     ctx << name << "("
     val currSelf = if (hasSystemParent) {

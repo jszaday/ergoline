@@ -6,42 +6,50 @@ import ergoline::_;
     var count: int = 0;
 
     @entry def activator() {
+        self@activate(new duck());
         self@activate(new lion());
     }
 
     @entry def activate(a: animal): unit {
-        val canFly: bool = match(a) {
-            case b: bird => true;
-            case _ => false;
-        };
+        match (a) {
+            case d: duck => makeSound(d);
+            case l: lion => makeSound(l);
+        }
 
-        println(`A ${a.species()} ${a.vocalization()} ${
-                 canFly ? "and can" : "but cannot"} fly.`);
+        val id = typeid(a);
+        println(`hey> a(n) ${id.name()} has ${a.numLegs()} legs!`);
 
-        if (count == 0) {
-            count += 1;
-            self@activate(new duck());
-        } else {
+        count += 1;
+        if (count >= 2) {
             exit();
         }
     }
 }
 
+def makeSound<A>(a: A) where A == lion {
+    println("hey> a lion roars!");
+}
+
+def makeSound<A>(a: A) where A == duck {
+    println("hey> a duck quacks!");
+}
+
 class lion with animal {
-    def lion(): unit { }
-    override def vocalization(): string { return "roars"; }
-    override def species(): string { return "lion"; }
+    def lion(): unit {}
+
+    override def numLegs(): int {
+        return 4;
+    }
 }
 
-class duck with bird {
-    def duck(): unit { }
-    override def vocalization(): string { return "quacks"; }
-    override def species(): string { return "duck"; }
-}
+class duck with animal {
+    def duck(): unit {}
 
-trait bird with animal { }
+    override def numLegs(): int {
+        return 2;
+    }
+}
 
 trait animal {
-    def vocalization(): string;
-    def species(): string;
+    def numLegs(): int;
 }
