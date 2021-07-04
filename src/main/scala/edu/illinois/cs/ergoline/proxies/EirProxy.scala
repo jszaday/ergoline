@@ -133,7 +133,27 @@ case class EirProxy(
     )
   }
 
-  // replace "self" with "selfProxy"
+  private def updateConstructor(
+      x: EirMember,
+      xtraArgs: List[EirResolvable[EirType]]
+  ): EirMember = {
+    val args = {
+      x.member match {
+        case f: EirFunction => f.functionArgs.map(_.declaredType)
+        case _              => ???
+      }
+    }
+    val generated = util.makeMemberFunction(
+      this,
+      if (x.isConstructor) baseName else x.name,
+      xtraArgs ++ args,
+      globals.unitType
+    )
+    generated.counterpart = Some(x)
+    generated
+  }
+
+  // replace "self" with "selfProxy"?
   // TODO use clone
   private def updateMember(m: EirMember): EirMember = {
     val theirs = m.member.asInstanceOf[EirFunction]
@@ -193,38 +213,45 @@ case class EirProxy(
     )
   }
 
+  def isArray: Boolean = collective.exists(_.startsWith("array"))
+
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
-
     val idxTy = idx.toTupleType()(None)
     val eleTy = ProxyManager.elementType(this)
     val secTy = ProxyManager.sectionType(this)
-    val unitTy = globals.unitType
     val arrayTy = // TODO iterable could be used here instead?
       EirTemplatedType(None, globals.arrayType, List(idxTy))
     val rangeTys =
       idx.map(x => EirTemplatedType(None, globals.rangeType, List(x)))
 
-    val needsIndex = collective.exists(_.startsWith("array"))
-    base.members
-      .filter(x => validMember(x) && x.isConstructor)
-      .map(m => {
-        // ckNew(n, ...); constructor with size + args
-        val args =
-          m.member.asInstanceOf[EirFunction].functionArgs.map(_.declaredType)
-        util.makeMemberFunction(
-          this,
-          baseName,
-          (if (needsIndex) idx else Nil) ++ args,
-          unitTy
-        )
-      }) ++ {
-      // ckNew(); <-- empty constructor
-      if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, unitTy))
-      else Nil
-    } :+ util.makeMemberFunction(this, "get", idx, eleTy) :+
+    // ckNew(); <-- empty constructor
+    Option
+      .when(isArray)(
+        util.makeMemberFunction(this, baseName, Nil, globals.unitType)
+      )
+      .toList :+
+      util.makeMemberFunction(this, "get", idx, eleTy) :+
       util.makeMemberFunction(this, "get", List(arrayTy), secTy) :+
       util.makeMemberFunction(this, "get", rangeTys, secTy)
+  }
+
+  def baseMembers: List[EirMember] = {
+    Option
+      .unless(singleton)({
+        val idx: List[EirType] = indices.get
+
+        base.members
+          .filter(x => validMember(x) && x.isConstructor)
+          .map(m => // ckNew(n, ...); constructor with size + args
+            updateConstructor(m, if (isArray) idx else Nil)
+          )
+      })
+      .getOrElse(Nil) ++ {
+      base.members
+        .filter(x => validMember(x) && (singleton || !x.isConstructor))
+        .map(updateMember)
+    }
   }
 
   override def members: List[EirMember] = {
@@ -237,9 +264,7 @@ case class EirProxy(
           case _                          => Nil
         }
 
-      internalMembers = fromKind ++ base.members
-        .filter(x => validMember(x) && (singleton || !x.isConstructor))
-        .map(updateMember)
+      internalMembers = fromKind ++ baseMembers
     }
 
     internalMembers

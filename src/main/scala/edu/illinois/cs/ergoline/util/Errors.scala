@@ -256,6 +256,10 @@ object Errors {
     exit(format(node, "expected an lvalue but got %s instead", node))
   }
 
+  def expectedDefaultConstructible(node: EirClassLike): Nothing = {
+    exit(format(node, "expected %s to be default constructible!", node))
+  }
+
   def unboundSlice(node: EirSlice, ty: Option[EirType]): Nothing = {
     exit(
       format(
@@ -278,11 +282,22 @@ object Errors {
     )
   }
 
-  def unsupportedOperation(node: EirNode, what: String, why: String): Unit = {
+  object Limitation extends Enumeration {
+    type Limitation = Value
+
+    val CppCodeGen = Value("C++ Code Generation")
+    val CharmxiCodeGen = Value("Charmxi Code Generation")
+  }
+
+  def unsupportedOperation(
+      node: EirNode,
+      what: String,
+      why: Limitation.Value
+  ): Unit = {
     exit(
       format(
         node,
-        "due to %s, %s",
+        "due to limitations pertaining to %s, %s",
         why,
         what
       )

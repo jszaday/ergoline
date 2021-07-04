@@ -51,9 +51,8 @@ object ProxyManager {
       base: EirClassLike,
       collective: Option[String],
       kind: Option[EirProxyKind]
-  ): EirProxy = {
-    // validate base has an entry constructor of the appropriate nature
-    EirProxy(base.parent, base, collective, kind)
+  )(implicit ctx: TypeCheckContext): EirProxy = {
+    CheckProxy(EirProxy(base.parent, base, collective, kind))
   }
 
   private def findCorrespondence(
