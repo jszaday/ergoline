@@ -105,7 +105,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  private def isStatic(lhs: EirExpressionNode, lhsTy: EirType): Boolean = {
+  private def isStatic(lhs: EirExpressionNode): Boolean = {
     lhs.disambiguation match {
       case Some(c: EirClass)     => !c.objectType
       case Some(_: EirClassLike) => true
@@ -115,11 +115,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   private def checkStaticness(
       lhs: EirExpressionNode,
-      lhsTy: EirType,
-      n: EirNamedNode
+      found: EirNamedNode
   ): Unit = {
-    val staticBase = isStatic(lhs, lhsTy)
-    n match {
+    val staticBase = isStatic(lhs)
+    found match {
       case m: EirMember if staticBase && !m.isStatic =>
         Errors.invalidAccess(lhs, m)
       case m: EirMember if !staticBase && m.isStatic =>
@@ -142,7 +141,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     found match {
       case Some((member, result)) =>
         x.disambiguation = Some(member)
-        checkStaticness(x.target, base, member)
+        checkStaticness(x.target, member)
         prevFc.foreach(validate(ctx, member, _))
         result
       case None =>
@@ -928,27 +927,37 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
+  private def isValidMemberAssign(node: EirAssignment, m: EirMember) = {
+    (m.member match {
+      case d: EirDeclaration => !d.isFinal
+      case _                 => false
+    }) || {
+      Find
+        .parentOf[EirMember](node)
+        .exists(x => x.isConstructor && x.base == m.base)
+    }
+  }
+
   def isInvalidFinalAssign(node: EirAssignment): Boolean = {
     node.lval match {
       case s: EirSymbol[_] =>
-        Find.uniqueResolution[EirNode](s) match {
-          case d: EirDeclaration =>
-            d.isFinal && {
-              !d.parent
-                .to[EirMember]
-                .map(_.base)
-                .exists(x => {
-                  Find
-                    .parentOf[EirMember](node)
-                    .exists(m => m.base == x && m.isConstructor)
-                })
-            }
+        val resolution = ((x: EirNode) => asMember(Some(x)).getOrElse(x))(
+          Find.uniqueResolution[EirNode](s)
+        )
+
+        resolution match {
+          case m: EirMember           => !isValidMemberAssign(node, m)
+          case d: EirDeclaration      => d.isFinal
           case _: EirFunctionArgument => true
           case _                      => false
         }
-      case _: EirArrayReference  => false
-      case _: EirScopedSymbol[_] => ???
-      case _                     => true
+      case _: EirArrayReference => false
+      case s: EirScopedSymbol[_] =>
+        asMember(s.disambiguation).orElse(s.disambiguation) match {
+          case Some(m: EirMember) => !isValidMemberAssign(node, m)
+          case _                  => false
+        }
+      case _ => true
     }
   }
 

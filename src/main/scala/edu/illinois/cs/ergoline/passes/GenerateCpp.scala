@@ -991,8 +991,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitSymbol[A <: EirNamedNode](
       x: EirSymbol[A]
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val member = asMember(x.disambiguation)
     if (!CheckTypes.isSelf(x)) {
-      asMember(x.disambiguation) match {
+      member match {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
             if (m.isEntryOnly) {
@@ -1005,10 +1006,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     }
 
-    ctx << asMember(x.disambiguation)
-      .filter(_.isEntryOnly)
-      .map(ctx.nameFor(_))
-      .getOrElse(ctx.nameFor(x, Some(x)))
+    x.disambiguation match {
+      case Some(c: EirClass) if c.objectType =>
+        ctx << "ergoline::access_singleton<" << ctx.nameFor(c, Some(x)) << ">()"
+      case _ =>
+        ctx << member
+          .filter(_.isEntryOnly)
+          .map(ctx.nameFor(_))
+          .getOrElse(ctx.nameFor(x, Some(x)))
+    }
   }
 
   override def visitDeclaration(
@@ -1474,6 +1480,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def declNameFor(
+      s: EirSpecializable,
+      name: Option[String],
+      includeTemplates: Boolean,
+      usage: Option[EirNode]
+  )(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    if (s.templateArgs.nonEmpty) {
+      val subst = s.templateArgs.map(ctx.hasSubstitution)
+      val substDefined = subst.forall(_.isDefined)
+      name.get + (if (includeTemplates || substDefined) {
+                    "<" + {
+                      if (substDefined)
+                        subst.flatten.map(ctx.typeFor(_, usage))
+                      else s.templateArgs.map(ctx.typeFor(_, usage))
+                    }.mkString(",") + ">"
+                  } else "")
+    } else {
+      name.get
+    }
+  }
+
   def nameFor(
       ctx: CodeGenerationContext,
       x: EirNode,
@@ -1526,7 +1555,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           },
           m
         )(ctx)
-      case f: EirFunction if proxy.isDefined =>
+      case _: EirFunction if proxy.isDefined =>
         nameForProxyMember(proxy, asMember(opt).get)(ctx)
       case _ if proxy.isDefined =>
         val prefix =
@@ -1560,19 +1589,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
                 .getOrElse("")
           }
         }
-      case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
-        val subst = x.templateArgs.map(ctx.hasSubstitution)
-        val substDefined = subst.forall(_.isDefined)
-        dealiased.get + (if (includeTemplates || substDefined) {
-                           "<" + {
-                             if (substDefined)
-                               subst.flatten.map(ctx.typeFor(_, usage))
-                             else x.templateArgs.map(ctx.typeFor(_, usage))
-                           }.mkString(",") + ">"
-                         } else "")
+      case x: EirSpecializable with EirNamedNode =>
+        declNameFor(x, dealiased, includeTemplates, usage)(ctx)
+      case _: EirNamedNode => dealiased.get
       case t: EirTupleType =>
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
-      case _: EirNamedNode      => dealiased.get
       case s: EirConstantFacade => s.value.toString
       case x: EirLambdaExpression =>
         _lambda_names.get(x) match {

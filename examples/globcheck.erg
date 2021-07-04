@@ -1,0 +1,27 @@
+package examples;
+
+import ergoline::_;
+
+object configuration {
+    var numFoo: int = 21;
+    val numBar: int = 42;
+    val numBaz: int = 63;
+}
+
+@main class globcheck {
+    @entry def globcheck(args: array<string>) {
+        assert(configuration.numBar == 42);
+
+        configuration.numFoo *= 3;
+
+        assert(configuration.numFoo == configuration.numBaz);
+
+        /* TODO add ck::updateGlobal<configuration>(cb)
+         *      then check that it was updated on another PE
+         */
+
+        println("info> basic globals seem OK");
+
+        exit();
+    }
+}

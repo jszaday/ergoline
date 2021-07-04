@@ -51,6 +51,41 @@ inline std::int64_t timestamp() {
   auto curr = std::chrono::system_clock::now();
   return std::chrono::duration_cast<std::chrono::seconds>(curr.time_since_epoch()).count();
 }
+
+namespace {
+class generic_singleton {};
+
+template <typename T>
+struct typed_singleton : public generic_singleton {
+  std::shared_ptr<T> instance;
+
+  typed_singleton(void) : instance(new T()) {}
+};
+
+using singleton_map_type =
+    std::map<std::type_index, std::unique_ptr<generic_singleton>>;
+
+CkpvDeclare(singleton_map_type, singleton_map_);
+}
+
+template <typename T>
+const std::shared_ptr<T>& access_singleton(void) {
+  if (!CkpvInitialized(singleton_map_)) {
+    CkpvInitialize(singleton_map_type, singleton_map_);
+  }
+  std::type_index typeIdx(typeid(T));
+  auto& ptr = CkpvAccess(singleton_map_)[typeIdx];
+  typed_singleton<T>* record = nullptr;
+  if (!ptr) {
+    record = new typed_singleton<T>();
+
+    ptr.reset(record);
+  } else {
+    record = static_cast<decltype(record)>(ptr.get());
+  }
+  return record->instance;
+}
+
 }
 
 #endif
