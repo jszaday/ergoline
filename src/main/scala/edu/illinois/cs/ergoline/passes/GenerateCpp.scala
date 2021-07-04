@@ -1800,9 +1800,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           }
         val postDrop = args.drop(numTake)
         if (postDrop.nonEmpty) {
-          ctx << "hypercomm::pack(" << {
-            visitArguments(None, x.disambiguation, postDrop)
-          } << ")" << Option.unless(numTake == 0)(",")
+          ctx << visitArguments(None, x.disambiguation, postDrop) << Option
+            .unless(numTake == 0)(",")
         }
         if (numTake > 0) {
           ctx << "CkArrayOptions("
