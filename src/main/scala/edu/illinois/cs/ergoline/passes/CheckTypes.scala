@@ -4,13 +4,13 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
   EirLiteralSymbol,
   EirLiteralType
 }
-import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
@@ -29,7 +29,6 @@ import edu.illinois.cs.ergoline.util.{
   Errors,
   assertValid,
   isSystem,
-  resolveToPair,
   validAccessibility
 }
 
@@ -106,6 +105,29 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  private def isStatic(lhs: EirExpressionNode, lhsTy: EirType): Boolean = {
+    lhs.disambiguation match {
+      case Some(c: EirClass)     => !c.objectType
+      case Some(_: EirClassLike) => true
+      case _                     => false
+    }
+  }
+
+  private def checkStaticness(
+      lhs: EirExpressionNode,
+      lhsTy: EirType,
+      n: EirNamedNode
+  ): Unit = {
+    val staticBase = isStatic(lhs, lhsTy)
+    n match {
+      case m: EirMember if staticBase && !m.isStatic =>
+        Errors.invalidAccess(lhs, m)
+      case m: EirMember if !staticBase && m.isStatic =>
+        Errors.invalidAccess(lhs, m)
+      case _ =>
+    }
+  }
+
   // TODO add checks for static-ness?
   override def visitScopedSymbol[A <: EirNode](
       x: EirScopedSymbol[A]
@@ -120,6 +142,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     found match {
       case Some((member, result)) =>
         x.disambiguation = Some(member)
+        checkStaticness(x.target, base, member)
         prevFc.foreach(validate(ctx, member, _))
         result
       case None =>

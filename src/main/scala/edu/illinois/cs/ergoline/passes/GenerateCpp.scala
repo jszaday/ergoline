@@ -1872,8 +1872,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val ty = ctx.resolve(t)
         ctx.ignoreNext(";")
         if (ty.isPointer && i.needsCasting)
-          ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${ctx
-            .nameFor(t)}>($current);"
+          ctx << i.declarations.head << "=" << "std::dynamic_pointer_cast<" << ctx
+            .nameFor(t) << ">(" << current << ");"
         // TODO make this a reference!
         else ctx << i.declarations.head << s" = $current;"
       case i: EirIdentifierPattern =>

@@ -246,12 +246,27 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitClassDeclaration(
       ctx: ClassDeclarationContext
   ): EirClassLike = {
+    val kind = ctx.classKind()
     val name = ctx.identifier().getText
     val node: EirClassLike = {
-      val isClass = ctx.ClassKwd() != null
-      val isStruct = ctx.StructKwd() != null
-      if (isClass || isStruct) {
-        EirClass(parent, null, name, null, None, Nil, None, isStruct)
+      val isClass = kind.ClassKwd() != null
+      val isStruct = kind.StructKwd() != null
+      val isObject = kind.ObjectKwd() != null
+
+      if (isClass || isObject || isStruct) {
+        EirClass(
+          parent,
+          null,
+          name,
+          null,
+          None,
+          Nil,
+          None, {
+            if (isClass) EirReferenceType
+            else if (isObject) EirSingletonType
+            else EirValueType
+          }
+        )
       } else {
         EirTrait(parent, null, name, null, None, Nil, None)
       }
@@ -259,7 +274,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     enter(
       node,
       (c: EirClassLike) => {
-        c.isAbstract = c.isAbstract || ctx.AbstractKwd() != null
+        c.isAbstract = c.isAbstract || kind.AbstractKwd() != null
         Option(ctx.inheritanceDecl()).foreach(visitInheritanceDecl)
         c.templateArgs = visitTemplateDeclaration(ctx.templateDecl())
         c.members = ctx.mapOrEmpty(_.annotatedMember, visitAs[EirMember])

@@ -376,6 +376,12 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
     false
 }
 
+sealed trait EirClassKind
+
+case object EirValueType extends EirClassKind
+case object EirReferenceType extends EirClassKind
+case object EirSingletonType extends EirClassKind
+
 case class EirClass(
     var parent: Option[EirNode],
     var members: List[EirMember],
@@ -384,9 +390,21 @@ case class EirClass(
     var extendsThis: Option[EirResolvable[EirType]],
     var implementsThese: List[EirResolvable[EirType]],
     var predicate: Option[EirExpressionNode],
-    var valueType: Boolean = false
+    var kind: EirClassKind
 ) extends EirNode
-    with EirClassLike
+    with EirClassLike {
+  def valueType: Boolean =
+    kind match {
+      case EirValueType => true
+      case _            => false
+    }
+
+  def objectType: Boolean =
+    kind match {
+      case EirSingletonType => true
+      case _                => false
+    }
+}
 
 case class EirTrait(
     var parent: Option[EirNode],

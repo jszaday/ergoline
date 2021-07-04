@@ -302,7 +302,7 @@ object Find {
       implicit ctx: TypeCheckContext
   ): View[(EirMember, EirType)] = {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
-    def helper(x: EirMember) = {
+    def helper(x: EirMember): (EirMember, EirType) = {
       (accessor.isStatic, x.isStatic) match {
         case (true, true) | (false, false) => (x, CheckTypes.visit(x))
         case (true, false) if x.member.isInstanceOf[EirFunction] =>
