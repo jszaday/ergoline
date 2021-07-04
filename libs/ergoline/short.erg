@@ -1,0 +1,33 @@
+package ergoline;
+
+@system struct short {
+    @system(operator=true,reducer="CkReduction::sum_short")
+    def +(other: short): short;
+
+    @system(operator=true) def -(other: short): short;
+    @system(operator=true) def *(other: short): short;
+    @system(operator=true) def /(other: short): short;
+    @system(operator=true) def %(other: short): short;
+    @system(operator=true) def %(other: int): int;
+
+    @system(operator=true,alias="-")
+    def <=>(other: short): short;
+
+    @system(operator=true) def unary_+(): short;
+    @system(operator=true) def unary_-(): short;
+
+    @system(operator=true) def unary_~(): short;
+    @system(operator=true) def ^(other: short): short;
+    @system(operator=true) def |(other: short): short;
+    @system(operator=true) def &(other: short): short;
+    @system(operator=true) def <<(other: short): short;
+    @system(operator=true) def >>(other: short): short;
+
+    @system(cast=true) def toInt(): int;
+    @system(cast=true) def toBool(): bool;
+    @system(cast=true) def toLong(): long;
+    @system(cast=true) def toDouble(): double;
+
+    @system(alias="std::to_string",static=true)
+    def toString(): string;
+}

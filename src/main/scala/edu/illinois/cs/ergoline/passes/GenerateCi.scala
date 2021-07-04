@@ -102,10 +102,16 @@ object GenerateCi {
     } << "};"
   }
 
+  val passThruAttributes: Seq[String] = Seq(
+    "threaded",
+    "createhome",
+    "createhere"
+  )
+
   def attributesFor(p: EirProxy, m: EirMember): String = {
     val attributes =
+      passThruAttributes.flatMap(m.annotation).map(_.name)
 //      Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
-      m.annotation("threaded").map(_.name)
     if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }
 

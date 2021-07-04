@@ -1,0 +1,42 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def main(args: array<string>) {
+        val n = ((args.size() > 1) ? args[1].toInt() : 8).toShort();
+        val arrProxy: hello6d@array6d = new hello6d@array6d();
+
+        for (var i = (0).toShort(); i < n; i += (1).toShort()) {
+            if (i % 2 == 0) {
+                arrProxy[i, i, i, i, i, i].sayHi();
+            } else {
+                // TODO enable ( arrProxy[i, i, i, i, i, i].insert(n).sayHello() )
+                // NOTE make ( insert ) return a proxy element
+                arrProxy[i, i, i, i, i, i].insert(n);
+                arrProxy[i, i, i, i, i, i].sayHello();
+            }
+        }
+
+        arrProxy.doneInserting();
+
+        ck::exitAfterQuiescence();
+    }
+}
+
+class hello6d {
+    @entry def hello6d() { }
+
+    @entry def hello6d(n: short) { }
+
+    @entry def sayMessage(what: string) {
+        val mine = self[@]index();
+        // TODO add a (toString) method to tuples to hide all this!
+        println(`(${mine[0]}, ${mine[1]}, ${mine[2]}, ${mine[3]}, ${mine[4]}, ${mine[5]},)> ${what}!`);
+    }
+
+    @entry def sayHello() { self.sayMessage("hello"); }
+
+    @entry @createhome def sayHi() { self.sayMessage("hi"); }
+}

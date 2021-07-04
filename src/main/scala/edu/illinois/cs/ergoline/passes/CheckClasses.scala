@@ -37,7 +37,7 @@ object CheckClasses {
         Errors.unsupportedOperation(
           node,
           "nested classes must be non-public",
-          "c++ codegen constraints"
+          Errors.Limitation.CppCodeGen
         )
       })
 
@@ -47,7 +47,7 @@ object CheckClasses {
         Errors.unsupportedOperation(
           node,
           "nested classes must be @transient",
-          "c++ codegen constraints"
+          Errors.Limitation.CppCodeGen
         )
       })
 

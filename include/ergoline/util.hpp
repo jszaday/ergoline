@@ -10,8 +10,29 @@
 
 #define CkAssertNot(b) CkAssert(!b)
 
-std::ostream& operator<< (std::ostream& stream, const std::tuple<int, int>& idx) {
-  return stream << "(" << std::get<0>(idx) << ", " << std::get<1>(idx) << ")";
+namespace detail {
+template <int... Is>
+struct seq {};
+
+template <int N, int... Is>
+struct gen_seq : gen_seq<N - 1, N - 1, Is...> {};
+
+template <int... Is>
+struct gen_seq<0, Is...> : seq<Is...> {};
+
+template <typename T, typename F, int... Is>
+void for_each(T&& t, F f, seq<Is...>) {
+  auto l = {(f(std::get<Is>(t)), 0)...};
+}
+}
+
+template<typename... Ts>
+std::ostream& operator<< (std::ostream& stream, const std::tuple<Ts...>& idx) {
+  stream << "(";
+  detail::for_each(idx, [&](const int& i) {
+    stream << i << ",";
+  }, detail::gen_seq<sizeof...(Ts)>());
+  return stream << ")";
 }
 
 namespace ergoline {

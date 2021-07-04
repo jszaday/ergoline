@@ -24,6 +24,7 @@ package ergoline;
 
     @system(cast=true) def toBool(): bool;
     @system(cast=true) def toLong(): long;
+    @system(cast=true) def toShort(): short;
     @system(cast=true) def toDouble(): double;
 
     @system(alias="std::to_string",static=true)

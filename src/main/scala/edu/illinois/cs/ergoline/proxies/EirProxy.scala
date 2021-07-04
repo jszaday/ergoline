@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.EirLiteral
+import edu.illinois.cs.ergoline.ast.literals.EirStringLiteral
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
@@ -133,7 +133,42 @@ case class EirProxy(
     )
   }
 
-  // replace "self" with "selfProxy"
+  private def updateConstructor(asInsert: Boolean)(
+      x: EirMember
+  ): EirMember = {
+    // NOTE for legacy reasons, singleton cons still use the default codepath
+    if (singleton && !asInsert) {
+      return updateMember(x)
+    }
+
+    assert(x.isConstructor)
+    val idx: List[EirType] =
+      if (isArray && !asInsert) indices.get else Nil
+    val args = {
+      x.member match {
+        case f: EirFunction => f.functionArgs.map(_.declaredType)
+        case _              => ???
+      }
+    }
+    val insertName = "insert"
+    val generated = util.makeMemberFunction(
+      this,
+      if (asInsert) insertName else baseName,
+      idx ++ args,
+      globals.unitType
+    )
+    generated.annotations +:= EirAnnotation("entry", Map())
+    generated
+      .annotation("system")
+      .filter(_ => asInsert)
+      .foreach(x => {
+        x.opts += ("alias" -> EirStringLiteral("\"" + insertName + "\"")(None))
+      })
+    generated.counterpart = Some(x)
+    generated
+  }
+
+  // replace "self" with "selfProxy"?
   // TODO use clone
   private def updateMember(m: EirMember): EirMember = {
     val theirs = m.member.asInstanceOf[EirFunction]
@@ -168,8 +203,9 @@ case class EirProxy(
 
   private def indices: Option[List[EirType]] = {
     val n = collective.map(ProxyManager.dimensionality)
-    val i = globals.integerType
-    n.map(List.fill(_)(i))
+    val ty =
+      n.filter(_ > 3).map(_ => globals.shortType).getOrElse(globals.integerType)
+    n.map(List.fill(_)(ty))
   }
 
   def indexType: Option[EirType] = {
@@ -186,44 +222,50 @@ case class EirProxy(
     val parent = ProxyManager.collectiveFor(this).get
     val idx = indexType.get
 
-    genContributors() ++ List(
+    genContributors() ++ baseConstructors(asInsert = true) ++ List(
       util.makeMemberFunction(this, "parent", Nil, parent),
       util.makeMemberFunction(this, "index", Nil, idx)
     )
   }
 
+  def isArray: Boolean = collective.exists(_.startsWith("array"))
+
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
-
     val idxTy = idx.toTupleType()(None)
     val eleTy = ProxyManager.elementType(this)
     val secTy = ProxyManager.sectionType(this)
-    val unitTy = globals.unitType
     val arrayTy = // TODO iterable could be used here instead?
       EirTemplatedType(None, globals.arrayType, List(idxTy))
     val rangeTys =
       idx.map(x => EirTemplatedType(None, globals.rangeType, List(x)))
 
-    val needsIndex = collective.exists(_.startsWith("array"))
-    base.members
-      .filter(x => validMember(x) && x.isConstructor)
-      .map(m => {
-        // ckNew(n, ...); constructor with size + args
-        val args =
-          m.member.asInstanceOf[EirFunction].functionArgs.map(_.declaredType)
-        util.makeMemberFunction(
-          this,
-          baseName,
-          (if (needsIndex) idx else Nil) ++ args,
-          unitTy
+    Option
+      .when(isArray)(
+        List(
+          // ckNew(); <-- empty constructor
+          util.makeMemberFunction(this, baseName, Nil, globals.unitType),
+          util.makeMemberFunction(this, "doneInserting", Nil, globals.unitType)
         )
-      }) ++ {
-      // ckNew(); <-- empty constructor
-      if (needsIndex) List(util.makeMemberFunction(this, baseName, Nil, unitTy))
-      else Nil
-    } :+ util.makeMemberFunction(this, "get", idx, eleTy) :+
+      )
+      .getOrElse(Nil) :+
+      util.makeMemberFunction(this, "get", idx, eleTy) :+
       util.makeMemberFunction(this, "get", List(arrayTy), secTy) :+
       util.makeMemberFunction(this, "get", rangeTys, secTy)
+  }
+
+  def baseConstructors(asInsert: Boolean = false): List[EirMember] = {
+    base.members
+      .filter(x => validMember(x) && x.isConstructor)
+      .map(updateConstructor(asInsert))
+  }
+
+  def baseMembers: List[EirMember] = {
+    baseConstructors() ++ {
+      base.members
+        .filter(x => validMember(x) && !x.isConstructor)
+        .map(updateMember)
+    }
   }
 
   override def members: List[EirMember] = {
@@ -236,9 +278,7 @@ case class EirProxy(
           case _                          => Nil
         }
 
-      internalMembers = fromKind ++ base.members
-        .filter(x => validMember(x) && (singleton || !x.isConstructor))
-        .map(updateMember)
+      internalMembers = fromKind ++ baseMembers
     }
 
     internalMembers
