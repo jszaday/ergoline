@@ -9,14 +9,16 @@ object CheckProxy {
   // validate base has an entry constructor of the appropriate nature
   def apply(x: EirProxy)(implicit ctx: TypeCheckContext): EirProxy = {
     val baseMembers = x.baseMembers
-    val constructors = baseMembers.filter(_.isConstructor)
+    val constructors = x.baseConstructors()
     val numConstructors = constructors.size
-    val defaultConstructor = constructors flatMap (_.counterpart) find {
+    val defaultConstructors = constructors flatMap (_.counterpart) filter {
       case EirMember(_, f: EirFunction, _) => f.functionArgs.isEmpty
       case _                               => false
     }
 
-    if (numConstructors > 1) {
+    if (
+      numConstructors > 1 && !(numConstructors == 2 && defaultConstructors.size == 1)
+    ) {
       Errors.unsupportedOperation(
         x.base,
         "multiple constructors are unsupported",
@@ -39,7 +41,7 @@ object CheckProxy {
 
     val creators =
       baseMembers.filter(_.annotations.exists(_.name.startsWith("create")))
-    if (x.isArray && creators.nonEmpty && defaultConstructor.isEmpty) {
+    if (x.isArray && creators.nonEmpty && defaultConstructors.isEmpty) {
       Errors.expectedDefaultConstructible(x.base)
     }
 

@@ -9,8 +9,17 @@ import ck;
         val arrProxy: hello6d@array6d = new hello6d@array6d();
 
         for (var i = (0).toShort(); i < n; i += (1).toShort()) {
-            arrProxy[i, i, i, i, i, i].sayHi();
+            if (i % 2 == 0) {
+                arrProxy[i, i, i, i, i, i].sayHi();
+            } else {
+                // TODO enable ( arrProxy[i, i, i, i, i, i].insert(n).sayHello() )
+                // NOTE make ( insert ) return a proxy element
+                arrProxy[i, i, i, i, i, i].insert(n);
+                arrProxy[i, i, i, i, i, i].sayHello();
+            }
         }
+
+        arrProxy.doneInserting();
 
         ck::exitAfterQuiescence();
     }
@@ -19,9 +28,15 @@ import ck;
 class hello6d {
     @entry def hello6d() { }
 
-    @entry @createhome def sayHi(): unit {
-        val mine = self[@]index();
+    @entry def hello6d(n: short) { }
 
-        println(`(${mine[0]}, ${mine[1]}, ${mine[2]}, ${mine[3]}, ${mine[4]}, ${mine[5]},)> hello!`);
+    @entry def sayMessage(what: string) {
+        val mine = self[@]index();
+        // TODO add a (toString) method to tuples to hide all this!
+        println(`(${mine[0]}, ${mine[1]}, ${mine[2]}, ${mine[3]}, ${mine[4]}, ${mine[5]},)> ${what}!`);
     }
+
+    @entry def sayHello() { self.sayMessage("hello"); }
+
+    @entry @createhome def sayHi() { self.sayMessage("hi"); }
 }
