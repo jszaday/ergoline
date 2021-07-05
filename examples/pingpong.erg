@@ -37,7 +37,7 @@ class pingpong {
     }
 
     @entry def acknowledge(src: int, msg: message<string>) {
-        println(`[${self[@]index()}] recvd ${msg.value()} from ${src}!`);
+        println(`pe${self[@]index()}> received a ${msg.value()} from pe${src}.`);
     }
 
     @mailbox def receive(src: int, msg: message<string>);
@@ -65,7 +65,7 @@ class pingpong {
     }
 
     @entry def finished() {
-        println("[info] all done!");
+        println("main> done~!");
         exit();
     }
 }

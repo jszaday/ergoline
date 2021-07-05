@@ -11,8 +11,8 @@ import ck;
     val receivers: receiver@group;
 
     @entry def avalanche(args: array<string>) {
-        numIters = args.size() > 1 ? args[1].toInt() : 256;
-        numReps = numIters >= 256 ? 129 : numIters / 2 + 1;
+        numIters = (args.size() > 1) ? args[1].toInt() : 256;
+        numReps = (numIters >= 256) ? 129 : (numIters / 2 + 1);
 
 
         receivers = new receiver@group(numIters);

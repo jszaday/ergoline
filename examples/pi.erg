@@ -18,12 +18,12 @@ import ck;
         if (numSteps % numPes != 0) {
             abort("expected an evenly divisible number of steps.");
         }
-        println(`running ${numSteps} steps of pi computation on ${numPes} PEs`);
+        println(`main> running ${numSteps} steps of pi approximation on ${numPes} PEs.`);
         new pi@array1d(numPes, self@, numSteps / numPes);
     }
 
     @entry def done(sum : double) {
-        println(`result = ${sum / numSteps}`);
+        println(`main> result = ${sum / numSteps}`);
         exit();
     }
 }

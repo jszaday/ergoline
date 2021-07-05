@@ -23,7 +23,7 @@ class hello1d {
     @threaded @entry def sayHi(a: uid): unit {
         val t = await ts[a];
         val next: int = t[1] + 1;
-        println(`[${self[@]index()}] sending a hello to ${next}~!`);
+        println(`${self[@]index()}> sending a hello to ${next}~!`);
         if (next < n) {
             val b = new uid();
             ts.put((b, next));

@@ -36,10 +36,10 @@ import ck;
         assert(!j);
 
         val numOnes = countOnes(d);
-        println(`info> there are ${numOnes} ones in ${d} :3`);
+        println(`main> there are ${numOnes} ones in ${d}.`);
         assert(numOnes == 2);
 
-        println("success> operators appear operational!");
+        println("main> operators seem operational~!");
 
         exit();
     }
