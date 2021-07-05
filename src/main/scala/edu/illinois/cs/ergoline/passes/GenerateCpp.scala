@@ -1440,7 +1440,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << Option.unless(isMember || systemParent)(
           ctx.nameFor(classLike) + "::"
         ) << ctx.nameFor(x)
-      case _ => ctx.nameFor(x)
+      case _ =>
+        ctx << ctx.nameFor(x)
     }
 
     ctx << "("
