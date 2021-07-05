@@ -162,7 +162,12 @@ object GenerateProxies {
     GenerateCpp.visitTemplateArgs(x.templateArgs)(ctx)
     val args =
       if (x.templateArgs.nonEmpty)
-        GenerateCpp.templateArgumentsToString(ctx, x.templateArgs, None)
+        GenerateCpp.templateArgumentsToString(
+          ctx,
+          Some(x),
+          x.templateArgs,
+          Some(x)
+        )
       else ""
     val mailboxes = x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
 
