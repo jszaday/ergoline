@@ -1017,7 +1017,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     // TODO this should probably return templated types
-    val candidates = Find.resolutions[EirNamedNode](x.symbol)
+    val candidates = Find.resolutions[EirNamedNode](x.symbol).toList
     val found =
       screenCandidates(prevFc, candidates.view.zip(candidates.map(visit(_))))
     found match {

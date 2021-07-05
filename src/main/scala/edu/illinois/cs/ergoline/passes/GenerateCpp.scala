@@ -284,17 +284,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       })
     }
 
+    var anyObjects = false
+    def makeEnroll(x: EirSpecializable): Unit = {
+      val name = ctx.nameFor(x, global)
+      val objectType = x match {
+        case c: EirClass => c.objectType
+        case _           => false
+      }
+      anyObjects = anyObjects || objectType
+
+      ctx << "hypercomm::enroll<" << name << ">();"
+
+      if (objectType) {
+        ctx << "hypercomm::enroll<ergoline::typed_singleton<" << name << ">>();"
+      }
+    }
+
     puppables.foreach(x => {
       if (x.templateArgs.isEmpty) {
-        ctx << "hypercomm::enroll<" << ctx
-          .nameFor(x, global) << ">" << "()" << ";"
+        makeEnroll(x)
       } else {
         checked(x).foreach(y => {
           ctx.specialize(x, y)
-          ctx << "hypercomm::enroll<" << ctx.nameFor(
-            x,
-            global
-          ) << ">" << "()" << ";"
+          makeEnroll(x)
           ctx.leave(y)
         })
       }
@@ -321,6 +333,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val (ty, name) = ("int", counterFor(p, types, global)(ctx))
         ctx << "CpvInitialize(" << ty << "," << name << ");"
         ctx << "CpvAccess(" << name << ") = 0;"
+    }
+
+    if (anyObjects) {
+      ctx << "ergoline::setup_singleton_module();"
     }
 
     ctx << "}"
@@ -784,6 +800,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           assert(flattened.size == 1)
           ctx << "(" << base << name << flattened.head << ")"
         }
+      case _ if name == "ergoline::broadcast_singleton" =>
+        ctx << name << "<" << {
+          (target match {
+            case s: EirSpecialization => s.types
+            case _                    => fc.types
+          }).headOption
+            .to[EirExpressionNode]
+            .map(disambiguate(ctx, _))
+            .map(ctx.nameFor(_, Some(fc)))
+        } << ">(" << {
+          visitCallback(flattenArgs(args).last, isReduction = false)
+        } << ")"
       case m: EirMember if isArray(ctx, m.base) && m.name == "size" =>
         ctx << target // bypass args for size!
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>

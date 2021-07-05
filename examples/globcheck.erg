@@ -1,7 +1,11 @@
 package examples;
 
 import ergoline::_;
+import ck;
 
+// object-type classes have one instance
+// per PE (aka, singletons), they are created
+// on demand (or, potentially, by broadcast)
 object configuration {
     var numFoo: int = 21;
     val numBar: int = 42;
@@ -10,18 +14,35 @@ object configuration {
 
 @main class globcheck {
     @entry def globcheck(args: array<string>) {
-        assert(configuration.numBar == 42);
+        val m = (args.size() > 1) ? args[1].toInt() : 4;
+        val n = m * ck::numPes();
+        val proxy = new cfgcheck@array1d(n);
 
+        /* make a (noticable) change to the configuration
+         * 
+         * NOTE: this also (locally) creates the configuration,
+         *       as a broadcast without an extant configuration
+         *       will fail with a null-pointer exception!
+         */
         configuration.numFoo *= 3;
 
-        assert(configuration.numFoo == configuration.numBaz);
+        // broadcast the updated configuration to all
+        // PE's, triggering a callback when completed
+        ck::updateGlobal<configuration>(proxy.validate);
 
-        /* TODO add ck::updateGlobal<configuration>(cb)
-         *      then check that it was updated on another PE
-         */
+        // exit when things have settled down
+        ck::exitAfterQuiescence();
+    }
+}
 
-        println("info> basic globals seem OK");
+class cfgcheck {
+    @entry def cfgcheck() {}
 
-        exit();
+    @entry def validate() {
+        assert((configuration.numBar == 42) &&
+               (configuration.numFoo == configuration.numBaz));
+
+        val mine = self[@]index();
+        println(`ch${mine}@pe${ck::myPe()}> configuration seems legit to me!`);
     }
 }

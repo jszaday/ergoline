@@ -1,11 +1,13 @@
 package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast.types.{
+  EirLambdaType,
   EirTemplatedType,
   EirTupleType,
   EirType
 }
 import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirConstantFacade}
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -52,6 +54,19 @@ object TypeCompatibility {
 
     def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean =
       (ours == theirs) || ((ours, theirs) match {
+        case (a: EirLambdaType, b: EirLambdaType) =>
+          // TODO make this more robust!
+          (a.templateArgs == b.templateArgs) && a.to.canAssignTo(b.to) && {
+            val (x, y) = (
+              a.from.map(assertValid[EirType]),
+              b.from.map(assertValid[EirType])
+            )
+            if ((x.isEmpty && y.length == 1) || (y.isEmpty && x.length == 1)) {
+              x.headOption.orElse(y.headOption).contains(globals.unitType)
+            } else {
+              CheckTypes.argumentsMatch(x, y)
+            }
+          }
         case (x: EirTemplatedType, y: EirTemplatedType) =>
           // TODO add checking for default arguments
           x.base.canAssignTo(
