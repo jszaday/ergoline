@@ -946,7 +946,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def isInvalidFinalAssign(node: EirAssignment): Boolean = {
     node.lval match {
       case s: EirSymbol[_] =>
-        val resolution = ((x: EirNode) => asMember(Some(x)).getOrElse(x))(
+        val resolution = ((x: EirNode) => asMember(x).getOrElse(x))(
           Find.uniqueResolution[EirNode](s)
         )
 

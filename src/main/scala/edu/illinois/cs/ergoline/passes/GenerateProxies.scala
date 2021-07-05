@@ -239,7 +239,7 @@ object GenerateProxies {
       types: List[String]
   ): String = {
     // TODO impl this
-    ctx.nameFor(asMember(Some(node)).getOrElse(node)) + "_mailbox_"
+    ctx.nameFor(asMember(node).getOrElse(node)) + "_mailbox_"
   }
 
   def mailboxName(
