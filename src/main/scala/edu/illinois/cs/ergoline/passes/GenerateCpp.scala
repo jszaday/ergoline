@@ -1634,7 +1634,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val system = x.annotation("system")
     val prefix = x.memberParent
       .filter(y => system.isEmpty && y.isSystem)
-      .map(ctx.nameFor(_))
+      .collect {
+        case n: EirNamedNode => n.name
+      }
     val alias =
       system.flatMap(_("alias")).map(_.strip())
     val isOperator = system.flatMap(_("operator")).exists(_.toBoolean)

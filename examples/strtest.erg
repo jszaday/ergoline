@@ -4,16 +4,39 @@ import ergoline::_;
 import ck;
 
 @main class strtest {
+    val n: int = 16;
+
     @entry def strtest() {
-        val n = 16;
+        self@checkArray();
+    }
+
+    @entry def checkArray() {
         val a = new array<string, 1>(n);
+
         a[0] = "0";
         for (var i = 1; i < n; i += 1) {
             a[i] = a[i - 1] + ` ${i}`;
         }
+
         for (var i = 0; i < n; i += 1) {
             println(a[i]);
         }
+
+        self@checkQueue();
+    }
+
+    @entry def checkQueue() {
+        val q = new queue<string>();
+
+        q.prepend("0");
+        for (var i = 1; i < n; i += 1) {
+            q.prepend(`${q.head()} ${i}`);
+        }
+
+        for (s <- q) {
+            println(s);
+        }
+
         exit();
     }
 }
