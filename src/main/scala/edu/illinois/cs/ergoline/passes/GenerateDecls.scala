@@ -61,7 +61,7 @@ object GenerateDecls {
       return
     }
 
-    ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
+    ctx << visitTemplateArgs(x)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
       x
     )(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
