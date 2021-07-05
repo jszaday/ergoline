@@ -8,7 +8,7 @@ import ergoline::_;
 
         assert(foo() == (bar * 2));
 
-        println("basic implicits OK");
+        println("main> implicits seem operational~!");
 
         exit();
     }

@@ -912,7 +912,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     visit(node.declaredType)
   }
 
-  override def visit(node: EirNode)(implicit ctx: TypeCheckContext): EirType = {
+  override def visit(n: EirNode)(implicit ctx: TypeCheckContext): EirType = {
+    val node = n match {
+      case x: EirCallArgument => x.expr
+      case _                  => n
+    }
+
     ctx.enterNode(node)
     val result = super.visit(node)
     node match {

@@ -16,7 +16,7 @@ class hello2d {
     @entry def sayHi(): unit {
         val idx: (int, int) = self[@]index();
 
-        println(`hello from [${idx[0]}, ${idx[1]}]`);
+        println(`(${idx[0]},${idx[1]},)> hello!`);
 
         match (idx) {
             case 0, 0 => exit();

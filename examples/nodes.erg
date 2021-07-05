@@ -11,7 +11,7 @@ import ck;
     @entry def done(i: int) {
         assert(i == ck::numPes());
 
-        println("[INFO] done, all tests passed.");
+        println("main> done~!");
 
         exit();
     }
@@ -27,7 +27,7 @@ class nodes {
         val start = ck::nodeFirst(mine);
         val end = start + ck::nodeSize(mine);
 
-        println(`[ND${mine}] sending a message to pes [${start}, ${end}).`);
+        println(`nd${mine}> sending a message to PEs [${start}, ${end}).`);
 
         for (var i = start; i < end; i += 1) {
             w[i].recv(mine);
@@ -43,7 +43,7 @@ class workers {
     @entry def recv(i: int) {
         assert(i == ck::myNode());
 
-        println(`[PE${ck::myPe()}] got the message.`);
+        println(`pe${ck::myPe()}> got the message~!`);
 
         self[@]contribute(1, int::+, m.done);
     }
