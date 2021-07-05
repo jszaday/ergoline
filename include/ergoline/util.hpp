@@ -4,7 +4,6 @@
 #include <chrono>
 #include <string>
 #include <charm++.h>
-#include <hypercomm/core/locality_base.hpp>
 
 #include "hash.hpp"
 
@@ -51,6 +50,7 @@ inline std::int64_t timestamp() {
   auto curr = std::chrono::system_clock::now();
   return std::chrono::duration_cast<std::chrono::seconds>(curr.time_since_epoch()).count();
 }
+
 }
 
 #endif

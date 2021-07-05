@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
@@ -9,19 +10,51 @@ import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 
 object CheckConstructors {
-  def checkConstructors(
-      cls: EirClassLike
-  )(implicit ctx: TypeCheckContext): Int = {
-    checkConstructors(cls, cls.members.filter(_.isConstructor))
+  def mkDefaultConstructor(cls: EirClassLike): EirMember = {
+    val m = EirMember(Some(cls), null, EirAccessibility.Public)
+    val f = EirFunction(
+      Some(m),
+      None,
+      cls.name,
+      Nil,
+      Nil,
+      Nil,
+      globals.unitType,
+      None
+    )
+    f.body = Some(EirBlock(Some(f), Nil))
+    m.member = f
+    m
   }
 
-  def checkConstructors(cls: EirClassLike, constructors: List[EirMember])(
-      implicit ctx: TypeCheckContext
+  def checkConstructors(cls: EirClassLike)(implicit
+      ctx: TypeCheckContext
   ): Int = {
+    def constructors: Seq[EirMember] = cls.members.filter(_.isConstructor)
     val needsInitialization = cls.needsInitialization
-    if (constructors.isEmpty && needsInitialization.nonEmpty) {
-      Errors.missingConstructor(cls)
+
+    if (constructors.isEmpty) {
+      if (needsInitialization.nonEmpty) {
+        Errors.missingConstructor(cls)
+      } else {
+        cls.members +:= mkDefaultConstructor(cls)
+      }
     }
+
+    val reqsDefaultCons = cls match {
+      case c: EirClass => c.objectType
+      case _           => false
+    }
+
+    if (
+      reqsDefaultCons && !constructors.exists({
+        case EirMember(_, f: EirFunction, _) => f.functionArgs.isEmpty
+        case _                               => false
+      })
+    ) {
+      Errors.expectedDefaultConstructible(cls)
+    }
+
     for (constructor <- constructors) {
       (
         cls,
@@ -40,6 +73,7 @@ object CheckConstructors {
         Errors.missingMemberAssignment(constructor)
       }
     }
+
     constructors.length
   }
 

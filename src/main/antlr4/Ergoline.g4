@@ -154,8 +154,15 @@ whereClause
     :   WhereKwd staticExpression
     ;
 
+classKind
+    :  (AbstractKwd? ClassKwd)
+    |   ObjectKwd
+    |   StructKwd
+    |   TraitKwd
+    ;
+
 classDeclaration
-    :   ((AbstractKwd? ClassKwd) | StructKwd | TraitKwd) identifier templateDecl? inheritanceDecl whereClause? '{' annotatedMember* '}'
+    :   classKind identifier templateDecl? inheritanceDecl whereClause? '{' annotatedMember* '}'
     ;
 
 annotatedMember
@@ -458,6 +465,7 @@ ValueKeyword : 'val' ;
 AbstractKwd : 'abstract';
 OverrideKwd : 'override';
 ClassKwd : 'class';
+ObjectKwd : 'object';
 StructKwd : 'struct';
 TraitKwd : 'trait';
 FunctionKwd : 'def';

@@ -90,6 +90,10 @@ object Errors {
       )
   }
 
+  def invalidAccess(symbol: EirExpressionNode, m: EirMember): Nothing = {
+    exit(format(symbol, "cannot access field %s of %s", m, symbol))
+  }
+
   def unableToResolve(resolvable: EirResolvable[_]): Nothing = {
     exit(format(resolvable, "unable to resolve %s", resolvable))
   }

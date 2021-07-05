@@ -1,13 +1,15 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.EirImportTests.setupEnv
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace}
+import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace, EirNamedNode}
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
 import org.scalatest.Matchers.convertToAnyShouldWrapper
+
+import scala.reflect.ClassTag
 
 object EirImportTests{
   def setupEnv(): Unit = {
@@ -122,9 +124,19 @@ class EirImportTests extends FunSuite {
     unsorted.hasValidOrder shouldBe false
     val sorted = unsorted.dependenceSort()
     sorted.hasValidOrder shouldBe true
-    sorted.map(_.name) shouldEqual List("bar", "quux", "baz", "foobar")
     val partitioned = sorted.namespacePartitioned
-    partitioned.map(_._1.name) shouldEqual List("foo", "qux", "foo", "foobar")
+
+    val expected1 = List("bar", "quux", "baz", "foobar")
+    val expected2 = List("foo", "qux", "foo", "foobar")
+    val knownGood = (expected1 ++ expected2).toSet
+    def getNames[A <: EirNamedNode : ClassTag](classes: List[A]): List[String] = {
+      classes collect {
+        case n: A if knownGood.contains(n.name) => n.name
+      }
+    }
+
+    getNames(sorted) shouldEqual expected1
+    getNames(partitioned.map(_._1)) shouldEqual expected2
   }
 
   test("check sophisticated and chained templates") {

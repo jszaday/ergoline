@@ -284,17 +284,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       })
     }
 
+    var anyObjects = false
+    def makeEnroll(x: EirSpecializable): Unit = {
+      val name = ctx.nameFor(x, global)
+      val objectType = x match {
+        case c: EirClass => c.objectType
+        case _           => false
+      }
+      anyObjects = anyObjects || objectType
+
+      ctx << "hypercomm::enroll<" << name << ">();"
+
+      if (objectType) {
+        ctx << "hypercomm::enroll<ergoline::typed_singleton<" << name << ">>();"
+      }
+    }
+
     puppables.foreach(x => {
       if (x.templateArgs.isEmpty) {
-        ctx << "hypercomm::enroll<" << ctx
-          .nameFor(x, global) << ">" << "()" << ";"
+        makeEnroll(x)
       } else {
         checked(x).foreach(y => {
           ctx.specialize(x, y)
-          ctx << "hypercomm::enroll<" << ctx.nameFor(
-            x,
-            global
-          ) << ">" << "()" << ";"
+          makeEnroll(x)
           ctx.leave(y)
         })
       }
@@ -321,6 +333,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val (ty, name) = ("int", counterFor(p, types, global)(ctx))
         ctx << "CpvInitialize(" << ty << "," << name << ");"
         ctx << "CpvAccess(" << name << ") = 0;"
+    }
+
+    if (anyObjects) {
+      ctx << "ergoline::setup_singleton_module();"
     }
 
     ctx << "}"
@@ -784,6 +800,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           assert(flattened.size == 1)
           ctx << "(" << base << name << flattened.head << ")"
         }
+      case _ if name == "ergoline::broadcast_singleton" =>
+        ctx << name << "<" << {
+          (target match {
+            case s: EirSpecialization => s.types
+            case _                    => fc.types
+          }).headOption
+            .to[EirExpressionNode]
+            .map(disambiguate(ctx, _))
+            .map(ctx.nameFor(_, Some(fc)))
+        } << ">(" << {
+          visitCallback(flattenArgs(args).last, isReduction = false)
+        } << ")"
       case m: EirMember if isArray(ctx, m.base) && m.name == "size" =>
         ctx << target // bypass args for size!
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>
@@ -991,8 +1019,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitSymbol[A <: EirNamedNode](
       x: EirSymbol[A]
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val member = asMember(x.disambiguation)
     if (!CheckTypes.isSelf(x)) {
-      asMember(x.disambiguation) match {
+      member match {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
             if (m.isEntryOnly) {
@@ -1005,10 +1034,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     }
 
-    ctx << asMember(x.disambiguation)
-      .filter(_.isEntryOnly)
-      .map(ctx.nameFor(_))
-      .getOrElse(ctx.nameFor(x, Some(x)))
+    x.disambiguation match {
+      case Some(c: EirClass) if c.objectType =>
+        ctx << "ergoline::access_singleton<" << ctx.nameFor(c, Some(x)) << ">()"
+      case _ =>
+        ctx << member
+          .filter(_.isEntryOnly)
+          .map(ctx.nameFor(_))
+          .getOrElse(ctx.nameFor(x, Some(x)))
+    }
   }
 
   override def visitDeclaration(
@@ -1474,6 +1508,29 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def declNameFor(
+      s: EirSpecializable,
+      name: Option[String],
+      includeTemplates: Boolean,
+      usage: Option[EirNode]
+  )(implicit
+      ctx: CodeGenerationContext
+  ): String = {
+    if (s.templateArgs.nonEmpty) {
+      val subst = s.templateArgs.map(ctx.hasSubstitution)
+      val substDefined = subst.forall(_.isDefined)
+      name.get + (if (includeTemplates || substDefined) {
+                    "<" + {
+                      if (substDefined)
+                        subst.flatten.map(ctx.typeFor(_, usage))
+                      else s.templateArgs.map(ctx.typeFor(_, usage))
+                    }.mkString(",") + ">"
+                  } else "")
+    } else {
+      name.get
+    }
+  }
+
   def nameFor(
       ctx: CodeGenerationContext,
       x: EirNode,
@@ -1526,7 +1583,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           },
           m
         )(ctx)
-      case f: EirFunction if proxy.isDefined =>
+      case _: EirFunction if proxy.isDefined =>
         nameForProxyMember(proxy, asMember(opt).get)(ctx)
       case _ if proxy.isDefined =>
         val prefix =
@@ -1560,19 +1617,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
                 .getOrElse("")
           }
         }
-      case x: EirSpecializable with EirNamedNode if x.templateArgs.nonEmpty =>
-        val subst = x.templateArgs.map(ctx.hasSubstitution)
-        val substDefined = subst.forall(_.isDefined)
-        dealiased.get + (if (includeTemplates || substDefined) {
-                           "<" + {
-                             if (substDefined)
-                               subst.flatten.map(ctx.typeFor(_, usage))
-                             else x.templateArgs.map(ctx.typeFor(_, usage))
-                           }.mkString(",") + ">"
-                         } else "")
+      case x: EirSpecializable with EirNamedNode =>
+        declNameFor(x, dealiased, includeTemplates, usage)(ctx)
+      case _: EirNamedNode => dealiased.get
       case t: EirTupleType =>
         s"std::tuple${templateArgumentsToString(ctx, t.children, usage)}"
-      case _: EirNamedNode      => dealiased.get
       case s: EirConstantFacade => s.value.toString
       case x: EirLambdaExpression =>
         _lambda_names.get(x) match {
@@ -1872,8 +1921,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val ty = ctx.resolve(t)
         ctx.ignoreNext(";")
         if (ty.isPointer && i.needsCasting)
-          ctx << i.declarations.head << s" = std::dynamic_pointer_cast<${ctx
-            .nameFor(t)}>($current);"
+          ctx << i.declarations.head << "=" << "std::dynamic_pointer_cast<" << ctx
+            .nameFor(t) << ">(" << current << ");"
         // TODO make this a reference!
         else ctx << i.declarations.head << s" = $current;"
       case i: EirIdentifierPattern =>

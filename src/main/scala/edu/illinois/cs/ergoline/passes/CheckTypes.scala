@@ -4,13 +4,13 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
   EirLiteralSymbol,
   EirLiteralType
 }
-import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
@@ -29,7 +29,6 @@ import edu.illinois.cs.ergoline.util.{
   Errors,
   assertValid,
   isSystem,
-  resolveToPair,
   validAccessibility
 }
 
@@ -106,6 +105,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  private def isStatic(lhs: EirExpressionNode): Boolean = {
+    lhs.disambiguation match {
+      case Some(c: EirClass)     => !c.objectType
+      case Some(_: EirClassLike) => true
+      case _                     => false
+    }
+  }
+
+  private def checkStaticness(
+      lhs: EirExpressionNode,
+      found: EirNamedNode
+  ): Unit = {
+    val staticBase = isStatic(lhs)
+    found match {
+      case m: EirMember if staticBase && !m.isStatic =>
+        Errors.invalidAccess(lhs, m)
+      case m: EirMember if !staticBase && m.isStatic =>
+        Errors.invalidAccess(lhs, m)
+      case _ =>
+    }
+  }
+
   // TODO add checks for static-ness?
   override def visitScopedSymbol[A <: EirNode](
       x: EirScopedSymbol[A]
@@ -120,6 +141,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     found match {
       case Some((member, result)) =>
         x.disambiguation = Some(member)
+        checkStaticness(x.target, member)
         prevFc.foreach(validate(ctx, member, _))
         result
       case None =>
@@ -905,27 +927,37 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
+  private def isValidMemberAssign(node: EirAssignment, m: EirMember) = {
+    (m.member match {
+      case d: EirDeclaration => !d.isFinal
+      case _                 => false
+    }) || {
+      Find
+        .parentOf[EirMember](node)
+        .exists(x => x.isConstructor && x.base == m.base)
+    }
+  }
+
   def isInvalidFinalAssign(node: EirAssignment): Boolean = {
     node.lval match {
       case s: EirSymbol[_] =>
-        Find.uniqueResolution[EirNode](s) match {
-          case d: EirDeclaration =>
-            d.isFinal && {
-              !d.parent
-                .to[EirMember]
-                .map(_.base)
-                .exists(x => {
-                  Find
-                    .parentOf[EirMember](node)
-                    .exists(m => m.base == x && m.isConstructor)
-                })
-            }
+        val resolution = ((x: EirNode) => asMember(Some(x)).getOrElse(x))(
+          Find.uniqueResolution[EirNode](s)
+        )
+
+        resolution match {
+          case m: EirMember           => !isValidMemberAssign(node, m)
+          case d: EirDeclaration      => d.isFinal
           case _: EirFunctionArgument => true
           case _                      => false
         }
-      case _: EirArrayReference  => false
-      case _: EirScopedSymbol[_] => ???
-      case _                     => true
+      case _: EirArrayReference => false
+      case s: EirScopedSymbol[_] =>
+        asMember(s.disambiguation).orElse(s.disambiguation) match {
+          case Some(m: EirMember) => !isValidMemberAssign(node, m)
+          case _                  => false
+        }
+      case _ => true
     }
   }
 
