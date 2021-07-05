@@ -1,6 +1,6 @@
 package ergoline;
 
-@system(qualify=true)
+@system(alias="ergoline::array")
 class array<A, N: int = 1> {
     using shapeType = (int) .* N;
 
