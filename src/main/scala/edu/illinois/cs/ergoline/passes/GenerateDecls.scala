@@ -1,7 +1,8 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   makeHasher,
@@ -160,4 +161,25 @@ object GenerateDecls {
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =
     GenerateCpp.visitFunction(x, isMember = true)(ctx)
+
+  def mkIteratorBridge(
+      x: EirClass,
+      y: EirTemplatedType
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val ns = globals.ergolineModule
+    ctx << visitTemplateArgs(x)
+    ctx << "struct" << "iterator_for" << "<" << GenerateCpp.qualifiedNameFor(
+      ctx,
+      ns.getOrElse(???),
+      includeTemplates = true
+    )(x) << ">" << "{"
+    ctx << "using" << "value_type" << "=" << ctx.typeFor(
+      y.types.head,
+      ns
+    ) << ";"
+    ctx << "static" << "constexpr" << "auto" << "accessor" << "=" << {
+      x.member("iter").map(ctx.nameFor(_, ns))
+    } << ";"
+    ctx << "};"
+  }
 }

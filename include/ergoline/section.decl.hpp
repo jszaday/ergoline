@@ -9,6 +9,13 @@
 #include "array.hpp"
 
 namespace ergoline {
+
+  template<typename T, typename Enable = void>
+  struct iterator_for;
+
+  template<typename T>
+  using iterator_value_t = typename iterator_for<T>::value_type;
+
   template<typename Index, typename T>
   hypercomm::vector_section<Index> conv2section(const T&);
 

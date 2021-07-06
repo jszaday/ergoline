@@ -1424,10 +1424,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
     val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
-    val hasChecked = ctx.hasChecked(x)
-
+    val canEnter = ctx.hasChecked(x) || langCi
     if (
-      !hasChecked || (!langCi && entryOnly) || x.isSystem || abstractMember || isTempl
+      !canEnter || (!langCi && entryOnly) || x.isSystem || abstractMember || isTempl
     ) {
       return
     }
@@ -1561,7 +1560,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     val sys = base.annotation("system")
-    if (sys.isDefined && !sys.flatMap(_("qualify")).exists(_.toBoolean)) {
+    if (
+      node.isInstanceOf[EirTemplateArgument] || (
+        sys.isDefined && !sys.flatMap(_("qualify")).exists(_.toBoolean)
+      )
+    ) {
       return Nil
     }
 

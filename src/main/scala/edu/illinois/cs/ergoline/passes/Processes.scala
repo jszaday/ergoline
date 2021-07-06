@@ -1,7 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirNode
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -147,6 +150,23 @@ object Processes {
     })
     kids.foreach(GenerateCpp.visit(_)(ctx))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
+
+    val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
+    val iterables = sorted
+      .collect({
+        case s: EirClass if s.isSystem => s
+      })
+      .flatMap(s => {
+        Find
+          .implementationOf(s, iterableTy)
+          .to[EirTemplatedType]
+          .map(t => (s, t))
+      })
+    if (iterables.nonEmpty) {
+      ctx << "namespace" << "ergoline" << "{"
+      iterables.foreach(it => GenerateDecls.mkIteratorBridge(it._1, it._2)(ctx))
+      ctx << "}"
+    }
 
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
