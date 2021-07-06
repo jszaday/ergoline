@@ -1,7 +1,7 @@
 package ergoline;
 
 @system(alias="ergoline::array")
-class array<A, N: int = 1> {
+class array<A, N: int = 1> extends iterable<A> {
     using shapeType = (int) .* N;
 
     @system val shape: shapeType;
@@ -18,7 +18,28 @@ class array<A, N: int = 1> {
     @system(alias="[]")
     def set(idx: *shapeType, value: A): unit;
 
-    @system def size(): int; // where N == 1
+    @system def size(): int where N == 1;
+
+    @transient private class iterator_  with iterator<A> where N == 1 {
+        var current: int = 0;
+        val base: array<A, N>;
+
+        def iterator_(=base: array<A, N>) {}
+
+        override def hasNext(): bool {
+            return current < base.size();
+        }
+
+        override def next(): A {
+            val prev = current;
+            current += 1;
+            return base[prev];
+        }
+    }
+
+    override def iter(): iterator<A> where N == 1 {
+        return new iterator_(self);
+    }
 
     @system def getOrNone(idx: int): option<A>;
 

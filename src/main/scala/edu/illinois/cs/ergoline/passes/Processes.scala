@@ -100,11 +100,13 @@ object Processes {
 
     val sorted = ctx.checked.keys
       .collect({
-        case c: EirClassLike if !(c.isNested || c.isInstanceOf[EirProxy]) => c
+        case c: EirClassLike if !c.isInstanceOf[EirProxy] => c
       })
       .toList
       .dependenceSort()
+
     assert(!globals.strict || sorted.hasValidOrder)
+
     val toDecl = sorted.namespacePartitioned
     ctx << priorityIncludes
     // NOTE do we ever need to topo sort these?
@@ -130,10 +132,13 @@ object Processes {
 
     toDecl foreach {
       case (namespace, classes) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          classes.foreach(GenerateDecls.visit(ctx, _))
+        ctx << "namespace" << (namespace.fullyQualifiedName, "::") << "{" << {
+          classes
+            .filterNot(_.isNested)
+            .foreach(GenerateDecls.visit(ctx, _))
         } << "}"
     }
+
     ctx.lambdas.foreach({
       case (namespace, lambdas) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {

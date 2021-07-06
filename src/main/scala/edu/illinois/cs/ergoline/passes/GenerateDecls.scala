@@ -53,20 +53,44 @@ object GenerateDecls {
     ctx << "namespace " << ctx.nameFor(x) << "{" << x.children << "}"
   }
 
+  def visitPredicate(
+      x: EirClassLike
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val args = GenerateCpp.templateArgsOf(x)
+    x.predicate match {
+      case Some(predicate) =>
+        ctx << "<" << (args.map(ctx.nameFor(_)), ",")
+        ctx << Option.when(args.nonEmpty)(",")
+        ctx << "typename" << "std::enable_if" << "<" << {
+          StaticGenerator.visit(predicate)
+        } << ">::type" << ">"
+      case None =>
+    }
+  }
+
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
-    if (isSystem(x)) {
-      x.members.collect {
-        case m @ EirMember(_, x: EirNode, _) if !isSystem(x) => x
-      } foreach { x => visit(ctx, x) }
+    val checked = ctx.hasChecked(x)
+    if (isSystem(x) || !checked) {
+      if (checked) {
+        x.members.collect {
+          case EirMember(_, x: EirNode, _) if !isSystem(x) => x
+        } foreach { x => visit(ctx, x) }
+      }
+
       return
     }
 
     val thisName = ctx.nameFor(x)
     val declName = GenerateCpp.declNameFor(x)(ctx)
 
-    ctx << visitTemplateArgs(x)(ctx) << "struct" << declName << visitInherits(
-      x
-    )(ctx) << "{"
+    ctx << {
+      visitTemplateArgs(x)(ctx)
+    } << "struct" << declName << {
+      visitPredicate(x)(ctx)
+    } << {
+      visitInherits(x)(ctx)
+    } << "{"
+
     if (!x.isInstanceOf[EirTrait]) {
       if (!hasHash(x)) makeHasher(ctx, x)
 

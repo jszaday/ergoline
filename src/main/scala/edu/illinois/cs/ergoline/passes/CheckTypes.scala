@@ -536,8 +536,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (_, Some(_)) => (false, None)
     }
 
+    val result =
+      found._2 filter {
+        case (_, p: EirSpecializable) =>
+          ctx.checkPredicate(p.predicate.filter(_ => p.templateArgs.isEmpty))
+        case _ => true
+      }
+
     ctx.leave(ispec)
-    found
+
+    (found._1, result)
   }
 
   def screenCandidates(
@@ -705,9 +713,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTemplateArgument(
       node: EirTemplateArgument
   )(implicit ctx: TypeCheckContext): EirType = {
-    ctx.hasSubstitution(node) match {
-      case Some(x) => visit(x)
-      case _       => Errors.missingSpecialization(node)
+    node.argumentType match {
+      case Some(ty) if ctx.staticTyping => visit(ty)
+      case _ =>
+        ctx.hasSubstitution(node) match {
+          case Some(x) => visit(x)
+          case _       => Errors.missingSpecialization(node)
+        }
     }
   }
 
@@ -762,8 +774,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   ): (Boolean, Option[EirMember], Option[TypeCheckContext.Context]) = {
     val member = ctx.immediateAncestor[EirMember]
     val noArgs = s.templateArgs.isEmpty
+    val pred = ctx.checkPredicate(s.predicate.filter(_ => noArgs))
     val spec = if (noArgs) None else ctx.findSubstitution(s)
-    val isDefined = noArgs || spec.isDefined
+    val isDefined = pred && (noArgs || spec.isDefined)
     (
       isDefined,
       member,

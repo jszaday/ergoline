@@ -1,17 +1,9 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{
-  EirBinaryExpression,
-  EirExpressionNode,
-  EirNamedNode,
-  EirNode,
-  EirSymbol,
-  EirTemplateArgument,
-  EirUnaryExpression
-}
-
-import scala.reflect.ClassTag
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.globals
 
 object StaticGenerator {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
@@ -32,6 +24,7 @@ object StaticGenerator {
       case x: EirUnaryExpression  => visit(x)
       case x: EirBinaryExpression => visit(x)
       case x: EirSymbol[_]        => visit(x.asInstanceOf[EirSymbol[EirNamedNode]])
+      case x: EirLiteral[_]       => GenerateCpp.visit(x)
     }
   }
 
@@ -50,11 +43,23 @@ object StaticGenerator {
     ctx << x.op << x.rhs
   }
 
+  def staticType(
+      x: EirExpressionNode
+  )(implicit ctx: TypeCheckContext): EirType = {
+    val before = ctx.staticTyping
+    ctx.staticTyping = true
+    val ty = CheckTypes.visit(x)
+    ctx.staticTyping = before
+    ty
+  }
+
   def visit(
       x: EirBinaryExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val lhsTy = staticType(x.lhs)(ctx.tyCtx)
+
     x.op match {
-      case "==" | "!=" =>
+      case "==" | "!=" if lhsTy != globals.integerType =>
         ctx << Option.when(x.op == "!=")(
           "!"
         ) << "(std::is_same<" << x.lhs << "," << x.rhs << ">::value)"
@@ -65,6 +70,8 @@ object StaticGenerator {
         } << ">,ergoline::extricate_t<" << {
           if (flip) x.rhs else x.lhs
         } << ">>::value"
+      case op =>
+        ctx << "(" << x.lhs << op << x.rhs << ")"
     }
   }
 }

@@ -45,6 +45,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def currentSelf: String = _selves.headOption.getOrElse("this")
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
+
+  def hasChecked(x: EirSpecializable): Boolean = checked.contains(x)
+
   def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
     tyCtx.lambdas.groupBy(x =>
       Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
