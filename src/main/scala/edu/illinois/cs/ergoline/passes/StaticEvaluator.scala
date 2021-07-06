@@ -23,8 +23,18 @@ object StaticEvaluator {
   private def valueWithin(
       x: EirResolvable[_]
   )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
-    val result = CheckTypes.visit(x)
+    val resolvable: EirResolvable[_] = {
+      Find.resolutions[EirNode](x) match {
+        case (x: EirTemplateArgument) :: _ =>
+          ctx.hasSubstitution(x) match {
+            case Some(y) => y
+            case None    => return EirLiteralSymbol(x)(None)
+          }
+        case _ => x
+      }
+    }
 
+    val result = CheckTypes.visit(resolvable)
     result match {
       case x: EirConstantFacade => x.value
       case x: EirType           => EirLiteralType(x)(None)

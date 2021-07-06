@@ -61,7 +61,10 @@ object GenerateDecls {
       return
     }
 
-    ctx << visitTemplateArgs(x.templateArgs)(ctx) << s"struct ${ctx.nameFor(x)}" << visitInherits(
+    val thisName = ctx.nameFor(x)
+    val declName = GenerateCpp.declNameFor(x)(ctx)
+
+    ctx << visitTemplateArgs(x)(ctx) << "struct" << declName << visitInherits(
       x
     )(ctx) << "{"
     if (!x.isInstanceOf[EirTrait]) {
@@ -79,10 +82,9 @@ object GenerateDecls {
         .map(Find.uniqueResolution[EirType])
         .map(ctx.nameFor(_, Some(x)))
 
-      val thisName = ctx.nameFor(x)
       if (x.isValueType) { // TODO add !isAbstract?
         val tmp = ctx.temporary
-        ctx << thisName << "(" << "const" << thisName << "&" << tmp << ")" << {
+        ctx << declName << "(" << "const" << thisName << "&" << tmp << ")" << {
           parent.map(p => s": $p($tmp)")
         } << "{"
         x.members.collect {
@@ -101,7 +103,7 @@ object GenerateDecls {
 
       val needsColon = parent.nonEmpty || fields.nonEmpty
 
-      ctx << thisName << "(PUP::reconstruct __tag__)" << Option.when(
+      ctx << declName << "(PUP::reconstruct __tag__)" << Option.when(
         needsColon
       )(":") << parent.map(p => s"$p(__tag__)") << Option.when(
         parent.nonEmpty && fields.nonEmpty

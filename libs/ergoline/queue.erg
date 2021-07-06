@@ -1,7 +1,7 @@
 package ergoline;
 
 @system(alias="std::deque", fromHeader="deque")
-class queue<A> {
+class queue<A> extends iterable<A> {
     @system def queue();
     @system(alias="front")
     def head(): A;
@@ -12,8 +12,38 @@ class queue<A> {
     @system(alias="empty",invert=true)
     def nonEmpty(): bool;
     @system(alias="push_back")
-    def push(a: A);
+    def push(a: A); // TODO rename append
+    @system(alias="push_front")
+    def prepend(a: A);
     @system(alias="pop_front")
     def pop();
-    @system def size(): int;
+    @system(applyResult="int")
+    def size(): int;
+
+    @system(alias="[]")
+    def get(idx: int): A;
+
+    @system(alias="[]")
+    def set(idx: int, value: A): unit;
+
+    @transient private class iterator_ with iterator<A> {
+        var current: int = 0;
+        val base: queue<A>;
+
+        def iterator_(=base: queue<A>) {}
+
+        override def hasNext(): bool {
+            return current < base.size();
+        }
+
+        override def next(): A {
+            val prev = current;
+            current += 1;
+            return base[prev];
+        }
+    }
+
+    override def iter(): iterator<A> {
+        return new iterator_(self);
+    }
 }

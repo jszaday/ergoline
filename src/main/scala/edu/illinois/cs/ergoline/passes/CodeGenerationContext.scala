@@ -131,8 +131,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   ): String = {
     resolve[EirNode](x) match {
       case t: EirTemplateArgument => nameFor(t, ctx)
-      case t: EirType             => typeFor(t, ctx)
-      case n: EirNode             => Errors.incorrectType(n, classOf[EirType])
+      case t: EirType =>
+        typeFor(t, ctx.filterNot(_ => x.isInstanceOf[EirConstantFacade]))
+      case n: EirNode => Errors.incorrectType(n, classOf[EirType])
     }
   }
 
