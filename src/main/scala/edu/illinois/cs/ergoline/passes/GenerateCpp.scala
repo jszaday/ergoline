@@ -721,8 +721,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   ): EirExpressionNode = {
     target match {
       case EirScopedSymbol(target, _) => stripSection(target, getProxy)
-      case EirArrayReference(_, target, section :: Nil) =>
-        stripSection(if (getProxy) target else section, getProxy)
+      case EirArrayReference(_, target, args) =>
+        if (args.length == 1)
+          stripSection(if (getProxy) target else args.head, getProxy)
+        else ??? // TODO add support for zipping iterators?
       case _ => target
     }
   }
