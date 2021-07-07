@@ -73,6 +73,8 @@ object GenerateCi {
 
     proxies
       .sortBy(!_.isMain)
+      // NOTE only element proxies are specialized!
+      .map(p => ProxyManager.elementFor(p).getOrElse(p))
       .foreach(p => {
         visit(ctx, p)
 
