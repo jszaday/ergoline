@@ -167,12 +167,13 @@ object GenerateDecls {
 
   def mkIteratorAccessor(
       x: EirClass,
+      iter: Option[EirMember],
       args: List[EirTemplateArgument],
       qualifiedName: String
   )(implicit ctx: CodeGenerationContext): Unit = {
     ctx << "constexpr" << "auto" << "accessor" << "="
     if (x.isSystem) {
-      ctx << x.member("iter").map(ctx.nameFor(_, ns))
+      ctx << iter.map(ctx.nameFor(_, ns))
       ctx << Option.when(args.nonEmpty)(
         s"<${args.map(ctx.nameFor(_)) mkString ","}>"
       )
@@ -188,6 +189,17 @@ object GenerateDecls {
       x: EirClass,
       y: EirTemplatedType
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val iter = x.member("iter")
+    if (
+      !iter.exists(z =>
+        isSystem(z) || {
+          ctx.hasChecked(z.member.asInstanceOf[EirSpecializable])
+        }
+      )
+    ) {
+      return
+    }
+
     val args = templateArgsOf(x)
     val qualifiedName = {
       GenerateCpp.qualifiedNameFor(
@@ -203,7 +215,7 @@ object GenerateDecls {
       y.types.head,
       ns
     ) << ";"
-    ctx << "static" << mkIteratorAccessor(x, args, qualifiedName)(ctx)
+    ctx << "static" << mkIteratorAccessor(x, iter, args, qualifiedName)(ctx)
     ctx << "};"
   }
 }

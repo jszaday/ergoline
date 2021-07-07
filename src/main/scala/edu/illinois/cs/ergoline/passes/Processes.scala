@@ -26,11 +26,11 @@ object Processes {
   )
 
   var sensitiveDeclIncludes: Map[String, String] = Map(
-    ("range", "ergoline/section.decl.hpp")
+    ("iterable", "ergoline/section.decl.hpp")
   )
 
   var sensitiveDefIncludes: Map[String, String] = Map(
-    ("range", "ergoline/section.def.hpp")
+    ("iterable", "ergoline/section.def.hpp")
   )
 
   private var ctx = new TypeCheckContext
