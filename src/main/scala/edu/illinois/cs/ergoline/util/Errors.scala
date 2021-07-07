@@ -40,7 +40,12 @@ object Errors {
 
   def exit(msg: String): Nothing = exitAction(msg)
 
-  final case class EirException(msg: String) extends RuntimeException(msg)
+  sealed abstract class EirExceptionBase(msg: String)
+      extends RuntimeException(msg)
+
+  case class EirException(msg: String) extends EirExceptionBase(msg)
+  case class EirSubstitutionException(arg: EirTemplateArgument)
+      extends EirExceptionBase(arg.name)
 
   def useDebugAction(): Unit = {
     exitAction = (s: String) => throw EirException(s)

@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.util.Errors.EirSubstitutionException
 
 object StaticGenerator {
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
@@ -45,10 +46,15 @@ object StaticGenerator {
 
   def staticType(
       x: EirExpressionNode
-  )(implicit ctx: TypeCheckContext): EirType = {
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val before = ctx.staticTyping
     ctx.staticTyping = true
-    val ty = CheckTypes.visit(x)
+    val ty =
+      try {
+        Some(CheckTypes.visit(x))
+      } catch {
+        case _: EirSubstitutionException => None
+      }
     ctx.staticTyping = before
     ty
   }
@@ -59,7 +65,7 @@ object StaticGenerator {
     val lhsTy = staticType(x.lhs)(ctx.tyCtx)
 
     x.op match {
-      case "==" | "!=" if lhsTy != globals.integerType =>
+      case "==" | "!=" if !lhsTy.contains(globals.integerType) =>
         ctx << Option.when(x.op == "!=")(
           "!"
         ) << "(std::is_same<" << x.lhs << "," << x.rhs << ">::value)"

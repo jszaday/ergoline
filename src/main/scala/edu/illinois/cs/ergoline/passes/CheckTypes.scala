@@ -21,6 +21,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
   RichResolvableTypeIterable
 }
+import edu.illinois.cs.ergoline.util.Errors.EirSubstitutionException
 import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
@@ -713,13 +714,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTemplateArgument(
       node: EirTemplateArgument
   )(implicit ctx: TypeCheckContext): EirType = {
-    node.argumentType match {
-      case Some(ty) if ctx.staticTyping => visit(ty)
-      case _ =>
-        ctx.hasSubstitution(node) match {
-          case Some(x) => visit(x)
-          case _       => Errors.missingSpecialization(node)
-        }
+    if (ctx.staticTyping) {
+      node.argumentType.orElse(ctx.hasSubstitution(node)) match {
+        case Some(ty) => visit(ty)
+        case None     => throw EirSubstitutionException(node)
+      }
+    } else {
+      ctx.hasSubstitution(node) match {
+        case Some(x) => visit(x)
+        case _       => Errors.missingSpecialization(node)
+      }
     }
   }
 
