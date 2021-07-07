@@ -13,7 +13,12 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
 }
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, isSystem}
+import edu.illinois.cs.ergoline.util.{
+  Errors,
+  TupleFactory,
+  assertValid,
+  isSystem
+}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -164,18 +169,7 @@ class TypeCheckContext {
     }
   }
 
-  private var _tuples: Map[List[EirType], EirTupleType] = Map()
-
-  def getTupleType(_ts: Iterable[EirType]): EirTupleType = {
-    val ts = _ts.toList
-    _tuples.getOrElse(
-      ts, {
-        val u = EirTupleType(None, ts)
-        _tuples += (ts -> u)
-        u
-      }
-    )
-  }
+  def getTupleType(tys: Iterable[EirType]): EirTupleType = TupleFactory(tys)
 
   def start(c: Context): Unit = _contexts.push(c)
   def stop(c: Context): Unit = assert(_contexts.pop() == c)

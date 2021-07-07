@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
@@ -132,7 +133,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   )(implicit ctx: UnparseContext): String = {
     node.name +
       node.upperBound.mapOrEmpty(x => " <: " + visit(x)) +
-      node.lowerBound.mapOrEmpty(x => " :> " + visit(x))
+      node.lowerBound.mapOrEmpty(x => " >: " + visit(x)) +
+      node.argumentType.mapOrEmpty(x => " : " + visit(x))
   }
 
   def visitChildren(
@@ -165,8 +167,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
             case (x, _) => s" and ${visit(x)}"
           }
           .mkString("")
-    val clause = node.predicate.map(visit).map(s => s" where $s").getOrElse("")
-    s"$keyword ${node.name}$decl$inheritance$clause $body$n"
+    s"$keyword ${node.name}$decl$inheritance${visitWhere(node.predicate)} $body$n"
   }
 
   override def visitClass(node: EirClass)(implicit
@@ -197,9 +198,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
         "<" + node.templateArgs.map(visit(_)).mkString(", ") + ">"
       else ""
     val retType = visit(node.returnType)
-    s"def ${node.name}$templates($args): $retType " + node.body.mapOrSemi(
-      visit(_)
-    )
+    s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)} " + node.body
+      .mapOrSemi(
+        visit(_)
+      )
   }
 
   override def visitAnnotation(node: EirAnnotation)(implicit
@@ -287,13 +289,26 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     s"import ${x.qualified mkString "::"};"
   }
 
+  def kindToSymbol(kind: Option[EirProxyKind]): String = {
+    kind match {
+      case Some(EirSectionProxy) => "{@}"
+      case Some(EirElementProxy) => "[@]"
+      case _                     => "@"
+    }
+  }
+
+  def visitProxyLike(
+      base: EirResolvable[EirType],
+      kind: Option[EirProxyKind],
+      collective: Option[String]
+  )(implicit ctx: UnparseContext): String = {
+    nameFor(base) + kindToSymbol(kind) + collective.getOrElse("")
+  }
+
   override def visitProxyType(
       x: EirProxyType
-  )(implicit ctx: UnparseContext): String = {
-    nameFor(x.base) +
-      (if (x.isElement) "[@]" else "@") +
-      x.collective.getOrElse("")
-  }
+  )(implicit ctx: UnparseContext): String =
+    visitProxyLike(x.base, x.kind, x.collective)
 
   def nameFor(node: EirNode)(implicit ctx: UnparseContext): String = {
     node match {
@@ -373,14 +388,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   override def visitProxy(x: EirProxy)(implicit ctx: UnparseContext): String =
-    visitProxyType(
-      EirProxyType(
-        x.parent,
-        x.base,
-        x.collective,
-        Option.when(x.isElement)(EirElementProxy)
-      )
-    )
+    visitProxyLike(x.base, x.kind, x.collective)
 
   override def visitMatch(x: EirMatch)(implicit ctx: UnparseContext): String = {
     s"${n}match (${visit(x.expression)}) {" + {
@@ -490,5 +498,14 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       x: EirUnaryExpression
   )(implicit ctx: UnparseContext): String = {
     s"(${x.op}(${x.rhs}))"
+  }
+
+  def visitWhere(
+      opt: Option[EirExpressionNode]
+  )(implicit ctx: UnparseContext): String = {
+    opt match {
+      case Some(s) => s" where ${visit(s)}"
+      case None    => ""
+    }
   }
 }

@@ -39,8 +39,13 @@ object Processes {
     ctx = new TypeCheckContext
   }
 
+  def isMain(node: EirNode): Boolean = {
+    node.annotation("main").nonEmpty
+  }
+
   def onLoad(node: EirNode): Unit = {
-    val all = node +: Modules.fileSiblings.getOrElse(node, Nil)
+    val all =
+      (node +: Modules.fileSiblings.getOrElse(node, Nil)).sortBy(!isMain(_))
 
     for (x <- all) {
       FullyResolve.visit(x)
@@ -167,7 +172,8 @@ object Processes {
     }
 
     kids.foreach(GenerateCpp.visit(_)(ctx))
-    c.foreach(GenerateProxies.visitProxy(ctx, _))
+    c.filter(ProxyManager.shouldGenerate)
+      .foreach(GenerateProxies.visitProxy(ctx, _))
 
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
