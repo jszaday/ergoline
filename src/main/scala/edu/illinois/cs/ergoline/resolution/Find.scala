@@ -388,10 +388,10 @@ object Find {
 
   def implementationOf(x: EirClassLike, y: EirTrait): Option[EirType] = {
     def helper(z: EirType): Option[EirType] = {
-      tryClassLike(z).map(implementationOf(_, y)).map(_ => z)
+      tryClassLike(z).flatMap(implementationOf(_, y)).map(_ => z)
     }
 
-    { Option.when(x == y)(x) } orElse {
+    { Option.when(x.eq(y))(x) } orElse {
       x.extendsThis.map(uniqueResolution[EirType]).flatMap(helper(_))
     } orElse {
       x.implementsThese.view

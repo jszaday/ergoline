@@ -4,26 +4,32 @@
 #include "section.decl.hpp"
 
 namespace ergoline {
-  template<typename T, std::size_t N>
-  hypercomm::vector_section<T> conv2section(const std::shared_ptr<array<T, N>>& arr) {
-    std::vector<T> vect(arr->size());
-    std::copy(std::begin(*arr), std::end(*arr), std::begin(vect));
-    return hypercomm::vector_section<T>(std::move(vect));
-  }
 
-  template<typename T>
-  hypercomm::vector_section<T> conv2section(const range<T>& rng) {
-    std::vector<T> vect{};
-    auto iter = const_cast<range<T>&>(rng).iter();
-    while (iter->hasNext()) {
-      vect.push_back(iter->next());
-    }
-    return hypercomm::vector_section<T>(std::move(vect));
-  }
+template <typename T>
+inline iterator_t<T> access_value_iter(const T& t) {
+  return const_cast<T&>(t).iter();
+}
 
-  hypercomm::combiner_ptr make_null_combiner(void) {
-    return std::make_shared<hypercomm::null_combiner>();
+template <typename T>
+inline iterator_t<T> access_ref_iter(const std::shared_ptr<T>& t) {
+  return t->iter();
+}
+
+template <typename T>
+inline hypercomm::vector_section<iterator_value_t<T>> conv2section(const T& t) {
+  using iter_type = iterator_for<extricate_t<T>>;
+  using value_type = typename iter_type::value_type;
+  std::vector<value_type> vect{};
+  auto iter = iter_type::accessor(t);
+  while (iter->hasNext()) {
+    vect.push_back(iter->next());
   }
+  return hypercomm::vector_section<value_type>(std::move(vect));
+}
+
+hypercomm::combiner_ptr make_null_combiner(void) {
+  return std::make_shared<hypercomm::null_combiner>();
+}
 }
 
 #endif

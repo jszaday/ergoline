@@ -36,8 +36,18 @@ std::ostream& operator<< (std::ostream& stream, const std::tuple<Ts...>& idx) {
 
 namespace ergoline {
 
+template<typename T, typename Enable = void>
+struct extractor_ {
+  using type = T;
+};
+
 template<typename T>
-using extricate_t = typename std::conditional<hypercomm::is_specialization_of<std::shared_ptr, T>::value, typename T::element_type, T>::type;
+struct extractor_<std::shared_ptr<T>> {
+  using type = T;
+};
+
+template<typename T>
+using extricate_t = typename extractor_<T>::type;
 
 inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
   auto* chare = static_cast<Chare*>(proxy->local());

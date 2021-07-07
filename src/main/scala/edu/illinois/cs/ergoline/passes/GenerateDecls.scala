@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   makeHasher,
   makePupper,
+  templateArgsOf,
   visitInherits,
   visitTemplateArgs
 }
@@ -162,24 +163,47 @@ object GenerateDecls {
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =
     GenerateCpp.visitFunction(x, isMember = true)(ctx)
 
+  private val ns = globals.ergolineModule
+
+  def mkIteratorAccessor(
+      x: EirClass,
+      args: List[EirTemplateArgument],
+      qualifiedName: String
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    ctx << "constexpr" << "auto" << "accessor" << "="
+    if (x.isSystem) {
+      ctx << x.member("iter").map(ctx.nameFor(_, ns))
+      ctx << Option.when(args.nonEmpty)(
+        s"<${args.map(ctx.nameFor(_)) mkString ","}>"
+      )
+    } else if (x.isValueType) {
+      ctx << "ergoline::access_value_iter<" << qualifiedName << ">"
+    } else {
+      ctx << "ergoline::access_ref_iter<" << qualifiedName << ">"
+    }
+    ctx << ";"
+  }
+
   def mkIteratorBridge(
       x: EirClass,
       y: EirTemplatedType
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val ns = globals.ergolineModule
-    ctx << visitTemplateArgs(x)
-    ctx << "struct" << "iterator_for" << "<" << GenerateCpp.qualifiedNameFor(
-      ctx,
-      ns.getOrElse(???),
-      includeTemplates = true
-    )(x) << ">" << "{"
+    val args = templateArgsOf(x)
+    val qualifiedName = {
+      GenerateCpp.qualifiedNameFor(
+        ctx,
+        ns.getOrElse(???),
+        includeTemplates = true
+      )(x)
+    }
+
+    ctx << visitTemplateArgs(args)
+    ctx << "struct" << "iterator_for" << "<" << qualifiedName << ">" << "{"
     ctx << "using" << "value_type" << "=" << ctx.typeFor(
       y.types.head,
       ns
     ) << ";"
-    ctx << "static" << "constexpr" << "auto" << "accessor" << "=" << {
-      x.member("iter").map(ctx.nameFor(_, ns))
-    } << ";"
+    ctx << "static" << mkIteratorAccessor(x, args, qualifiedName)(ctx)
     ctx << "};"
   }
 }

@@ -148,13 +148,11 @@ object Processes {
           lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
         } << "}"
     })
-    kids.foreach(GenerateCpp.visit(_)(ctx))
-    c.foreach(GenerateProxies.visitProxy(ctx, _))
 
     val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
     val iterables = sorted
       .collect({
-        case s: EirClass if s.isSystem => s
+        case s: EirClass => s
       })
       .flatMap(s => {
         Find
@@ -167,6 +165,9 @@ object Processes {
       iterables.foreach(it => GenerateDecls.mkIteratorBridge(it._1, it._2)(ctx))
       ctx << "}"
     }
+
+    kids.foreach(GenerateCpp.visit(_)(ctx))
+    c.foreach(GenerateProxies.visitProxy(ctx, _))
 
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
