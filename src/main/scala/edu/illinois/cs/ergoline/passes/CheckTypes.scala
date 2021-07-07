@@ -694,10 +694,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): EirType = {
     ctx.avail(node).foreach(return _)
     val lval = {
-      node.declaredType match {
-        case p: EirPlaceholder[_] => p.expectation.map(visit(_))
-        case t                    => Some(visit(t))
-      }
+      (node.declaredType match {
+        case p: EirPlaceholder[_] => p.expectation
+        case t                    => Some(t)
+      }).map(visit(_))
     }
     val rval = node.initialValue.map(visit(_))
     val ty = (lval, rval) match {
@@ -1088,14 +1088,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitProxy(
       node: EirProxy
   )(implicit ctx: TypeCheckContext): EirType = {
-    val (_, _, opt) = handleSpecializable(ctx, node)
+    val element = ProxyManager.elementFor(node).getOrElse(node)
+    val (_, _, opt) = handleSpecializable(ctx, element)
+
     opt.foreach(subCtx => {
       ctx.start(subCtx)
-      val element = ProxyManager.elementFor(node).getOrElse(node)
+
       element.members.map(visit(_))
-      visit(node.base)
+      visit(element.base)
+
       ctx.stop(subCtx)
     })
+
     if (node.templateArgs.nonEmpty) {
       ctx.getTemplatedType(node, node.templateArgs.map(visit(_)))
     } else {

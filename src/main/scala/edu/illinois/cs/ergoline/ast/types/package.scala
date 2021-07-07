@@ -99,6 +99,7 @@ package object types {
 
   sealed trait EirProxyKind
 
+  case object EirCollectiveProxy extends EirProxyKind
   case object EirElementProxy extends EirProxyKind
   case object EirSectionProxy extends EirProxyKind
 

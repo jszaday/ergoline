@@ -22,6 +22,7 @@ case class EirProxy(
 
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)
+  def isCollective: Boolean = kind.contains(EirCollectiveProxy)
 
   def predicate: Option[EirExpressionNode] = base.predicate
   override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???

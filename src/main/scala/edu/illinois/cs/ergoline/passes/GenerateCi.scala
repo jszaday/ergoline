@@ -36,7 +36,7 @@ object GenerateCi {
     ctx << "initproc void setup_environment(void);"
 
     ProxyManager.proxies
-      .filterNot(x => x.base.isAbstract || x.isElement)
+      .filter(ProxyManager.shouldGenerate)
       .map(x => (x.namespaces.toList, x))
       .groupBy(_._1)
       .foreach({

@@ -636,6 +636,20 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
+  def kindFrom(
+      collective: Option[String],
+      suffix: Option[String]
+  ): Option[EirProxyKind] = {
+    suffix
+      .filter(_ => collective.nonEmpty)
+      .map({
+        case "[@]" => EirElementProxy
+        case "{@}" => EirSectionProxy
+        case "@"   => EirCollectiveProxy
+        case _     => ???
+      })
+  }
+
   override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
     if (ctx.Ellipses() != null) {
       return EirPackExpansion(ctx.fqn.identifier.toStringList)(parent)
@@ -647,23 +661,24 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       base.parent = Some(templatedType)
       base = templatedType
     }
-    if (ctx.proxySuffix() != null) {
-      val suffix = Option(ctx.proxySuffix().ProxySuffix())
-      val isElement = suffix.exists(_.getText == "[@]")
-      val isSection = suffix.exists(_.getText == "{@}")
-      val proxyType =
-        EirProxyType(
-          parent,
-          base,
-          Option(ctx.proxySuffix().CollectiveKeyword()).map(_.getText),
-          kind =
-            Option.when(isElement)(EirElementProxy) orElse
-              Option.when(isSection)(EirSectionProxy)
-        )
-      base.parent = Some(proxyType)
-      base = proxyType
+    Option(ctx.proxySuffix()) match {
+      case Some(proxySuffix) =>
+        val collective = Option(proxySuffix.CollectiveKeyword()).map(_.getText)
+        val suffix = Option(proxySuffix.ProxySuffix())
+          .orElse(Option(proxySuffix.Atpersand()))
+          .map(_.getText)
+        val proxyType =
+          EirProxyType(
+            parent,
+            base,
+            collective,
+            kindFrom(collective, suffix)
+          )
+        assert(collective.isEmpty || proxyType.kind.nonEmpty)
+        base.parent = Some(proxyType)
+        proxyType
+      case None => base
     }
-    base
   }
 
   override def visitPattern(ctx: PatternContext): EirNode = {
