@@ -207,8 +207,10 @@ package object util {
         }
     }
 
-    implicit class RichResolvableTypeIterable(
-        types: Iterable[EirResolvable[EirType]]
+    implicit class RichResolvableTypeIterable[A <: EirResolvable[
+      EirType
+    ]: ClassTag](
+        types: Iterable[A]
     ) {
       def toTupleType(
           allowUnit: Boolean = false
@@ -218,7 +220,7 @@ package object util {
             if (allowUnit) globals.unitType
             else throw new RuntimeException("please use unit type")
           case element :: Nil => element
-          case x              => EirTupleType(parent, x)
+          case x              => TupleFactory(x)
         }
     }
 

@@ -300,7 +300,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "hypercomm::init_polymorph_registry();"
     ctx << "if(CkMyRank()==0)" << "{"
 
-    ProxyManager.registeredIndices() foreach { x =>
+    val regdIdxs = ProxyManager.registeredIndices()
+    regdIdxs foreach { x =>
       localityPupables foreach (y => {
         ctx << "hypercomm::enroll<" << y
         ctx << "<" << ctx.typeFor(x, global) << ">>" << "()" << ";"
