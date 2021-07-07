@@ -386,6 +386,21 @@ object Find {
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
+  def implementationOf(x: EirClassLike, y: EirTrait): Option[EirType] = {
+    def helper(z: EirType): Option[EirType] = {
+      tryClassLike(z).flatMap(implementationOf(_, y)).map(_ => z)
+    }
+
+    { Option.when(x.eq(y))(x) } orElse {
+      x.extendsThis.map(uniqueResolution[EirType]).flatMap(helper(_))
+    } orElse {
+      x.implementsThese.view
+        .map(uniqueResolution[EirType])
+        .flatMap(helper(_))
+        .headOption
+    }
+  }
+
   object FindSyntax {
 
     implicit class RichPredicate[T](predicate: T => Boolean) {

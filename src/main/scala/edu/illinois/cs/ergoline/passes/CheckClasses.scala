@@ -25,10 +25,6 @@ object CheckClasses {
   def visit(ctx: TypeCheckContext, node: EirClassLike): Unit = {
     if (checked.contains(node)) return
 
-    if (node.templateArgs.isEmpty && node.predicate.nonEmpty) {
-      ???
-    }
-
     val nested = node.parent.to[EirMember]
 
     nested

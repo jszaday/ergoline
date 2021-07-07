@@ -1,11 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   makeHasher,
   makePupper,
+  templateArgsOf,
   visitInherits,
   visitTemplateArgs
 }
@@ -53,20 +55,44 @@ object GenerateDecls {
     ctx << "namespace " << ctx.nameFor(x) << "{" << x.children << "}"
   }
 
+  def visitPredicate(
+      x: EirClassLike
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val args = GenerateCpp.templateArgsOf(x)
+    x.predicate match {
+      case Some(predicate) =>
+        ctx << "<" << (args.map(ctx.nameFor(_)), ",")
+        ctx << Option.when(args.nonEmpty)(",")
+        ctx << "typename" << "std::enable_if" << "<" << {
+          StaticGenerator.visit(predicate)
+        } << ">::type" << ">"
+      case None =>
+    }
+  }
+
   def visitClassLike(ctx: CodeGenerationContext, x: EirClassLike): Unit = {
-    if (isSystem(x)) {
-      x.members.collect {
-        case m @ EirMember(_, x: EirNode, _) if !isSystem(x) => x
-      } foreach { x => visit(ctx, x) }
+    val checked = ctx.hasChecked(x)
+    if (isSystem(x) || !checked) {
+      if (checked) {
+        x.members.collect {
+          case EirMember(_, x: EirNode, _) if !isSystem(x) => x
+        } foreach { x => visit(ctx, x) }
+      }
+
       return
     }
 
     val thisName = ctx.nameFor(x)
     val declName = GenerateCpp.declNameFor(x)(ctx)
 
-    ctx << visitTemplateArgs(x)(ctx) << "struct" << declName << visitInherits(
-      x
-    )(ctx) << "{"
+    ctx << {
+      visitTemplateArgs(x)(ctx)
+    } << "struct" << declName << {
+      visitPredicate(x)(ctx)
+    } << {
+      visitInherits(x)(ctx)
+    } << "{"
+
     if (!x.isInstanceOf[EirTrait]) {
       if (!hasHash(x)) makeHasher(ctx, x)
 
@@ -136,4 +162,60 @@ object GenerateDecls {
 
   def visitFunction(ctx: CodeGenerationContext, x: EirFunction): Unit =
     GenerateCpp.visitFunction(x, isMember = true)(ctx)
+
+  private val ns = globals.ergolineModule
+
+  def mkIteratorAccessor(
+      x: EirClass,
+      iter: Option[EirMember],
+      args: List[EirTemplateArgument],
+      qualifiedName: String
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    ctx << "constexpr" << "auto" << "accessor" << "="
+    if (x.isSystem) {
+      ctx << iter.map(ctx.nameFor(_, ns))
+      ctx << Option.when(args.nonEmpty)(
+        s"<${args.map(ctx.nameFor(_)) mkString ","}>"
+      )
+    } else if (x.isValueType) {
+      ctx << "ergoline::access_value_iter<" << qualifiedName << ">"
+    } else {
+      ctx << "ergoline::access_ref_iter<" << qualifiedName << ">"
+    }
+    ctx << ";"
+  }
+
+  def mkIteratorBridge(
+      x: EirClass,
+      y: EirTemplatedType
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val iter = x.member("iter")
+    if (
+      !iter.exists(z =>
+        isSystem(z) || {
+          ctx.hasChecked(z.member.asInstanceOf[EirSpecializable])
+        }
+      )
+    ) {
+      return
+    }
+
+    val args = templateArgsOf(x)
+    val qualifiedName = {
+      GenerateCpp.qualifiedNameFor(
+        ctx,
+        ns.getOrElse(???),
+        includeTemplates = true
+      )(x)
+    }
+
+    ctx << visitTemplateArgs(args)
+    ctx << "struct" << "iterator_for" << "<" << qualifiedName << ">" << "{"
+    ctx << "using" << "value_type" << "=" << ctx.typeFor(
+      y.types.head,
+      ns
+    ) << ";"
+    ctx << "static" << mkIteratorAccessor(x, iter, args, qualifiedName)(ctx)
+    ctx << "};"
+  }
 }

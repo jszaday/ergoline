@@ -86,13 +86,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   import GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
 
+  val enablerName = "__ENABLE__"
+
   def forwardDecl(
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
     if (x.isSystem) return
 
-    visitTemplateArgs(x.templateArgs)
-    ctx << s"struct ${ctx.nameFor(x)};"
+    x.predicate match {
+      case Some(_) =>
+        templateArgsOf(x) match {
+          case Nil => ctx << "template" << "<"
+          case args =>
+            ctx.ignoreNext(">")
+            ctx << visitTemplateArgs(args)(ctx)
+            ctx << ","
+        }
+        ctx << "typename" << enablerName << "=" << "void" << ">"
+      case None =>
+        visitTemplateArgs(x)
+    }
+
+    ctx << "struct" << declNameFor(x) << ";"
 
     ProxyManager
       .proxiesFor(x)
@@ -1226,7 +1241,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitClassLike(
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
-    if (x.templateArgs.isEmpty) {
+    val isDefined = x.templateArgs.isEmpty && ctx.hasChecked(x)
+
+    if (isDefined) {
       ctx << x.members.collect {
         case m @ EirMember(_, _: EirFunction, _) if !m.isSystem => m
       }
@@ -1294,7 +1311,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def visitTemplateArgs(
       args: List[EirTemplateArgument]
   )(implicit ctx: CodeGenerationContext): Unit = {
-    if (args.nonEmpty) ctx << s"template<" << (args, ",") << "> "
+    if (args.nonEmpty) ctx << s"template<" << (args, ",") << ">"
   }
 
   def visitTemplateArgs(x: EirSpecializable, systemParent: Boolean)(implicit
@@ -1407,7 +1424,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
     val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
-    if ((!langCi && entryOnly) || x.isSystem || abstractMember || isTempl) {
+    val canEnter = ctx.hasChecked(x) || langCi
+    if (
+      !canEnter || (!langCi && entryOnly) || x.isSystem || abstractMember || isTempl
+    ) {
       return
     }
 
@@ -1540,7 +1560,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     val sys = base.annotation("system")
-    if (sys.isDefined && !sys.flatMap(_("qualify")).exists(_.toBoolean)) {
+    if (
+      node.isInstanceOf[EirTemplateArgument] || (
+        sys.isDefined && !sys.flatMap(_("qualify")).exists(_.toBoolean)
+      )
+    ) {
       return Nil
     }
 

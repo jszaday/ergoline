@@ -1,7 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirNode
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -23,11 +26,11 @@ object Processes {
   )
 
   var sensitiveDeclIncludes: Map[String, String] = Map(
-    ("range", "ergoline/section.decl.hpp")
+    ("iterable", "ergoline/section.decl.hpp")
   )
 
   var sensitiveDefIncludes: Map[String, String] = Map(
-    ("range", "ergoline/section.def.hpp")
+    ("iterable", "ergoline/section.def.hpp")
   )
 
   private var ctx = new TypeCheckContext
@@ -100,11 +103,13 @@ object Processes {
 
     val sorted = ctx.checked.keys
       .collect({
-        case c: EirClassLike if !(c.isNested || c.isInstanceOf[EirProxy]) => c
+        case c: EirClassLike if !c.isInstanceOf[EirProxy] => c
       })
       .toList
       .dependenceSort()
+
     assert(!globals.strict || sorted.hasValidOrder)
+
     val toDecl = sorted.namespacePartitioned
     ctx << priorityIncludes
     // NOTE do we ever need to topo sort these?
@@ -130,16 +135,37 @@ object Processes {
 
     toDecl foreach {
       case (namespace, classes) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          classes.foreach(GenerateDecls.visit(ctx, _))
+        ctx << "namespace" << (namespace.fullyQualifiedName, "::") << "{" << {
+          classes
+            .filterNot(_.isNested)
+            .foreach(GenerateDecls.visit(ctx, _))
         } << "}"
     }
+
     ctx.lambdas.foreach({
       case (namespace, lambdas) =>
         ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
           lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
         } << "}"
     })
+
+    val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
+    val iterables = sorted
+      .collect({
+        case s: EirClass => s
+      })
+      .flatMap(s => {
+        Find
+          .implementationOf(s, iterableTy)
+          .to[EirTemplatedType]
+          .map(t => (s, t))
+      })
+    if (iterables.nonEmpty) {
+      ctx << "namespace" << "ergoline" << "{"
+      iterables.foreach(it => GenerateDecls.mkIteratorBridge(it._1, it._2)(ctx))
+      ctx << "}"
+    }
+
     kids.foreach(GenerateCpp.visit(_)(ctx))
     c.foreach(GenerateProxies.visitProxy(ctx, _))
 

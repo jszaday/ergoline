@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.EirImportTests.setupEnv
-import edu.illinois.cs.ergoline.ast.{EirClassLike, EirGlobalNamespace, EirNamedNode}
+import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirGlobalNamespace, EirNamedNode, EirTrait}
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -101,6 +101,18 @@ class EirImportTests extends FunSuite {
       |class foo extends bar { def getX(): int { return self.x; } }
       |""".stripMargin)
     Processes.onLoad(module)
+  }
+
+
+  test("shouldn't match wrong parent") {
+    setupEnv()
+
+    val iterable = globals.iterableType.asInstanceOf[EirTrait]
+    val iterator = globals.iteratorType.asInstanceOf[EirTrait]
+    val range = globals.rangeType.asInstanceOf[EirClass]
+
+    Find.implementationOf(iterator, iterable) shouldBe None
+    Find.implementationOf(range, iterable).nonEmpty shouldBe true
   }
 
   test("complex class relationships are correctly sorted and partitioned") {

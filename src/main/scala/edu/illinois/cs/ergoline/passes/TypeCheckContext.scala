@@ -108,6 +108,8 @@ class TypeCheckContext {
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
+  var staticTyping: Boolean = false
+
   def currentNode: Option[EirNode] = stack.headOption
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
@@ -204,9 +206,12 @@ class TypeCheckContext {
     EirSyntheticSpecialization(types)
   }
 
-  def checkPredicate(pred: EirPredicated): Boolean = {
-    pred.predicate.map(StaticEvaluator.evaluate(_)(this)).forall(_.toBoolean)
+  def checkPredicate(opt: Option[EirExpressionNode]): Boolean = {
+    opt.map(StaticEvaluator.evaluate(_)(this)).forall(_.toBoolean)
   }
+
+  def checkPredicate(pred: EirPredicated): Boolean =
+    checkPredicate(pred.predicate)
 
   def trySpecialize(
       s: EirSpecializable,
