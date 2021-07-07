@@ -235,11 +235,6 @@ case class EirProxy(
     val idx: List[EirType] = indices.get
     val idxTy = idx.toTupleType()(None)
     val eleTy = ProxyManager.elementType(this)
-    val secTy = ProxyManager.sectionType(this)
-    val arrayTy = // TODO iterable could be used here instead?
-      EirTemplatedType(None, globals.arrayType, List(idxTy))
-    val rangeTys =
-      idx.map(x => EirTemplatedType(None, globals.rangeType, List(x)))
 
     Option
       .when(isArray)(
@@ -249,10 +244,50 @@ case class EirProxy(
           util.makeMemberFunction(this, "doneInserting", Nil, globals.unitType)
         )
       )
-      .getOrElse(Nil) :+
-      util.makeMemberFunction(this, "get", idx, eleTy) :+
-      util.makeMemberFunction(this, "get", List(arrayTy), secTy) :+
-      util.makeMemberFunction(this, "get", rangeTys, secTy)
+      .getOrElse(Nil) ++
+      mkSectionAccessor(idx, idxTy) :+
+      util.makeMemberFunction(this, "get", idx, eleTy)
+  }
+
+  def mkSectionAccessor(
+      idx: List[EirType],
+      idxTy: EirResolvable[EirType]
+  ): List[EirMember] = {
+    val secTy = ProxyManager.sectionType(this)
+    var ms: List[EirMember] = Nil
+
+    {
+      val arg = EirTemplateArgument(None, "__Index__")
+      val m = util.makeMemberFunction(this, "get", List(arg), secTy)
+      val f = m.member.asInstanceOf[EirFunction]
+      arg.upperBound = Some(
+        EirTemplatedType(Some(arg), globals.iterableType, List(idxTy))
+      )
+      f.templateArgs = List(arg)
+      ms +:= m
+    }
+
+    if (idx.length > 1) {
+      val m = util.makeMemberFunction(this, "get", Nil, secTy)
+      val f = m.member.asInstanceOf[EirFunction]
+      for (i <- idx.indices.reverse) {
+        val arg = EirTemplateArgument(None, s"__Index${i}__")
+        arg.upperBound = Some(
+          EirTemplatedType(Some(arg), globals.iterableType, List(idx(i)))
+        )
+        f.templateArgs +:= arg
+        f.functionArgs +:= EirFunctionArgument(
+          Some(f),
+          s"x$i",
+          arg,
+          isExpansion = false,
+          isSelfAssigning = false
+        )
+      }
+      ms +:= m
+    }
+
+    ms
   }
 
   def baseConstructors(asInsert: Boolean = false): List[EirMember] = {

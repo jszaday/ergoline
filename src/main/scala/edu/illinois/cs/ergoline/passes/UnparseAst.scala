@@ -132,9 +132,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       node: EirTemplateArgument
   )(implicit ctx: UnparseContext): String = {
     node.name +
-      node.upperBound.mapOrEmpty(x => " <: " + visit(x)) +
-      node.lowerBound.mapOrEmpty(x => " >: " + visit(x)) +
-      node.argumentType.mapOrEmpty(x => " : " + visit(x))
+      node.upperBound.mapOrEmpty(x => " <: " + nameFor(x)) +
+      node.lowerBound.mapOrEmpty(x => " >: " + nameFor(x)) +
+      node.argumentType.mapOrEmpty(x => " : " + nameFor(x))
   }
 
   def visitChildren(
@@ -197,7 +197,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       if (node.templateArgs.nonEmpty)
         "<" + node.templateArgs.map(visit(_)).mkString(", ") + ">"
       else ""
-    val retType = visit(node.returnType)
+    val retType = nameFor(node.returnType)
     s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)} " + node.body
       .mapOrSemi(
         visit(_)
@@ -216,7 +216,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitFunctionArgument(
       node: EirFunctionArgument
   )(implicit ctx: UnparseContext): String = {
-    val declTy = visit(node.declaredType)
+    val declTy = nameFor(node.declaredType)
     val equals = if (node.isSelfAssigning) "=" else ""
     val asterisk = if (node.isExpansion) "*" else ""
     s"$equals${node.name}: $asterisk$declTy"
@@ -312,8 +312,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   def nameFor(node: EirNode)(implicit ctx: UnparseContext): String = {
     node match {
-      case x: EirNamedNode => x.name
-      case _               => visit(node)
+      case _: EirProxy | _: EirProxyType => visit(node)
+      case x: EirNamedNode               => x.name
+      case _                             => visit(node)
     }
   }
 
@@ -427,7 +428,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTupleType(
       x: EirTupleType
   )(implicit ctx: UnparseContext): String = {
-    s"(${x.children.map(visit(_)) mkString ", "})"
+    s"(${x.children.map(nameFor(_)) mkString ", "})"
   }
 
   override def visitAwait(x: EirAwait)(implicit ctx: UnparseContext): String = {
