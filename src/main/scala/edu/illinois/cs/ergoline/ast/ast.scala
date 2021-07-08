@@ -1058,13 +1058,20 @@ case class EirIdentifierPattern(
 ) extends EirPattern {
   private val declaration =
     EirDeclaration(Some(this), isFinal = true, name, _ty, None)
-  if (_ty != null) _ty.parent = Some(declaration)
+
+  private def updateParent(): Unit = {
+    if (!(_ty == null || _ty.isInstanceOf[EirType])) {
+      _ty.parent = Some(declaration)
+    }
+  }
+
+  this.updateParent()
 
   def ty: EirResolvable[EirType] = _ty
   def ty_=(ty: EirResolvable[EirType]): Unit = {
     declaration.declaredType = ty
     _ty = ty
-    _ty.parent = Some(declaration)
+    this.updateParent()
   }
 
   // TODO make context-specific
