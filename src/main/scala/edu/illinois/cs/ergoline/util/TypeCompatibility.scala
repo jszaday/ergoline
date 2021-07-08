@@ -66,16 +66,12 @@ object TypeCompatibility {
       }
     } else
       (ourBase, theirBase) match {
-        case (a: EirClassLike, b: EirTrait) =>
-          val impl = Find.implementationOf(a, b)
-          impl
-            .map(c => {
-              val spec = ctx.specialize(a, ours)
-              val cty = CheckTypes.visit(c)
-              ctx.leave(spec)
-              cty
-            })
-            .exists(_.canAssignTo(theirs))
+        case (_: EirClassLike, b: EirTrait) =>
+          val impl = Find.implementationOf(ours, b)(ctx)
+          impl.exists({
+            case impl: EirTemplatedType => canAssignHelper(impl, theirs)
+            case _                      => ???
+          })
         case _ => ???
       }
   }

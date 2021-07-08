@@ -3,7 +3,11 @@ package edu.illinois.cs.ergoline.ast
 import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{
+  EirTemplateFacade,
+  EirResolvable,
+  Find
+}
 
 trait EirVisitor[Context, Value] {
   def error(x: EirNode)(implicit ctx: Context): Value = {
@@ -58,6 +62,7 @@ trait EirVisitor[Context, Value] {
       case x: EirTemplatedType    => visitTemplatedType(x)
       case x: EirConstantFacade   => visitConstantFacade(x)
       case x: EirTemplateArgument => visitTemplateArgument(x)
+      case x: EirTemplateFacade   => x.asInstanceOf[Value]
       case _                      => error(x)
     }
   }

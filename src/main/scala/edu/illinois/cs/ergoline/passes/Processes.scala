@@ -7,7 +7,12 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirNode
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{Find, Modules}
+import edu.illinois.cs.ergoline.resolution.{
+  EirPlaceholder,
+  EirTemplateFacade,
+  Find,
+  Modules
+}
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
@@ -157,11 +162,11 @@ object Processes {
     val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
     val iterables = sorted
       .collect({
-        case s: EirClass => s
+        case s: EirClass if s.isDescendantOf(iterableTy) => s
       })
       .flatMap(s => {
         Find
-          .implementationOf(s, iterableTy)
+          .implementationOf(GenerateCpp.templatize(s), iterableTy)(ctx.tyCtx)
           .to[EirTemplatedType]
           .map(t => (s, t))
       })

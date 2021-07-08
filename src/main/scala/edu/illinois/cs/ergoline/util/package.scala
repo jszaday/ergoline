@@ -90,17 +90,28 @@ package object util {
     ).headOption
   }
 
-  def sweepInherited[T](
+  private def pickHelper[A <: EirType: ClassTag](
+      s: EirClassLike,
+      sp: Option[EirSpecialization]
+  ): A = {
+    (s, sp) match {
+      case (_, Some(a: A)) => a
+      case (a: A, _)       => a
+      case _               => ???
+    }
+  }
+
+  def sweepInherited[A <: EirType: ClassTag, B](
       ctx: TypeCheckContext,
-      base: EirClassLike,
-      f: (TypeCheckContext, EirClassLike) => View[T]
-  ): View[T] = {
-    base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
-      case (a, None) => f(ctx, a)
+      base: A,
+      f: (TypeCheckContext, A) => View[B]
+  ): View[B] = {
+    Find.asClassLike(base).inherited.view.map(resolveToPair(_)(ctx)).flatMap {
+      case (a, None) => f(ctx, pickHelper[A](a, None))
       case (a, Some(sp)) =>
         val inner = new TypeCheckContext(Some(ctx))
         val spec = inner.specialize(a, sp)
-        val found = f(inner, a)
+        val found = f(inner, pickHelper[A](a, Some(spec)))
         inner.leave(spec)
         found
     }

@@ -7,7 +7,11 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{
+  EirTemplateFacade,
+  EirResolvable,
+  Find
+}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
   RichResolvableTypeIterable
@@ -49,6 +53,11 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
       def accepts(
           resolvable: EirResolvable[EirType]
       )(implicit ctx: TypeCheckContext): Boolean = {
+        resolvable match {
+          case _: EirTemplateFacade => return true
+          case _                    => ;
+        }
+
         val ub = argument.upperBound.map(CheckTypes.visit)
         val lb = argument.lowerBound.map(CheckTypes.visit)
         val ty = argument.argumentType.map(CheckTypes.visit)

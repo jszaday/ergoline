@@ -14,7 +14,11 @@ import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   updateLocalityContext
 }
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{
+  EirTemplateFacade,
+  EirResolvable,
+  Find
+}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -1291,6 +1295,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } + ">"
   }
 
+  def templatize(x: EirType with EirSpecializable): EirType = {
+    val args = templateArgsOf(x)
+    if (args.nonEmpty) {
+      EirTemplatedType(None, x, args.map(EirTemplateFacade))
+    } else {
+      x
+    }
+  }
+
   def templateArgsOf(
       x: EirSpecializable,
       systemParent: Boolean
@@ -1800,6 +1813,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             _lambda_names.put(x, name)
             name
         }
+      case b: EirTemplateFacade =>
+        nameFor(ctx, b.t, includeTemplates, usage)
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
