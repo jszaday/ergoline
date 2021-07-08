@@ -159,13 +159,14 @@ object Modules {
 
   def load(f: File, scope: EirScope): EirNamedNode = {
     val file = f.getCanonicalFile
+    val expected = Modules.expectation(f)
     val (startMb, startMs) = (memoryUsageMb, currTimeMs)
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
-      case (value: EirNamedNode, sibilings)
-          if value.hasName(Modules.expectation(f)) =>
-        fileSiblings(value) = sibilings
+      case (value: EirNamedNode, siblings)
+          if value.hasName(expected) =>
+        fileSiblings(value) = siblings
         loadedFiles(file) = value
         Processes.onLoad(value)
         val (endMs, endMb) = (currTimeMs, memoryUsageMb)
@@ -176,7 +177,7 @@ object Modules {
         value
       case _ =>
         throw new RuntimeException(
-          s"could not find ${expectation(file)} within ${file.getCanonicalPath}"
+          s"could not find $expected within ${file.getCanonicalPath}"
         )
     }
   }

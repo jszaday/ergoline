@@ -11,4 +11,8 @@ package ergoline;
     def zip<B>(bs: iterator<B>): iterator<(A, B)> {
         return new zipped_iterator<A, B>(self, bs);
     }
+
+    def map<B>(f: A => B): iterator<B> {
+        return new mapped_iterator<A, B>(self, f);
+    }
 }

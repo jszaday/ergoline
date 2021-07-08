@@ -89,7 +89,7 @@ package object literals {
   case class EirUnitLiteral(var value: Unit = ())(
       override var parent: Option[EirNode]
   ) extends EirLiteral[Unit] {
-    override def `type`: String = "unit"
+    override def `type`: String = globals.unitName
   }
 
   case class EirLiteralTuple(var value: List[EirLiteral[_]])(

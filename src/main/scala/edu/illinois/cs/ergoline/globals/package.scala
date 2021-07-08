@@ -2,9 +2,9 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirUnitLiteral}
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.resolution.{Find, Modules}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirExpressionNode =
@@ -104,7 +104,12 @@ package object globals {
     Find.namedChild[EirClassLike](ckModule, "proxy")
   }
 
-  def unitType: EirType = typeFor("unit")
+  def unitName: String = "unit"
+
+  def unitSymbol: EirResolvable[EirType]
+    = EirSymbol[EirNamedType](ergolineModule, List(unitName))
+
+  def unitType: EirType = typeFor(unitName)
 
   def stringType: EirType = typeFor("string")
 

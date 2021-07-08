@@ -398,7 +398,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         f.implicitArgs.foreach(_.isImplicit = true)
         f.returnType = Option(ctx.`type`())
           .map(visitAs[EirResolvable[EirType]](_))
-          .getOrElse(globals.unitType)
+          .getOrElse(globals.unitSymbol)
         f.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
         f.body = Option(ctx.block()).map(visitAs[EirBlock])
       }
