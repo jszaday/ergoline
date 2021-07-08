@@ -22,6 +22,10 @@ package ergoline;
     @system(operator=true) def <<(other: int): int;
     @system(operator=true) def >>(other: int): int;
 
+    def to(end: int): range<int> {
+        return new range<int>(self, 1, end);
+    }
+
     @system(cast=true) def toBool(): bool;
     @system(cast=true) def toLong(): long;
     @system(cast=true) def toShort(): short;

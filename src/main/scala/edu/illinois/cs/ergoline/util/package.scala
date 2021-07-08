@@ -98,10 +98,10 @@ package object util {
     base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
       case (a, None) => f(ctx, a)
       case (a, Some(sp)) =>
-        val ictx = new TypeCheckContext
-        val spec = ictx.specialize(a, sp)
-        val found = f(ictx, a)
-        ictx.leave(spec)
+        val inner = new TypeCheckContext(Some(ctx))
+        val spec = inner.specialize(a, sp)
+        val found = f(inner, a)
+        inner.leave(spec)
         found
     }
   }

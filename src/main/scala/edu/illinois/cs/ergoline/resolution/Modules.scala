@@ -164,8 +164,7 @@ object Modules {
     val parser = parserFromPath(file.toPath)
     val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
     result match {
-      case (value: EirNamedNode, siblings)
-          if value.hasName(expected) =>
+      case (value: EirNamedNode, siblings) if value.hasName(expected) =>
         fileSiblings(value) = siblings
         loadedFiles(file) = value
         Processes.onLoad(value)

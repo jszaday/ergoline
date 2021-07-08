@@ -13,13 +13,17 @@ import ergoline::_;
             b[i] = 2 * (i + 1);
         }
 
-        val abs = a.iter().zip(b.iter());
-        val fabs = abs.map((ab: (int, int)) => {
-            return ab[0] + ab[1];
-        });
+        val azb = a.iter().zip(b.iter());
+        val azbs =
+          azb
+            .map((ab: (int, int)) => {
+                return ab[0] + ab[1];
+            });
 
-        println(`info> the first ${n} terms of ( a(n) = 4*n + 3 ) are:`);
-        for ( fab <- fabs ) { println(fab.toString()); }
+        println("a(n) = 4*n + 3");
+        for ( ab <- (0 to n).iter().zip(azbs) ) {
+            println(`a(${ab[0]}) = ${ab[1]}`);
+        }
 
         exit();
     }

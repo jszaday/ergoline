@@ -386,6 +386,7 @@ object Find {
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
+  // TODO this needs to be implemented using sweepInherited!
   def implementationOf(x: EirClassLike, y: EirTrait): Option[EirType] = {
     def helper(z: EirType): Option[EirType] = {
       tryClassLike(z).flatMap(implementationOf(_, y)).map(_ => z)

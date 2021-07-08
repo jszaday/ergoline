@@ -467,16 +467,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def structToTrait(n: EirNode, c: EirClassLike, noCopy: Boolean)(implicit
+  def structToTrait(n: EirNode, t: EirType, noCopy: Boolean)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     if (noCopy) {
       ctx << "std::shared_ptr<" << ctx.typeFor(
-        c,
+        t,
         Some(n)
       ) << ">(std::shared_ptr<void>{},&" << n << ")"
     } else {
-      ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+      ctx << "std::make_shared<" << ctx.typeFor(t, Some(n)) << ">(" << n << ")"
     }
   }
 
@@ -1870,7 +1870,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     })
     ctx << {
       "std::static_pointer_cast<" + ctx.nameFor(ty, Some(x)) + ">"
-    } << "(" << "std::make_shared<" << ctx.nameFor(x) << ">(" << (captures, ",") << ")" << ")"
+    } << "(" << "std::make_shared<" << ctx.nameFor(
+      x
+    ) << ">(" << (captures, ",") << ")" << ")"
   }
 
   def makeLambdaWrapper(
@@ -2353,7 +2355,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
         ctx << ctx.nameFor(a) << "(" << value << ")"
       case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
-        structToTrait(value, b, noCopy = requiresRef)
+        structToTrait(value, valueTy, noCopy = requiresRef)
       case _ => ctx << value
     }
   }

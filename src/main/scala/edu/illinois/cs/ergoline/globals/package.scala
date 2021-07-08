@@ -106,8 +106,8 @@ package object globals {
 
   def unitName: String = "unit"
 
-  def unitSymbol: EirResolvable[EirType]
-    = EirSymbol[EirNamedType](ergolineModule, List(unitName))
+  def unitSymbol: EirResolvable[EirType] =
+    EirSymbol[EirNamedType](ergolineModule, List(unitName))
 
   def unitType: EirType = typeFor(unitName)
 

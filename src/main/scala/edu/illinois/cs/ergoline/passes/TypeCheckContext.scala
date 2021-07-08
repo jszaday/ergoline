@@ -40,7 +40,7 @@ object TypeCheckContext {
   }
 }
 
-class TypeCheckContext {
+class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   import TypeCheckContext._
 
   object TypeCheckSyntax {
@@ -133,10 +133,12 @@ class TypeCheckContext {
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
-    _checked collect {
-      case (sp, contexts) =>
-        (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
-    }
+    parent
+      .map(_.checked)
+      .getOrElse(_checked collect {
+        case (sp, contexts) =>
+          (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
+      })
   }
 
   def enterNode(n: EirNode): Unit = {
@@ -187,10 +189,11 @@ class TypeCheckContext {
       spec: Option[EirSpecialization]
   ): Option[Context] = {
     val sp = spec.map(makeDistinct)
-    val checked = _checked.getOrElse(s, Nil)
+    val tyCtx = parent.getOrElse(this)
+    val checked = tyCtx._checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
     Option.unless(checked.contains(ctx))({
-      _checked += (s -> (checked :+ ctx))
+      tyCtx._checked += (s -> (checked :+ ctx))
       ctx
     })
   }
