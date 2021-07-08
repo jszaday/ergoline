@@ -310,22 +310,12 @@ class TypeCheckContext {
   def hasSubstitution(
       x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
-    val s = x.parent.to[EirSpecializable]
-
-    val subst = s.flatMap(s =>
-      _substitutions.findLast(t => {
-        s == t._1 || t._1.templateArgs.contains(x)
-      })
-    )
-
-    subst
-      .map({
+    _substitutions.reverse
+      .flatMap({
         case (s, sp) => templateZipArgs(s, sp)
       })
-      .flatMap({ list =>
-        list.collectFirst({
-          case (arg, ty) if x == arg => ty
-        })
+      .collectFirst({
+        case (arg, ty) if x == arg => ty
       })
   }
 

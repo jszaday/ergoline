@@ -790,7 +790,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def isProxySelf(s: EirSymbol[_]): Boolean = {
-    s.qualifiedName.lastOption.exists(_.contains("@"))
+    s.qualifiedName.lastOption.exists(x => {
+      x.contains("@") || x == globals.implicitProxyName
+    })
   }
 
   override def visitFunction(

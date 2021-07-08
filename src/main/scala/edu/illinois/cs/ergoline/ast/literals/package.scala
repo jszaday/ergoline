@@ -16,6 +16,13 @@ package object literals {
 
     def `type`: String
 
+    override def equals(other: Any): Boolean = {
+      other match {
+        case x: EirLiteral[_] => this.equals(x)
+        case _                => false
+      }
+    }
+
     def equals(other: EirLiteral[_]): Boolean = {
       other match {
         case x: EirLiteral[A] => this.value == x.value

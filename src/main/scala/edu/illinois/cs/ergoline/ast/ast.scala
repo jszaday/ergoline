@@ -1139,7 +1139,7 @@ case class EirConstantFacade(var value: EirLiteral[_])(
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case EirConstantFacade(other) => value.equals(other.value)
+      case EirConstantFacade(other) => value.equals(other)
       case _                        => false
     }
   }
