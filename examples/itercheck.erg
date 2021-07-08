@@ -1,0 +1,30 @@
+package examples;
+
+import ergoline::_;
+
+@main class itercheck {
+    @entry def itercheck() {
+        val n = 16;
+        val a = new array<int>(n);
+        val b = new array<int>(n);
+
+        for (var i = 0; i < n; i += 1) {
+            a[i] = (2 * i) + 1;
+            b[i] = 2 * (i + 1);
+        }
+
+        val azb = a.iter().zip(b.iter());
+        val azbs =
+          azb
+            .map((ab: (int, int)) => {
+                return ab[0] + ab[1];
+            });
+
+        println("a(n) = 4*n + 3");
+        for ( ab <- (0 to n).iter().zip(azbs) ) {
+            println(`a(${ab[0]}) = ${ab[1]}`);
+        }
+
+        exit();
+    }
+}

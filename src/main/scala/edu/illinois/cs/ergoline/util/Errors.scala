@@ -30,7 +30,7 @@ object Errors {
     val start = Option(ctx).map(contextualize).getOrElse("???")
     start + ": " + msg.format(params.map {
       case n: EirNode => nameFor(n)
-      case x          => x.toString
+      case x          => Option(x).map(_.toString).getOrElse("(null)")
     }: _*)
   }
 
@@ -164,7 +164,7 @@ object Errors {
         "expected a(n) %s, instead got %s (a(n) %s)",
         c.getName,
         a,
-        a.getClass.getName
+        Option(a).map(_.getClass.getName).getOrElse("(null)")
       )
     )
   }

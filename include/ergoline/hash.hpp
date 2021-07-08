@@ -17,7 +17,7 @@ struct equal_to {
 
 template <class T>
 struct equal_to<std::shared_ptr<T>,
-                typename std::enable_if<std::is_base_of<object, T>::value>::type> {
+                typename std::enable_if<std::is_base_of<hypercomm::comparable, T>::value>::type> {
   inline bool operator()(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs) const {
     return (!lhs || !rhs) ? (lhs == rhs) : (lhs->equals(rhs));
   }

@@ -6,7 +6,12 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
-import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirConstantFacade}
+import edu.illinois.cs.ergoline.ast.{
+  EirClass,
+  EirClassLike,
+  EirConstantFacade,
+  EirTrait
+}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
@@ -50,6 +55,27 @@ object TypeCompatibility {
     }
   }
 
+  private def canAssignHelper(ours: EirTemplatedType, theirs: EirTemplatedType)(
+      implicit ctx: TypeCheckContext
+  ): Boolean = {
+    val (ourBase, theirBase) =
+      (Find.uniqueResolution[EirType](ours.base), theirs.base)
+    if (ourBase == theirBase) {
+      ours.args.zip(theirs.args) forall {
+        case (a, b) => a == b // TODO add support for contravariance
+      }
+    } else
+      (ourBase, theirBase) match {
+        case (_: EirClassLike, b: EirTrait) =>
+          val impl = Find.implementationOf(ours, b)(ctx)
+          impl.exists({
+            case impl: EirTemplatedType => canAssignHelper(impl, theirs)
+            case _                      => ???
+          })
+        case _ => ???
+      }
+  }
+
   implicit class RichEirType(ours: EirType) {
 
     def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean =
@@ -67,14 +93,8 @@ object TypeCompatibility {
               CheckTypes.argumentsMatch(x, y)
             }
           }
-        case (x: EirTemplatedType, y: EirTemplatedType) =>
-          // TODO add checking for default arguments
-          x.base.canAssignTo(
-            y.base
-          ) && (x.args.length == y.args.length) && x.args.zip(y.args).forall {
-            case (xx, yy) => xx.canAssignTo(yy)
-          }
-        case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
+        case (x: EirTemplatedType, y: EirTemplatedType) => canAssignHelper(x, y)
+        case (x: EirClassLike, y: EirClassLike)         => x.isDescendantOf(y)
         case (x: EirTupleType, y: EirTupleType) =>
           x.children.length == y.children.length &&
             x.children

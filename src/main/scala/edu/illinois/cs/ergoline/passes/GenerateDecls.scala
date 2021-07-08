@@ -109,6 +109,11 @@ object GenerateDecls {
         .map(ctx.nameFor(_, Some(x)))
 
       if (x.isValueType) { // TODO add !isAbstract?
+        val objBase = "std::shared_ptr<ergoline::object_base_>"
+        ctx << "virtual" << objBase << "__this_object__" << "(" << "void" << ")" << "override" << "{"
+        ctx << "return" << objBase << "(" << objBase << "{},this);"
+        ctx << "}"
+
         val tmp = ctx.temporary
         ctx << declName << "(" << "const" << thisName << "&" << tmp << ")" << {
           parent.map(p => s": $p($tmp)")

@@ -309,7 +309,7 @@ trait EirClassLike
   // TODO eventually traits will need a self as well
   def selfDeclarations: List[EirMember] =
     Option
-      .when(this.isInstanceOf[EirClass])({
+      .when(this.isInstanceOf[EirClass] || this.isInstanceOf[EirTrait])({
         EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
       })
       .toList
@@ -505,10 +505,14 @@ case class EirMember(
   def isVirtual: Boolean =
     member match {
       case _: EirFunction =>
-        !isConstructor && (base.isAbstract || isOverride) && !annotations
-          .exists(
-            _.name == "system"
-          )
+        !isConstructor && (base.isAbstract || isOverride) && {
+          !annotations.exists(_.name == "system")
+        } && {
+          member match {
+            case s: EirSpecializable => s.templateArgs.isEmpty
+            case _                   => false
+          }
+        }
       case _ => false
     }
 
@@ -1054,13 +1058,20 @@ case class EirIdentifierPattern(
 ) extends EirPattern {
   private val declaration =
     EirDeclaration(Some(this), isFinal = true, name, _ty, None)
-  if (_ty != null) _ty.parent = Some(declaration)
+
+  private def updateParent(): Unit = {
+    if (!(_ty == null || _ty.isInstanceOf[EirType])) {
+      _ty.parent = Some(declaration)
+    }
+  }
+
+  this.updateParent()
 
   def ty: EirResolvable[EirType] = _ty
   def ty_=(ty: EirResolvable[EirType]): Unit = {
     declaration.declaredType = ty
     _ty = ty
-    _ty.parent = Some(declaration)
+    this.updateParent()
   }
 
   // TODO make context-specific
@@ -1139,7 +1150,7 @@ case class EirConstantFacade(var value: EirLiteral[_])(
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case EirConstantFacade(other) => value.equals(other.value)
+      case EirConstantFacade(other) => value.equals(other)
       case _                        => false
     }
   }

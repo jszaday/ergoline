@@ -7,8 +7,15 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
+import edu.illinois.cs.ergoline.resolution.{
+  EirTemplateFacade,
+  EirResolvable,
+  Find
+}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichOption,
+  RichResolvableTypeIterable
+}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
@@ -37,7 +44,7 @@ object TypeCheckContext {
   }
 }
 
-class TypeCheckContext {
+class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   import TypeCheckContext._
 
   object TypeCheckSyntax {
@@ -46,6 +53,11 @@ class TypeCheckContext {
       def accepts(
           resolvable: EirResolvable[EirType]
       )(implicit ctx: TypeCheckContext): Boolean = {
+        resolvable match {
+          case _: EirTemplateFacade => return true
+          case _                    => ;
+        }
+
         val ub = argument.upperBound.map(CheckTypes.visit)
         val lb = argument.lowerBound.map(CheckTypes.visit)
         val ty = argument.argumentType.map(CheckTypes.visit)
@@ -130,10 +142,12 @@ class TypeCheckContext {
 
   // naively filters out partial specializations
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
-    _checked collect {
-      case (sp, contexts) =>
-        (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
-    }
+    parent
+      .map(_.checked)
+      .getOrElse(_checked collect {
+        case (sp, contexts) =>
+          (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
+      })
   }
 
   def enterNode(n: EirNode): Unit = {
@@ -184,10 +198,11 @@ class TypeCheckContext {
       spec: Option[EirSpecialization]
   ): Option[Context] = {
     val sp = spec.map(makeDistinct)
-    val checked = _checked.getOrElse(s, Nil)
+    val tyCtx = parent.getOrElse(this)
+    val checked = tyCtx._checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
     Option.unless(checked.contains(ctx))({
-      _checked += (s -> (checked :+ ctx))
+      tyCtx._checked += (s -> (checked :+ ctx))
       ctx
     })
   }
@@ -305,14 +320,14 @@ class TypeCheckContext {
   }
 
   def hasSubstitution(
-      t: EirTemplateArgument
+      x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
     _substitutions.reverse
       .flatMap({
         case (s, sp) => templateZipArgs(s, sp)
       })
       .collectFirst({
-        case (arg, ty) if arg == t => ty
+        case (arg, ty) if x == arg => ty
       })
   }
 

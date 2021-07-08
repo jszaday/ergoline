@@ -3,4 +3,16 @@ package ergoline;
 @transient trait iterator<A> {
     def next(): A;
     def hasNext(): bool;
+
+    def zip<B>(bs: iterable<B>): iterator<(A, B)> {
+        return self.zip(bs.iter());
+    }
+
+    def zip<B>(bs: iterator<B>): iterator<(A, B)> {
+        return new zipped_iterator<A, B>(self, bs);
+    }
+
+    def map<B>(f: A => B): iterator<B> {
+        return new mapped_iterator<A, B>(self, f);
+    }
 }

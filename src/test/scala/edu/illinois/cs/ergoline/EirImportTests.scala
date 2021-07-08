@@ -1,9 +1,10 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.EirImportTests.setupEnv
+import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirGlobalNamespace, EirNamedNode, EirTrait}
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
-import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes}
+import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 import org.scalatest.FunSuite
@@ -104,15 +105,19 @@ class EirImportTests extends FunSuite {
   }
 
 
-  test("shouldn't match wrong parent") {
+  test("find implementation of") {
     setupEnv()
 
+    val ctx = new TypeCheckContext()
+    val range = globals.rangeType.asInstanceOf[EirClass]
     val iterable = globals.iterableType.asInstanceOf[EirTrait]
     val iterator = globals.iteratorType.asInstanceOf[EirTrait]
-    val range = globals.rangeType.asInstanceOf[EirClass]
 
-    Find.implementationOf(iterator, iterable) shouldBe None
-    Find.implementationOf(range, iterable).nonEmpty shouldBe true
+    val intRange = EirTemplatedType(None, range, List(globals.integerType))
+    val intIterator = EirTemplatedType(None, iterator, List(globals.integerType))
+
+    Find.implementationOf(intRange, iterable)(ctx).nonEmpty shouldBe true
+    Find.implementationOf(intIterator, iterable)(ctx).isEmpty shouldBe true
   }
 
   test("complex class relationships are correctly sorted and partitioned") {

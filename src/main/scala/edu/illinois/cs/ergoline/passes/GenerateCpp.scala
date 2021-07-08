@@ -14,7 +14,11 @@ import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   updateLocalityContext
 }
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{
+  EirTemplateFacade,
+  EirResolvable,
+  Find
+}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -467,16 +471,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def structToTrait(n: EirNode, c: EirClassLike, noCopy: Boolean)(implicit
+  def structToTrait(n: EirNode, t: EirType, noCopy: Boolean)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     if (noCopy) {
       ctx << "std::shared_ptr<" << ctx.typeFor(
-        c,
+        t,
         Some(n)
       ) << ">(std::shared_ptr<void>{},&" << n << ")"
     } else {
-      ctx << "std::make_shared<" << ctx.typeFor(c, Some(n)) << ">(" << n << ")"
+      ctx << "std::make_shared<" << ctx.typeFor(t, Some(n)) << ">(" << n << ")"
     }
   }
 
@@ -1130,32 +1134,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
     val base = x.extendsThis.map(ctx.resolve)
+    val serializableBase = base.map(ctx.typeOf).exists(!_.isTrait)
     val parents =
       (base ++ x.implementsThese.map(ctx.resolve)) map (ctx.nameFor(_))
-    val pupableBase = base.map(ctx.typeOf).exists(!_.isTrait)
+    val declName = nameFor(
+      ctx,
+      x,
+      includeTemplates = true
+    )
 
     if (x.isInstanceOf[EirTrait]) {
       ctx << {
         if (parents.nonEmpty) ": " + parents.map("public " + _).mkString(",")
-        else ": public hypercomm::polymorph::trait"
+        else ": public ergoline::trait<" + declName + ">"
       }
     } else {
-      ctx << ": " << {
-//        if (parents.isEmpty) "public ergoline::object" else
-        parents.map("public " + _).mkString(", ")
-      }
-      if (!pupableBase) {
+      ctx << ": " << (parents.map("public " + _), ",")
+      if (!serializableBase) {
         // TODO x.isTransient ?
-        ctx << Option.when(parents.nonEmpty)(",") << "public ergoline::object"
+        ctx << Option.when(parents.nonEmpty)(",") << {
+          "public ergoline::object<" + declName + ">"
+        }
       }
-      ctx <<
-        Option.unless(x.isValueType)(
-          ", public std::enable_shared_from_this<" + nameFor(
-            ctx,
-            x,
-            includeTemplates = true
-          ) + ">"
-        )
     }
   }
 
@@ -1293,6 +1293,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         .map(ctx.typeFor(_, usage))
         .mkString(",")
     } + ">"
+  }
+
+  def templatize(x: EirType with EirSpecializable): EirType = {
+    val args = templateArgsOf(x)
+    if (args.nonEmpty) {
+      EirTemplatedType(None, x, args.map(EirTemplateFacade))
+    } else {
+      x
+    }
   }
 
   def templateArgsOf(
@@ -1627,6 +1636,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (ty.isPointer) {
       if (ctx.currentSelf == "self") {
         "self"
+      } else if (ty.isTrait) {
+        "this->__self__()"
       } else {
         "(" + nameFor(
           ctx,
@@ -1802,6 +1813,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             _lambda_names.put(x, name)
             name
         }
+      case b: EirTemplateFacade =>
+        nameFor(ctx, b.t, includeTemplates, usage)
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -1859,6 +1872,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitLambdaExpression(
       x: EirLambdaExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val ty = ctx.typeOf(x)
     val captures = x.captures.map(captured => {
       // TODO use specialized version when avail
       val ty = ctx.typeOf(captured)
@@ -1869,7 +1883,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         s"std::shared_ptr<$t>(std::shared_ptr<$t>{}, &$name)"
       }
     })
-    ctx << s"std::make_shared<${ctx.nameFor(x)}>(${captures mkString ","})"
+    ctx << {
+      "std::static_pointer_cast<" + ctx.nameFor(ty, Some(x)) + ">"
+    } << "(" << "std::make_shared<" << ctx.nameFor(
+      x
+    ) << ">(" << (captures, ",") << ")" << ")"
   }
 
   def makeLambdaWrapper(
@@ -2352,7 +2370,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
         ctx << ctx.nameFor(a) << "(" << value << ")"
       case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
-        structToTrait(value, b, noCopy = requiresRef)
+        structToTrait(value, valueTy, noCopy = requiresRef)
       case _ => ctx << value
     }
   }

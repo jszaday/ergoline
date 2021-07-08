@@ -16,6 +16,13 @@ package object literals {
 
     def `type`: String
 
+    override def equals(other: Any): Boolean = {
+      other match {
+        case x: EirLiteral[_] => this.equals(x)
+        case _                => false
+      }
+    }
+
     def equals(other: EirLiteral[_]): Boolean = {
       other match {
         case x: EirLiteral[A] => this.value == x.value
@@ -82,7 +89,7 @@ package object literals {
   case class EirUnitLiteral(var value: Unit = ())(
       override var parent: Option[EirNode]
   ) extends EirLiteral[Unit] {
-    override def `type`: String = "unit"
+    override def `type`: String = globals.unitName
   }
 
   case class EirLiteralTuple(var value: List[EirLiteral[_]])(

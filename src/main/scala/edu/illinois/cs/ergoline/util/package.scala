@@ -81,22 +81,38 @@ package object util {
   def sweepInheritedFirst[T](
       ctx: TypeCheckContext,
       base: EirClassLike,
-      f: EirClassLike => Option[T]
+      f: (TypeCheckContext, EirClassLike) => Option[T]
   ): Option[T] = {
-    sweepInherited(ctx, base, (a: EirClassLike) => f(a).view).headOption
+    sweepInherited(
+      ctx,
+      base,
+      (ictx: TypeCheckContext, a: EirClassLike) => f(ictx, a).view
+    ).headOption
   }
 
-  def sweepInherited[T](
+  private def pickHelper[A <: EirType: ClassTag](
+      s: EirClassLike,
+      sp: Option[EirSpecialization]
+  ): A = {
+    (s, sp) match {
+      case (_, Some(a: A)) => a
+      case (a: A, _)       => a
+      case _               => ???
+    }
+  }
+
+  def sweepInherited[A <: EirType: ClassTag, B](
       ctx: TypeCheckContext,
-      base: EirClassLike,
-      f: EirClassLike => View[T]
-  ): View[T] = {
-    base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
-      case (a, None) => f(a)
+      base: A,
+      f: (TypeCheckContext, A) => View[B]
+  ): View[B] = {
+    Find.asClassLike(base).inherited.view.map(resolveToPair(_)(ctx)).flatMap {
+      case (a, None) => f(ctx, pickHelper[A](a, None))
       case (a, Some(sp)) =>
-        val spec = ctx.specialize(a, sp)
-        val found = f(a)
-        ctx.leave(spec)
+        val inner = new TypeCheckContext(Some(ctx))
+        val spec = inner.specialize(a, sp)
+        val found = f(inner, pickHelper[A](a, Some(spec)))
+        inner.leave(spec)
         found
     }
   }

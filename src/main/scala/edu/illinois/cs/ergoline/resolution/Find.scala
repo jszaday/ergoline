@@ -313,12 +313,12 @@ object Find {
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
-      sweepInherited(
+      sweepInherited[EirClassLike, (EirMember, EirType)](
         ctx,
         cls,
-        other => {
+        (ictx, other) => {
           // TODO filter if overridden?
-          resolveAccessor(accessor, Some(other))
+          resolveAccessor(accessor, Some(other))(ictx)
         }
       )
     }
@@ -386,18 +386,34 @@ object Find {
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
-  def implementationOf(x: EirClassLike, y: EirTrait): Option[EirType] = {
-    def helper(z: EirType): Option[EirType] = {
-      tryClassLike(z).flatMap(implementationOf(_, y)).map(_ => z)
+  // TODO this needs to be implemented using sweepInherited!
+  def implementationOf(x: EirType, y: EirTrait)(
+      ctx: TypeCheckContext
+  ): Option[EirType] = {
+    def helper(x: EirType)(ctx: TypeCheckContext): Option[EirType] = {
+      tryClassLike(x).flatMap(z => Option.when(y.eq(z))(x))
     }
 
-    { Option.when(x.eq(y))(x) } orElse {
-      x.extendsThis.map(uniqueResolution[EirType]).flatMap(helper(_))
-    } orElse {
-      x.implementsThese.view
-        .map(uniqueResolution[EirType])
-        .flatMap(helper(_))
-        .headOption
+    assert(x match {
+      case s: EirSpecializable => s.templateArgs.isEmpty
+      case _                   => true
+    })
+
+    { helper(x)(ctx) } orElse {
+      val spec =
+        Find.tryClassLike(x).zip(Some(x).to[EirSpecialization]).flatMap {
+          case (s, sp) => ctx.trySpecialize(s, sp)
+        }
+
+      val res = sweepInherited[EirType, EirType](
+        ctx,
+        x,
+        (ictx, z) => helper(z)(ictx).view
+      ).headOption
+
+      spec.foreach(ctx.leave(_))
+
+      res
     }
   }
 

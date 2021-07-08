@@ -35,15 +35,15 @@ object CheckFunctions {
     sweepInheritedFirst(
       ctx,
       within,
-      (base: EirClassLike) => {
+      (ictx: TypeCheckContext, base: EirClassLike) => {
         Find
           .child[EirMember](base, withName(of.name))
           .collectFirst {
             case m @ EirMember(_, f: EirFunction, accessibility)
-                if accessibility != Private && sharedArgs(ctx, of, f) =>
-              (m, CheckTypes.visit(f.returnType)(ctx))
+                if accessibility != Private && sharedArgs(ictx, of, f) =>
+              (m, CheckTypes.visit(f.returnType)(ictx))
           }
-          .orElse(overridesWithin(ctx, base, of))
+          .orElse(overridesWithin(ictx, base, of))
       }
     )
   }

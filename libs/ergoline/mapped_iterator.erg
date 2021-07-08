@@ -1,0 +1,17 @@
+package ergoline;
+
+@transient class mapped_iterator<A, B> with iterator<B> {
+
+    val as: iterator<A>;
+    val f: A => B;
+
+    def mapped_iterator(=as: iterator<A>, =f: A => B) {}
+
+    override def next(): B {
+        return f(as.next());
+    }
+
+    override def hasNext(): bool {
+        return as.hasNext();
+    }
+}
