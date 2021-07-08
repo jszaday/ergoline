@@ -123,7 +123,9 @@ object CheckConstructors {
   )(implicit
       ctx: TypeCheckContext
   ): Boolean = {
-    CheckTypes.visit(x).canAssignTo(CheckTypes.visit(y))
+    val xx = CheckTypes.visit(x)
+    val yy = CheckTypes.visit(y)
+    xx.canAssignTo(yy)(new TypeCheckContext)
   }
 
   def constructorAssignmentOk(

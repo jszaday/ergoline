@@ -309,7 +309,7 @@ trait EirClassLike
   // TODO eventually traits will need a self as well
   def selfDeclarations: List[EirMember] =
     Option
-      .when(this.isInstanceOf[EirClass])({
+      .when(this.isInstanceOf[EirClass] || this.isInstanceOf[EirTrait])({
         EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
       })
       .toList

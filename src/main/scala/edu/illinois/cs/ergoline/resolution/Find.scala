@@ -316,9 +316,9 @@ object Find {
       sweepInherited(
         ctx,
         cls,
-        other => {
+        (ictx, other) => {
           // TODO filter if overridden?
-          resolveAccessor(accessor, Some(other))
+          resolveAccessor(accessor, Some(other))(ictx)
         }
       )
     }

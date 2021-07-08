@@ -8,7 +8,10 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirType
 }
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichOption,
+  RichResolvableTypeIterable
+}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
@@ -305,14 +308,24 @@ class TypeCheckContext {
   }
 
   def hasSubstitution(
-      t: EirTemplateArgument
+      x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
-    _substitutions.reverse
-      .flatMap({
+    val s = x.parent.to[EirSpecializable]
+
+    val subst = s.flatMap(s =>
+      _substitutions.findLast(t => {
+        s == t._1 || t._1.templateArgs.contains(x)
+      })
+    )
+
+    subst
+      .map({
         case (s, sp) => templateZipArgs(s, sp)
       })
-      .collectFirst({
-        case (arg, ty) if arg == t => ty
+      .flatMap({ list =>
+        list.collectFirst({
+          case (arg, ty) if x == arg => ty
+        })
       })
   }
 

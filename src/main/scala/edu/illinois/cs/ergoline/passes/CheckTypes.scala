@@ -523,7 +523,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         if (missing.nonEmpty) {
           (missing.exists(_.name == globals.implicitProxyName), None)
         } else {
-          val t = assertValid[EirLambdaType](visit(candidate))
+          val s = visit(candidate)
+          val t = assertValid[EirLambdaType](s)
 
           if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
             // NOTE the double check is necessary here to visit candidate if it hasn't
@@ -788,6 +789,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     )
   }
 
+  def isProxySelf(s: EirSymbol[_]): Boolean = {
+    s.qualifiedName.lastOption.exists(_.contains("@"))
+  }
+
   override def visitFunction(
       node: EirFunction
   )(implicit ctx: TypeCheckContext): EirLambdaType = {
@@ -816,6 +821,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             // TODO fix up this logic
             //      needs to consider self[@] being inaccessible in foo@, e.g.
             if (member.exists(!_.isStatic)) {
+              assert(isProxySelf(e.symbol))
               member.foreach(_.makeEntryOnly())
               ctx.popUntil(node)
               ctx.removeSubstUntil(ns)

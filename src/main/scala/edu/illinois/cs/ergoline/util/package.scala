@@ -81,22 +81,27 @@ package object util {
   def sweepInheritedFirst[T](
       ctx: TypeCheckContext,
       base: EirClassLike,
-      f: EirClassLike => Option[T]
+      f: (TypeCheckContext, EirClassLike) => Option[T]
   ): Option[T] = {
-    sweepInherited(ctx, base, (a: EirClassLike) => f(a).view).headOption
+    sweepInherited(
+      ctx,
+      base,
+      (ictx: TypeCheckContext, a: EirClassLike) => f(ictx, a).view
+    ).headOption
   }
 
   def sweepInherited[T](
       ctx: TypeCheckContext,
       base: EirClassLike,
-      f: EirClassLike => View[T]
+      f: (TypeCheckContext, EirClassLike) => View[T]
   ): View[T] = {
     base.inherited.view.map(resolveToPair(_)(ctx)).flatMap {
-      case (a, None) => f(a)
+      case (a, None) => f(ctx, a)
       case (a, Some(sp)) =>
-        val spec = ctx.specialize(a, sp)
-        val found = f(a)
-        ctx.leave(spec)
+        val ictx = new TypeCheckContext
+        val spec = ictx.specialize(a, sp)
+        val found = f(ictx, a)
+        ictx.leave(spec)
         found
     }
   }
