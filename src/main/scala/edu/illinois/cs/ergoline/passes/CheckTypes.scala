@@ -1,8 +1,16 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protected}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{
+  EirAccessibility,
+  Protected
+}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.{EirIntegerLiteral, EirLiteral, EirLiteralSymbol, EirLiteralType}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirLiteralSymbol,
+  EirLiteralType
+}
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
@@ -10,10 +18,21 @@ import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.Transactions.EirSpecializeTransaction
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichOption,
+  RichResolvableTypeIterable
+}
 import edu.illinois.cs.ergoline.util.Errors.EirSubstitutionException
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
-import edu.illinois.cs.ergoline.util.{Errors, assertValid, isSystem, validAccessibility}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{
+  RichEirClassLike,
+  RichEirType
+}
+import edu.illinois.cs.ergoline.util.{
+  Errors,
+  assertValid,
+  isSystem,
+  validAccessibility
+}
 
 import scala.annotation.tailrec
 
@@ -762,7 +781,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val member = ctx.immediateAncestor[EirMember]
     val noArgs = s.templateArgs.isEmpty
     val pred = ctx.checkPredicate(s.predicate.filter(_ => noArgs))
-    val spec = if (noArgs) None else ctx.findSubstitution(s)
+    val spec = if (noArgs) None else ctx.hasSubstitution(s)
     val isDefined = pred && (noArgs || spec.isDefined)
     (
       isDefined,

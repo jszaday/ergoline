@@ -40,8 +40,10 @@ object Driver extends App {
   val out = {
     val idx = options.indexOf("-o")
     val hasOutput = idx >= 0 && idx < (options.length - 1)
-    val opt =
-      Option.when(hasOutput)("-o " + options(idx + 1)).getOrElse("-o a.out")
+    val opt = {
+      if (hasOutput) Seq("-o", options(idx + 1))
+      else Seq("-o", "a.out")
+    }
     if (hasOutput) {
       options = options.patch(idx, Nil, 2)
     }
@@ -93,16 +95,15 @@ object Driver extends App {
       "messaging"
     ).map(x => s"-lhypercomm-$x")
 
-    val inclPaths =
+    val inclPaths: Seq[String] =
       (hyperInclPaths ++ ergoInclPaths)
         .flatMap(_.map(_.toRealPath().toString))
-        .map("-I\"" + _ + "\"")
-        .mkString(" ")
+        .map("-I" + _)
 
-    val libPaths =
-      hyperLibsPath
+    val libPaths: Seq[String] =
+      (hyperLibsPath
         .map(_.toRealPath().toString)
-        .map("-L\"" + _ + "\"") ++ hyperLibs
+        .map("-L" + _) ++ hyperLibs).toSeq
 
     try {
       val cmd =
@@ -118,14 +119,15 @@ object Driver extends App {
     println(s"charmxi compilation:\t${charmxi - codegen}ms")
 
     try {
-      val linkOptions = options ++ {
+      val linkOptions: Iterable[String] = options ++ {
         if (usingBlas) LibUtils.linkLib("gsl")
         else None
       } ++ libPaths
-      val cmd =
-        s"${charmc.getOrElse("charmc")} ${linkOptions mkString " "} $out $inclPaths generate.cc"
-      println(s"$$ $cmd")
-      os.proc(cmd.split(raw"\s+")).call()
+      val cmd: Iterable[String] =
+        Seq(charmc.map(_.toRealPath().toString).getOrElse("charmc")) ++
+          (linkOptions ++ out ++ inclPaths ++ Seq("generate.cc"))
+      println(s"$$ ${cmd mkString " "}")
+      os.proc(cmd.filter(_.nonEmpty)).call()
     } catch {
       case throwable: Throwable =>
         Errors.exit(throwable.getMessage + " (is CHARM_HOME set?)")

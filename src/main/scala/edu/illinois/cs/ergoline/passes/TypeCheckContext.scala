@@ -124,7 +124,8 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
-  private def _substitutions: Iterable[(EirSpecializable, EirSpecialization)] = {
+  private def _substitutions
+      : Iterable[(EirSpecializable, EirSpecialization)] = {
     transactions.map(_.pair)
   }
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
@@ -142,7 +143,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def removeSubstUntil(n: Int): Unit = {
     val subst = transactions.toList
     if (subst.size > n) {
-      subst.slice(0, subst.size - n).foreach(_.active = false)
+      subst.slice(0, subst.size - n).foreach(_.deactivate())
     }
   }
 
@@ -265,7 +266,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   }
 
   def leave(ours: EirSpecializeTransaction): Unit = {
-    if (ours != null) { ours.active = false }
+    Option(ours).foreach(_.deactivate())
   }
 
   def specialization: Option[EirSpecialization] = {
@@ -306,8 +307,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
     }
   }
 
-  // TODO deprecate this?
-  def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
+  def hasSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
     _substitutions
       .find(x =>
         (x._1, s) match {
@@ -325,9 +325,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def hasSubstitution(
       x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
-    _substitutions
-      .toList
-      .reverse
+    _substitutions.toList.reverse
       .flatMap({
         case (s, sp) => templateZipArgs(s, sp)
       })
