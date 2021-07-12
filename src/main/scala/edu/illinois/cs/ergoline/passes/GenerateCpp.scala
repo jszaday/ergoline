@@ -333,9 +333,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         makeEnroll(x)
       } else {
         checked(x).foreach(y => {
-          ctx.specialize(x, y)
+          val t = ctx.specialize(x, y)
           makeEnroll(x)
-          ctx.leave(y)
+          ctx.leave(t)
         })
       }
     })

@@ -1,37 +1,19 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.EirAccessibility.{
-  EirAccessibility,
-  Protected
-}
+import edu.illinois.cs.ergoline.ast.EirAccessibility.{EirAccessibility, Protected}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirIntegerLiteral,
-  EirLiteral,
-  EirLiteralSymbol,
-  EirLiteralType
-}
+import edu.illinois.cs.ergoline.ast.literals.{EirIntegerLiteral, EirLiteral, EirLiteralSymbol, EirLiteralType}
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
+import edu.illinois.cs.ergoline.resolution.Transactions.EirSpecializeTransaction
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
-  RichOption,
-  RichResolvableTypeIterable
-}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichOption, RichResolvableTypeIterable}
 import edu.illinois.cs.ergoline.util.Errors.EirSubstitutionException
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{
-  RichEirClassLike,
-  RichEirType
-}
-import edu.illinois.cs.ergoline.util.{
-  Errors,
-  assertValid,
-  isSystem,
-  validAccessibility
-}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, isSystem, validAccessibility}
 
 import scala.annotation.tailrec
 
@@ -90,7 +72,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   def handleSpecialization(x: EirType)(implicit
       ctx: TypeCheckContext
-  ): Either[EirSpecializable, EirSpecialization] = {
+  ): Either[EirSpecializable, EirSpecializeTransaction] = {
     val base = x match {
       case x: EirTemplatedType => visit(x)
       case x                   => x

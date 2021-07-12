@@ -8,9 +8,10 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirType
 }
 import edu.illinois.cs.ergoline.resolution.{
-  EirTemplateFacade,
   EirResolvable,
-  Find
+  EirTemplateFacade,
+  Find,
+  Transactions
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
@@ -44,7 +45,10 @@ object TypeCheckContext {
   }
 }
 
-class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
+import Transactions.EirSpecializeTransaction
+
+class TypeCheckContext(parent: Option[TypeCheckContext] = None)
+    extends Transactions.Manager[EirSpecializeTransaction] {
   import TypeCheckContext._
 
   object TypeCheckSyntax {
@@ -120,8 +124,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
-  private var _substitutions: List[(EirSpecializable, EirSpecialization)] =
-    List()
+  private def _substitutions: Iterable[(EirSpecializable, EirSpecialization)] = {
+    transactions.map(_.pair)
+  }
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
@@ -135,8 +140,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   def numSubst: Int = _substitutions.size
   def removeSubstUntil(n: Int): Unit = {
-    if (_substitutions.size > n) {
-      _substitutions = _substitutions.patch(0, Nil, _substitutions.size - n)
+    val subst = transactions.toList
+    if (subst.size > n) {
+      subst.slice(0, subst.size - n).foreach(_.active = false)
     }
   }
 
@@ -207,7 +213,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
     })
   }
 
-  def trySpecialize(s: EirSpecializable): Option[EirSpecialization] = {
+  def trySpecialize(s: EirSpecializable): Option[EirSpecializeTransaction] = {
     specialization.flatMap(trySpecialize(s, _))
   }
 
@@ -225,7 +231,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   def trySpecialize(
       s: EirSpecializable,
       spec: EirSpecialization
-  ): Option[EirSpecialization] = {
+  ): Option[EirSpecializeTransaction] = {
     val types = s.accepts(spec)(this)
     Option
       .when(types.forall(_.isDefined))({
@@ -243,27 +249,23 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   def specialize(
       s: EirSpecializable,
       sp: EirSpecialization
-  ): EirSpecialization = {
+  ): EirSpecializeTransaction = {
     trySpecialize(s, sp).getOrElse(Errors.missingSpecialization(sp))
   }
 
   private def enter(
       s: EirSpecializable,
       sp: EirSpecialization
-  ): EirSpecialization = {
+  ): EirSpecializeTransaction = {
     Option
       .unless(s.sameAs(sp))({
-        _substitutions +:= (s -> sp)
-        sp
+        activate(EirSpecializeTransaction((s, sp), templateZipArgs(s, sp)))
       })
       .orNull
   }
 
-  def leave(ours: EirSpecialization): Unit = {
-    if (ours != null) {
-      val first = _substitutions.indexWhere(_._1 == ours)
-      _substitutions = _substitutions.patch(first, Nil, 1)
-    }
+  def leave(ours: EirSpecializeTransaction): Unit = {
+    if (ours != null) { ours.active = false }
   }
 
   def specialization: Option[EirSpecialization] = {
@@ -304,6 +306,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
     }
   }
 
+  // TODO deprecate this?
   def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
     _substitutions
       .find(x =>
@@ -322,7 +325,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   def hasSubstitution(
       x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
-    _substitutions.reverse
+    _substitutions
+      .toList
+      .reverse
       .flatMap({
         case (s, sp) => templateZipArgs(s, sp)
       })

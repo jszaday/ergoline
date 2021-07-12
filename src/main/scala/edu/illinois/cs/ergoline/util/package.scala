@@ -111,7 +111,7 @@ package object util {
       case (a, Some(sp)) =>
         val inner = new TypeCheckContext(Some(ctx))
         val spec = inner.specialize(a, sp)
-        val found = f(inner, pickHelper[A](a, Some(spec)))
+        val found = f(inner, pickHelper[A](a, Some(spec.to[EirSpecialization])))
         inner.leave(spec)
         found
     }

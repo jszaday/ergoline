@@ -1,17 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.literals.EirLiteral
-import edu.illinois.cs.ergoline.ast.types.{
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
 import edu.illinois.cs.ergoline.passes.Processes.ctx
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
+import edu.illinois.cs.ergoline.resolution.Transactions.EirSpecializeTransaction
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
@@ -105,9 +102,9 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def specialize(
       s: EirSpecializable,
       sp: EirSpecialization
-  ): EirSpecialization = tyCtx.specialize(s, sp)
+  ): EirSpecializeTransaction = tyCtx.specialize(s, sp)
 
-  def leave(ours: EirSpecialization): Unit = tyCtx.leave(ours)
+  def leave(ours: EirSpecializeTransaction): Unit = tyCtx.leave(ours)
 
   def hasSubstitution(t: EirTemplateArgument): Option[EirType] = {
     tyCtx.hasSubstitution(t).map(CheckTypes.visit(_)(tyCtx))
