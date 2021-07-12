@@ -411,7 +411,7 @@ object Find {
         (ictx, z) => helper(z)(ictx).view
       ).headOption
 
-      spec.foreach(ctx.leave(_))
+      spec.foreach(ctx.leave)
 
       res
     }

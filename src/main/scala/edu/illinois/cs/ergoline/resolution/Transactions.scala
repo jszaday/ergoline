@@ -7,7 +7,8 @@ import edu.illinois.cs.ergoline.ast.{
 }
 import edu.illinois.cs.ergoline.ast.types.EirType
 
-import scala.collection.mutable
+import scala.collection.SeqOps
+import scala.collection.mutable.ListBuffer
 import scala.reflect.{ClassTag, classTag}
 
 object Transactions {
@@ -44,11 +45,13 @@ object Transactions {
   }
 
   abstract class Manager[A <: EirTransaction] {
-    private val _transactions: mutable.ListBuffer[A] = new mutable.ListBuffer
+    private val _transactions: ListBuffer[A] = new ListBuffer
 
-    def transactions: Iterable[A] = _transactions.filter(_.active)
+    type SeqIterable = Iterable[A] with SeqOps[A, ListBuffer, ListBuffer[A]]
 
-    def allTransactions: Iterable[A] = _transactions
+    def transactions: SeqIterable = _transactions.filter(_.active)
+
+    def allTransactions: SeqIterable = _transactions
 
     def activate(a: A): A = {
       _transactions.append(a)

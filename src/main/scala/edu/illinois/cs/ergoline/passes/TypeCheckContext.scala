@@ -128,6 +128,12 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
       : Iterable[(EirSpecializable, EirSpecialization)] = {
     transactions.map(_.pair)
   }
+
+  private def _substitutionsReversed
+      : Iterable[(EirSpecializable, EirSpecialization)] = {
+    transactions.reverse.map(_.pair)
+  }
+
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
@@ -308,7 +314,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   }
 
   def hasSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
-    _substitutions
+    _substitutionsReversed
       .find(x =>
         (x._1, s) match {
           // NOTE EirLambdaExpression does not have template arguments so it's not considered here
@@ -325,7 +331,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def hasSubstitution(
       x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
-    _substitutions.toList.reverse
+    _substitutionsReversed
       .flatMap({
         case (s, sp) => templateZipArgs(s, sp)
       })
