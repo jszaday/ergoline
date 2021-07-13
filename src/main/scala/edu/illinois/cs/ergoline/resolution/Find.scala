@@ -2,25 +2,17 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.resolution.Find.uniqueResolution
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichEirNode,
   RichIntOption,
   RichOption
 }
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
-import edu.illinois.cs.ergoline.util.{
-  Errors,
-  addExplicitSelf,
-  assertValid,
-  extractFunction,
-  sweepInherited
-}
+import edu.illinois.cs.ergoline.util.{Errors, extractFunction, sweepInherited}
 
 import scala.collection.View
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
 object Find {
   type EirNamedScope = EirScope with EirNamedNode
@@ -305,12 +297,17 @@ object Find {
     checkSpecialized(base)
 
     def helper(x: EirMember): (EirMember, Option[EirSpecialization]) = {
-      (accessor.isStatic, x.isStatic) match {
-        case (true, true) | (false, false) =>
-          (x, Some(base).to[EirSpecialization])
-        case _ => ???
-      }
+      (
+        {
+          val (a, b) = (accessor.isStatic, x.isStatic)
+          // permits pure (non-)static and static access of non-static members (e.g., int::+)
+          assert(a == b || (a && !b))
+          x
+        },
+        Some(base).to[EirSpecialization]
+      )
     }
+
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
