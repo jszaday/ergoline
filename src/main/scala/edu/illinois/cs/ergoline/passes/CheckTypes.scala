@@ -652,11 +652,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           )
           val asCls = parent.headOption.flatMap(tryClassLike)
           if (asCls.isDefined) {
+            // NOTE this may not be reachable with a templated class
+            val asType = asCls.map(_.asType).map(visit)
             val accessor =
               mkAccessor(asCls.get, last)(value.parent)
+            accessor.foundType = asType
             accessor.isStatic = true
-            accessor.foundType = asCls.map(_.asType).map(visit)
-            (Some(accessor), Find.resolveAccessor(accessor, asCls))
+            (Some(accessor), Find.resolveAccessor(accessor, asType))
           } else {
             (None, Find.resolutions[EirNamedNode](value).map((_, None)))
           }
