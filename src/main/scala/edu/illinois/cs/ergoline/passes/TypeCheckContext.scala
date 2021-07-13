@@ -195,9 +195,8 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   def mkCheckContext(
       s: EirSpecializable,
-      spec: Option[EirSpecialization]
+      sp: Option[EirSpecialization]
   ): Option[Context] = {
-    val sp = spec.map(makeDistinct)
     val tyCtx = parent.getOrElse(this)
     val checked = tyCtx._checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
@@ -253,7 +252,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   ): EirSpecialization = {
     Option
       .unless(s.sameAs(sp))({
-        _substitutions +:= (s -> sp)
+        _substitutions +:= (s -> makeDistinct(sp))
         sp
       })
       .orNull
@@ -305,7 +304,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   }
 
   def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
-    _substitutions
+    _substitutions.reverse
       .find(x =>
         (x._1, s) match {
           // NOTE EirLambdaExpression does not have template arguments so it's not considered here
