@@ -497,7 +497,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         val sp = args
           .flatMap(inferSpecialization(s, _))
           .flatMap(ctx.trySpecialize(s, _))
-          .getOrElse(return (false, None))
+          .getOrElse({
+            ospec.foreach(ctx.leave)
+            return (false, None)
+          })
         (sp, args)
       case Right(sp) => (sp, getArguments(scope._1))
     }

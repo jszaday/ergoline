@@ -107,6 +107,8 @@ object Processes {
   // TODO this logic should be moved into GenerateCpp
   // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
+    assert(this.ctx.transactions.isEmpty)
+
     val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
     val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
