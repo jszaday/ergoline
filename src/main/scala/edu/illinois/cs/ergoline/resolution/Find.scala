@@ -300,20 +300,21 @@ object Find {
 
   def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(
       implicit ctx: TypeCheckContext
-  ): View[(EirMember, EirType)] = {
+  ): View[(EirMember, Option[EirSpecialization])] = {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
-    def helper(x: EirMember): (EirMember, EirType) = {
+    checkSpecialized(base)
+
+    def helper(x: EirMember): (EirMember, Option[EirSpecialization]) = {
       (accessor.isStatic, x.isStatic) match {
-        case (true, true) | (false, false) => (x, CheckTypes.visit(x))
-        case (true, false) if x.member.isInstanceOf[EirFunction] =>
-          (x, addExplicitSelf(ctx, base, CheckTypes.visit(x)))
+        case (true, true) | (false, false) =>
+          (x, Some(base).to[EirSpecialization])
         case _ => ???
       }
     }
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
-      sweepInherited[EirClassLike, (EirMember, EirType)](
+      sweepInherited[EirType, (EirMember, Option[EirSpecialization])](
         ctx,
         cls,
         (ictx, other) => {
@@ -386,16 +387,20 @@ object Find {
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
+  private def checkSpecialized(x: EirType): Unit = {
+    assert(x match {
+      case s: EirSpecializable => s.templateArgs.isEmpty
+      case _                   => true
+    })
+  }
+
   // TODO this needs to be implemented using sweepInherited!
   def implementationOf(x: EirType, y: EirTrait)(
       ctx: TypeCheckContext
   ): Option[EirType] = {
     val c = Find.tryClassLike(x)
 
-    assert(x match {
-      case s: EirSpecializable => s.templateArgs.isEmpty
-      case _                   => true
-    })
+    checkSpecialized(x)
 
     { c.flatMap(z => Option.when(y.eq(z))(x)) } orElse {
       Option

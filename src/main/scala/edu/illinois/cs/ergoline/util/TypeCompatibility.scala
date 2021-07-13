@@ -64,7 +64,7 @@ object TypeCompatibility {
       ours.args.zip(theirs.args) forall {
         case (a, b) => a == b // TODO add support for contravariance
       }
-    } else
+    } else {
       (ourBase, theirBase) match {
         case (_: EirClassLike, b: EirTrait) =>
           val impl = Find.implementationOf(ours, b)(ctx)
@@ -74,6 +74,7 @@ object TypeCompatibility {
           })
         case _ => ???
       }
+    }
   }
 
   implicit class RichEirType(ours: EirType) {

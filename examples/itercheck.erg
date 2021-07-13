@@ -21,7 +21,7 @@ import ergoline::_;
             });
 
         println("a(n) = 4*n + 3");
-        for ( ab <- (0 to n).iter().zip(azbs) ) {
+        for ( ab <- (0 to n).zip(azbs) ) {
             println(`a(${ab[0]}) = ${ab[1]}`);
         }
 

@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.ast
 import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
+import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{
@@ -260,6 +261,12 @@ case class EirSyntheticSpecialization(var types: List[EirResolvable[EirType]])
   override var parent: Option[EirNode] = None
   override def children: Iterable[EirNode] = types
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+
+  override def toString: String = {
+    this.getClass.getName + "(" + (types.map(
+      UnparseAst.nameFor(_)
+    ) mkString ", ") + ")"
+  }
 }
 
 object EirClassLike {
