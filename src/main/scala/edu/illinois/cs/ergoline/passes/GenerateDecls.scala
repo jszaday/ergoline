@@ -191,13 +191,17 @@ object GenerateDecls {
   }
 
   def mkIteratorBridge(
-      x: EirClass,
+      x: EirType,
       y: EirTemplatedType
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val iter = x.member("iter")
+    val cls = assertValid[EirClass](Find.asClassLike(x))
+    val accessor = CheckTypes.mkAccessor[EirMember](cls, "iter")(None)
+    val iter =
+      Find.resolveAccessor(accessor, Some(x))(ctx.tyCtx).headOption.map(_._1)
+
     if (
       !iter.exists(z =>
-        isSystem(z) || {
+        isSystem(z) || z.isAbstract || {
           ctx.hasChecked(z.member.asInstanceOf[EirSpecializable])
         }
       )
@@ -205,7 +209,7 @@ object GenerateDecls {
       return
     }
 
-    val args = templateArgsOf(x)
+    val args = templateArgsOf(cls)
     val qualifiedName = {
       GenerateCpp.qualifiedNameFor(
         ctx,
@@ -220,7 +224,7 @@ object GenerateDecls {
       y.types.head,
       ns
     ) << ";"
-    ctx << "static" << mkIteratorAccessor(x, iter, args, qualifiedName)(ctx)
+    ctx << "static" << mkIteratorAccessor(cls, iter, args, qualifiedName)(ctx)
     ctx << "};"
   }
 }
