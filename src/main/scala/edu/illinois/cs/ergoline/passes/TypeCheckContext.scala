@@ -7,9 +7,10 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
+import edu.illinois.cs.ergoline.resolution.Transactions.EirSubstituteTransaction
 import edu.illinois.cs.ergoline.resolution.{
-  EirTemplateFacade,
   EirResolvable,
+  EirTemplateFacade,
   Find
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
@@ -120,8 +121,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
-  private var _substitutions: List[(EirSpecializable, EirSpecialization)] =
-    List()
+  private var _substitutions: List[EirSubstituteTransaction] = List()
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
@@ -133,11 +133,13 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   var lambdas: List[EirLambdaExpression] = Nil
 
-  def numSubst: Int = _substitutions.size
-  def removeSubstUntil(n: Int): Unit = {
-    if (_substitutions.size > n) {
-      _substitutions = _substitutions.patch(0, Nil, _substitutions.size - n)
-    }
+  def currentSubstitution: Option[EirSubstituteTransaction] =
+    _substitutions.headOption
+
+  def rollbackTo(s: Option[EirSubstituteTransaction]): Unit = {
+    val save = s.map(_substitutions.indexOf(_)).getOrElse(_substitutions.size)
+    assert(save >= 0)
+    _substitutions = _substitutions.slice(save, _substitutions.size)
   }
 
   // naively filters out partial specializations
@@ -195,9 +197,8 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   def mkCheckContext(
       s: EirSpecializable,
-      spec: Option[EirSpecialization]
+      sp: Option[EirSpecialization]
   ): Option[Context] = {
-    val sp = spec.map(makeDistinct)
     val tyCtx = parent.getOrElse(this)
     val checked = tyCtx._checked.getOrElse(s, Nil)
     val ctx = (immediateAncestor[EirMember].map(_.base), sp)
@@ -253,7 +254,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   ): EirSpecialization = {
     Option
       .unless(s.sameAs(sp))({
-        _substitutions +:= (s -> sp)
+        _substitutions +:= EirSubstituteTransaction(s, makeDistinct(sp))
         sp
       })
       .orNull
@@ -261,17 +262,18 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   def leave(ours: EirSpecialization): Unit = {
     if (ours != null) {
-      val first = _substitutions.indexWhere(_._1 == ours)
+      val first = _substitutions.indexWhere(ours == _.sp)
       _substitutions = _substitutions.patch(first, Nil, 1)
     }
   }
 
   def specialization: Option[EirSpecialization] = {
-    stack.collectFirst {
-      case x: EirSpecialization if !_substitutions.exists(y => {
-            x.asInstanceOf[AnyRef] eq y._2
-          }) && x.types.nonEmpty =>
-        x
+    def canUse(x: EirSpecialization): Boolean = {
+      x.types.nonEmpty && !_substitutions.exists(t => x.eq(t.sp))
+    }
+
+    stack collectFirst {
+      case x: EirSpecialization if canUse(x) => x
     }
   }
 
@@ -305,9 +307,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   }
 
   def findSubstitution(s: EirSpecializable): Option[EirSpecialization] = {
-    _substitutions
+    _substitutions.reverse
       .find(x =>
-        (x._1, s) match {
+        (x.s, s) match {
           // NOTE EirLambdaExpression does not have template arguments so it's not considered here
           // case (a: EirProxy, b: EirClass) => a.base == b
           // case (a: EirProxy, b: EirTrait) => a.base == b
@@ -316,16 +318,14 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
           case (a, b) => a == b
         }
       )
-      .map(_._2)
+      .map(_.sp)
   }
 
   def hasSubstitution(
       x: EirTemplateArgument
   ): Option[EirResolvable[EirType]] = {
     _substitutions.reverse
-      .flatMap({
-        case (s, sp) => templateZipArgs(s, sp)
-      })
+      .flatMap(x => templateZipArgs(x.s, x.sp))
       .collectFirst({
         case (arg, ty) if x == arg => ty
       })
