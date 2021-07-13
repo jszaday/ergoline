@@ -35,10 +35,10 @@ class dht_<A> {
 
     private def enqueue(h: hashcode, f: future<A>) {
         if (waiting.contains(h)) {
-            waiting[h].push(f);
+            waiting[h].append(f);
         } else {
             waiting[h] = new queue<future<A>>();
-            waiting[h].push(f);
+            waiting[h].append(f);
         }
     }
 
@@ -60,7 +60,7 @@ class dht_<A> {
             val q = waiting[h];
             while (q.nonEmpty()) {
                 q.head().set(a);
-                q.pop();
+                q.removeHead();
             }
             waiting.remove(h);
         }

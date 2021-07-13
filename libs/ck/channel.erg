@@ -13,19 +13,19 @@ class channel<A> {
 
     @entry def send(a: A) {
         if (pending.isEmpty()) {
-            values.push(a);
+            values.append(a);
         } else {
             pending.head().set(a);
-            pending.pop();
+            pending.removeHead();
         }
     }
 
     @entry def receive(f: future<A>) {
         if (values.isEmpty()) {
-            pending.push(f);
+            pending.append(f);
         } else {
             f.set(values.head());
-            values.pop();
+            values.removeHead();
         }
     }
 }

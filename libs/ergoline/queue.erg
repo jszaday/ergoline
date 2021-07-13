@@ -12,11 +12,13 @@ class queue<A> extends iterable<A> {
     @system(alias="empty",invert=true)
     def nonEmpty(): bool;
     @system(alias="push_back")
-    def push(a: A); // TODO rename append
+    def append(a: A);
     @system(alias="push_front")
     def prepend(a: A);
     @system(alias="pop_front")
-    def pop();
+    def removeHead();
+    @system(alias="pop_back")
+    def removeLast();
     @system(applyResult="int")
     def size(): int;
 
