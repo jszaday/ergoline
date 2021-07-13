@@ -1718,7 +1718,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         .when(shouldGen)({
           "<" + ({
             if (substDefined) subst.flatten.map(ctx.typeFor(_, usage))
-            else templateArgs.map(ctx.typeFor(_, usage))
+            else templateArgs.map(ctx.nameFor(_))
           } mkString ",") + ">"
         })
         .getOrElse("")

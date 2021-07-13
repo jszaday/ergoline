@@ -2,4 +2,12 @@ package ergoline;
 
 trait iterable<A> {
     def iter(): iterator<A>;
+
+    def zip<B>(it: iterable<B>): iterator<(A, B)> {
+        return self.zip(it.iter());
+    }
+
+    def zip<B>(it: iterator<B>): iterator<(A, B)> {
+        return self.iter().zip(it);
+    }
 }

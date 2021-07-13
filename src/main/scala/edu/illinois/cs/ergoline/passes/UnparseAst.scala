@@ -24,8 +24,13 @@ object UnparseAst {
 
   private val _instance = new UnparseAst
 
+  private def mkContext() = new UnparseContext("ergoline")
+
+  def nameFor(node: EirNode): String =
+    _instance.nameFor(node)(mkContext())
+
   def visit(node: EirNode): String =
-    _instance.visit(node)(new UnparseContext("ergoline"))
+    _instance.visit(node)(mkContext())
 }
 
 class UnparseAst extends EirVisitor[UnparseContext, String] {

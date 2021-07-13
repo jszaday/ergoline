@@ -2,25 +2,17 @@ package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.resolution.Find.uniqueResolution
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichEirNode,
   RichIntOption,
   RichOption
 }
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
-import edu.illinois.cs.ergoline.util.{
-  Errors,
-  addExplicitSelf,
-  assertValid,
-  extractFunction,
-  sweepInherited
-}
+import edu.illinois.cs.ergoline.util.{Errors, extractFunction, sweepInherited}
 
 import scala.collection.View
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
 object Find {
   type EirNamedScope = EirScope with EirNamedNode
@@ -300,20 +292,26 @@ object Find {
 
   def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(
       implicit ctx: TypeCheckContext
-  ): View[(EirMember, EirType)] = {
+  ): View[(EirMember, Option[EirSpecialization])] = {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
-    def helper(x: EirMember): (EirMember, EirType) = {
-      (accessor.isStatic, x.isStatic) match {
-        case (true, true) | (false, false) => (x, CheckTypes.visit(x))
-        case (true, false) if x.member.isInstanceOf[EirFunction] =>
-          (x, addExplicitSelf(ctx, base, CheckTypes.visit(x)))
-        case _ => ???
-      }
+    checkSpecialized(base)
+
+    def helper(x: EirMember): (EirMember, Option[EirSpecialization]) = {
+      (
+        {
+          val (a, b) = (accessor.isStatic, x.isStatic)
+          // permits pure (non-)static and static access of non-static members (e.g., int::+)
+          assert(a == b || (a && !b))
+          x
+        },
+        Some(base).to[EirSpecialization]
+      )
     }
+
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
     imm.map(helper) ++ {
-      sweepInherited[EirClassLike, (EirMember, EirType)](
+      sweepInherited[EirType, (EirMember, Option[EirSpecialization])](
         ctx,
         cls,
         (ictx, other) => {
@@ -386,34 +384,40 @@ object Find {
     child[EirMember](asClassLike(base), withName(field).and(ctx.canAccess(_)))
   }
 
-  // TODO this needs to be implemented using sweepInherited!
-  def implementationOf(x: EirType, y: EirTrait)(
-      ctx: TypeCheckContext
-  ): Option[EirType] = {
-    def helper(x: EirType)(ctx: TypeCheckContext): Option[EirType] = {
-      tryClassLike(x).flatMap(z => Option.when(y.eq(z))(x))
-    }
-
+  private def checkSpecialized(x: EirType): Unit = {
     assert(x match {
       case s: EirSpecializable => s.templateArgs.isEmpty
       case _                   => true
     })
+  }
 
-    { helper(x)(ctx) } orElse {
-      val spec =
-        Find.tryClassLike(x).zip(Some(x).to[EirSpecialization]).flatMap {
-          case (s, sp) => ctx.trySpecialize(s, sp)
-        }
+  // TODO this needs to be implemented using sweepInherited!
+  def implementationOf(x: EirType, y: EirTrait)(
+      ctx: TypeCheckContext
+  ): Option[EirType] = {
+    val c = Find.tryClassLike(x)
 
-      val res = sweepInherited[EirType, EirType](
-        ctx,
-        x,
-        (ictx, z) => helper(z)(ictx).view
-      ).headOption
+    checkSpecialized(x)
 
-      spec.foreach(ctx.leave(_))
+    { c.flatMap(z => Option.when(y.eq(z))(x)) } orElse {
+      Option
+        .when(c.exists(_.inherited.nonEmpty))({
+          val spec =
+            c.zip(Some(x).to[EirSpecialization]).flatMap {
+              case (s, sp) => ctx.trySpecialize(s, sp)
+            }
 
-      res
+          val res = sweepInherited[EirType, EirType](
+            ctx,
+            x,
+            (ictx, x) => implementationOf(x, y)(ictx).view
+          ).headOption
+
+          spec.foreach(ctx.leave)
+
+          res
+        })
+        .flatten
     }
   }
 
