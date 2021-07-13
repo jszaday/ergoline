@@ -1,32 +1,12 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{
-  EirLambdaType,
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
+import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
 import edu.illinois.cs.ergoline.resolution.Transactions.EirSubstituteTransaction
-import edu.illinois.cs.ergoline.resolution.{
-  EirResolvable,
-  EirTemplateFacade,
-  Find
-}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
-  RichOption,
-  RichResolvableTypeIterable
-}
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{
-  RichEirClassLike,
-  RichEirType
-}
-import edu.illinois.cs.ergoline.util.{
-  Errors,
-  TupleFactory,
-  assertValid,
-  isSystem
-}
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, EirTemplateFacade, Find, Transactions}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
+import edu.illinois.cs.ergoline.util.{Errors, TupleFactory, assertValid}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -45,7 +25,7 @@ object TypeCheckContext {
   }
 }
 
-class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
+class TypeCheckContext(parent: Option[TypeCheckContext] = None) extends Transactions.Manager[EirSubstituteTransaction] {
   import TypeCheckContext._
 
   object TypeCheckSyntax {
@@ -121,7 +101,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack
   private val _contexts: mutable.Stack[Context] = new mutable.Stack
-  private var _substitutions: List[EirSubstituteTransaction] = List()
+  private def _substitutions = this.transactions
   private var _checked: Map[EirSpecializable, List[Context]] = Map()
   private var _cache: Map[(Context, EirNode), EirType] = Map()
 
@@ -139,7 +119,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   def rollbackTo(s: Option[EirSubstituteTransaction]): Unit = {
     val save = s.map(_substitutions.indexOf(_)).getOrElse(_substitutions.size)
     assert(save >= 0)
-    _substitutions = _substitutions.slice(save, _substitutions.size)
+    _substitutions.slice(0, save).foreach(deactivate)
   }
 
   // naively filters out partial specializations
@@ -254,16 +234,14 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None) {
   ): EirSpecialization = {
     Option
       .unless(s.sameAs(sp))({
-        _substitutions +:= EirSubstituteTransaction(s, makeDistinct(sp))
-        sp
+        activate(EirSubstituteTransaction(s, makeDistinct(sp))).sp
       })
       .orNull
   }
 
   def leave(ours: EirSpecialization): Unit = {
     if (ours != null) {
-      val first = _substitutions.indexWhere(ours == _.sp)
-      _substitutions = _substitutions.patch(first, Nil, 1)
+      _substitutions.find(ours == _.sp).foreach(deactivate)
     }
   }
 

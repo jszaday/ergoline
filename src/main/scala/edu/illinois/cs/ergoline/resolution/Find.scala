@@ -390,30 +390,30 @@ object Find {
   def implementationOf(x: EirType, y: EirTrait)(
       ctx: TypeCheckContext
   ): Option[EirType] = {
-    def helper(x: EirType)(ctx: TypeCheckContext): Option[EirType] = {
-      tryClassLike(x).flatMap(z => Option.when(y.eq(z))(x))
-    }
+    val c = Find.tryClassLike(x)
 
     assert(x match {
       case s: EirSpecializable => s.templateArgs.isEmpty
       case _                   => true
     })
 
-    { helper(x)(ctx) } orElse {
-      val spec =
-        Find.tryClassLike(x).zip(Some(x).to[EirSpecialization]).flatMap {
-          case (s, sp) => ctx.trySpecialize(s, sp)
-        }
+    { c.flatMap(z => Option.when(y.eq(z))(x)) } orElse {
+      Option.when(c.exists(_.inherited.nonEmpty))({
+        val spec =
+          c.zip(Some(x).to[EirSpecialization]).flatMap {
+            case (s, sp) => ctx.trySpecialize(s, sp)
+          }
 
-      val res = sweepInherited[EirType, EirType](
-        ctx,
-        x,
-        (ictx, z) => helper(z)(ictx).view
-      ).headOption
+        val res = sweepInherited[EirType, EirType](
+          ctx,
+          x,
+          (ictx, x) => implementationOf(x, y)(ictx).view
+        ).headOption
 
-      spec.foreach(ctx.leave(_))
+        spec.foreach(ctx.leave)
 
-      res
+        res
+      }).flatten
     }
   }
 
