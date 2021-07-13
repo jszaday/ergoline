@@ -398,22 +398,24 @@ object Find {
     })
 
     { c.flatMap(z => Option.when(y.eq(z))(x)) } orElse {
-      Option.when(c.exists(_.inherited.nonEmpty))({
-        val spec =
-          c.zip(Some(x).to[EirSpecialization]).flatMap {
-            case (s, sp) => ctx.trySpecialize(s, sp)
-          }
+      Option
+        .when(c.exists(_.inherited.nonEmpty))({
+          val spec =
+            c.zip(Some(x).to[EirSpecialization]).flatMap {
+              case (s, sp) => ctx.trySpecialize(s, sp)
+            }
 
-        val res = sweepInherited[EirType, EirType](
-          ctx,
-          x,
-          (ictx, x) => implementationOf(x, y)(ictx).view
-        ).headOption
+          val res = sweepInherited[EirType, EirType](
+            ctx,
+            x,
+            (ictx, x) => implementationOf(x, y)(ictx).view
+          ).headOption
 
-        spec.foreach(ctx.leave)
+          spec.foreach(ctx.leave)
 
-        res
-      }).flatten
+          res
+        })
+        .flatten
     }
   }
 

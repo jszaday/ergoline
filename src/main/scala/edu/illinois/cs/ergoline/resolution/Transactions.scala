@@ -38,7 +38,8 @@ object Transactions {
       }
     }
 
-    private type Iterable = scala.collection.Iterable[A] with scala.collection.SeqOps[A, ListBuffer, ListBuffer[A]]
+    private type Iterable = scala.collection.Iterable[A]
+      with scala.collection.SeqOps[A, ListBuffer, ListBuffer[A]]
 
     def transactions: Iterable = _transactions.filter(_.active)
   }

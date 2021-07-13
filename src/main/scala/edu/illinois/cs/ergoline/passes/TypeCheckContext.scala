@@ -1,11 +1,24 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.{EirLambdaType, EirTemplatedType, EirTupleType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{
+  EirLambdaType,
+  EirTemplatedType,
+  EirTupleType,
+  EirType
+}
 import edu.illinois.cs.ergoline.resolution.Transactions.EirSubstituteTransaction
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, EirTemplateFacade, Find, Transactions}
+import edu.illinois.cs.ergoline.resolution.{
+  EirResolvable,
+  EirTemplateFacade,
+  Find,
+  Transactions
+}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichResolvableTypeIterable
-import edu.illinois.cs.ergoline.util.TypeCompatibility.{RichEirClassLike, RichEirType}
+import edu.illinois.cs.ergoline.util.TypeCompatibility.{
+  RichEirClassLike,
+  RichEirType
+}
 import edu.illinois.cs.ergoline.util.{Errors, TupleFactory, assertValid}
 
 import scala.collection.mutable
@@ -25,7 +38,8 @@ object TypeCheckContext {
   }
 }
 
-class TypeCheckContext(parent: Option[TypeCheckContext] = None) extends Transactions.Manager[EirSubstituteTransaction] {
+class TypeCheckContext(parent: Option[TypeCheckContext] = None)
+    extends Transactions.Manager[EirSubstituteTransaction] {
   import TypeCheckContext._
 
   object TypeCheckSyntax {
