@@ -13,7 +13,7 @@ import edu.illinois.cs.ergoline.resolution.{
   Modules
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
+import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, isSystem}
 import edu.illinois.cs.ergoline.{globals, util}
 
 import java.io.File
@@ -332,9 +332,16 @@ trait EirClassLike
   var implementsThese: List[EirResolvable[EirType]]
 
   // TODO sweep parent classes!
-  def member(name: String): Option[EirMember] = members.find(_.name == name)
+  private[this] def member(name: String): Option[EirMember] =
+    members.find(_.name == name)
 
-  def hasMember(name: String): Boolean = member(name).isDefined
+  def hasMember(name: String): Boolean =
+    member(name).isDefined || {
+      inherited.view
+        .map(Find.uniqueResolution[EirType])
+        .flatMap(Find.tryClassLike(_))
+        .exists(_.hasMember(name))
+    }
 
   override def children: List[EirNode] =
     templateArgs ++ extendsThis ++ implementsThese ++ predicate ++ members
@@ -509,6 +516,13 @@ case class EirMember(
 //    case _ => false
 //  }
 
+  def isAbstract: Boolean = {
+    member match {
+      case f: EirFunction => f.isAbstract
+      case _              => false
+    }
+  }
+
   def isVirtual: Boolean =
     member match {
       case _: EirFunction =>
@@ -549,6 +563,11 @@ case class EirFunction(
     with EirScope
     with EirNamedNode
     with EirSpecializable {
+
+  def isAbstract: Boolean = {
+    body.isEmpty && !isSystem(this)
+  }
+
   override def children: Iterable[EirNode] =
     body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType
 

@@ -615,10 +615,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     args.map(_.map(visit(_)))
   }
 
-  private def zipWithVisit[A <: EirNamedNode: ClassTag](
-      ns: Iterable[A]
-  )(implicit ctx: TypeCheckContext): Iterable[(A, EirType)] = {
-    ns.view.zip(ns.view.map(visit(_)))
+  def mkAccessor[A <: EirNamedNode: ClassTag](cls: EirClassLike, name: String)(
+      parent: Option[EirNode]
+  ): EirScopedSymbol[A] = {
+    // TODO need something more reliable than ( null ) here
+    EirScopedSymbol[A](null, EirSymbol[A](parent, List(name)))(parent)
   }
 
   override def visitSymbol[A <: EirNamedNode](
@@ -651,14 +652,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           )
           val asCls = parent.headOption.flatMap(tryClassLike)
           if (asCls.isDefined) {
+            // NOTE this may not be reachable with a templated class
+            val asType = asCls.map(_.asType).map(visit)
             val accessor =
-              // TODO need something more reliable than ( null ) here
-              EirScopedSymbol(null, EirSymbol(value.parent, List(last)))(
-                value.parent
-              )
+              mkAccessor(asCls.get, last)(value.parent)
+            accessor.foundType = asType
             accessor.isStatic = true
-            accessor.foundType = asCls.map(_.asType).map(visit)
-            (Some(accessor), Find.resolveAccessor(accessor, asCls))
+            (Some(accessor), Find.resolveAccessor(accessor, asType))
           } else {
             (None, Find.resolutions[EirNamedNode](value).map((_, None)))
           }

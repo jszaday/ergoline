@@ -167,10 +167,12 @@ object Processes {
         case s: EirClass if s.isDescendantOf(iterableTy) => s
       })
       .flatMap(s => {
+        val ts = GenerateCpp.templatize(s)
+
         Find
-          .implementationOf(GenerateCpp.templatize(s), iterableTy)(ctx.tyCtx)
+          .implementationOf(ts, iterableTy)(ctx.tyCtx)
           .to[EirTemplatedType]
-          .map(t => (s, t))
+          .map(t => (ts, t))
       })
     if (iterables.nonEmpty) {
       ctx << "namespace" << "ergoline" << "{"
