@@ -12,13 +12,23 @@ import scala.language.postfixOps
 import scala.util.matching.Regex
 
 object ProxyManager {
+  val chareKwd: String = "chare"
   val arrayPtn: Regex = raw"array(\d+)d".r
+  val groupPtn: Regex = raw"(node)?group".r
+
+  def isChareDescriptor(s: String): Boolean = {
+    s match {
+      case arrayPtn(_) => true
+      case groupPtn(_) => true
+      case _           => s == chareKwd
+    }
+  }
 
   def dimensionality(s: String): Int = {
     s match {
-      case arrayPtn(dim)         => dim.toInt
-      case "nodegroup" | "group" => 1
-      case _                     => Errors.unreachable()
+      case arrayPtn(dim) => dim.toInt
+      case groupPtn(_)   => 1
+      case _             => Errors.unreachable()
     }
   }
 

@@ -198,8 +198,14 @@ case class EirProxy(
     newMember
   }
 
+  private def descriptor: String = collective.getOrElse(ProxyManager.chareKwd)
+
   private def validMember(m: EirMember): Boolean = {
-    m.isEntry // && can be used with this type
+    m.annotation("entry")
+      .exists(a => {
+        val enabled = a.opts.keys.filter(ProxyManager.isChareDescriptor).toList
+        enabled.isEmpty || enabled.contains(descriptor)
+      })
   }
 
   private def indices: Option[List[EirType]] = {

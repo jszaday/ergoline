@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def main(args: array<string>) {
+    @entry(chare) def main(args: array<string>) {
         val n = (args.size() > 1) ? args[1].toInt() : 16;
         val ts = new ck::tspace<uid, int>(n);
         val arrProxy: hello1d@array1d = new hello1d@array1d(n, n, ts);
@@ -18,9 +18,9 @@ class hello1d {
     val n: int;
     val ts: ck::tspace<uid, int>;
 
-    @entry def hello1d(=n: int, =ts: ck::tspace<uid, int>) {}
+    @entry(array1d) def hello1d(=n: int, =ts: ck::tspace<uid, int>) {}
 
-    @threaded @entry def sayHi(a: uid): unit {
+    @threaded @entry(array1d) def sayHi(a: uid): unit {
         val t = await ts[a];
         val next: int = t[1] + 1;
         println(`${self[@]index()}> sending a hello to ${next}~!`);
