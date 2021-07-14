@@ -34,7 +34,7 @@ class slicecheck {
     val mainProxy: main@;
     val n: int;
 
-    @entry def slicecheck(=n: int, =mainProxy: main@) {
+    @entry def self(=n: int, =mainProxy: main@) {
         if ((self[@]index() % 2) == 0) {
             self@[0:2:n].contribute(mainProxy.done);
         } else {

@@ -25,7 +25,7 @@ class cherry with colorful {
 }
 
 @main class traitcheck {
-    @entry def traitcheck(args: array<string>) {
+    @entry def self(args: array<string>) {
         val b = new banana();   // stack-alloc'd despite `new`
         val c = new cherry();
         val d: colorful = b;    // a copy is made at this point

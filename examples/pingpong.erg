@@ -58,7 +58,7 @@ class pingpong {
 }
 
 @main class main {
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         new pingpong@group(self@);
     }
 
