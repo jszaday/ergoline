@@ -17,8 +17,9 @@ case class EirProxy(
     var collective: Option[String],
     var kind: Option[EirProxyKind]
 ) extends EirClassLike {
-
   isAbstract = base.isAbstract
+
+  override def classKind: EirClassKind = EirValueType
 
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)

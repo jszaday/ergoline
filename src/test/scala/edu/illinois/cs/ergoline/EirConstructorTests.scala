@@ -4,10 +4,10 @@ import edu.illinois.cs.ergoline.ast.{EirClassLike, EirNode, EirTrait}
 import edu.illinois.cs.ergoline.passes.{CheckConstructors, CheckEnclose, CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors.EirException
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
-class EirConstructorTests extends FunSuite {
+class EirConstructorTests extends AnyFunSuite {
 
   private implicit val ctx: TypeCheckContext = new TypeCheckContext
   private val bigProgram = {

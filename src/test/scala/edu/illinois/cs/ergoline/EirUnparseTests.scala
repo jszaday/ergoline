@@ -3,8 +3,8 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.ast.EirGlobalNamespace
 import edu.illinois.cs.ergoline.passes.{CheckEnclose, UnparseAst}
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import scala.util.Properties
 
@@ -13,7 +13,7 @@ object EirUnparseTests {
   def localize(s: String): String = s.replaceAll("(\n|\r\n)+", Properties.lineSeparator)
 }
 
-class EirUnparseTests extends FunSuite {
+class EirUnparseTests extends AnyFunSuite {
   import EirUnparseTests._
 
   private val genericFunction = "def foo<T>(=bar: T, baz: T): T { }"

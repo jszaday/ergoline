@@ -9,10 +9,10 @@ import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.parserFromString
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
-class EirParseTest extends FunSuite {
+class EirParseTest extends AnyFunSuite {
   private object ParseTestSyntax {
     implicit class RichIterable[T](iterable: Iterable[T]) {
       def headOnly: T = {

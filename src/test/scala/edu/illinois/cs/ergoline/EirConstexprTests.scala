@@ -5,10 +5,10 @@ import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirScope}
 import edu.illinois.cs.ergoline.passes.{StaticEvaluator, TypeCheckContext}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.resolution.Modules
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
-class EirConstexprTests extends FunSuite {
+class EirConstexprTests extends AnyFunSuite {
 
   def parseExpression(s: String): EirExpressionNode = {
     EirImportTests.setupEnv()

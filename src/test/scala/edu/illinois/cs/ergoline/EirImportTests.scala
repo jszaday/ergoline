@@ -7,8 +7,8 @@ import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClas
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.convertToAnyShouldWrapper
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import scala.reflect.ClassTag
 
@@ -21,7 +21,7 @@ object EirImportTests{
   }
 }
 
-class EirImportTests extends FunSuite {
+class EirImportTests extends AnyFunSuite {
   test("built-in types are resolvable") {
     setupEnv()
     val module = Modules.load("""

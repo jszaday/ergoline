@@ -13,7 +13,7 @@ import edu.illinois.cs.ergoline.resolution.{
   Find,
   Modules
 }
-import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.{Errors, isSystem}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
 object Processes {
@@ -104,12 +104,31 @@ object Processes {
     }
   }
 
+  private[this] def checkContext(): TypeCheckContext = {
+    assert(this.ctx.transactions.isEmpty)
+
+    val redFlag = ctx.checked.filterNot(x => isSystem(x._1)).map { x =>
+      val sets = x._2.map(_.types.map(x => {
+        Find.tryClassLike(x).map(_.classKind).getOrElse(EirValueType)
+      }))
+      val min = if (sets.nonEmpty) sets.map(_.size).min else 0
+      sets.map(_.slice(0, min)).toSet
+    } exists (_.size > 1)
+
+    if (redFlag) {
+      Errors.warn(
+        s"due to ${Errors.Limitation.CppCodeGen}, specializations of mixed-kinded types (e.g., value and reference) might fail."
+      )
+    }
+
+    this.ctx
+  }
+
   // TODO this logic should be moved into GenerateCpp
   // NOTE This will go away once passes are implemented
   def generateCpp(): Iterable[String] = {
-    assert(this.ctx.transactions.isEmpty)
-
-    val ctx: CodeGenerationContext = new CodeGenerationContext("cpp", this.ctx)
+    val ctx: CodeGenerationContext =
+      new CodeGenerationContext("cpp", this.checkContext())
     val (a, c) = ProxyManager.proxies.toList.partition(_.isAbstract)
     val kids = EirGlobalNamespace.children // .filterNot(_.name == "ergoline")
 

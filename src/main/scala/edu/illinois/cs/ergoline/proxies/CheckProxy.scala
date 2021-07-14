@@ -10,6 +10,15 @@ object CheckProxy {
   def apply(x: EirProxy)(implicit ctx: TypeCheckContext): EirProxy = {
     val baseMembers = x.baseMembers
     val constructors = x.baseConstructors()
+
+    if (constructors.exists(_.annotation("threaded").isDefined)) {
+      Errors.unsupportedOperation(
+        x.base,
+        "threaded @entry constructors are unsupported",
+        Errors.Limitation.CharmxiCodeGen
+      )
+    }
+
     val numConstructors = constructors.size
     val defaultConstructors = constructors flatMap (_.counterpart) filter {
       case EirMember(_, f: EirFunction, _) => f.functionArgs.isEmpty

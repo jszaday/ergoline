@@ -4,12 +4,12 @@ import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.resolution.Modules.charmc
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 import java.nio.file.Paths
 
-class EirProcessTests extends FunSuite {
+class EirProcessTests extends AnyFunSuite {
   Errors.useDebugAction()
 
   private val wd = os.pwd
