@@ -1,33 +1,33 @@
 package ergoline;
 
 @system struct short {
-    @system(operator=true,reducer="CkReduction::sum_short")
+    @system(operator, reducer="CkReduction::sum_short")
     def +(other: short): short;
 
-    @system(operator=true) def -(other: short): short;
-    @system(operator=true) def *(other: short): short;
-    @system(operator=true) def /(other: short): short;
-    @system(operator=true) def %(other: short): short;
-    @system(operator=true) def %(other: int): int;
+    @system(operator) def -(other: short): short;
+    @system(operator) def *(other: short): short;
+    @system(operator) def /(other: short): short;
+    @system(operator) def %(other: short): short;
+    @system(operator) def %(other: int): int;
 
-    @system(operator=true,alias="-")
+    @system(operator, alias="-")
     def <=>(other: short): short;
 
-    @system(operator=true) def unary_+(): short;
-    @system(operator=true) def unary_-(): short;
+    @system(operator) def unary_+(): short;
+    @system(operator) def unary_-(): short;
 
-    @system(operator=true) def unary_~(): short;
-    @system(operator=true) def ^(other: short): short;
-    @system(operator=true) def |(other: short): short;
-    @system(operator=true) def &(other: short): short;
-    @system(operator=true) def <<(other: short): short;
-    @system(operator=true) def >>(other: short): short;
+    @system(operator) def unary_~(): short;
+    @system(operator) def ^(other: short): short;
+    @system(operator) def |(other: short): short;
+    @system(operator) def &(other: short): short;
+    @system(operator) def <<(other: short): short;
+    @system(operator) def >>(other: short): short;
 
-    @system(cast=true) def toInt(): int;
-    @system(cast=true) def toBool(): bool;
-    @system(cast=true) def toLong(): long;
-    @system(cast=true) def toDouble(): double;
+    @system(cast) def toInt(): int;
+    @system(cast) def toBool(): bool;
+    @system(cast) def toLong(): long;
+    @system(cast) def toDouble(): double;
 
-    @system(alias="std::to_string",static=true)
+    @system(static, alias="std::to_string")
     def toString(): string;
 }

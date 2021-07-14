@@ -40,7 +40,7 @@ import ck;
         return a;
     }
 
-    @entry def matmul() {
+    @entry def self() {
         val m = 4;
         val n = 2;
         val a = linspace(m, n);

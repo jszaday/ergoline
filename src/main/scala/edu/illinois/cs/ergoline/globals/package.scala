@@ -1,14 +1,21 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirUnitLiteral}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirBooleanLiteral,
+  EirLiteral,
+  EirUnitLiteral
+}
 import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 
 package object globals {
-  def unitLiteral(parent: Option[EirNode]): EirExpressionNode =
+  def unitLiteral(parent: Option[EirNode]): EirLiteral[_] =
     EirUnitLiteral()(parent)
+
+  def trueLiteral(parent: Option[EirNode]): EirLiteral[_] =
+    EirBooleanLiteral(value = true)(parent)
 
   var strict: Boolean = false
   var verbose: Boolean = false

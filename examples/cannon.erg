@@ -13,7 +13,7 @@ def sqrt(value: double): double;
     var startTime: double;
     var endTime: double;
 
-    @entry def cannon(args: array<string>) {
+    @entry def self(args: array<string>) {
         val alpha = 1.0;
         val np = ck::numPes();
         val npPerDim = sqrt(np.toDouble()).toInt();
@@ -48,8 +48,8 @@ class block {
     val data: array<double, 2>;
     val mainProxy: cannon@;
 
-    @entry def block(=mainProxy: cannon@, =shape: (int, int),
-                     =nBlocks: int, randInit: bool) {
+    @entry def self(=mainProxy: cannon@, =shape: (int, int),
+                    =nBlocks: int, randInit: bool) {
         if (randInit) {
             // TODO add support for tuple expansion~! (*shape)
             data = new array<double, 2>(shape[0], shape[1]);

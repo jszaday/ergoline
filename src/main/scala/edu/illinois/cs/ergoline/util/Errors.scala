@@ -235,7 +235,7 @@ object Errors {
     )
   }
 
-  def invalidSelfAssignment(f: EirMember): Nothing = {
+  def invalidSelfAssignment(f: EirNode): Nothing = {
     exit(format(f, "%s contains an invalid argument member-initializer", f))
   }
 

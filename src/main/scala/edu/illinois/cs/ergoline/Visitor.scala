@@ -359,8 +359,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         _.annotationOption(),
         (ctx: AnnotationOptionContext) => {
           (
-            Option(ctx.identifier()).getOrElse(ctx.StaticKwd()).getText,
-            visitAs[EirLiteral[_]](ctx.constant())
+            ctx.annotationIdentifier().getText,
+            Option(ctx.constant())
+              .map(visitAs[EirLiteral[_]])
+              .getOrElse(globals.trueLiteral(parent))
           )
         }
       )
@@ -373,7 +375,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirFunction(
         parent,
         None,
-        ctx.identifier().getText,
+        ctx.functionIdentifier().getText,
         Nil,
         Nil,
         Nil,
@@ -582,7 +584,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         EirScopedSymbol[EirNode](null, null)(parent),
         (f: EirScopedSymbol[EirNode]) => {
           f.target = visitAs[EirExpressionNode](
-            Option(ctx.postfixExpression()).getOrElse(ctx.selfExpression())
+            Option(ctx.postfixExpression()).getOrElse(ctx.proxySelfExpression())
           )
           f.pending = symbolize[EirNamedNode](ctx.identifier())
         }
@@ -626,10 +628,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   def kindFrom(
-      collective: Option[String],
-      suffix: Option[String]
+      prefix: Option[String],
+      collective: Option[String]
   ): Option[EirProxyKind] = {
-    suffix
+    prefix
       .filter(_ => collective.nonEmpty)
       .map({
         case "[@]" => EirElementProxy
@@ -652,15 +654,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
     Option(ctx.proxySuffix()) match {
       case Some(proxySuffix) =>
-        val collective = Option(proxySuffix.CollectiveKeyword()).map(_.getText)
-        val suffix = Option(proxySuffix.ProxySuffix())
-          .orElse(Option(proxySuffix.Atpersand()))
-          .map(_.getText)
+        val collective = Option(proxySuffix.CollectiveKwd()).map(_.getText)
+        val prefix = Option(proxySuffix.prefix).map(_.getText)
         val proxyType = EirProxyType(
           parent,
           base,
           collective,
-          kindFrom(collective, suffix)
+          kindFrom(prefix, collective)
         )
         assert(collective.isEmpty || proxyType.kind.nonEmpty)
         base.parent = Some(proxyType)
@@ -1224,8 +1224,18 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     )
   }
 
+  override def visitProxySelfExpression(
+      ctx: ProxySelfExpressionContext
+  ): EirNode = {
+    symbolize[EirNamedNode](ctx)
+  }
+
   override def visitSelfExpression(ctx: SelfExpressionContext): EirNode = {
-    symbolize[EirNamedNode](ctx.SelfKeyword)
+    Option(ctx.proxySelfExpression())
+      .map(visit(_))
+      .getOrElse({
+        symbolize[EirNamedNode](ctx.SelfKwd())
+      })
   }
 
   override def visitPrimaryExpression(

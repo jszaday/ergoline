@@ -8,14 +8,12 @@ trait message<T> {
 }
 
 class pong with message<string> {
-    def pong() { }
     override def value(): string {
         return "pong";
     }
 }
 
 class ping with message<string> {
-    def ping() { }
     override def value(): string {
         return "ping";
     }
@@ -24,7 +22,7 @@ class ping with message<string> {
 class pingpong {
     val mainProxy: main@;
 
-    @entry def pingpong(=mainProxy: main@) {
+    @entry def self(=mainProxy: main@) {
         // broadcast a ping to all members of the group
         self@receive(self[@]index(), new ping());
         // then start the exchange loop
@@ -60,7 +58,7 @@ class pingpong {
 }
 
 @main class main {
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         new pingpong@group(self@);
     }
 

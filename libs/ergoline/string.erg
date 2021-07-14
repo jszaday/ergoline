@@ -1,12 +1,12 @@
 package ergoline;
 
-@system(alias = "std::string") struct string {
-    @system(operator=true) def +(other: string): string;
-    @system(operator=true) def ==(other: string): string;
+@system(alias="std::string") struct string {
+    @system(operator) def +(other: string): string;
+    @system(operator) def ==(other: string): string;
 
     @system def toString(): string;
 
-    @system(alias = "std::stoi", static = true)
+    @system(static, alias="std::stoi")
     def toInt(): int;
 
     @system def tryParse<A>(): option<A>;

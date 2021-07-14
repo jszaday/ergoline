@@ -57,17 +57,31 @@ object CheckFunctions {
 
   // TODO check self-assigning arguments?
   def visit(implicit ctx: TypeCheckContext, function: EirFunction): Unit = {
-    val overloads = Find.overloads(function)
     val member = function.parent.to[EirMember]
+    val constructor = member.exists(_.isConstructor)
+
     val system = member.getOrElse(function).annotation("system")
     val mailbox = member.exists(_.isMailbox)
     val hasBody = function.body.isDefined
 
-    if (system.isDefined || mailbox) {
-      if (hasBody) Errors.systemFnHasBody(function)
-    } else if (!hasBody && !member.exists(_.base.isAbstract)) {
+    val bodyAllowed = !mailbox && system.isEmpty
+    val bodyOptional =
+      !bodyAllowed || (!constructor && member.exists(_.base.isAbstract))
+
+    if (hasBody && !bodyAllowed) {
+      Errors.systemFnHasBody(function)
+    } else if (!hasBody && !bodyOptional) {
       Errors.bodyLessFunction(function)
     }
+
+    if (constructor) {
+      return
+    } else if (function.functionArgs.exists(_.isSelfAssigning)) {
+      Errors.invalidSelfAssignment(function)
+    }
+
+    // only check overloads for non-constructors
+    val overloads = Find.overloads(function)
 
     member.foreach(_.hasOverloads = overloads.nonEmpty)
 

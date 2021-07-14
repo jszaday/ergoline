@@ -5,8 +5,6 @@ import ergoline::_;
 abstract class peelable {
     var peeled: bool = false;
 
-    def peelable() {}
-
     def peel() { peeled = true; }
 }
 
@@ -15,23 +13,19 @@ trait colorful {
 }
 
 struct banana extends peelable with colorful {
-    def banana() {}
-
     override def color(): string {
         return "yellow";
     }
 }
 
 class cherry with colorful {
-    def cherry() {}
-
     override def color(): string {
         return "red";
     }
 }
 
 @main class traitcheck {
-    @entry def traitcheck(args: array<string>) {
+    @entry def self(args: array<string>) {
         val b = new banana();   // stack-alloc'd despite `new`
         val c = new cherry();
         val d: colorful = b;    // a copy is made at this point

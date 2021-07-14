@@ -6,9 +6,7 @@ import ck;
 @main class strtest {
     val n: int = 16;
 
-    @entry def strtest() {
-        self@checkArray();
-    }
+    @entry def self() { self@checkArray(); }
 
     @entry def checkArray() {
         val a = new array<string, 1>(n);

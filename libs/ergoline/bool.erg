@@ -1,9 +1,9 @@
 package ergoline;
 
 @system struct bool {
-    @system(operator=true) def unary_!(): bool;
+    @system(operator) def unary_!(): bool;
 
-    @system(operator=true) def ==(other: bool): bool;
+    @system(operator) def ==(other: bool): bool;
 
     def toString(): string {
         return self ? "true" : "false";

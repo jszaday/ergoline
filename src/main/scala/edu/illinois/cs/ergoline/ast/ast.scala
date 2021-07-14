@@ -487,9 +487,12 @@ case class EirMember(
     }
   }
 
-  def isConstructor: Boolean = member.isInstanceOf[EirFunction] &&
-    (parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name) ||
-      parent.to[EirProxy].exists(_.baseName == name))
+  def isConstructor: Boolean = {
+    member match {
+      case f: EirFunction => f.name == "self"
+      case _              => false
+    }
+  }
 
   // TODO also ensure return type is "unit" unless a/sync or local
   def isEntry: Boolean = member match {

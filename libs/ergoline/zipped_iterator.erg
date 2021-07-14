@@ -5,7 +5,7 @@ package ergoline;
     val as: iterator<A>;
     val bs: iterator<B>;
 
-    def zipped_iterator(=as: iterator<A>, =bs: iterator<B>) {}
+    def self(=as: iterator<A>, =bs: iterator<B>) {}
 
     override def next(): (A, B) {
         return (as.next(), bs.next());

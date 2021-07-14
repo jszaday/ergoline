@@ -6,7 +6,7 @@ class dht<K, V> {
     private val proxy: dht_<V>@array1d;
     private val n: int;
 
-    def dht(=n: int) {
+    def self(=n: int) {
         proxy = new dht_<V>@array1d(n, n);
     }
 
@@ -28,7 +28,7 @@ class dht_<A> {
     @hashExclude private val waiting: map<hashcode, queue<future<A>>>;
     private val n: int;
 
-    @entry def dht_(=n: int) {
+    @entry def self(=n: int) {
         data = new map<hashcode, A>();
         waiting = new map<hashcode, queue<future<A>>>();
     }

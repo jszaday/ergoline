@@ -5,7 +5,7 @@ package ergoline;
     val as: iterator<A>;
     val f: A => B;
 
-    def mapped_iterator(=as: iterator<A>, =f: A => B) {}
+    def self(=as: iterator<A>, =f: A => B) {}
 
     override def next(): B {
         return f(as.next());

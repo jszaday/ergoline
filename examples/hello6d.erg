@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         val n = ((args.size() > 1) ? args[1].toInt() : 8).toShort();
         val arrProxy: hello6d@array6d = new hello6d@array6d();
 
@@ -26,9 +26,9 @@ import ck;
 }
 
 class hello6d {
-    @entry def hello6d() { }
+    @entry def self() {}
 
-    @entry def hello6d(n: short) { }
+    @entry def self(n: short) {}
 
     @entry def sayMessage(what: string) {
         val mine = self[@]index();

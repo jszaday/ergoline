@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def main() {
+    @entry def self() {
         (new nodes@nodegroup(new workers@group(self@))).send();
     }
 
@@ -20,7 +20,7 @@ import ck;
 class nodes {
     private val w: workers@group;
 
-    @entry def nodes(=w: workers@group) {}
+    @entry def self(=w: workers@group) {}
 
     @entry def send() {
         val mine = self[@]index();
@@ -38,7 +38,7 @@ class nodes {
 class workers {
     val m: main@;
 
-    @entry def workers(=m: main@) {}
+    @entry def self(=m: main@) {}
 
     @entry def recv(i: int) {
         assert(i == ck::myNode());
