@@ -201,7 +201,8 @@ case class EirProxy(
   private def descriptor: String = collective.getOrElse(ProxyManager.chareKwd)
 
   private def validMember(m: EirMember): Boolean = {
-    (m.annotation("entry").orElse(m.annotation("mailbox")))
+    (m.annotation("entry")
+      .orElse(m.annotation("mailbox")))
       .map(_.opts)
       .exists(opts => {
         val enabled = opts.keys.filter(ProxyManager.isChareDescriptor).toList

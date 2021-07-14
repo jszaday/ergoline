@@ -74,9 +74,13 @@ object CheckFunctions {
       Errors.bodyLessFunction(function)
     }
 
-    // only check overloads for non-constructors
-    if (constructor) return
+    if (constructor) {
+      return
+    } else if (function.functionArgs.exists(_.isSelfAssigning)) {
+      Errors.invalidSelfAssignment(function)
+    }
 
+    // only check overloads for non-constructors
     val overloads = Find.overloads(function)
 
     member.foreach(_.hasOverloads = overloads.nonEmpty)
