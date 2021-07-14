@@ -78,7 +78,9 @@ object StaticEvaluator {
   def evaluate(
       x: EirArrayReference
   )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
-    val (lval, rvals) = (evaluate(x.target), x.args.map(evaluate(_)))
+    val lval = evaluate(x.target)
+    val rvals = x.args.map(evaluate(_))
+
     (lval, rvals) match {
       case (EirLiteralTuple(value), EirIntegerLiteral(idx) :: Nil)
           if 0 <= idx && idx < value.length =>

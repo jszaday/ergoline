@@ -862,6 +862,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               p.collective match {
                 case Some("group" | "nodegroup")      => ".ckGetGroupID()))"
                 case Some(s) if s.startsWith("array") => ".ckGetArrayID()))"
+                case _ => ???
               }
             }
           case _ => ???
@@ -2025,6 +2026,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
                 indexForSingleton(p, types)
               } << Option.when(args.nonEmpty)(",")
               0
+            case _ => ???
           }
         val postDrop = args.drop(numTake)
         if (postDrop.nonEmpty) {
