@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class uidtest {
-    @entry def uidtest(args: array<string>) {
+    @entry def self(args: array<string>) {
         val n = 256;
         val arr = new array<uid>(n);
 

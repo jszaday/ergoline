@@ -1,12 +1,15 @@
 package ergoline;
 
 @system class option<A> {
-    @system def apply(t : A): option<A>;
-    @system def apply(): option<A>;
+    @system static def apply(): option<A>;
+    @system static def apply(t : A): option<A>;
+
     @system def isEmpty(): bool;
     @system def nonEmpty(): bool;
+
     @system def get(): A;
     @system def getOrElse(t: A): A;
+
     @system def map<B>(f: (A => B)): option<B>;
     @system def flatMap<B>(f: (A => option<B>)): option<B>;
 }

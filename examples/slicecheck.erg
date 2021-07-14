@@ -9,7 +9,7 @@ import ck;
 
     var tally: int = 0;
 
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         val multiplier = (args.size() > 1) ? args[1].toInt() : 16;
         n = multiplier * ck::numPes();
 

@@ -16,7 +16,7 @@ import ck;
         return n;
     }
 
-    @entry def opcheck(args: array<string>) {
+    @entry def self(args: array<string>) {
         val a = 2;
         val b = 3;
         val c = 4;

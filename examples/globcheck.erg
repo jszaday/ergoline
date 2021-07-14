@@ -13,7 +13,7 @@ object configuration {
 }
 
 @main class globcheck {
-    @entry def globcheck(args: array<string>) {
+    @entry def self(args: array<string>) {
         val m = (args.size() > 1) ? args[1].toInt() : 4;
         val n = m * ck::numPes();
         val proxy = new cfgcheck@array1d(n);
@@ -36,7 +36,7 @@ object configuration {
 }
 
 class cfgcheck {
-    @entry def cfgcheck() {}
+    @entry def self() {}
 
     @entry def validate() {
         assert((configuration.numBar == 42) &&

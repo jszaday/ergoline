@@ -5,8 +5,6 @@ import ergoline::_;
 abstract class peelable {
     var peeled: bool = false;
 
-    def peelable() {}
-
     def peel() { peeled = true; }
 }
 
@@ -15,16 +13,12 @@ trait colorful {
 }
 
 struct banana extends peelable with colorful {
-    def banana() {}
-
     override def color(): string {
         return "yellow";
     }
 }
 
 class cherry with colorful {
-    def cherry() {}
-
     override def color(): string {
         return "red";
     }

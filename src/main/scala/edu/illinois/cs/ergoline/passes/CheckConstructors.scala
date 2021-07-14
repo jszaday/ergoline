@@ -15,7 +15,7 @@ object CheckConstructors {
     val f = EirFunction(
       Some(m),
       None,
-      cls.name,
+      "self",
       Nil,
       Nil,
       Nil,

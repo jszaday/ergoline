@@ -7,7 +7,7 @@ import ck;
     var count: int = 0;
     val n: int;
 
-    @entry def main() {
+    @entry def self() {
         n = ck::numPes() * 16;
         val table = new ck::dht<int, int>(n);
         new sharing@array1d(n, n, self@, table);
@@ -28,7 +28,7 @@ class sharing {
     val table: ck::dht<int, int>;
     val n: int;
 
-    @entry def sharing(=n: int, =mainProxy: main@, =table: ck::dht<int, int>) {
+    @entry def self(=n: int, =mainProxy: main@, =table: ck::dht<int, int>) {
         self[@]share();
     }
 

@@ -4,9 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def main() {
-        self@test(100);
-    }
+    @entry def self() { self@test(100); }
 
     @threaded @entry def test(n: int) {
         val sz = n * 1000;

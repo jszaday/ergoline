@@ -149,7 +149,7 @@ case class EirProxy(
     val insertName = "insert"
     val generated = util.makeMemberFunction(
       this,
-      if (asInsert) insertName else baseName,
+      if (asInsert) insertName else "self",
       idx ++ args,
       globals.unitType
     )
@@ -201,9 +201,10 @@ case class EirProxy(
   private def descriptor: String = collective.getOrElse(ProxyManager.chareKwd)
 
   private def validMember(m: EirMember): Boolean = {
-    m.annotation("entry")
-      .exists(a => {
-        val enabled = a.opts.keys.filter(ProxyManager.isChareDescriptor).toList
+    (m.annotation("entry").orElse(m.annotation("mailbox")))
+      .map(_.opts)
+      .exists(opts => {
+        val enabled = opts.keys.filter(ProxyManager.isChareDescriptor).toList
         enabled.isEmpty || enabled.contains(descriptor)
       })
   }
@@ -246,7 +247,7 @@ case class EirProxy(
       .when(isArray)(
         List(
           // ckNew(); <-- empty constructor
-          util.makeMemberFunction(this, baseName, Nil, globals.unitType),
+          util.makeMemberFunction(this, "self", Nil, globals.unitType),
           util.makeMemberFunction(this, "doneInserting", Nil, globals.unitType)
         )
       )

@@ -6,8 +6,8 @@ class array<A, N: int = 1> extends iterable<A> {
 
     @system val shape: shapeType;
 
-    @system def array();
-    @system def array(n: *shapeType);
+    @system def self();
+    @system def self(n: *shapeType);
 
     @system(alias="[]")
     def get(idx: *shapeType): A;
@@ -24,7 +24,7 @@ class array<A, N: int = 1> extends iterable<A> {
         var current: int = 0;
         val base: array<A, N>;
 
-        def iterator_(=base: array<A, N>) {}
+        def self(=base: array<A, N>) {}
 
         override def hasNext(): bool {
             return current < base.size();

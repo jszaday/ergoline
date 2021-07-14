@@ -2,7 +2,7 @@ package ergoline;
 
 @system(alias="ergoline::hash_map")
 class map<K, V> {
-    @system def map();
+    @system def self();
 
     @system(static, alias="ergoline::map_contains")
     def contains(key: K): bool;

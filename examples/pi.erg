@@ -9,7 +9,7 @@ import ck;
 @main class main {
     val numSteps: int;
 
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         numSteps = (args.size() > 1) ? args[1].toInt() : 16;
         val numPes: int = ck::numPes();
         if (numSteps < (numPes * 4)) {
@@ -32,11 +32,7 @@ class pi {
     val stepsPerPe: int;
     val numSteps: int;
 
-    def step(): double {
-        return 1.0 / (numSteps.toDouble());
-    }
-
-    @entry def pi(mainProxy: main@, =stepsPerPe: int) {
+    @entry def self(mainProxy: main@, =stepsPerPe: int) {
         numSteps = stepsPerPe * ck::numPes();
 
         val idx = self[@]index();
@@ -51,5 +47,9 @@ class pi {
         }
 
         self[@]contribute(sum, double::+, mainProxy.done);
+    }
+
+    def step(): double {
+        return 1.0 / (numSteps.toDouble());
     }
 }

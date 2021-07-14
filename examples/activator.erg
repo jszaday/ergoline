@@ -5,7 +5,7 @@ import ergoline::_;
 @main class activator {
     var count: int = 0;
 
-    @entry def activator() {
+    @entry def self() {
         self@activate(new duck());
         self@activate(new lion());
     }
@@ -57,16 +57,12 @@ def identify<A <: animal>(a: A) where !(A <: bird) {
 }
 
 class lion with animal {
-    def lion(): unit {}
-
     override def numLegs(): int {
         return 4;
     }
 }
 
 class duck with bird {
-    def duck(): unit {}
-
     override def beak(): string {
         return "bill";
     }

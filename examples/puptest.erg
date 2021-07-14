@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class puptest {
-    @entry def puptest() {
+    @entry def self() {
         val n = ck::numPes() * 4;
         val a = new array<int>(n);
 

@@ -3,7 +3,7 @@ package examples;
 import ergoline::_;
 
 @main class implicitest {
-    @entry def implicitest() {
+    @entry def self() {
         implicit val bar: int = 42;
 
         assert(foo() == (bar * 2));

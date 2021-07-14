@@ -13,7 +13,7 @@ def sqrt(value: double): double;
     var startTime: double;
     var endTime: double;
 
-    @entry def cannon(args: array<string>) {
+    @entry def self(args: array<string>) {
         val alpha = 1.0;
         val np = ck::numPes();
         val npPerDim = sqrt(np.toDouble()).toInt();

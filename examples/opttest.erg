@@ -3,15 +3,13 @@ package examples;
 import ergoline::_;
 
 class foo {
-    def foo() {}
-
     def toString(): string {
         return "foo";
     }
 }
 
 @main class opttest {
-    @entry def opttest() {
+    @entry def self() {
         val o1 = option<foo>(new foo());
         val o2 = option<foo>();
         val o3 = o1.map((_: foo) => 42);

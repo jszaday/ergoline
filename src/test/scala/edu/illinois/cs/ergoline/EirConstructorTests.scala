@@ -15,9 +15,10 @@ class EirConstructorTests extends AnyFunSuite {
     Modules.load(
       """package foo;
         |class bar {
-        |  def bar(=baz : bar) {}
-        |  def bar() { baz = self; }
         |  val baz : bar;
+        |
+        |  def self()           { baz = self; }
+        |  def self(=baz : bar) {}
         |}
         |""".stripMargin
     )
@@ -45,7 +46,7 @@ class EirConstructorTests extends AnyFunSuite {
       """package foo;
         |class bar {
         |  val baz : bar = ();
-        |  def bar(=baz : bar) : unit { }
+        |  def self(=baz : bar) : unit { }
         |}
         |""".stripMargin
     )

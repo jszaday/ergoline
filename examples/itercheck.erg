@@ -3,7 +3,7 @@ package examples;
 import ergoline::_;
 
 @main class itercheck {
-    @entry def itercheck() {
+    @entry def self() {
         val n = 16;
         val a = new array<int>(n);
         val b = new array<int>(n);

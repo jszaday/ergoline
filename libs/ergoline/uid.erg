@@ -15,7 +15,7 @@ struct uid {
     val time: long;
     val count: long;
 
-    def uid() {
+    def self() {
         // set our variables
         pe = ck::myPe();
         time = timestamp();

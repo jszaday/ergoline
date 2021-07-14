@@ -3,7 +3,7 @@ package examples;
 import ergoline::_;
 
 @main class main with acceptor {
-    @entry def main(args: array<string>) {
+    @entry def self(args: array<string>) {
         val n: int = (args.size() > 1) ? args[1].toInt() : 0;
         new fib@(self@, (n > 16) ? n : 16);
     }
@@ -19,7 +19,7 @@ class fib with acceptor {
     var value: int = 0;
     val parent: acceptor@;
 
-    @entry def fib(=parent: acceptor@, n: int) {
+    @entry def self(=parent: acceptor@, n: int) {
         if (n > 1) {
             new fib@(self@, n - 1);
             new fib@(self@, n - 2);

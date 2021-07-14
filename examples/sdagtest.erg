@@ -4,7 +4,7 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def main() {
+    @entry def self() {
         val n = ck::numPes() * 4;
         new sdagtest@array1d(n, n, n * 4, self@);
     }
@@ -21,7 +21,7 @@ class sdagtest {
     val numIts: int;
     val n: int;
 
-    @entry def sdagtest(=n: int, =numIts: int, =mainProxy: main@) {
+    @entry def self(=n: int, =numIts: int, =mainProxy: main@) {
         // TODO enable [ (idx + n - 1) % n, (idx + 1) % n ]
         val idx = self[@]index();
         neighbors = new array<int, 1>(2);
