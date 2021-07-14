@@ -28,34 +28,33 @@ case class EirProxy(
   def predicate: Option[EirExpressionNode] = base.predicate
   override def predicate_=(expr: Option[EirExpressionNode]): Unit = ???
 
-  override def selfDeclarations: List[EirMember] =
-    base.selfDeclarations ++ {
-      Option
-        .when(collective.nonEmpty && isElement)({
-          EirClassLike.makeSelfDeclaration(
-            Some(this),
-            "self[@]",
-            ProxyManager.elementType(this)
-          )
-        })
-        .toList
-    } :+ {
-      EirClassLike.makeSelfDeclaration(
-        Some(this),
-        "self@",
-        collective
-          .map(_ => ProxyManager.collectiveType(this))
-          .getOrElse(ProxyManager.proxyType(this))
-      )
-    } :+ {
-      val decl = EirClassLike.makeSelfDeclaration(
-        Some(this),
-        globals.implicitProxyName,
-        globals.proxyType
-      )
-      decl.member.asInstanceOf[EirDeclaration].isImplicit = true
-      decl
-    }
+  override def selfDeclarations: List[EirMember] = base.selfDeclarations ++ {
+    Option
+      .when(collective.nonEmpty && isElement)({
+        EirClassLike.makeSelfDeclaration(
+          Some(this),
+          "self[@]",
+          ProxyManager.elementType(this)
+        )
+      })
+      .toList
+  } :+ {
+    EirClassLike.makeSelfDeclaration(
+      Some(this),
+      "self@",
+      collective
+        .map(_ => ProxyManager.collectiveType(this))
+        .getOrElse(ProxyManager.proxyType(this))
+    )
+  } :+ {
+    val decl = EirClassLike.makeSelfDeclaration(
+      Some(this),
+      globals.implicitProxyName,
+      globals.proxyType
+    )
+    decl.member.asInstanceOf[EirDeclaration].isImplicit = true
+    decl
+  }
 
   def isMain: Boolean =
     base.annotations.exists(_.name == "main") && collective.isEmpty
@@ -63,29 +62,25 @@ case class EirProxy(
   override def derived: Set[EirClassLike] =
     base.derived.flatMap(ProxyManager.proxiesFor).toSet
 
-  def namespaces: Seq[EirNamespace] =
-    Find
-      .ancestors(base)
-      .collect({
-        case n: EirNamespace => n
-      })
+  def namespaces: Seq[EirNamespace] = Find
+    .ancestors(base)
+    .collect({ case n: EirNamespace => n })
 
   var internalMembers: List[EirMember] = Nil
 
   def mkValueContribute(): EirMember = {
     val m = EirMember(Some(this), null, EirAccessibility.Public)
     m.annotations +:= EirAnnotation("system", Map())
-    val f =
-      EirFunction(
-        Some(m),
-        None,
-        "contribute",
-        Nil,
-        Nil,
-        Nil,
-        globals.unitType,
-        None
-      )
+    val f = EirFunction(
+      Some(m),
+      None,
+      "contribute",
+      Nil,
+      Nil,
+      Nil,
+      globals.unitType,
+      None
+    )
     val (from, to) =
       (EirTemplateArgument(Some(f), "From"), EirTemplateArgument(Some(f), "To"))
     val (fromExp, toExp) =
@@ -144,8 +139,7 @@ case class EirProxy(
     }
 
     assert(x.isConstructor)
-    val idx: List[EirType] =
-      if (isArray && !asInsert) indices.get else Nil
+    val idx: List[EirType] = if (isArray && !asInsert) indices.get else Nil
     val args = {
       x.member match {
         case f: EirFunction => f.functionArgs.map(_.declaredType)
@@ -186,9 +180,14 @@ case class EirProxy(
       null,
       theirs.predicate
     )
-    ours.returnType = if (isAsync) {
-      EirTemplatedType(Some(ours), globals.futureType, List(theirs.returnType))
-    } else theirs.returnType
+    ours.returnType =
+      if (isAsync) {
+        EirTemplatedType(
+          Some(ours),
+          globals.futureType,
+          List(theirs.returnType)
+        )
+      } else theirs.returnType
 //    val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.counterpart = Some(m)
     newMember.annotations =
@@ -307,13 +306,12 @@ case class EirProxy(
 
   override def members: List[EirMember] = {
     if (internalMembers.isEmpty) {
-      val fromKind =
-        (kind, collective) match {
-          case (Some(EirElementProxy), _) => genElementMembers()
-          case (Some(EirSectionProxy), _) => genSectionMembers()
-          case (_, Some(_))               => genCollectiveMembers()
-          case _                          => Nil
-        }
+      val fromKind = (kind, collective) match {
+        case (Some(EirElementProxy), _) => genElementMembers()
+        case (Some(EirSectionProxy), _) => genSectionMembers()
+        case (_, Some(_))               => genCollectiveMembers()
+        case _                          => Nil
+      }
 
       internalMembers = fromKind ++ baseMembers
     }

@@ -95,15 +95,13 @@ object Driver extends App {
       "messaging"
     ).map(x => s"-lhypercomm-$x")
 
-    val inclPaths: Seq[String] =
-      (hyperInclPaths ++ ergoInclPaths)
-        .flatMap(_.map(_.toRealPath().toString))
-        .map("-I" + _)
+    val inclPaths: Seq[String] = (hyperInclPaths ++ ergoInclPaths)
+      .flatMap(_.map(_.toRealPath().toString))
+      .map("-I" + _)
 
-    val libPaths: Seq[String] =
-      (hyperLibsPath
-        .map(_.toRealPath().toString)
-        .map("-L" + _) ++ hyperLibs).toSeq
+    val libPaths: Seq[String] = (hyperLibsPath
+      .map(_.toRealPath().toString)
+      .map("-L" + _) ++ hyperLibs).toSeq
 
     try {
       val cmd =

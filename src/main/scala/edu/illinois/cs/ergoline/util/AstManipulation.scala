@@ -44,9 +44,8 @@ object AstManipulation {
       (scope, node) match {
         case (EirGlobalNamespace, x: EirNamespace) =>
           EirGlobalNamespace.put(x.name, x)
-        case (x: EirNamespace, _) =>
-          x.children +:= node
-        case _ => throw new RuntimeException(s"cannot place $node into $scope")
+        case (x: EirNamespace, _) => x.children +:= node
+        case _                    => throw new RuntimeException(s"cannot place $node into $scope")
       }
     }
   }
@@ -58,8 +57,7 @@ object AstManipulation {
   ): Option[List[T]] = {
     val converted = (oldNode.isValid[T] ++ newNode.isValid[T]).toList
     converted match {
-      case List(o, n) =>
-        lst.indexOf(o) match {
+      case List(o, n) => lst.indexOf(o) match {
           case -1  => None
           case idx => Some(lst.updated(idx, n))
         }

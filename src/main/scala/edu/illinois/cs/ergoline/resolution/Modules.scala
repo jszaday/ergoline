@@ -19,10 +19,9 @@ object Modules {
   val homePathEnv = "ERG_HOME"
   val searchPathEnv = "ERG_CLASSPATH"
 
-  val ergolineHome =
-    Option(Properties.envOrElse(homePathEnv, "."))
-      .map(Paths.get(_))
-      .find(Files.isDirectory(_))
+  val ergolineHome = Option(Properties.envOrElse(homePathEnv, "."))
+    .map(Paths.get(_))
+    .find(Files.isDirectory(_))
 
   val hypercommHome = ergolineHome
     .map(_.resolve("hypercomm"))
@@ -42,16 +41,14 @@ object Modules {
       .flatMap(_.split(pathSeparator))
       .map(Paths.get(_))).filter(Files.exists(_))
 
-  def charmHome: Option[Path] =
-    Properties
-      .envOrNone("CHARM_HOME")
-      .map(Paths.get(_))
-      .find(Files.isDirectory(_))
+  def charmHome: Option[Path] = Properties
+    .envOrNone("CHARM_HOME")
+    .map(Paths.get(_))
+    .find(Files.isDirectory(_))
 
-  def charmc: Option[Path] =
-    charmHome
-      .map(_.resolve("bin").resolve("charmc"))
-      .find(Files.isExecutable)
+  def charmc: Option[Path] = charmHome
+    .map(_.resolve("bin").resolve("charmc"))
+    .find(Files.isExecutable)
 
   val loadedFiles: mutable.Map[File, EirNamedNode] = mutable.Map()
   val fileSiblings: mutable.Map[EirNode, List[EirNode]] = mutable.Map()
@@ -92,8 +89,7 @@ object Modules {
   def apply(qualified: List[String], scope: EirScope): Option[EirNamedNode] = {
     qualified match {
       case head :: Nil => this(head, scope)
-      case head :: tail =>
-        this(head, scope).map(x =>
+      case head :: tail => this(head, scope).map(x =>
           retrieve(tail, util.assertValid[EirScope](x))
         )
       case Nil => None
@@ -174,8 +170,7 @@ object Modules {
             .max(endMb - startMb, 0)} MB)"
         )
         value
-      case _ =>
-        throw new RuntimeException(
+      case _ => throw new RuntimeException(
           s"could not find $expected within ${file.getCanonicalPath}"
         )
     }
@@ -187,8 +182,7 @@ object Modules {
   def isPackageFile(file: File): Boolean = { file.getName == packageFile }
 
   def expectation(file: File): String = {
-    if (isPackageFile(file))
-      file.getCanonicalFile.getParentFile.getName
+    if (isPackageFile(file)) file.getCanonicalFile.getParentFile.getName
     else {
       val name = file.getName
       val idx = name.indexOf('.')

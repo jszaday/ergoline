@@ -53,12 +53,11 @@ abstract class EirNode {
   def annotation(name: String): Option[EirAnnotation] =
     annotations.find(_.name == name)
 
-  def scope: Option[EirScope] =
-    parent flatMap {
-      case x: EirScope => Some(x)
-      case x: EirNode  => x.scope
-      case _           => None
-    }
+  def scope: Option[EirScope] = parent flatMap {
+    case x: EirScope => Some(x)
+    case x: EirNode  => x.scope
+    case _           => None
+  }
 
   def children: Iterable[EirNode]
 
@@ -119,11 +118,10 @@ abstract class EirExpressionFacade extends EirExpressionNode {
 trait EirNamedNode extends EirNode {
   def name: String
 
-  def fullyQualifiedName: List[String] =
-    parent match {
-      case Some(x: EirNamespace) => x.fullyQualifiedName ++ List(name)
-      case _                     => List(name)
-    }
+  def fullyQualifiedName: List[String] = parent match {
+    case Some(x: EirNamespace) => x.fullyQualifiedName ++ List(name)
+    case _                     => List(name)
+  }
 
   override def hashCode(): Int = name.hashCode
 }
@@ -316,12 +314,11 @@ trait EirClassLike
   }
 
   // TODO eventually traits will need a self as well
-  def selfDeclarations: List[EirMember] =
-    Option
-      .when(this.isInstanceOf[EirClass] || this.isInstanceOf[EirTrait])({
-        EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
-      })
-      .toList
+  def selfDeclarations: List[EirMember] = Option
+    .when(this.isInstanceOf[EirClass] || this.isInstanceOf[EirTrait])({
+      EirClassLike.makeSelfDeclaration(Some(this), "self", asType)
+    })
+    .toList
 
   def inherited: Iterable[EirResolvable[EirType]] =
     extendsThis ++ implementsThese
@@ -337,21 +334,19 @@ trait EirClassLike
   private[this] def member(name: String): Option[EirMember] =
     members.find(_.name == name)
 
-  def hasMember(name: String): Boolean =
-    member(name).isDefined || {
-      inherited.view
-        .map(Find.uniqueResolution[EirType])
-        .flatMap(Find.tryClassLike(_))
-        .exists(_.hasMember(name))
-    }
+  def hasMember(name: String): Boolean = member(name).isDefined || {
+    inherited.view
+      .map(Find.uniqueResolution[EirType])
+      .flatMap(Find.tryClassLike(_))
+      .exists(_.hasMember(name))
+  }
 
   override def children: List[EirNode] =
     templateArgs ++ extendsThis ++ implementsThese ++ predicate ++ members
 
-  def needsInitialization: List[EirMember] =
-    members.collect {
-      case m @ EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
-    }
+  def needsInitialization: List[EirMember] = members.collect {
+    case m @ EirMember(_, EirDeclaration(_, true, _, _, None), _) => m
+  }
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean = {
     (extendsThis.contains(oldValue) && util
@@ -409,17 +404,15 @@ case class EirClass(
     var kind: EirClassKind
 ) extends EirNode
     with EirClassLike {
-  def valueType: Boolean =
-    kind match {
-      case EirValueType => true
-      case _            => false
-    }
+  def valueType: Boolean = kind match {
+    case EirValueType => true
+    case _            => false
+  }
 
-  def objectType: Boolean =
-    kind match {
-      case EirSingletonType => true
-      case _                => false
-    }
+  def objectType: Boolean = kind match {
+    case EirSingletonType => true
+    case _                => false
+  }
 
   override def classKind: EirClassKind = kind
 }
@@ -451,13 +444,12 @@ case class EirMember(
   private var _hasOverloads: Boolean = false
 
   def isStatic_=(yes: Boolean): Unit = _isStatic = yes
-  def isStatic: Boolean =
-    _isStatic || {
-      member match {
-        case _: EirClassLike | _: EirTypeAlias => true
-        case _                                 => false
-      }
+  def isStatic: Boolean = _isStatic || {
+    member match {
+      case _: EirClassLike | _: EirTypeAlias => true
+      case _                                 => false
     }
+  }
 
   def hasOverloads_=(yes: Boolean): Unit = _hasOverloads = yes
   def hasOverloads: Boolean =
@@ -469,12 +461,11 @@ case class EirMember(
   def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox
 
-  def isImplOnly: Boolean =
-    member match {
-      case _: EirFunction    => !isEntryOnly
-      case _: EirDeclaration => true
-      case _                 => ???
-    }
+  def isImplOnly: Boolean = member match {
+    case _: EirFunction    => !isEntryOnly
+    case _: EirDeclaration => true
+    case _                 => ???
+  }
 
   def makeEntryOnly(): Unit = {
     entryOnly = true
@@ -483,12 +474,11 @@ case class EirMember(
 
   def isPublic: Boolean = accessibility == EirAccessibility.Public
 
-  def base: EirClassLike =
-    parent match {
-      case Some(p: EirProxy)     => ProxyManager.elementFor(p).getOrElse(p)
-      case Some(c: EirClassLike) => c
-      case _                     => Errors.missingType(this)
-    }
+  def base: EirClassLike = parent match {
+    case Some(p: EirProxy)     => ProxyManager.elementFor(p).getOrElse(p)
+    case Some(c: EirClassLike) => c
+    case _                     => Errors.missingType(this)
+  }
 
   def selfDeclarations: List[EirMember] = {
     member match {
@@ -497,23 +487,20 @@ case class EirMember(
     }
   }
 
-  def isConstructor: Boolean =
-    member.isInstanceOf[EirFunction] &&
-      (parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name) ||
-        parent.to[EirProxy].exists(_.baseName == name))
+  def isConstructor: Boolean = member.isInstanceOf[EirFunction] &&
+    (parent.map(_.asInstanceOf[EirNamedNode]).exists(_.name == name) ||
+      parent.to[EirProxy].exists(_.baseName == name))
 
   // TODO also ensure return type is "unit" unless a/sync or local
-  def isEntry: Boolean =
-    member match {
-      case _: EirFunction => isMailbox || annotations.exists(_.name == "entry")
-      case _              => false
-    }
+  def isEntry: Boolean = member match {
+    case _: EirFunction => isMailbox || annotations.exists(_.name == "entry")
+    case _              => false
+  }
 
-  def isFinal: Boolean =
-    member match {
-      case d: EirDeclaration => d.isFinal
-      case _                 => true
-    }
+  def isFinal: Boolean = member match {
+    case d: EirDeclaration => d.isFinal
+    case _                 => true
+  }
 
   // TODO these checks should be more robust
 //  def isConst: Boolean = member match {
@@ -529,19 +516,18 @@ case class EirMember(
     }
   }
 
-  def isVirtual: Boolean =
-    member match {
-      case _: EirFunction =>
-        !isConstructor && (base.isAbstract || isOverride) && {
-          !annotations.exists(_.name == "system")
-        } && {
-          member match {
-            case s: EirSpecializable => s.templateArgs.isEmpty
-            case _                   => false
-          }
+  def isVirtual: Boolean = member match {
+    case _: EirFunction =>
+      !isConstructor && (base.isAbstract || isOverride) && {
+        !annotations.exists(_.name == "system")
+      } && {
+        member match {
+          case s: EirSpecializable => s.templateArgs.isEmpty
+          case _                   => false
         }
-      case _ => false
-    }
+      }
+    case _ => false
+  }
 
   override def name: String = member.name
 
@@ -618,8 +604,7 @@ case class EirImport(var parent: Option[EirNode], var qualified: List[String])
       _resolved = Modules(name, EirGlobalNamespace).to[EirScope]
     }
     _resolved match {
-      case Some(x) =>
-        last
+      case Some(x) => last
           .map(n => Find.child(x, withName(n)))
           .map(_.toList)
           .getOrElse(if (wildcard) x.children.toList else List(x))
@@ -725,15 +710,14 @@ object EirTupleExpression {
   def fromExpressions(
       parent: Option[EirNode],
       expressions: List[EirExpressionNode]
-  ): EirExpressionNode =
-    expressions match {
-      case Nil         => globals.unitLiteral(parent)
-      case head :: Nil => head
-      case lst =>
-        val t = EirTupleExpression(parent, lst)
-        lst.foreach(_.parent = Some(t))
-        t
-    }
+  ): EirExpressionNode = expressions match {
+    case Nil         => globals.unitLiteral(parent)
+    case head :: Nil => head
+    case lst =>
+      val t = EirTupleExpression(parent, lst)
+      lst.foreach(_.parent = Some(t))
+      t
+  }
 }
 
 case class EirLambdaExpression(

@@ -50,15 +50,14 @@ package object util {
     makeMemberFunctionWithArgs(
       parent,
       name,
-      args.zipWithIndex.map({
-        case (value, i) =>
-          EirFunctionArgument(
-            None,
-            s"x$i",
-            value,
-            isExpansion = false,
-            isSelfAssigning = false
-          )
+      args.zipWithIndex.map({ case (value, i) =>
+        EirFunctionArgument(
+          None,
+          s"x$i",
+          value,
+          isExpansion = false,
+          isSelfAssigning = false
+        )
       }),
       retTy
     )
@@ -160,8 +159,7 @@ package object util {
     y match {
       case _: EirTemplateArgument                                     => Find.commonAncestor(x, y) == y.parent
       case m: EirMember if m.accessibility == EirAccessibility.Public => true
-      case m: EirMember =>
-        (Find.parentOf[EirClassLike](x), y.parent) match {
+      case m: EirMember => (Find.parentOf[EirClassLike](x), y.parent) match {
           case (Some(xParent: EirClassLike), Some(yParent: EirClassLike)) =>
             val relationship = validAccessibility(xParent, yParent)
             EirAccessibility.compatible(relationship, m.accessibility)
@@ -176,9 +174,7 @@ package object util {
 
   def isSystem(node: EirNode): Boolean = {
     node.parent
-      .collect({
-        case m: EirMember => m
-      })
+      .collect({ case m: EirMember => m })
       .getOrElse(node)
       .annotation("system")
       .isDefined
@@ -193,11 +189,10 @@ package object util {
 
       def visitAll[T](f: EirNode => T): Seq[T] = util.visitAll(node, f)
 
-      def isValid[T: ClassTag]: Option[T] =
-        node match {
-          case t: T => Some(t)
-          case _    => None
-        }
+      def isValid[T: ClassTag]: Option[T] = node match {
+        case t: T => Some(t)
+        case _    => None
+      }
 
       def hasName(name: String): Boolean = {
         node match {
@@ -208,19 +203,17 @@ package object util {
     }
 
     implicit class RichOption(option: Option[_]) {
-      def to[T: ClassTag]: Option[T] =
-        option match {
-          case Some(t: T) => Some(t)
-          case _          => None
-        }
+      def to[T: ClassTag]: Option[T] = option match {
+        case Some(t: T) => Some(t)
+        case _          => None
+      }
     }
 
     implicit class RichIntOption(option: Option[Int]) {
-      def >(other: Option[Int]): Boolean =
-        option ++ other match {
-          case List(x, y) => x > y
-          case _          => false
-        }
+      def >(other: Option[Int]): Boolean = option ++ other match {
+        case List(x, y) => x > y
+        case _          => false
+      }
     }
 
     implicit class RichResolvableTypeIterable[A <: EirResolvable[

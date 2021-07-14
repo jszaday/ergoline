@@ -83,14 +83,11 @@ object CheckConstructors {
       base: EirClass,
       constructor: EirMember
   ): Boolean = {
-    val parentCons =
-      parent.members.filter(_.isConstructor)
+    val parentCons = parent.members.filter(_.isConstructor)
 
     parentCons.isEmpty || (parentCons collect {
       case EirMember(_, f: EirFunction, _) => f
-    } exists { x =>
-      x.functionArgs.isEmpty
-    })
+    } exists { x => x.functionArgs.isEmpty })
   }
 
   def selfAssignmentsOk(cls: EirClassLike, constructor: EirMember)(implicit
@@ -110,8 +107,7 @@ object CheckConstructors {
         case (
               Some(EirMember(_, d: EirDeclaration, _)),
               arg: EirFunctionArgument
-            ) =>
-          constructorAssignmentOk(d, arg.declaredType)
+            ) => constructorAssignmentOk(d, arg.declaredType)
         case _ => false
       }
     )

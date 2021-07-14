@@ -10,8 +10,8 @@ import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 object GenerateProxies {
 
-  implicit val visitor: (CodeGenerationContext, EirNode) => Unit = (ctx, x) =>
-    GenerateCpp.visit(x)(ctx)
+  implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
+    (ctx, x) => GenerateCpp.visit(x)(ctx)
 
   def visitProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val ns = x.namespaces.toList
@@ -104,15 +104,13 @@ object GenerateProxies {
                   ctx.typeContext,
                   f,
                   g
-                ) =>
-              (f, g)
+                ) => (f, g)
           }
       }
       .flatten
-      .foreach {
-        case (f, g) =>
-          ctx << (ctx
-            .nameFor(f) + "_idx__") << "=" << indexFor(ctx, derived, g) << ";"
+      .foreach { case (f, g) =>
+        ctx << (ctx
+          .nameFor(f) + "_idx__") << "=" << indexFor(ctx, derived, g) << ";"
       }
 //    ctx << "__id__" << "=" << tmp << "." << "ckGetChareID()" << ";"
 //    ctx << "__msgType__" << "=" << {
@@ -161,13 +159,12 @@ object GenerateProxies {
     val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
     GenerateCpp.visitTemplateArgs(x.templateArgs)(ctx)
     val args =
-      if (x.templateArgs.nonEmpty)
-        GenerateCpp.templateArgumentsToString(
-          ctx,
-          Some(x),
-          x.templateArgs,
-          Some(x)
-        )
+      if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(
+        ctx,
+        Some(x),
+        x.templateArgs,
+        Some(x)
+      )
       else ""
     val mailboxes = x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
 

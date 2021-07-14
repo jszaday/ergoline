@@ -26,11 +26,9 @@ object UnparseAst {
 
   private def mkContext() = new UnparseContext("ergoline")
 
-  def nameFor(node: EirNode): String =
-    _instance.nameFor(node)(mkContext())
+  def nameFor(node: EirNode): String = _instance.nameFor(node)(mkContext())
 
-  def visit(node: EirNode): String =
-    _instance.visit(node)(mkContext())
+  def visit(node: EirNode): String = _instance.visit(node)(mkContext())
 }
 
 class UnparseAst extends EirVisitor[UnparseContext, String] {
@@ -164,14 +162,15 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case lst => s"<${lst.map(visit(_)) mkString ", "}>"
     }
     val body = visitChildren(node.members)
-    val inheritance: String =
-      node.extendsThis.mapOrEmpty(x => s" extends ${visit(x)}") +
-        node.implementsThese.zipWithIndex
-          .map {
-            case (x, 0) => s" with ${visit(x)}"
-            case (x, _) => s" and ${visit(x)}"
-          }
-          .mkString("")
+    val inheritance: String = node.extendsThis.mapOrEmpty(x =>
+      s" extends ${visit(x)}"
+    ) +
+      node.implementsThese.zipWithIndex
+        .map {
+          case (x, 0) => s" with ${visit(x)}"
+          case (x, _) => s" and ${visit(x)}"
+        }
+        .mkString("")
     s"$keyword ${node.name}$decl$inheritance${visitWhere(node.predicate)} $body$n"
   }
 
@@ -249,8 +248,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitReturn(
       node: EirReturn
-  )(implicit ctx: UnparseContext): String =
-    s"return ${visit(node.expression)};"
+  )(implicit ctx: UnparseContext): String = s"return ${visit(node.expression)};"
 
   override def visitSymbol[A <: EirNamedNode](
       value: EirSymbol[A]
@@ -421,8 +419,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitExpressionPattern(
       x: EirExpressionPattern
-  )(implicit ctx: UnparseContext): String =
-    visit(x.expression)
+  )(implicit ctx: UnparseContext): String = visit(x.expression)
 
   override def visitIdentifierPattern(
       x: EirIdentifierPattern
@@ -463,8 +460,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitConstantFacade(
       facade: EirConstantFacade
-  )(implicit context: UnparseContext): String =
-    visit(facade.value)
+  )(implicit context: UnparseContext): String = visit(facade.value)
 
   override def visitWhen(
       x: EirSdagWhen

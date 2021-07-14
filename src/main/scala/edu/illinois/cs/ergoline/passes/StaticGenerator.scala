@@ -76,8 +76,7 @@ object StaticGenerator {
         } << ">,ergoline::extricate_t<" << {
           if (flip) x.rhs else x.lhs
         } << ">>::value"
-      case op =>
-        ctx << "(" << x.lhs << op << x.rhs << ")"
+      case op => ctx << "(" << x.lhs << op << x.rhs << ")"
     }
   }
 }

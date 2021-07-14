@@ -19,12 +19,11 @@ object Errors {
   def contextualize(n: EirNode): String =
     n.location.map(_.toString).getOrElse("???")
 
-  def nameFor(n: EirNode): String =
-    n match {
-      case n: EirNamedNode => n.name
-      case t: EirTupleType => s"(${t.children.map(nameFor(_)) mkString ", "})"
-      case _               => n.toString
-    }
+  def nameFor(n: EirNode): String = n match {
+    case n: EirNamedNode => n.name
+    case t: EirTupleType => s"(${t.children.map(nameFor(_)) mkString ", "})"
+    case _               => n.toString
+  }
 
   def format(ctx: EirNode, msg: String, params: Any*): String = {
     val start = Option(ctx).map(contextualize).getOrElse("???")
@@ -85,14 +84,13 @@ object Errors {
 
   def unableToUnify(ctx: EirNode, it: Iterable[EirType]): Nothing = {
     if (it.isEmpty) missingType(ctx)
-    else
-      exit(
-        format(
-          ctx,
-          "could not unify types: [%s]",
-          it.map(nameFor) mkString ", "
-        )
+    else exit(
+      format(
+        ctx,
+        "could not unify types: [%s]",
+        it.map(nameFor) mkString ", "
       )
+    )
   }
 
   def invalidAccess(symbol: EirExpressionNode, m: EirMember): Nothing = {

@@ -140,9 +140,8 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def checked: Map[EirSpecializable, List[EirSpecialization]] = {
     parent
       .map(_.checked)
-      .getOrElse(_checked collect {
-        case (sp, contexts) =>
-          (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
+      .getOrElse(_checked collect { case (sp, contexts) =>
+        (sp, contexts.collect({ case (_, Some(sp)) => sp }).distinct)
       })
   }
 

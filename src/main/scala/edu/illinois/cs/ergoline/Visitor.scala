@@ -110,8 +110,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   def dropSelf(scope: EirScope, fileOption: Option[File]): Unit = {
     fileOption match {
-      case Some(file) =>
-        AstManipulation.dropNodes(
+      case Some(file) => AstManipulation.dropNodes(
           scope,
           Find.child[EirFileSymbol](
             scope,
@@ -127,11 +126,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       file: Option[File]
   ): (EirNode, List[EirNode]) = {
     val expectation = file.map(Modules.expectation)
-    val topLevel: EirScope =
-      Option(ctx.packageStatement())
-        .map(_.fqn().identifier.toStringList)
-        .map(loadPackage(_, file))
-        .getOrElse(global)
+    val topLevel: EirScope = Option(ctx.packageStatement())
+      .map(_.fqn().identifier.toStringList)
+      .map(loadPackage(_, file))
+      .getOrElse(global)
     // A provisional package sweep will include us, so we'll just drop that...
     dropSelf(topLevel, file)
     parents.push(topLevel)
@@ -149,14 +147,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       .map(name => {
         if (file.exists(Modules.isPackageFile) && topLevel.hasName(name))
           (topLevel, nodes)
-        else
-          nodes.partition(_.hasName(name)) match {
-            case (head :: Nil, x) => (head, x)
-            case _ =>
-              throw new RuntimeException(
-                s"could not locate $name in ${file.get.getName}"
-              )
-          }
+        else nodes.partition(_.hasName(name)) match {
+          case (head :: Nil, x) => (head, x)
+          case _ => throw new RuntimeException(
+              s"could not locate $name in ${file.get.getName}"
+            )
+        }
       })
       .getOrElse((topLevel, Nil))
   }
@@ -168,12 +164,11 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   private def parent: Option[EirNode] =
     Option.when(parents.isEmpty)(global).orElse(parents.headOption)
 
-  private def scope: EirScope =
-    parent match {
-      case Some(x: EirScope) => x
-      case Some(x)           => x.scope.orNull
-      case None              => null
-    }
+  private def scope: EirScope = parent match {
+    case Some(x: EirScope) => x
+    case Some(x)           => x.scope.orNull
+    case None              => null
+  }
 
   private def enter[T <: EirNode](node: T, f: T => Unit): T = {
     parents.push(node)
@@ -299,11 +294,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitMember(ctx: MemberContext): EirMember = {
-    val modifier: EirAccessibility =
-      Option(ctx.accessModifier())
-        .map(_.getText.capitalize)
-        .map(EirAccessibility.withName)
-        .getOrElse(defaultMemberAccessibility)
+    val modifier: EirAccessibility = Option(ctx.accessModifier())
+      .map(_.getText.capitalize)
+      .map(EirAccessibility.withName)
+      .getOrElse(defaultMemberAccessibility)
     enter(
       EirMember(parent, null, modifier),
       (m: EirMember) => {
@@ -345,8 +339,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   def visitAnnotationList(
       annotations: java.util.List[AnnotationContext]
-  ): Iterable[EirAnnotation] =
-    annotations.asScala.map(this.visitAnnotation)
+  ): Iterable[EirAnnotation] = annotations.asScala.map(this.visitAnnotation)
 
   override def visitTopLevelDeclaration(
       ctx: TopLevelDeclarationContext
@@ -360,19 +353,18 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitAnnotation(ctx: AnnotationContext): EirAnnotation = {
     val name = ctx.identifier().getText
-    val opts =
-      ctx
-        .annotationOptions()
-        .mapOrEmpty(
-          _.annotationOption(),
-          (ctx: AnnotationOptionContext) => {
-            (
-              Option(ctx.identifier()).getOrElse(ctx.StaticKwd()).getText,
-              visitAs[EirLiteral[_]](ctx.constant())
-            )
-          }
-        )
-        .toMap
+    val opts = ctx
+      .annotationOptions()
+      .mapOrEmpty(
+        _.annotationOption(),
+        (ctx: AnnotationOptionContext) => {
+          (
+            Option(ctx.identifier()).getOrElse(ctx.StaticKwd()).getText,
+            visitAs[EirLiteral[_]](ctx.constant())
+          )
+        }
+      )
+      .toMap
     EirAnnotation(name, opts)
   }
 
@@ -515,13 +507,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitValueDeclaration(
       ctx: ValueDeclarationContext
-  ): EirDeclaration =
-    visitDeclaration(
-      ctx.identifier,
-      ctx.`type`(),
-      ctx.expression(),
-      isFinal = true
-    )
+  ): EirDeclaration = visitDeclaration(
+    ctx.identifier,
+    ctx.`type`(),
+    ctx.expression(),
+    isFinal = true
+  )
 
   def visitDeclaration(
       name: IdentifierContext,
@@ -543,23 +534,21 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitFieldDeclaration(
       ctx: FieldDeclarationContext
-  ): EirDeclaration =
-    visitDeclaration(
-      ctx.identifier,
-      ctx.`type`(),
-      ctx.expression(),
-      isFinal = ctx.ValueKeyword() != null
-    )
+  ): EirDeclaration = visitDeclaration(
+    ctx.identifier,
+    ctx.`type`(),
+    ctx.expression(),
+    isFinal = ctx.ValueKeyword() != null
+  )
 
   override def visitVariableDeclaration(
       ctx: VariableDeclarationContext
-  ): EirDeclaration =
-    visitDeclaration(
-      ctx.identifier,
-      ctx.`type`(),
-      ctx.expression(),
-      isFinal = false
-    )
+  ): EirDeclaration = visitDeclaration(
+    ctx.identifier,
+    ctx.`type`(),
+    ctx.expression(),
+    isFinal = false
+  )
 
   override def visitSliceExpression(ctx: SliceExpressionContext): EirNode = {
     Option(ctx.single)
@@ -667,13 +656,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         val suffix = Option(proxySuffix.ProxySuffix())
           .orElse(Option(proxySuffix.Atpersand()))
           .map(_.getText)
-        val proxyType =
-          EirProxyType(
-            parent,
-            base,
-            collective,
-            kindFrom(collective, suffix)
-          )
+        val proxyType = EirProxyType(
+          parent,
+          base,
+          collective,
+          kindFrom(collective, suffix)
+        )
         assert(collective.isEmpty || proxyType.kind.nonEmpty)
         base.parent = Some(proxyType)
         proxyType
@@ -770,11 +758,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitTupleExpression(
       ctx: TupleExpressionContext
-  ): EirExpressionNode =
-    EirTupleExpression.fromExpressions(
-      parent,
-      ctx.expressionList().mapOrEmpty(_.expression, visitAs[EirExpressionNode])
-    )
+  ): EirExpressionNode = EirTupleExpression.fromExpressions(
+    parent,
+    ctx.expressionList().mapOrEmpty(_.expression, visitAs[EirExpressionNode])
+  )
 
   override def visitLambdaExpression(
       ctx: LambdaExpressionContext
@@ -907,8 +894,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           }
         )
 
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil =>
-        enter(
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil => enter(
           EirBinaryExpression(parent, lhs, op, rhs),
           (expr: EirBinaryExpression) => {
             lhs.parent = Some(expr)
@@ -955,9 +941,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   def sortInfixes(parts: Seq[InfixPart]): EirExpressionNode = {
     var infixes = parts
     var ops = infixes.zipWithIndex.reverse
-      .collect({
-        case (Right(op), i) => (i, precedenceOf(op))
-      })
+      .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
       .sortBy(_._2)
       .map(_._1)
 
@@ -1008,8 +992,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       rhs: ParseTree
   ): EirExpressionNode = {
     opt match {
-      case Some(op) =>
-        enter(
+      case Some(op) => enter(
           EirUnaryExpression(parent, op.getText, null),
           (x: EirUnaryExpression) => {
             x.rhs = visitAs[EirExpressionNode](rhs)
@@ -1084,12 +1067,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     val grouped: List[List[ParseTree]] = children.grouped(2).toList
     for (List(kwd, ty) <- grouped) {
       kwd.getText match {
-        case "extends" =>
-          base.extendsThis = Some(
+        case "extends" => base.extendsThis = Some(
             visitAs[EirResolvable[EirType]](ty.asInstanceOf[TypeContext])
           )
-        case "with" | "and" =>
-          base.implementsThese ++= List(
+        case "with" | "and" => base.implementsThese ++= List(
             visitAs[EirResolvable[EirType]](ty.asInstanceOf[TypeContext])
           )
       }
@@ -1119,19 +1100,20 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitLoopHeader(ctx: LoopHeaderContext): EirNode = {
     val forLoop = parent.to[EirForLoop].get
-    forLoop.header = if (ctx.variableDeclaration() != null) {
-      EirCStyleHeader(
-        Option(ctx.variableDeclaration()).map(visitVariableDeclaration),
-        Option(ctx.test).map(visitAs[EirExpressionNode]),
-        Option(ctx.incr).map(visitAs[EirExpressionNode])
-      )
-    } else {
-      EirForAllHeader(
-        parent,
-        ctx.identifierList().identifier().toStringList,
-        visitAs[EirExpressionNode](ctx.iter)
-      )
-    }
+    forLoop.header =
+      if (ctx.variableDeclaration() != null) {
+        EirCStyleHeader(
+          Option(ctx.variableDeclaration()).map(visitVariableDeclaration),
+          Option(ctx.test).map(visitAs[EirExpressionNode]),
+          Option(ctx.incr).map(visitAs[EirExpressionNode])
+        )
+      } else {
+        EirForAllHeader(
+          parent,
+          ctx.identifierList().identifier().toStringList,
+          visitAs[EirExpressionNode](ctx.iter)
+        )
+      }
     null
   }
 
@@ -1140,8 +1122,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     val l = EirLambdaType(parent, null, null, Nil, None)
     parents.push(l)
     l.from = children.head match {
-      case x: TupleTypeContext =>
-        visitTupleType(x) match {
+      case x: TupleTypeContext => visitTupleType(x) match {
           case x: EirTupleType => x.children
           case x               => List(x)
         }
@@ -1205,8 +1186,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   ): EirResolvable[EirNode] = {
     val curr =
       Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
-        case Some(spec) =>
-          enter(
+        case Some(spec) => enter(
             EirSpecializedSymbol(parent, null, null),
             (s: EirSpecializedSymbol) => {
               s.types = specializationToList(spec)
