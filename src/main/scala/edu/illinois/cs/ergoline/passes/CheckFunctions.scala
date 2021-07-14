@@ -82,6 +82,7 @@ object CheckFunctions {
         if (!isOverride) {
           Errors.expectedOverride(function, m)
         } else {
+          // TODO add warning about overriding templated methods
           val ours = CheckTypes.visit(function.returnType)
           if (!ours.canAssignTo(theirs)) {
             Errors.incompatibleOverride(function, ours, theirs)

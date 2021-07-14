@@ -296,6 +296,8 @@ trait EirClassLike
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
+  def classKind: EirClassKind
+
   // TODO make this more robust?
   def isNested: Boolean = parent.exists(_.isInstanceOf[EirMember])
 
@@ -418,6 +420,8 @@ case class EirClass(
       case EirSingletonType => true
       case _                => false
     }
+
+  override def classKind: EirClassKind = kind
 }
 
 case class EirTrait(
@@ -431,6 +435,8 @@ case class EirTrait(
 ) extends EirNode
     with EirClassLike {
   isAbstract = true
+
+  override def classKind: EirClassKind = EirReferenceType
 }
 
 case class EirMember(
