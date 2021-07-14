@@ -3,9 +3,9 @@ package edu.illinois.cs.ergoline
 import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Modules
 import edu.illinois.cs.ergoline.util.Errors.EirException
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class EirFunctionTests extends FunSuite {
+class EirFunctionTests extends AnyFunSuite {
   test("empty body fails") {
     EirImportTests.setupEnv()
     assertThrows[EirException]({

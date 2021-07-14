@@ -7,10 +7,10 @@ import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
-import org.scalatest.FunSuite
-import org.scalatest.Matchers.{convertToAnyShouldWrapper, matchPattern}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, matchPattern}
 
-class EirUtilityTests extends FunSuite {
+class EirUtilityTests extends AnyFunSuite {
   EirGlobalNamespace.clear()
   Errors.useDebugAction()
 
