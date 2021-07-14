@@ -1,5 +1,5 @@
 package ergoline;
 
-@system(alias = "void") struct unit {
+@system(alias="void") struct unit {
     @system def toString(): string;
 }

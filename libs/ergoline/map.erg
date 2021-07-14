@@ -4,10 +4,10 @@ package ergoline;
 class map<K, V> {
     @system def map();
 
-    @system(alias="ergoline::map_contains", static=true)
+    @system(static, alias="ergoline::map_contains")
     def contains(key: K): bool;
 
-    @system(alias="ergoline::map_remove", static=true)
+    @system(static, alias="ergoline::map_remove")
     @system def remove(key: K): bool;
 
     @system(alias="[]")

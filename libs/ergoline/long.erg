@@ -2,23 +2,23 @@ package ergoline;
 
 @system(alias="std::int64_t")
 struct long {
-    @system(operator=true) def +(other: int): long;
-    @system(operator=true) def +(other: long): long;
+    @system(operator) def +(other: int): long;
+    @system(operator) def +(other: long): long;
 
-    @system(operator=true) def -(other: long): long;
-    @system(operator=true) def *(other: long): long;
-    @system(operator=true) def /(other: long): long;
-    @system(operator=true) def %(other: long): long;
+    @system(operator) def -(other: long): long;
+    @system(operator) def *(other: long): long;
+    @system(operator) def /(other: long): long;
+    @system(operator) def %(other: long): long;
 
-    @system(operator=true,alias="-")
+    @system(operator, alias="-")
     def <=>(other: long): int;
 
-    @system(operator=true) def unary_+(): long;
-    @system(operator=true) def unary_-(): long;
+    @system(operator) def unary_+(): long;
+    @system(operator) def unary_-(): long;
 
-    @system(cast=true) def toInt(): double;
-    @system(cast=true) def toDouble(): double;
+    @system(cast) def toInt(): double;
+    @system(cast) def toDouble(): double;
 
-    @system(alias="std::to_string",static=true)
+    @system(static, alias="std::to_string")
     def toString(): string;
 }

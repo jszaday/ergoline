@@ -1,36 +1,36 @@
 package ergoline;
 
 @system struct int {
-    @system(operator=true,reducer="CkReduction::sum_int")
+    @system(operator, reducer="CkReduction::sum_int")
     def +(other: int): int;
 
-    @system(operator=true) def -(other: int): int;
-    @system(operator=true) def *(other: int): int;
-    @system(operator=true) def /(other: int): int;
-    @system(operator=true) def %(other: int): int;
+    @system(operator) def -(other: int): int;
+    @system(operator) def *(other: int): int;
+    @system(operator) def /(other: int): int;
+    @system(operator) def %(other: int): int;
 
-    @system(operator=true,alias="-")
+    @system(operator, alias="-")
     def <=>(other: int): int;
 
-    @system(operator=true) def unary_+(): int;
-    @system(operator=true) def unary_-(): int;
+    @system(operator) def unary_+(): int;
+    @system(operator) def unary_-(): int;
 
-    @system(operator=true) def unary_~(): int;
-    @system(operator=true) def ^(other: int): int;
-    @system(operator=true) def |(other: int): int;
-    @system(operator=true) def &(other: int): int;
-    @system(operator=true) def <<(other: int): int;
-    @system(operator=true) def >>(other: int): int;
+    @system(operator) def unary_~(): int;
+    @system(operator) def ^(other: int): int;
+    @system(operator) def |(other: int): int;
+    @system(operator) def &(other: int): int;
+    @system(operator) def <<(other: int): int;
+    @system(operator) def >>(other: int): int;
 
     def to(end: int): range<int> {
         return new range<int>(self, 1, end);
     }
 
-    @system(cast=true) def toBool(): bool;
-    @system(cast=true) def toLong(): long;
-    @system(cast=true) def toShort(): short;
-    @system(cast=true) def toDouble(): double;
+    @system(cast) def toBool(): bool;
+    @system(cast) def toLong(): long;
+    @system(cast) def toShort(): short;
+    @system(cast) def toDouble(): double;
 
-    @system(alias="std::to_string",static=true)
+    @system(static, alias="std::to_string")
     def toString(): string;
 }

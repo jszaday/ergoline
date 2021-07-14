@@ -87,7 +87,7 @@ void reduction_handler_(envelope* env) {
 }
 
 inline void setup_singleton_module(void) {
-  CkpvInitialize(singleton_map_type, singleton_map_);
+  CkpvInitialize(singleton_map_type_, singleton_map_);
   CkpvInitialize(int, reduction_idx_);
   CkpvInitialize(int, singleton_idx_);
   CkpvAccess(reduction_idx_) =

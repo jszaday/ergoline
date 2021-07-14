@@ -41,9 +41,9 @@ innerStatement
     |   expression ';'
     |   returnStatement
     |   classDeclaration
-    |   topLevelDeclaration
     |   whenStatement
     |   awaitManyStatement
+    |   topLevelDeclaration
     ;
 
 body
@@ -209,8 +209,12 @@ implicitArguments
     :   '(' (implicitArgument ',')* implicitArgument ')'
     ;
 
+functionIdentifier
+    :   SelfKwd | identifier
+    ;
+
 function
-    :   FunctionKwd identifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? whereClause? (';' | block)
+    :   FunctionKwd functionIdentifier templateDecl? '(' functionArgumentList? ')' implicitArguments? (':' type)? whereClause? (';' | block)
     ;
 
 functionArgument
@@ -230,8 +234,13 @@ identifierExpression
     |   fqn specialization?
     ;
 
+proxySelfExpression
+    :   SelfKwd suffix=(Atpersand | ProxySuffix)
+    ;
+
 selfExpression
-    :   SelfKeyword
+    :   proxySelfExpression
+    |   SelfKwd
     ;
 
 primaryExpression
@@ -273,7 +282,7 @@ callArgumentList
     ;
 
 postfixExpression
-    :   selfExpression identifier
+    :   proxySelfExpression identifier  // proxies have the highest precedence
     |   primaryExpression
     |   postfixExpression '[' arrArgs=sliceExpressionList ']'
     |   postfixExpression specialization? LParen fnArgs=callArgumentList? RParen
@@ -377,8 +386,8 @@ specialization
     ;
 
 proxySuffix
-    :    Atpersand
-    |   (Atpersand | ProxySuffix) CollectiveKeyword
+    :   Atpersand
+    |   prefix=(Atpersand | ProxySuffix) CollectiveKwd
     ;
 
 basicType
@@ -400,8 +409,14 @@ annotation
     :   Atpersand identifier annotationOptions?
     ;
 
+annotationIdentifier
+    :   identifier
+    |   StaticKwd
+    |   CollectiveKwd
+    ;
+
 annotationOption
-    :   (StaticKwd | identifier) Equals constant
+    :   annotationIdentifier (Equals constant)? // TODO make staticExpression
     ;
 
 annotationOptions
@@ -446,11 +461,11 @@ ProxySuffix
     :   Element | Section
     ;
 
-SelfKeyword
-    :   'self' ('@' | ProxySuffix)?
+SelfKwd
+    :   'self'
     ;
 
-CollectiveKeyword
+CollectiveKwd
     :   'array' [1-6] 'd'
     |   'nodegroup'
     |   'group'
@@ -474,6 +489,7 @@ FalseKwd : 'false' ;
 StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
 WhereKwd : 'where' ;
+EnumKwd : 'enum' ;
 
 fragment Sign
     :   '+' | '-'
