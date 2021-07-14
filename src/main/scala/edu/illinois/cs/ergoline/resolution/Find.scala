@@ -17,11 +17,10 @@ import scala.reflect.ClassTag
 object Find {
   type EirNamedScope = EirScope with EirNamedNode
 
-  def ancestors(x: EirNode): Seq[EirNode] =
-    x.parent match {
-      case Some(parent) => parent +: ancestors(parent)
-      case None         => Nil
-    }
+  def ancestors(x: EirNode): Seq[EirNode] = x.parent match {
+    case Some(parent) => parent +: ancestors(parent)
+    case None         => Nil
+  }
 
   // find where x's ancestors first overlap with y's
   def commonAncestor(x: EirNode, y: EirNode): Option[EirNode] = {
@@ -43,10 +42,9 @@ object Find {
       .unless(stack.contains(node))({
         node.children.view
           .zip(node.children.view.map(predicate))
-          .collect({
-            case (child, Some(x)) =>
-              Option
-                .when(x)(child) ++ descendant(child, predicate, stack :+ node)
+          .collect({ case (child, Some(x)) =>
+            Option
+              .when(x)(child) ++ descendant(child, predicate, stack :+ node)
           })
           .flatten
       })
@@ -96,8 +94,8 @@ object Find {
   }
 
   def resolutions[T <: EirNode: ClassTag](x: EirResolvable[_]): Iterable[T] = {
-    x.resolve() collect {
-      case t: T => t
+    x.resolve() collect { case t: T =>
+      t
 //      case s: EirResolvable[_] if x != s => uniqueResolution[T](s)
     }
   }
@@ -168,22 +166,21 @@ object Find {
 
   def traits(x: EirClassLike): Set[EirType] = _traits(x).toSet
 
-  def isTopLevel(x: EirNode): Boolean =
-    x match {
-      // TODO can this simplify to?
-      //      case _ : EirScope => true
-      case _: EirBlock             => true
-      case _: EirForLoop           => true
-      case _: EirLambdaExpression  => true
-      case _: EirFunction          => true
-      case _: EirClassLike         => true
-      case _: EirNamespace         => true
-      case _: EirImport            => true
-      case _: EirMatchCase         => true
-      case _: EirExpressionPattern => true
-      case _: EirSdagWhen          => true
-      case _                       => false
-    }
+  def isTopLevel(x: EirNode): Boolean = x match {
+    // TODO can this simplify to?
+    //      case _ : EirScope => true
+    case _: EirBlock             => true
+    case _: EirForLoop           => true
+    case _: EirLambdaExpression  => true
+    case _: EirFunction          => true
+    case _: EirClassLike         => true
+    case _: EirNamespace         => true
+    case _: EirImport            => true
+    case _: EirMatchCase         => true
+    case _: EirExpressionPattern => true
+    case _: EirSdagWhen          => true
+    case _                       => false
+  }
 
   import FindSyntax.RichPredicate
 
@@ -232,16 +229,14 @@ object Find {
       })
       .filter(ctx.canAccess(_))
       .collect {
-        case fs: EirFileSymbol =>
-          Find.uniqueResolution[EirNamedNode](fs)
-        case x: EirNamedNode => x
+        case fs: EirFileSymbol => Find.uniqueResolution[EirNamedNode](fs)
+        case x: EirNamedNode   => x
       }
   }
 
   def fromSymbol(symbol: EirSymbol[_]): Iterable[EirNode] = {
     symbol.qualifiedName match {
-      case last :: Nil =>
-        anywhereAccessible(symbol, last)
+      case last :: Nil => anywhereAccessible(symbol, last)
       case head :: tail =>
         anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail))
       case Nil => Nil
@@ -263,9 +258,8 @@ object Find {
         .flatMap(
           child[EirNamedNode](_, withName(names.last).and(usage.canAccess))
             .map({
-              case fs: EirFileSymbol =>
-                Find.uniqueResolution[EirNamedNode](fs)
-              case x => x
+              case fs: EirFileSymbol => Find.uniqueResolution[EirNamedNode](fs)
+              case x                 => x
             })
         )
         .toSeq
@@ -277,18 +271,16 @@ object Find {
   def asClassLike(resolvable: EirResolvable[EirType]): EirClassLike =
     asClassLike(Find.uniqueResolution[EirType](resolvable))
 
-  def asClassLike(ty: EirType): EirClassLike =
-    tryClassLike(ty) match {
-      case Some(c) => c
-      case None    => Errors.incorrectType(ty, classOf[EirClassLike])
-    }
+  def asClassLike(ty: EirType): EirClassLike = tryClassLike(ty) match {
+    case Some(c) => c
+    case None    => Errors.incorrectType(ty, classOf[EirClassLike])
+  }
 
-  def tryClassLike(ty: EirNode): Option[EirClassLike] =
-    ty match {
-      case c: EirClassLike     => Some(c)
-      case t: EirTemplatedType => Some(asClassLike(t.base))
-      case _                   => None
-    }
+  def tryClassLike(ty: EirNode): Option[EirClassLike] = ty match {
+    case c: EirClassLike     => Some(c)
+    case t: EirTemplatedType => Some(asClassLike(t.base))
+    case _                   => None
+  }
 
   def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(
       implicit ctx: TypeCheckContext
@@ -364,16 +356,15 @@ object Find {
   private def accessibleMember(
       base: EirType,
       x: EirScopedSymbol[_]
-  ): View[EirMember] =
-    x.pending match {
-      case EirSymbol(_, head :: rest) =>
-        accessibleMember(base, x, head).flatMap(qualified(x, _, rest)).collect {
-          case m: EirMember => m
-        }
-      // TODO add support for this
-      case s: EirSpecializedSymbol => Errors.unableToResolve(s)
-      case _                       => Errors.unreachable()
-    }
+  ): View[EirMember] = x.pending match {
+    case EirSymbol(_, head :: rest) =>
+      accessibleMember(base, x, head).flatMap(qualified(x, _, rest)).collect {
+        case m: EirMember => m
+      }
+    // TODO add support for this
+    case s: EirSpecializedSymbol => Errors.unableToResolve(s)
+    case _                       => Errors.unreachable()
+  }
 
   def accessibleMember(
       base: EirType,
@@ -402,10 +393,9 @@ object Find {
     { c.flatMap(z => Option.when(y.eq(z))(x)) } orElse {
       Option
         .when(c.exists(_.inherited.nonEmpty))({
-          val spec =
-            c.zip(Some(x).to[EirSpecialization]).flatMap {
-              case (s, sp) => ctx.trySpecialize(s, sp)
-            }
+          val spec = c.zip(Some(x).to[EirSpecialization]).flatMap {
+            case (s, sp) => ctx.trySpecialize(s, sp)
+          }
 
           val res = sweepInherited[EirType, EirType](
             ctx,

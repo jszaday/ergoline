@@ -25,8 +25,7 @@ object StaticEvaluator {
   )(implicit ctx: TypeCheckContext): EirLiteral[_] = {
     val resolvable: EirResolvable[_] = {
       Find.resolutions[EirNode](x) match {
-        case (x: EirTemplateArgument) :: _ =>
-          ctx.hasSubstitution(x) match {
+        case (x: EirTemplateArgument) :: _ => ctx.hasSubstitution(x) match {
             case Some(y) => y
             case None    => return EirLiteralSymbol(x)(None)
           }
@@ -83,14 +82,12 @@ object StaticEvaluator {
 
     (lval, rvals) match {
       case (EirLiteralTuple(value), EirIntegerLiteral(idx) :: Nil)
-          if 0 <= idx && idx < value.length =>
-        value(idx)
+          if 0 <= idx && idx < value.length => value(idx)
       case (EirLiteralType(t: EirTupleType), EirIntegerLiteral(idx) :: Nil)
           if 0 <= idx && idx < t.children.length =>
         EirLiteralType(CheckTypes.visit(t.children(idx)))(None)
-      case (value, EirIntegerLiteral(idx) :: Nil) if idx == 0 =>
-        value
-      case _ => Errors.invalidTupleIndices(lval, rvals)
+      case (value, EirIntegerLiteral(idx) :: Nil) if idx == 0 => value
+      case _                                                  => Errors.invalidTupleIndices(lval, rvals)
     }
   }
 
@@ -130,10 +127,8 @@ object StaticEvaluator {
     val rhs = () => evaluate(expr.rhs)
 
     lhs match {
-      case EirIntegerLiteral(x) =>
-        evaluateIntBinop(x, expr, valueAs[Int](rhs))
-      case EirBooleanLiteral(x) =>
-        evaluateBoolBinop(x, expr, rhs)
+      case EirIntegerLiteral(x) => evaluateIntBinop(x, expr, valueAs[Int](rhs))
+      case EirBooleanLiteral(x) => evaluateBoolBinop(x, expr, rhs)
       case EirLiteralType(x) =>
         evaluateTypeBinop(x, expr, valueAs[EirType](rhs))
       case _ => Errors.unknownOperator(expr, expr.op)
@@ -172,22 +167,18 @@ object StaticEvaluator {
       rhs: () => EirLiteral[_]
   ): EirLiteral[_] = {
     x.op match {
-      case "&&" =>
-        mkBoolLiteral(if (lval) {
+      case "&&" => mkBoolLiteral(if (lval) {
           valueAs[Boolean](rhs)
         } else false)
-      case "||" =>
-        mkBoolLiteral(
+      case "||" => mkBoolLiteral(
           if (lval) true
           else {
             valueAs[Boolean](rhs)
           }
         )
-      case "==" =>
-        mkBoolLiteral(lval == valueAs[Boolean](rhs))
-      case "!=" =>
-        mkBoolLiteral(lval != valueAs[Boolean](rhs))
-      case _ => Errors.unknownOperator(x, x.op)
+      case "==" => mkBoolLiteral(lval == valueAs[Boolean](rhs))
+      case "!=" => mkBoolLiteral(lval != valueAs[Boolean](rhs))
+      case _    => Errors.unknownOperator(x, x.op)
     }
   }
 

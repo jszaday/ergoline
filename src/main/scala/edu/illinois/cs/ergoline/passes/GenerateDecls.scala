@@ -128,9 +128,7 @@ object GenerateDecls {
 
       val fields = x.members collect {
         case m @ EirMember(_, d: EirDeclaration, _) if !m.isStatic => d
-      } filter { x =>
-        ctx.resolve(x.declaredType).isReconstructible
-      }
+      } filter { x => ctx.resolve(x.declaredType).isReconstructible }
 
       val needsColon = parent.nonEmpty || fields.nonEmpty
 

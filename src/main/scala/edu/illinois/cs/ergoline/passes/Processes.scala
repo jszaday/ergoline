@@ -96,11 +96,10 @@ object Processes {
   def sensitiveHelper(
       map: Map[String, String]
   )(implicit ctx: CodeGenerationContext): Unit = {
-    map foreach {
-      case (name, header) =>
-        if (willGenerate(name)) {
-          ctx << s"#include <$header> // ;"
-        }
+    map foreach { case (name, header) =>
+      if (willGenerate(name)) {
+        ctx << s"#include <$header> // ;"
+      }
     }
   }
 
@@ -146,11 +145,10 @@ object Processes {
     // NOTE do we ever need to topo sort these?
     a.foreach(GenerateCpp.forwardDecl(ctx, _))
 
-    toDecl foreach {
-      case (namespace, classes) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          classes.foreach(GenerateCpp.forwardDecl(_)(ctx))
-        } << "}"
+    toDecl foreach { case (namespace, classes) =>
+      ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+        classes.foreach(GenerateCpp.forwardDecl(_)(ctx))
+      } << "}"
     }
 
     ctx << cppIncludes.map(x =>
@@ -164,20 +162,18 @@ object Processes {
     // NOTE do we ever need to topo sort proxies?
     a.foreach(GenerateProxies.visitProxy(ctx, _))
 
-    toDecl foreach {
-      case (namespace, classes) =>
-        ctx << "namespace" << (namespace.fullyQualifiedName, "::") << "{" << {
-          classes
-            .filterNot(_.isNested)
-            .foreach(GenerateDecls.visit(ctx, _))
-        } << "}"
+    toDecl foreach { case (namespace, classes) =>
+      ctx << "namespace" << (namespace.fullyQualifiedName, "::") << "{" << {
+        classes
+          .filterNot(_.isNested)
+          .foreach(GenerateDecls.visit(ctx, _))
+      } << "}"
     }
 
-    ctx.lambdas.foreach({
-      case (namespace, lambdas) =>
-        ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
-          lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
-        } << "}"
+    ctx.lambdas.foreach({ case (namespace, lambdas) =>
+      ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
+        lambdas.foreach(GenerateCpp.makeLambdaWrapper(ctx, _))
+      } << "}"
     })
 
     val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
@@ -252,9 +248,8 @@ object Processes {
           val b = f(a)
           if (!current.contains(b)) {
             current match {
-              case Some(c) =>
-                result :+= (c -> group)
-              case _ =>
+              case Some(c) => result :+= (c -> group)
+              case _       =>
             }
             current = Some(b)
             group = Nil
@@ -269,9 +264,8 @@ object Processes {
       }
 
       def hasValidOrder: Boolean = {
-        self.zipWithIndex.forall({
-          case (c, i) =>
-            self.find(c.isDescendantOf).forall(self.indexOf(_) < i)
+        self.zipWithIndex.forall({ case (c, i) =>
+          self.find(c.isDescendantOf).forall(self.indexOf(_) < i)
         })
       }
     }

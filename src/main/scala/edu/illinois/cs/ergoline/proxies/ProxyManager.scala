@@ -29,8 +29,7 @@ object ProxyManager {
   private var _types: Map[(EirProxy, List[EirResolvable[EirType]]), EirType] =
     Map()
 
-  def proxies: Iterable[EirProxy] =
-    _proxies.values.flatMap(_.values)
+  def proxies: Iterable[EirProxy] = _proxies.values.flatMap(_.values)
 
   def registeredIndices(): Set[EirType] = {
     proxies.flatMap(_.indexType).toSet + globals.integerType

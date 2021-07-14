@@ -89,8 +89,7 @@ trait EirVisitor[Context, Value] {
 
   def visitExpression(node: EirExpressionNode)(implicit ctx: Context): Value = {
     node match {
-      case x: EirSymbolLike[_] =>
-        visitSymbolLike(
+      case x: EirSymbolLike[_] => visitSymbolLike(
           x
         ) // <-- MAY BE TREATED AS TYPE ELSEWHERE. matched separately above
       case x: EirNew                => visitNew(x)

@@ -39,9 +39,7 @@ object GenerateCi {
       .filter(ProxyManager.shouldGenerate)
       .map(x => (x.namespaces.toList, x))
       .groupBy(_._1)
-      .foreach({
-        case (k, v) => visitNamespaces(ctx, k, v.map(_._2).toList)
-      })
+      .foreach({ case (k, v) => visitNamespaces(ctx, k, v.map(_._2).toList) })
 
     ctx << s"}"
     ctx.toString
@@ -83,11 +81,10 @@ object GenerateCi {
         }
 
         if (p.collective.isEmpty) {
-          zipWithSpecializations(Seq(p))(ctx) foreach {
-            case (p, types) =>
-              ctx << "readonly" << collectiveTypeFor(p, types)(
-                ctx
-              ) << " " << readOnlyFor(p, types, None)(ctx) << ";"
+          zipWithSpecializations(Seq(p))(ctx) foreach { case (p, types) =>
+            ctx << "readonly" << collectiveTypeFor(p, types)(
+              ctx
+            ) << " " << readOnlyFor(p, types, None)(ctx) << ";"
           }
         }
       })
@@ -111,8 +108,7 @@ object GenerateCi {
   )
 
   def attributesFor(p: EirProxy, m: EirMember): String = {
-    val attributes =
-      passThruAttributes.flatMap(m.annotation).map(_.name)
+    val attributes = passThruAttributes.flatMap(m.annotation).map(_.name)
 //      Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
     if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }

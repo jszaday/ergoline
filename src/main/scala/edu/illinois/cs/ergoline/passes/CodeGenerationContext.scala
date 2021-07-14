@@ -74,8 +74,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def tryResolve[T <: EirNode: ClassTag](
       resolvable: EirResolvable[T]
-  ): Option[T] =
-    Find.resolutions[T](resolvable).headOption
+  ): Option[T] = Find.resolutions[T](resolvable).headOption
 
   def resolve[T <: EirNode: ClassTag](resolvable: EirResolvable[T]): T =
     tryResolve(resolvable).getOrElse(Errors.unableToResolve(resolvable))
@@ -305,16 +304,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
       (idx + 1) < lines.size && lines(idx).endsWith("{") && (lines(
         idx + 1
       ) == "{")
-    } map { idx =>
-      (idx, shouldCollapseAt(idx + 2))
-    } collect {
+    } map { idx => (idx, shouldCollapseAt(idx + 2)) } collect {
       case (i, Some(j)) => (i + 1, j)
-    } flatten {
-      case (i, j) => IndexedSeq(i, j)
-    }
+    } flatten { case (i, j) => IndexedSeq(i, j) }
 
-    lines.zipWithIndex filterNot {
-      case (_, idx) => collapsible.contains(idx)
+    lines.zipWithIndex filterNot { case (_, idx) =>
+      collapsible.contains(idx)
     } map (_._1)
   }
 
@@ -335,11 +330,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     output.toString()
   }
 
-  def last: Char =
-    current
-      .toString()
-      .trim
-      .lastOption
-      .orElse(lines.lastOption.flatMap(_.trim.lastOption))
-      .getOrElse('\u0000')
+  def last: Char = current
+    .toString()
+    .trim
+    .lastOption
+    .orElse(lines.lastOption.flatMap(_.trim.lastOption))
+    .getOrElse('\u0000')
 }

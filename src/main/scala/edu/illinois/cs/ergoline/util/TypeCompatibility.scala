@@ -29,17 +29,14 @@ object TypeCompatibility {
           assertValid[EirClassLike](Find.uniqueResolution[EirType](t.base))
         case c: EirClassLike => c
       })
-      .collect({
-        case c: EirClassLike => c
-      })
+      .collect({ case c: EirClassLike => c })
       .exists(x => { x == b || checkSubclass(x, b) })
   }
 
   implicit class RichEirClassLike(self: EirClassLike) {
     def isDescendantOf(other: EirClassLike): Boolean = {
       (self, other) match {
-        case (a: EirProxy, b: EirProxy) =>
-          (a.isElement == b.isElement) &&
+        case (a: EirProxy, b: EirProxy) => (a.isElement == b.isElement) &&
             (a.collective == b.collective) &&
             a.base.isDescendantOf(b.base)
         case _ => checkSubclass(self, other)
@@ -61,8 +58,8 @@ object TypeCompatibility {
     val (ourBase, theirBase) =
       (Find.uniqueResolution[EirType](ours.base), theirs.base)
     if (ourBase == theirBase) {
-      ours.args.zip(theirs.args) forall {
-        case (a, b) => a == b // TODO add support for contravariance
+      ours.args.zip(theirs.args) forall { case (a, b) =>
+        a == b // TODO add support for contravariance
       }
     } else {
       (ourBase, theirBase) match {
@@ -100,9 +97,7 @@ object TypeCompatibility {
           x.children.length == y.children.length &&
             x.children
               .zip(y.children)
-              .forall({
-                case (a, b) => a.canAssignTo(b)
-              })
+              .forall({ case (a, b) => a.canAssignTo(b) })
         case (x: EirClassLike, y: EirTemplatedType) if x.templateArgs.isEmpty =>
           x.inherited.map(CheckTypes.visit(_)).exists(_.canAssignTo(y))
         case (x: EirTemplatedType, y: EirClassLike) if y.templateArgs.isEmpty =>
