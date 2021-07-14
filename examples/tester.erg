@@ -47,7 +47,7 @@ import ck;
 }
 
 class tester {
-    @entry def tester() {}
+    @entry def self() {}
 
     @threaded @entry def run(n: int) {
         @overlap for (var i = 0; i < n; i += 1) {
