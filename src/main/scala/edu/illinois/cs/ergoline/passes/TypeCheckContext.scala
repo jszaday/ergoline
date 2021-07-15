@@ -36,11 +36,6 @@ object TypeCheckContext {
   def upperBound(x: EirType, y: EirType): Boolean = {
     Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
   }
-}
-
-class TypeCheckContext(parent: Option[TypeCheckContext] = None)
-    extends Transactions.Manager[EirSubstituteTransaction] {
-  import TypeCheckContext._
 
   object TypeCheckSyntax {
     implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
@@ -110,7 +105,11 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
       }
     }
   }
+}
 
+class TypeCheckContext(parent: Option[TypeCheckContext] = None)
+    extends Transactions.Manager[EirSubstituteTransaction] {
+  import TypeCheckContext._
   import TypeCheckSyntax.RichEirSpecializable
 
   private val stack: mutable.Stack[EirNode] = new mutable.Stack

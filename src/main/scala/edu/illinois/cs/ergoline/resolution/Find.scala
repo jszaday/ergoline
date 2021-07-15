@@ -288,21 +288,16 @@ object Find {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
     checkSpecialized(base)
 
-    def helper(x: EirMember): (EirMember, Option[EirSpecialization]) = {
-      (
-        {
-          val (a, b) = (accessor.isStatic, x.isStatic)
-          // permits pure (non-)static and static access of non-static members (e.g., int::+)
-          assert(a == b || (a && !b))
-          x
-        },
-        Some(base).to[EirSpecialization]
-      )
+    def helper(x: EirMember): Option[(EirMember, Option[EirSpecialization])] = {
+      // permits pure (non-)static and static access of non-static members (e.g., int::+)
+      val (a, b) = (accessor.isStatic, x.isStatic)
+      val isValid = a == b || (a && !b)
+      Option.when(isValid)((x, Option(base).to[EirSpecialization]))
     }
 
     val cls = asClassLike(base)
     val imm = accessibleMember(cls, accessor)
-    imm.map(helper) ++ {
+    imm.flatMap(helper) ++ {
       sweepInherited[EirType, (EirMember, Option[EirSpecialization])](
         ctx,
         cls,
