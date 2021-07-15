@@ -488,27 +488,32 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       args: List[EirType]
   )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val candidates = Find.resolutions[EirNamedNode](x)
+    val types = candidates map {
+      case s: EirSpecializable => s         // classes, traits, fns, etc.
+      case n: EirNode          => visit(n)  // declarations, members, etc.
+    }
     val synth = ctx.synthesize(args)
 
-    val found = (candidates flatMap {
+    val found = (candidates.zip(types) flatMap {
+      case (n, s: EirType with EirSpecialization) => Some((n, s))
       // TODO this bypass is a bit flaky!
-      case s: EirType with EirSpecializable if s.templateArgs.isEmpty => Some(s)
-      case s: EirSpecializable =>
+      case (n, s: EirType with EirSpecializable) if s.templateArgs.isEmpty => Some((n, s))
+      case (n, s: EirSpecializable) =>
         val ty = ctx.trySpecialize(s, synth)
         ty.foreach(ctx.leave)
         ty.map(_ =>
-          s match {
+          (n, s match {
             case t: EirLambdaType => t
             case _                => ctx.getTemplatedType(s, args)
-          }
+          })
         )
     }).headOption
 
     x match {
-      case x: EirExpressionNode => x.disambiguation = found
+      case x: EirExpressionNode => x.disambiguation = found.map(_._1)
     }
 
-    found
+    found.map(_._2)
   }
 
   private def resolve(
