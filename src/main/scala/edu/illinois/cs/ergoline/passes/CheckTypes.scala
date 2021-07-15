@@ -432,13 +432,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def inferSpecialization(s: EirSpecializable, args: List[EirType])(implicit
       ctx: TypeCheckContext
   ): Option[EirSpecialization] = {
-    // TODO this does not consider static applications (e.g. option<?>(42))
-    val unknowns = Option(s).to[EirLambdaType].map(_.from)
-
-//    val unknowns = s match {
-//      case s: EirLambdaType => Option(s.from)
-//      case _ => Option.when(s.templateArgs.nonEmpty)(s.templateArgs)
-//    }
+    val unknowns = s match {
+      case s: EirLambdaType => Option(s.from)
+      case _                => Option.when(s.templateArgs.nonEmpty)(s.templateArgs)
+    } // TODO this needs further testing to ensure it doesn't mess with things!
 
     val insights = unknowns
       .filter(_.length == args.length)
@@ -526,10 +523,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): Option[EirType] = {
     (t, args) match {
-      case (t: EirSpecializedSymbol, None) => resolve(t)
-      case (t: EirType, None)              => Some(t)
-      case (t: EirSymbol[_], Some(args))   => resolve(t, args)
-      case _                               => ???
+      case (t: EirSpecializedSymbol, _)  => resolve(t)
+      case (t: EirType, None)            => Some(t)
+      case (t: EirSymbol[_], Some(args)) => resolve(t, args)
+      case _                             => ???
     }
   }
 
@@ -543,18 +540,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
 
     val member = visit(candidate)
-    val (ispec, args) = handleSpecialization(member) match {
-      case Left(s) =>
-        val args = getArguments(scope._1)
-        val sp = args
+    val args = getArguments(scope._1)
+    val ispec = handleSpecialization(member) match {
+      case Right(sp) => sp
+      case Left(s) => args
+          .filterNot(_.isEmpty)
           .flatMap(inferSpecialization(s, _))
           .flatMap(ctx.trySpecialize(s, _))
           .getOrElse({
             ospec.foreach(ctx.leave)
             return (false, None)
           })
-        (sp, args)
-      case Right(sp) => (sp, getArguments(scope._1))
     }
 
     val found = (member, args) match {
@@ -562,8 +558,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             EirTemplatedType(_, _: EirClassLike, _) | _: EirClassLike,
             Some(_)
           ) =>
-        val sp = { Option(ispec).flatMap(resolve(_, None)) } orElse {
-          scope._1.to[EirFunctionCall].map(_.target).flatMap(resolve(_, args))
+        val sp = {
+          scope._1
+            .to[EirFunctionCall]
+            .map(_.target)
+            .flatMap(resolve(_, args.filterNot(_.isEmpty)))
+        } orElse {
+          Option(ispec).flatMap(resolve(_, None))
         } getOrElse member
         val candidates = {
           val cls = Find.asClassLike(member)

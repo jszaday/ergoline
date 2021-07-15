@@ -10,7 +10,7 @@ class foo {
 
 @main class opttest {
     @entry def self() {
-        val o1 = option<foo>(new foo());
+        val o1 = option(new foo());
         val o2 = option<foo>();
         val o3 = o1.map((_: foo) => 42);
         val o4 = option<int>();
