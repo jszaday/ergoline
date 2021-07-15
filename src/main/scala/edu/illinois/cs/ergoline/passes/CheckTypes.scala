@@ -107,6 +107,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  @tailrec
   private def isStatic(x: EirExpressionNode): Boolean = {
     x match {
       case x: EirFunctionCall    => isStatic(x.target)
@@ -433,6 +434,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   ): Option[EirSpecialization] = {
     // TODO this does not consider static applications (e.g. option<?>(42))
     val unknowns = Option(s).to[EirLambdaType].map(_.from)
+
+//    val unknowns = s match {
+//      case s: EirLambdaType => Option(s.from)
+//      case _ => Option.when(s.templateArgs.nonEmpty)(s.templateArgs)
+//    }
+
     val insights = unknowns
       .filter(_.length == args.length)
       .map(_.zip(args).map(learn(_)))
@@ -480,32 +487,49 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def resolve(
+      x: EirResolvable[_],
+      args: List[EirType]
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
+    val candidates = Find.resolutions[EirNamedNode](x)
+    val synth = ctx.synthesize(args)
+
+    val found = (candidates flatMap {
+      // TODO this bypass is a bit flaky!
+      case s: EirType with EirSpecializable if s.templateArgs.isEmpty => Some(s)
+      case s: EirSpecializable =>
+        val ty = ctx.trySpecialize(s, synth)
+        ty.foreach(ctx.leave)
+        ty.map(_ =>
+          s match {
+            case t: EirLambdaType => t
+            case _                => ctx.getTemplatedType(s, args)
+          }
+        )
+    }).headOption
+
+    x match {
+      case x: EirExpressionNode => x.disambiguation = found
+    }
+
+    found
+  }
+
+  private def resolve(
       x: EirSpecializedSymbol
   )(implicit ctx: TypeCheckContext): Option[EirType] = {
-    val candidates = Find.resolutions[EirNamedNode](x.symbol)
-    val args = x.types.map(visit(_))
-    val synth = ctx.synthesize(args)
-    val found = (candidates flatMap { case s: EirSpecializable =>
-      val ty = ctx.trySpecialize(s, synth)
-      ty.foreach(ctx.leave)
-      ty.map(_ =>
-        s match {
-          case t: EirLambdaType => t
-          case _                => ctx.getTemplatedType(s, args)
-        }
-      )
-    }).headOption
+    val found = resolve(x.symbol, x.types.map(visit(_)))
     x.disambiguation = found
     found
   }
 
-  private def resolve(t: EirSpecialization)(implicit
+  private def resolve(t: EirNode, args: Option[List[EirType]])(implicit
       ctx: TypeCheckContext
   ): Option[EirType] = {
-    t match {
-      case t: EirSpecializedSymbol => resolve(t)
-      case t: EirType              => Some(t)
-      case _                       => ???
+    (t, args) match {
+      case (t: EirSpecializedSymbol, None) => resolve(t)
+      case (t: EirType, None)              => Some(t)
+      case (t: EirSymbol[_], Some(args))   => resolve(t, args)
+      case _                               => ???
     }
   }
 
@@ -538,7 +562,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             EirTemplatedType(_, _: EirClassLike, _) | _: EirClassLike,
             Some(_)
           ) =>
-        val sp = Option(ispec).flatMap(resolve).getOrElse(member)
+        val sp = { Option(ispec).flatMap(resolve(_, None)) } orElse {
+          scope._1.to[EirFunctionCall].map(_.target).flatMap(resolve(_, args))
+        } getOrElse member
         val candidates = {
           val cls = Find.asClassLike(member)
           val accessor = mkAccessor(cls, "apply")(scope._1)
