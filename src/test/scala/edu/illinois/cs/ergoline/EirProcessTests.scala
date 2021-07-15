@@ -22,7 +22,7 @@ class EirProcessTests extends AnyFunSuite {
     val out1 = os.proc("java", "-jar", "ergc.jar", f.getCanonicalPath, "-o", tmp / "a.out").call().out.text()
     println(out1)
     println("starting process...")
-    val out2 = charmc.map(_ => os.proc("charmrun", tmp / "a.out", "16", "+p2", "++local").call(cwd = wd).out.text())
+    val out2 = charmc.map(_ => os.proc(tmp / "charmrun", tmp / "a.out", "16", "+p2", "++local").call(cwd = wd).out.text())
     out2.foreach(println(_))
     println("(moving .cc file...)\n")
     try {
