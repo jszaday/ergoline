@@ -544,7 +544,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ispec = handleSpecialization(member) match {
       case Right(sp) => sp
       case Left(s) => args
-          .filterNot(_.isEmpty)
+          .filterNot(_.isEmpty) // TODO make this UNIT in the future?
           .flatMap(inferSpecialization(s, _))
           .flatMap(ctx.trySpecialize(s, _))
           .getOrElse({
@@ -607,12 +607,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val result = found._2 filter {
       case (_, p: EirSpecializable) =>
         ctx.checkPredicate(p.predicate.filter(_ => p.templateArgs.isEmpty))
-      case _ => true
-    } map { x =>
-      (prependSelf, x._2) match {
-        case (Some(a), b) => (assertValid[A](x._1), addExplicitSelf(ctx, a, b))
-        case _            => (assertValid[A](x._1), x._2)
-      }
+      case _ => true // TODO check whether this works for sysParents
+    } collect { case (a: A, b) =>
+      (a, prependSelf.map(addExplicitSelf(ctx, b, _)).getOrElse(b))
     }
 
     ctx.leave(ispec)

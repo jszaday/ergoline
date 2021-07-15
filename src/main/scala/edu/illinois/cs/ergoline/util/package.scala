@@ -16,13 +16,13 @@ package object util {
 
   def addExplicitSelf(
       ctx: TypeCheckContext,
-      base: EirType,
-      ty: EirType
+      target: EirType,
+      self: EirType
   ): EirType = {
-    ty match {
+    target match {
       case EirLambdaType(_, from, to, args, pred) =>
-        ctx.lambdaWith(base +: from, to, args, pred)
-      case _ => Errors.incorrectType(ty, classTag[EirLambdaType])
+        ctx.lambdaWith(self +: from, to, args, pred)
+      case _ => Errors.incorrectType(target, classTag[EirLambdaType])
     }
   }
 
