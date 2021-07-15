@@ -71,11 +71,9 @@ class block {
         val idx = self[@]index();
 
         if (sendA) {
-            // TODO(URGENT) fix bug with errant infix binding that precludes:
-            //              idx[0] - idx[1] + nBlocks
-            dest[((idx[0] - idx[1]) + nBlocks) % nBlocks, idx[1]].inputA(0, data);
+            dest[(idx[0] - idx[1] + nBlocks) % nBlocks, idx[1]].inputA(0, data);
         } else {
-            dest[idx[0], ((idx[1] - idx[0]) + nBlocks) % nBlocks].inputB(0, data);
+            dest[idx[0], (idx[1] - idx[0] + nBlocks) % nBlocks].inputB(0, data);
         }
     }
 
