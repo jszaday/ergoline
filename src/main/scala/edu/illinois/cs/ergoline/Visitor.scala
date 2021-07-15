@@ -917,7 +917,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   )
 
   def isAssignOperator(op: String): Boolean = {
-    op.endsWith("=") && !globals.comparisonOperators.contains(op)
+    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals.isComparisonOperator(op))
   }
 
   def precedenceOf(op: String): Int = {

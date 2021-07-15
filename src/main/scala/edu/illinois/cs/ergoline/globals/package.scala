@@ -68,16 +68,15 @@ package object globals {
     ">"
   )
 
-  def isEqualityComparator(op: String): Boolean = equalityOperators.contains(op)
-
   def hasEqualityComparator(c: EirClassLike): Option[String] = {
     equalityOperators.find(c.hasMember)
   }
 
-  def isIdentityComparator(op: String): Boolean = op == "===" || op == "!=="
+  def isEqualityComparator(op: String): Boolean = equalityOperators.contains(op)
 
-  def isComparisonOperator(op: String): Boolean =
-    isEqualityComparator(op) || comparisonOperators.contains(op)
+  def isComparisonOperator(op: String): Boolean = comparisonOperators.contains(op)
+
+  def isIdentityComparator(op: String): Boolean = op == "===" || op == "!=="
 
   val implicitProxyName: String = "__proxy__"
 
