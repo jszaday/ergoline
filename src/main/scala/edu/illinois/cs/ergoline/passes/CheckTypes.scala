@@ -107,11 +107,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  private def isStatic(lhs: EirExpressionNode): Boolean = {
-    lhs.disambiguation match {
-      case Some(c: EirClass)     => !c.objectType
-      case Some(_: EirClassLike) => true
-      case _                     => false
+  @tailrec
+  private def isStatic(x: EirExpressionNode): Boolean = {
+    x match {
+      case x: EirFunctionCall    => isStatic(x.target)
+      case x: EirScopedSymbol[_] => x.isStatic
+      case x: EirSymbolLike[_] =>
+        x.disambiguation.flatMap(Find.tryClassLike) match {
+          case Some(c: EirClass)     => !c.objectType
+          case Some(_: EirClassLike) => true
+          case _                     => false
+        }
+      case _ => false // TODO figure out what goes here?
     }
   }
 
@@ -425,8 +432,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def inferSpecialization(s: EirSpecializable, args: List[EirType])(implicit
       ctx: TypeCheckContext
   ): Option[EirSpecialization] = {
-    // TODO this does not consider static applications (e.g. option<?>(42))
-    val unknowns = Option(s).to[EirLambdaType].map(_.from)
+    val unknowns = s match {
+      case s: EirLambdaType => Option(s.from)
+      case _                => Option.when(s.templateArgs.nonEmpty)(s.templateArgs)
+    } // TODO this needs further testing to ensure it doesn't mess with things!
+
     val insights = unknowns
       .filter(_.length == args.length)
       .map(_.zip(args).map(learn(_)))
@@ -473,6 +483,53 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
+  private def resolve(
+      x: EirResolvable[_],
+      args: List[EirType]
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
+    val candidates = Find.resolutions[EirNamedNode](x)
+    val synth = ctx.synthesize(args)
+
+    val found = (candidates flatMap {
+      // TODO this bypass is a bit flaky!
+      case s: EirType with EirSpecializable if s.templateArgs.isEmpty => Some(s)
+      case s: EirSpecializable =>
+        val ty = ctx.trySpecialize(s, synth)
+        ty.foreach(ctx.leave)
+        ty.map(_ =>
+          s match {
+            case t: EirLambdaType => t
+            case _                => ctx.getTemplatedType(s, args)
+          }
+        )
+    }).headOption
+
+    x match {
+      case x: EirExpressionNode => x.disambiguation = found
+    }
+
+    found
+  }
+
+  private def resolve(
+      x: EirSpecializedSymbol
+  )(implicit ctx: TypeCheckContext): Option[EirType] = {
+    val found = resolve(x.symbol, x.types.map(visit(_)))
+    x.disambiguation = found
+    found
+  }
+
+  private def resolve(t: EirNode, args: Option[List[EirType]])(implicit
+      ctx: TypeCheckContext
+  ): Option[EirType] = {
+    (t, args) match {
+      case (t: EirSpecializedSymbol, _)  => resolve(t)
+      case (t: EirType, None)            => Some(t)
+      case (t: EirSymbol[_], Some(args)) => resolve(t, args)
+      case _                             => ???
+    }
+  }
+
   private def screenCandidate[A <: EirNamedNode: ClassTag](
       scope: ExpressionScope
   )(candidate: A, outer: Option[EirSpecialization])(implicit
@@ -481,19 +538,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val ospec = outer.collect { case t: EirTemplatedType =>
       ctx.specialize(assertValid[EirSpecializable](t.base), t)
     }
+
     val member = visit(candidate)
-    val (ispec, args) = handleSpecialization(member) match {
-      case Left(s) =>
-        val args = getArguments(scope._1)
-        val sp = args
+    val args = getArguments(scope._1)
+    val ispec = handleSpecialization(member) match {
+      case Right(sp) => sp
+      case Left(s) => args
+          .filterNot(_.isEmpty) // TODO make this UNIT in the future?
           .flatMap(inferSpecialization(s, _))
           .flatMap(ctx.trySpecialize(s, _))
           .getOrElse({
             ospec.foreach(ctx.leave)
             return (false, None)
           })
-        (sp, args)
-      case Right(sp) => (sp, getArguments(scope._1))
     }
 
     val found = (member, args) match {
@@ -501,23 +558,24 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             EirTemplatedType(_, _: EirClassLike, _) | _: EirClassLike,
             Some(_)
           ) =>
-        // TODO this should be applicable without the cast (only necessary until SpecializedSymbol::resolve impl'd)
-        val sp = Option(member)
-          .to[EirTemplatedType]
-          .map(s =>
-            handleSpecialization(s) match {
-              case Left(s)   => Errors.missingSpecialization(s)
-              case Right(sp) => sp
-            }
-          )
-          .orNull
-        val candidates =
-          Find.accessibleMember(Find.asClassLike(member), scope._1.get, "apply")
+        val sp = {
+          scope._1
+            .to[EirFunctionCall]
+            .map(_.target)
+            .flatMap(resolve(_, args.filterNot(_.isEmpty)))
+        } orElse {
+          Option(ispec).flatMap(resolve(_, None))
+        } getOrElse member
+        val candidates = {
+          val cls = Find.asClassLike(member)
+          val accessor = mkAccessor(cls, "apply")(scope._1)
+          accessor.isStatic = scope._1.exists(isStatic)
+          Find.resolveAccessor(accessor, Some(sp))
+        }
         val found = screenCandidates(
           scope,
-          candidates.view.map((_, Some(sp)))
+          candidates.view.collect { case (a: A, opt) => (a, opt) }
         )
-        ctx.leave(sp)
         (false, found)
       case (_: EirLambdaType, Some(ours)) =>
         val missing = screenImplicitArgs(candidate)
@@ -549,12 +607,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val result = found._2 filter {
       case (_, p: EirSpecializable) =>
         ctx.checkPredicate(p.predicate.filter(_ => p.templateArgs.isEmpty))
-      case _ => true
-    } map { x =>
-      (prependSelf, x._2) match {
-        case (Some(a), b) => (assertValid[A](x._1), addExplicitSelf(ctx, a, b))
-        case _            => (assertValid[A](x._1), x._2)
-      }
+      case _ => true // TODO check whether this works for sysParents
+    } collect { case (a: A, b) =>
+      (a, prependSelf.map(addExplicitSelf(ctx, b, _)).getOrElse(b))
     }
 
     ctx.leave(ispec)
