@@ -1,4 +1,4 @@
-name: Scala CI (SMP)
+name: Scala CI (Non-SMP)
 
 on:
   push:

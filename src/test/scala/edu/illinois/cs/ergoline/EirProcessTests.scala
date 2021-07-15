@@ -19,10 +19,12 @@ class EirProcessTests extends AnyFunSuite {
     Modules.discoverSources(Paths.get(path).toFile)._2.filter(_.isFile).toList.sortBy(_.getName)
 
   def test(f: File): Unit = {
+    val charmHome = Modules.charmHome.map(os.Path(_))
+    val charmRun = charmHome.map(_ / "bin" / "charmrun")
     val out1 = os.proc("java", "-jar", "ergc.jar", f.getCanonicalPath, "-o", tmp / "a.out").call().out.text()
     println(out1)
     println("starting process...")
-    val out2 = charmc.map(_ => os.proc(tmp / "charmrun", tmp / "a.out", "16", "+p2", "++local").call(cwd = wd).out.text())
+    val out2 = charmc.map(_ => os.proc(charmRun.getOrElse(???), tmp / "a.out", "16", "+p2", "++local").call(cwd = wd).out.text())
     out2.foreach(println(_))
     println("(moving .cc file...)\n")
     try {
