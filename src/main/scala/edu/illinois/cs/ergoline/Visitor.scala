@@ -885,7 +885,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
     seq match {
       case Left(lhs) :: Right(op) :: Left(rhs) :: Nil
-          if assignOperators.contains(op) =>
+          if isAssignOperator(op) =>
         enter(
           EirAssignment(parent, lhs, op, rhs),
           (expr: EirAssignment) => {
@@ -916,19 +916,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     Seq('|')
   )
 
-  val assignOperators = Seq(
-    "=",
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%=",
-    "^=",
-    "&=",
-    "|="
-  )
-
-  def isAssignOperator(op: String): Boolean = assignOperators.contains(op)
+  def isAssignOperator(op: String): Boolean = {
+    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals.isComparisonOperator(op))
+  }
 
   def precedenceOf(op: String): Int = {
     if (op.head.isLetter || isAssignOperator(op)) {
@@ -940,7 +930,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   def sortInfixes(parts: Seq[InfixPart]): EirExpressionNode = {
     var infixes = parts
-    var ops = infixes.zipWithIndex.reverse
+    var ops = infixes.zipWithIndex
       .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
       .sortBy(_._2)
       .map(_._1)

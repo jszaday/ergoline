@@ -23,17 +23,24 @@ import ck;
         val d = 5;
         assert(c > b && b < c);
 
-        val e = a + ((b * c) + d);
+        val e = (a + (b * c)) + d;
         val f = a + b * c + d;
         assert((e == f) == true);
 
-        val g = a + (b * (c * d));
+        val g = a + ((b * c) * d);
         val h = a + b * c * d;
         assert((g == h) != false);
 
         val i = -5;
         val j = !(i < 0);
         assert(!j);
+
+        val k = 32 + 3 == 35;
+        assert(k);
+
+        val l = ((a + b) - c) + d;
+        val m = a + b - c + d;
+        assert(l == m);
 
         val numOnes = countOnes(d);
         println(`main> there are ${numOnes} ones in ${d}.`);
