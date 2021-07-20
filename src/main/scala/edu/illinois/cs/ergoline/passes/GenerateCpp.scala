@@ -2317,12 +2317,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
     val (value, valueTy) = pair
-    (Find.tryClassLike(goal), Find.tryClassLike(valueTy)) match {
-      case (Some(a: EirProxy), Some(b: EirProxy)) if b.isDescendantOf(a) =>
+
+    (
+      Find.tryClassLike(goal).getOrElse(goal),
+      Find.tryClassLike(valueTy)
+    ) match {
+      case (a: EirProxy, Some(b: EirProxy)) if b.isDescendantOf(a) =>
         ctx << ctx.nameFor(a) << "(" << value << ")"
-      case (Some(a), Some(b)) if a.isPointer && b.isValueType =>
+      case (a: EirClassLike, Some(b)) if a.isPointer && b.isValueType =>
         structToTrait(value, valueTy, noCopy = requiresRef)
-      case _ => ctx << value
+      case (a: EirLambdaType, Some(b)) => ???
+      case _                           => ctx << value
     }
   }
 

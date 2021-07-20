@@ -110,6 +110,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   @tailrec
   private def isStatic(x: EirExpressionNode): Boolean = {
     x match {
+      case x: EirCallArgument    => isStatic(x.expr)
       case x: EirFunctionCall    => isStatic(x.target)
       case x: EirScopedSymbol[_] => x.isStatic
       case x: EirSymbolLike[_] =>
@@ -144,7 +145,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val spec = handleSpecialization(base)
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
-    val candidates = Find.resolveAccessor(x, Some(base))
+    val candidates = Find.resolveAccessor(x)(Some(base), Some(x.isStatic))
     val found = screenCandidates((prevFc, Some(x)), candidates)
     found match {
       case (member, result) :: _ =>
@@ -280,11 +281,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       call: EirFunctionCall
   )(implicit ctx: TypeCheckContext): EirType = {
     val target = visit(call.target)
-    val ours = call.args.map(visit(_))
+    val ours = call.args
 
     // screen for correct usage of reference-passing
-    call.args zip ours filter { _._1.isRef } foreach { case (x, y) =>
-      checkReference(x.expr, y)
+    ours filter { _.isRef } map { _.expr } foreach { x =>
+      checkReference(x, visit(x))
     }
 
     // everything else should be resolved already, or resolved "above" the specialization
@@ -310,6 +311,40 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit
       ctx: TypeCheckContext
   ): Boolean = argumentsMatch(x.toList, y.toList, exact)
+
+  def tryCast(expr: EirExpressionNode, to: EirType)(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
+    val from = visit(expr)
+    if (from.canAssignTo(to)) {
+      (from, to) match {
+        case (_: EirLambdaType, _: EirLambdaType) => true
+        case (_, _: EirLambdaType)                =>
+          // detailed applicator information is only available at this point
+          // (i.e., verifying compatible static-ness)
+          CheckTypes
+            .findApply[EirMember]((Some(expr), None), from, Some(from)) exists {
+            case (m, ty) =>
+              expr.disambiguation = Some(m)
+              ty.canAssignTo(to)
+          }
+        case _ => true
+      }
+    } else {
+      false
+    }
+  }
+
+  def argumentsMatch(
+      x: List[EirExpressionNode],
+      y: List[EirType]
+  )(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
+    (x.length == y.length) && {
+      x.zip(y) forall { case (a, b) => tryCast(a, b) }
+    }
+  }
 
   def argumentsMatch(
       x: List[EirType],
@@ -549,8 +584,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val candidates = {
       val cls = Find.asClassLike(member)
       val accessor = mkAccessor(cls, "apply")(scope._1)
-      accessor.isStatic = scope._1.exists(isStatic)
-      Find.resolveAccessor(accessor, sp)
+      Find.resolveAccessor(accessor)(sp, scope._1.map(isStatic))
     }
 
     screenCandidates(
@@ -715,8 +749,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             val asType = asCls.map(_.asType).map(visit)
             val accessor = mkAccessor(asCls.get, last)(value.parent)
             accessor.foundType = asType
-            accessor.isStatic = true
-            (Some(accessor), Find.resolveAccessor(accessor, asType))
+            (Some(accessor), Find.resolveAccessor(accessor)(asType, Some(true)))
           } else {
             (None, Find.resolutions[EirNamedNode](value).map((_, None)))
           }

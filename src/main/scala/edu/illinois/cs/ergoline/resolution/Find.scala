@@ -282,16 +282,19 @@ object Find {
     case _                   => None
   }
 
-  def resolveAccessor(accessor: EirScopedSymbol[_], _base: Option[EirType])(
-      implicit ctx: TypeCheckContext
+  def resolveAccessor(
+      accessor: EirScopedSymbol[_]
+  )(_base: Option[EirType], static: Option[Boolean])(implicit
+      ctx: TypeCheckContext
   ): View[(EirMember, Option[EirSpecialization])] = {
     val base = _base.getOrElse(CheckTypes.visit(accessor.target))
     checkSpecialized(base)
 
     def helper(x: EirMember): Option[(EirMember, Option[EirSpecialization])] = {
       // permits pure (non-)static and static access of non-static members (e.g., int::+)
-      val (a, b) = (accessor.isStatic, x.isStatic)
-      val isValid = a == b || (a && !b)
+      val isValid = static.zip(Some(x.isStatic)).forall { case (a, b) =>
+        a == b || (a && !b)
+      }
       Option.when(isValid)((x, Option(base).to[EirSpecialization]))
     }
 
@@ -303,7 +306,7 @@ object Find {
         cls,
         (ictx, other) => {
           // TODO filter if overridden?
-          resolveAccessor(accessor, Some(other))(ictx)
+          resolveAccessor(accessor)(Some(other), static)(ictx)
         }
       )
     }
