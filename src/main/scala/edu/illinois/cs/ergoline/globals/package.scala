@@ -74,7 +74,8 @@ package object globals {
 
   def isEqualityComparator(op: String): Boolean = equalityOperators.contains(op)
 
-  def isComparisonOperator(op: String): Boolean = comparisonOperators.contains(op)
+  def isComparisonOperator(op: String): Boolean =
+    comparisonOperators.contains(op)
 
   def isIdentityComparator(op: String): Boolean = op == "===" || op == "!=="
 

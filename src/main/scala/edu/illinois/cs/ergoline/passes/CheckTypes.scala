@@ -146,14 +146,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
     val candidates = Find.resolveAccessor(x, Some(base))
     val found = screenCandidates((prevFc, Some(x)), candidates)
-    spec.foreach(ctx.leave)
     found match {
-      case Some((member, result)) =>
+      case (member, result) :: _ =>
+        spec.foreach(ctx.leave)
         x.disambiguation = Some(member)
         checkStaticness(x.target, member)
         prevFc.foreach(validate(ctx, member, _))
         result
-      case None => Errors.unableToResolve(x.pending)
+      case _ => Errors.unableToResolve(x.pending)
     }
   }
 
@@ -489,23 +489,27 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val candidates = Find.resolutions[EirNamedNode](x)
     val types = candidates map {
-      case s: EirSpecializable => s         // classes, traits, fns, etc.
-      case n: EirNode          => visit(n)  // declarations, members, etc.
+      case s: EirSpecializable => s // classes, traits, fns, etc.
+      case n: EirNode          => visit(n) // declarations, members, etc.
     }
     val synth = ctx.synthesize(args)
 
     val found = (candidates.zip(types) flatMap {
       case (n, s: EirType with EirSpecialization) => Some((n, s))
       // TODO this bypass is a bit flaky!
-      case (n, s: EirType with EirSpecializable) if s.templateArgs.isEmpty => Some((n, s))
+      case (n, s: EirType with EirSpecializable) if s.templateArgs.isEmpty =>
+        Some((n, s))
       case (n, s: EirSpecializable) =>
         val ty = ctx.trySpecialize(s, synth)
         ty.foreach(ctx.leave)
         ty.map(_ =>
-          (n, s match {
-            case t: EirLambdaType => t
-            case _                => ctx.getTemplatedType(s, args)
-          })
+          (
+            n,
+            s match {
+              case t: EirLambdaType => t
+              case _                => ctx.getTemplatedType(s, args)
+            }
+          )
         )
     }).headOption
 
@@ -533,6 +537,26 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (t: EirSymbol[_], Some(args)) => resolve(t, args)
       case _                             => ???
     }
+  }
+
+  def findApply[A <: EirNamedNode: ClassTag](
+      scope: ExpressionScope,
+      member: EirType,
+      sp: Option[EirType]
+  )(implicit
+      ctx: TypeCheckContext
+  ): Seq[(A, EirType)] = {
+    val candidates = {
+      val cls = Find.asClassLike(member)
+      val accessor = mkAccessor(cls, "apply")(scope._1)
+      accessor.isStatic = scope._1.exists(isStatic)
+      Find.resolveAccessor(accessor, sp)
+    }
+
+    screenCandidates(
+      scope,
+      candidates.view.collect { case (a: A, opt) => (a, opt) }
+    )
   }
 
   private def screenCandidate[A <: EirNamedNode: ClassTag](
@@ -571,17 +595,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         } orElse {
           Option(ispec).flatMap(resolve(_, None))
         } getOrElse member
-        val candidates = {
-          val cls = Find.asClassLike(member)
-          val accessor = mkAccessor(cls, "apply")(scope._1)
-          accessor.isStatic = scope._1.exists(isStatic)
-          Find.resolveAccessor(accessor, Some(sp))
-        }
-        val found = screenCandidates(
-          scope,
-          candidates.view.collect { case (a: A, opt) => (a, opt) }
-        )
-        (false, found)
+
+        (false, findApply(scope, member, Some(sp)).headOption)
       case (_: EirLambdaType, Some(ours)) =>
         val missing = screenImplicitArgs(candidate)
         if (missing.nonEmpty) {
@@ -630,16 +645,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       candidates: Iterable[(A, Option[EirSpecialization])]
   )(implicit
       ctx: TypeCheckContext
-  ): Option[(A, EirType)] = {
+  ): Seq[(A, EirType)] = {
     var missingSelf = false
-    val results = candidates.flatMap { case (candidate, pair) =>
+    val results = (candidates flatMap { case (candidate, pair) =>
       val res = screenCandidate(scope)(candidate, pair)
       missingSelf = missingSelf || res._1
       res._2
-    }
+    }).toSeq
 
-    val found = results.headOption
-    if (missingSelf && found.isEmpty) {
+    if (missingSelf && results.isEmpty) {
       throw MissingSelfException(
         EirSymbol[EirImplicitDeclaration](
           ctx.currentNode,
@@ -648,7 +662,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       )
     } else {
       // TODO implement some safety here, one must hide the others or it's ambiguous!
-      found
+      results
     }
   }
 
@@ -711,15 +725,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
     }
     val found = screenCandidates((prevFc, candidates._1), candidates._2)
-    value.disambiguation = found.map(_._1)
-    val retTy = found.map(x => visit(x._2))
-    prevFc
-      .zip(asMember(found.map(_._1)))
-      .foreach(x => validate(ctx, x._2, x._1))
-    retTy.getOrElse(self match {
-      case Some(_) => throw MissingSelfException(value)
-      case _       => Errors.unableToResolve(value)
-    })
+    (found, self) match {
+      case ((m, ty) :: _, _) =>
+        value.disambiguation = Some(m)
+        prevFc
+          .zip(asMember(m))
+          .foreach(x => validate(ctx, x._2, x._1))
+        visit(ty)
+      case (_, Some(_)) => throw MissingSelfException(value)
+      case _            => Errors.unableToResolve(value)
+    }
   }
 
   private def seekType(
@@ -1128,7 +1143,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val candidates = Find.resolutions[EirNamedNode](x.symbol)
     val found = screenCandidates((prevFc, None), candidates.view.map((_, None)))
     found match {
-      case Some((m, ty)) =>
+      case (m, ty) :: _ =>
         x.disambiguation = Some(m)
         prevFc.foreach(x => validate(ctx, m, x))
         ty match {
@@ -1136,7 +1151,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case t: EirSpecializable =>
             ctx.getTemplatedType(t, x.types.map(visit(_)))
         }
-      case None => Errors.missingType(x)
+      case _ => Errors.missingType(x)
     }
   }
 
@@ -1161,11 +1176,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val spec = handleSpecialization(base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
     val found = screenCandidates((Some(x), None), candidates.map((_, None)))
-    x.disambiguation = found.map(_._1)
-    spec.foreach(ctx.leave)
+
     found match {
-      case Some(_) => base
-      case _       => error(x, "could not find a suitable constructor")
+      case head :: _ =>
+        x.disambiguation = Some(head._1)
+        spec.foreach(ctx.leave)
+        base
+      case _ => error(x, "could not find a suitable constructor")
     }
   }
 
