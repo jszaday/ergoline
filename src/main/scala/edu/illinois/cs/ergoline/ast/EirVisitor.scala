@@ -10,8 +10,29 @@ import edu.illinois.cs.ergoline.resolution.{
 }
 
 trait EirVisitor[Context, Value] {
+
+  type Matcher = PartialFunction[EirNode, Value]
+
+  def fallback(implicit ctx: Context): Matcher = new Matcher {
+    def apply(x: EirNode): Value = ???
+    def isDefinedAt(x: EirNode) = false
+  }
+
   def error(x: EirNode)(implicit ctx: Context): Value = {
     throw new RuntimeException(s"unable to visit $x in context $ctx")
+  }
+
+  def fallback(x: EirNode)(implicit ctx: Context): Value = {
+    fallback(ctx).applyOrElse[EirNode, Value](
+      x,
+      {
+        case x: EirResolvable[_] if x.resolved =>
+          val found = Find.uniqueResolution[EirNode](x)
+          if (found == x) error(found)
+          else visit(found)
+        case x => error(x)
+      }
+    )
   }
 
   def visit[A <: EirNode](it: Iterable[A])(implicit
@@ -39,13 +60,8 @@ trait EirVisitor[Context, Value] {
       case x: EirMatchCase        => visitMatchCase(x)
       case x: EirSdagWhen         => visitWhen(x)
       case x: EirAwaitMany        => visitAwaitMany(x)
-      case x: EirResolvable[_] if x.resolved =>
-        val found = Find.uniqueResolution[EirNode](x)
-        if (found == x) error(found)
-        else visit(found)
-      case x: EirUserNode => x.accept(ctx, this)
-      case null           => error(null)
-      case x              => error(x)
+      case x: EirUserNode         => x.accept(ctx, this)
+      case x                      => fallback(x)
     }
   }
 
@@ -63,7 +79,7 @@ trait EirVisitor[Context, Value] {
       case x: EirConstantFacade   => visitConstantFacade(x)
       case x: EirTemplateArgument => visitTemplateArgument(x)
       case x: EirTemplateFacade   => x.asInstanceOf[Value]
-      case _                      => error(x)
+      case _                      => fallback(x)
     }
   }
 
@@ -72,7 +88,7 @@ trait EirVisitor[Context, Value] {
       case x: EirPatternList       => visitPatternList(x)
       case x: EirExpressionPattern => visitExpressionPattern(x)
       case x: EirIdentifierPattern => visitIdentifierPattern(x)
-      case _                       => error(x)
+      case _                       => fallback(x)
     }
   }
 
@@ -83,7 +99,7 @@ trait EirVisitor[Context, Value] {
       case x: EirSymbol[_]         => visitSymbol(x)
       case x: EirScopedSymbol[_]   => visitScopedSymbol(x)
       case x: EirSpecializedSymbol => visitSpecializedSymbol(x)
-      case _                       => error(x)
+      case _                       => fallback(x)
     }
   }
 
@@ -107,7 +123,7 @@ trait EirVisitor[Context, Value] {
       case x: EirInterpolatedString => visitInterpolatedString(x)
       case x: EirCallArgument       => visitExpression(x.expr)
       case x: EirAssignment         => visitAssignment(x)
-      case x                        => error(x)
+      case x                        => fallback(x)
     }
   }
 

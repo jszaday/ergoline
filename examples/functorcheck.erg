@@ -1,0 +1,25 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+class functor {
+    def apply(x: int) {
+        println(`called non-statically with ${x}`);
+    }
+
+    // static def apply(x: int) {
+    //     println(`called statically with ${x}`);
+    // }
+}
+
+@main class functorcheck {
+
+    @entry def self() {
+        /* self. */ // call(functor);
+        /* self. */ call(new functor());
+        exit();
+    }
+
+    def call(f: int => unit) { f(42); }
+}

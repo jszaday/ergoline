@@ -15,8 +15,9 @@ import edu.illinois.cs.ergoline.passes.GenerateProxies.{
 }
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{
-  EirTemplateFacade,
+  EirPlaceholder,
   EirResolvable,
+  EirTemplateFacade,
   Find
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -85,6 +86,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       }
     }
+  }
+
+  override def fallback(implicit ctx: CodeGenerationContext): Matcher = {
+    case EirPlaceholder(_, Some(arg: EirFunctionArgument)) =>
+      ctx << ctx.nameFor(arg)
   }
 
   import GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
@@ -410,7 +416,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
            ctx << "this"
          } else {
            ctx << x.target
-         }) << fieldAccessorFor(targetTy) << ctx.nameFor(found)
+         }) << fieldAccessorFor(targetTy)(Some(x.isStatic)) << ctx.nameFor(
+          found
+        )
     }
   }
 
@@ -875,8 +883,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             args
           ) << argWrapper.map(_ => ")") << ")"
         else {
-          val fqnOrDot =
-            if (m.isStatic) "::" else fieldAccessorFor(ctx.exprType(base))
+          val fqnOrDot = fieldAccessorFor(ctx.exprType(base))(Some(m.isStatic))
           ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(
             Some(fc),
             Some(disambiguated),
@@ -991,9 +998,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def fieldAccessorFor(x: EirType): String = {
-    if (x.isPointer) "->"
-    else "."
+  def fieldAccessorFor(x: EirType)(static: Option[Boolean]): String = {
+    if (static.contains(true)) {
+      "::"
+    } else if (x.isPointer) {
+      "->"
+    } else {
+      "."
+    }
   }
 
   override def visitForLoop(
@@ -1010,7 +1022,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirCStyleHeader(declaration, test, increment) =>
         ctx << s"for (" <| (declaration, ";") << test << ";" << increment << ")" << "{" << x.body << "}"
       case h: EirForAllHeader =>
-        val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))
+        val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))(None)
         // TODO find a better name than it_
         ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
         if (h.identifiers.length == 1) {
@@ -1614,6 +1626,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       } else if (ty.isTrait) {
         "this->__self__()"
       } else {
+        // TODO this should only be shared_from_this when casting!
         "(" + nameFor(
           ctx,
           ty,
@@ -2326,8 +2339,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << ctx.nameFor(a) << "(" << value << ")"
       case (a: EirClassLike, Some(b)) if a.isPointer && b.isValueType =>
         structToTrait(value, valueTy, noCopy = requiresRef)
-      case (a: EirLambdaType, Some(b)) => ???
-      case _                           => ctx << value
+      case (a: EirLambdaType, Some(b)) =>
+        ctx << value.disambiguation.to[EirLambdaExpression]
+      case _ => ctx << value
     }
   }
 
@@ -2369,8 +2383,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "([](" << ctx.typeFor(found, Some(x)) << tmp << ")" << "{"
         ctx << "auto" << "val" << "=" << tmp << fieldAccessorFor(
           found
-        ) << "get()" << ";"
-        ctx << tmp << fieldAccessorFor(found) << "release()" << ";"
+        )(None) << "get()" << ";"
+        ctx << tmp << fieldAccessorFor(found)(None) << "release()" << ";"
         ctx << "return" << "val" << ";"
         ctx << "}" << ")(" << target << ")"
       case None => ctx << x.disambiguation

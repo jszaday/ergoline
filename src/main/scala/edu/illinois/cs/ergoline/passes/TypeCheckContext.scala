@@ -9,6 +9,7 @@ import edu.illinois.cs.ergoline.ast.types.{
 }
 import edu.illinois.cs.ergoline.resolution.Transactions.EirSubstituteTransaction
 import edu.illinois.cs.ergoline.resolution.{
+  EirPlaceholder,
   EirResolvable,
   EirTemplateFacade,
   Find,
@@ -124,7 +125,54 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
 
   val goal: mutable.Stack[EirType] = new mutable.Stack
 
-  var lambdas: List[EirLambdaExpression] = Nil
+  private var _userLambdas: Set[EirLambdaExpression] = Set()
+  private var _generatedLambdas: Map[EirExpressionNode, EirLambdaExpression] =
+    Map()
+
+  def lambdas: List[EirLambdaExpression] =
+    (_userLambdas ++ _generatedLambdas.values).toList
+
+  def registerLambda(x: EirLambdaExpression): Unit = _userLambdas += x
+
+  def makeLambda(
+      x: EirExpressionNode,
+      m: EirMember,
+      ty: EirType
+  ): EirLambdaExpression = {
+    _generatedLambdas.getOrElse(
+      x, {
+        val args = assertValid[EirFunction](m.member).functionArgs
+        val lambda = EirLambdaExpression(Some(x), args, null)
+        _generatedLambdas += (x -> lambda)
+        lambda.foundType = Some(ty)
+        lambda.body = EirBlock(Some(lambda), Nil)
+        val ret = EirReturn(Some(lambda.body), null)
+        lambda.body.children +:= ret
+        val accessor = EirScopedSymbol[EirMember](
+          x,
+          EirPlaceholder[EirMember](None, Some(m))
+        )(None)
+        accessor.disambiguation = m
+        accessor.isStatic = CheckTypes.isStatic(x)
+        ret.expression = EirFunctionCall(
+          Some(ret),
+          accessor,
+          args.map(x =>
+            EirCallArgument(
+              {
+                val p = EirPlaceholder(None, Some(x))
+                p.foundType = Some(CheckTypes.visit(x)(this))
+                p
+              },
+              isRef = false
+            )(None)
+          ),
+          Nil
+        )
+        lambda
+      }
+    )
+  }
 
   def currentSubstitution: Option[EirSubstituteTransaction] =
     _substitutions.headOption

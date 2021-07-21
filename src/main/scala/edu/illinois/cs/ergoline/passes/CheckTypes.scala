@@ -108,7 +108,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   @tailrec
-  private def isStatic(x: EirExpressionNode): Boolean = {
+  def isStatic(x: EirExpressionNode): Boolean = {
     x match {
       case x: EirCallArgument    => isStatic(x.expr)
       case x: EirFunctionCall    => isStatic(x.target)
@@ -325,7 +325,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           CheckTypes
             .findApply[EirMember]((Some(expr), None), from, Some(from)) exists {
             case (m, ty) =>
-              expr.disambiguation = Some(m)
+              expr.disambiguation = ctx.makeLambda(expr, m, ty)
               ty.canAssignTo(to)
           }
         case _ => true
@@ -749,6 +749,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             val asType = asCls.map(_.asType).map(visit)
             val accessor = mkAccessor(asCls.get, last)(value.parent)
             accessor.foundType = asType
+            // NOTE this is symptomatic of a hack that will persist
+            //      until (true) static-ness detection is more mature
+            accessor.isStatic = true
             (Some(accessor), Find.resolveAccessor(accessor)(asType, Some(true)))
           } else {
             (None, Find.resolutions[EirNamedNode](value).map((_, None)))
@@ -1151,8 +1154,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitLambdaExpression(
       node: EirLambdaExpression
   )(implicit ctx: TypeCheckContext): EirType = {
-    if (!ctx.lambdas.contains(node)) ctx.lambdas +:= node
-
+    ctx.registerLambda(node)
     ctx.lambdaWith(expand(node.args), visit(node.body))
   }
 
