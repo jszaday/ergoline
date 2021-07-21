@@ -97,6 +97,7 @@ abstract class EirExpressionNode extends EirNode {
 
   def disambiguation: Option[EirNode] = _disambiguation
   def disambiguation_=(x: Option[EirNode]): Unit = _disambiguation = x
+  final def disambiguation_=(x: EirNode): Unit = this.disambiguation = Option(x)
 
   def foundType: Option[EirType] = _foundType
   def foundType_=(x: Option[EirType]): Unit = _foundType = x
@@ -729,17 +730,22 @@ case class EirLambdaExpression(
     var body: EirBlock
 ) extends EirExpressionNode {
 
+  private[this] def hasArgument(x: EirFunctionArgument): Boolean = {
+    x.parent.contains(this) || args.contains(x)
+  }
+
   def captures: List[EirNamedNode] = {
     val predicate = (x: EirNode) =>
       x match {
-        case s: EirSymbol[_] =>
-          val resolution = Find.uniqueResolution[EirNode](s)
-          Some(resolution match {
-            case f: EirFunctionArgument             => !f.parent.contains(this)
-            case d: EirDeclaration                  => !Find.ancestors(d).contains(this)
-            case EirMember(_, _: EirDeclaration, _) => true
-            case _                                  => false
-          })
+        case s: EirScopedSymbol[_] => Some(false)
+        case s: EirResolvable[_] => Find
+            .resolutions[EirNamedNode](s)
+            .collectFirst({
+              case f: EirFunctionArgument             => !hasArgument(f)
+              case d: EirDeclaration                  => !Find.ancestors(d).contains(this)
+              case EirMember(_, _: EirDeclaration, _) => true
+              case _                                  => false
+            })
         case _ => Some(false)
       }
     Find

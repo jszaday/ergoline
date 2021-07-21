@@ -194,8 +194,10 @@ object GenerateDecls {
   )(implicit ctx: CodeGenerationContext): Unit = {
     val cls = assertValid[EirClass](Find.asClassLike(x))
     val accessor = CheckTypes.mkAccessor[EirMember](cls, "iter")(None)
-    val iter =
-      Find.resolveAccessor(accessor, Some(x))(ctx.tyCtx).headOption.map(_._1)
+    val iter = Find
+      .resolveAccessor(accessor)(Some(x), Some(false))(ctx.tyCtx)
+      .headOption
+      .map(_._1)
 
     if (
       !iter.exists(z =>

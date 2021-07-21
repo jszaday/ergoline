@@ -10,9 +10,12 @@ import edu.illinois.cs.ergoline.ast.{
   EirClass,
   EirClassLike,
   EirConstantFacade,
+  EirFunction,
+  EirMember,
   EirTrait
 }
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
@@ -74,6 +77,19 @@ object TypeCompatibility {
     }
   }
 
+  private def canAssignHelper(ours: EirType, theirs: EirLambdaType)(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
+    CheckTypes.findApply[EirMember](
+      ExpressionScope(None, None),
+      ours,
+      Some(ours)
+    ) exists {
+      case (_, t: EirLambdaType) => t.canAssignTo(theirs)
+      case _                     => false
+    }
+  }
+
   implicit class RichEirType(ours: EirType) {
 
     def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean =
@@ -92,7 +108,9 @@ object TypeCompatibility {
             }
           }
         case (x: EirTemplatedType, y: EirTemplatedType) => canAssignHelper(x, y)
-        case (x: EirClassLike, y: EirClassLike)         => x.isDescendantOf(y)
+        case (_: EirClassLike | _: EirTemplatedType, y: EirLambdaType) =>
+          canAssignHelper(ours, y)
+        case (x: EirClassLike, y: EirClassLike) => x.isDescendantOf(y)
         case (x: EirTupleType, y: EirTupleType) =>
           x.children.length == y.children.length &&
             x.children

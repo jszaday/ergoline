@@ -1,0 +1,29 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+class functor {
+
+    static def apply(x: int): int {
+        return 2 * x;
+    }
+
+    def apply(x: int): int {
+        return functor(x) + 1;
+    }
+}
+
+@main class functorcheck {
+
+    @entry def self() {
+        val res = call(new functor(), functor, 1);
+        assert(res == 5);
+        println("info> all tests passed~!");
+        exit();
+    }
+
+    def call(f: int => int, g: int => int, i: int): int { 
+        return f(g(i));
+    }
+}

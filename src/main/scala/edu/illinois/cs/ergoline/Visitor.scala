@@ -884,8 +884,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
     seq match {
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil
-          if isAssignOperator(op) =>
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
         enter(
           EirAssignment(parent, lhs, op, rhs),
           (expr: EirAssignment) => {
@@ -917,7 +916,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   )
 
   def isAssignOperator(op: String): Boolean = {
-    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals.isComparisonOperator(op))
+    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
+      .isComparisonOperator(op))
   }
 
   def precedenceOf(op: String): Int = {

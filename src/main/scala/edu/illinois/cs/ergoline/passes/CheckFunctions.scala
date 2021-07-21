@@ -21,6 +21,11 @@ object CheckFunctions {
       b: EirFunction
   ): Boolean = {
     (a.templateArgs.isEmpty && b.templateArgs.isEmpty) && {
+      a.parent
+        .to[EirMember]
+        .zip(b.parent.to[EirMember])
+        .forall({ case (a, b) => a.isStatic == b.isStatic })
+    } && {
       val as = CheckTypes.visit(a.functionArgs)
       val bs = CheckTypes.visit(b.functionArgs)
       CheckTypes.argumentsMatch(as, bs, exact = true)
