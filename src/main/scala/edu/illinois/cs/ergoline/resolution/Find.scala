@@ -192,7 +192,8 @@ object Find {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
     val matches = withName(name)
     val predicate: EirNode => Option[Boolean] = {
-      case _: EirBlock => None
+      case _: EirBlock   => None
+      case x: EirForLoop => Option.when(ancestors.contains(x))(false)
       // only allowed to consider members when within the class?
       case x: EirMember =>
         Option.when(matches(x) && ancestors.contains(x.base))(false)

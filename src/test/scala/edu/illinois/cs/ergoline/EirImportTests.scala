@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClas
 import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.util.Errors.EirException
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
@@ -104,6 +105,22 @@ class EirImportTests extends AnyFunSuite {
     Processes.onLoad(module)
   }
 
+  test("for should encapsulate variable") {
+    setupEnv()
+
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |def test (n: int) {
+      |  for (var i = 0; i < (n - 1); i += 1) { test(i); }
+      |  assert(i == (n - 1));
+      |}
+      |""".stripMargin)
+
+    assertThrows[EirException]({
+      Processes.onLoad(module)
+    })
+  }
 
   test("find implementation of") {
     setupEnv()
