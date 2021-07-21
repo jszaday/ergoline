@@ -2411,7 +2411,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   // TODO implement this?
-  private def escapeInterpString(s: String) = "\"" + s + "\""
+  private def escapeInterpString(s: String) = "std::string(\"" + s + "\")"
 
   override def visitInterpolatedString(
       str: EirInterpolatedString
