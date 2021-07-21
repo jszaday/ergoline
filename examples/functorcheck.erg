@@ -19,7 +19,7 @@ class functor {
     @entry def self() {
         val res = call(new functor(), functor, 1);
         assert(res == 5);
-        println("info> all tests passed~!");
+        println(`info> all tests passed~!`);
         exit();
     }
 
