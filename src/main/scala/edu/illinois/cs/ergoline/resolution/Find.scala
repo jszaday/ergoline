@@ -292,9 +292,11 @@ object Find {
 
     def helper(x: EirMember): Option[(EirMember, Option[EirSpecialization])] = {
       // permits pure (non-)static and static access of non-static members (e.g., int::+)
-      val isValid = static.zip(Some(x.isStatic)).forall { case (a, b) =>
-        a == b || (a && !b)
+      val isValid = (static, x.isStatic) match {
+        case (Some(a), b) => a == b || (a && !b)
+        case _            => true
       }
+
       Option.when(isValid)((x, Option(base).to[EirSpecialization]))
     }
 

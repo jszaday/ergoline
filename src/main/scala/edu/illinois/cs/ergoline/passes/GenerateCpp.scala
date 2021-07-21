@@ -927,6 +927,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def isFunctor(expr: EirExpressionNode, clarifier: EirNode): Boolean = {
+    clarifier match {
+      case m: EirMember if m.name == "apply" =>
+        // TODO this assumption may be weak!
+        !expr.isInstanceOf[EirScopedSymbol[_]]
+      case _ => false
+    }
+  }
+
   override def visitFunctionCall(
       x: EirFunctionCall
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -947,6 +956,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         (x.args, implicits)
       )
     } else {
+      val functor = isFunctor(x.target, disambiguated)
       if (isAsync) {
         val retTy = disambiguated match {
           case EirMember(_, f: EirFunction, _) => ctx.resolve(f.returnType)
@@ -981,9 +991,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           )
         } << ")"
       } else {
-        if (isPointer) ctx << "(*"
-        ctx << x.target
-        if (isPointer) ctx << ")"
+        if (functor) {
+          val static = asMember(disambiguated).map(_.isStatic)
+          ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
+            ctx.nameFor(disambiguated)
+          }
+        } else {
+          if (isPointer) ctx << "(*"
+          ctx << x.target
+          if (isPointer) ctx << ")"
+        }
         ctx << visitSpecialization(x) << "(" << {
           ctx << visitArguments(
             Some(x),
@@ -1253,10 +1270,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitMember(
       x: EirMember
-  )(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << Option.when(x.isStatic)("static")
-    visit(x.member)
-  }
+  )(implicit ctx: CodeGenerationContext): Unit = visit(x.member)
 
   def templateArgumentsToString(
       ctx: CodeGenerationContext,
@@ -1657,10 +1671,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit
       ctx: CodeGenerationContext
   ): Option[String] = {
+    val staticFn = asMember(x) exists {
+      case m @ EirMember(_, _: EirFunction, _) => m.isStatic
+      case _                                   => false
+    }
     val system = x.annotation("system")
     val prefix = x.memberParent
       .filter(y => system.isEmpty && y.isSystem)
       .collect { case n: EirNamedNode => n.name }
+      .getOrElse("") + (if (staticFn && system.isEmpty) "__s" else "")
     val alias = system.flatMap(_("alias")).map(_.strip())
     val isOperator = system.flatMap(_("operator")).exists(_.toBoolean)
     alias
@@ -1676,7 +1695,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         else x
       })
       .map(b => {
-        prefix.map(a => (a + "_" + b)).getOrElse(b)
+        if (prefix.nonEmpty) s"${prefix}_$b" else b
       })
   }
 

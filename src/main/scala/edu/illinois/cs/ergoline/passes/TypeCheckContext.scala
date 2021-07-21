@@ -38,6 +38,11 @@ object TypeCheckContext {
     Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
   }
 
+  case class ExpressionScope(
+      args: Option[EirExpressionNode],
+      acc: Option[EirExpressionNode]
+  )
+
   object TypeCheckSyntax {
     implicit class RichEirTemplateArgument(argument: EirTemplateArgument) {
       // TODO implement this, check upper/lower/type bounds

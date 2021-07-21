@@ -4,22 +4,26 @@ import ergoline::_;
 import ck;
 
 class functor {
-    def apply(x: int) {
-        println(`called non-statically with ${x}`);
+
+    static def apply(x: int): int {
+        return 2 * x;
     }
 
-    // static def apply(x: int) {
-    //     println(`called statically with ${x}`);
-    // }
+    def apply(x: int): int {
+        return functor(x) + 1;
+    }
 }
 
 @main class functorcheck {
 
     @entry def self() {
-        /* self. */ // call(functor);
-        /* self. */ call(new functor());
+        val res = call(new functor(), functor, 1);
+        assert(res == 5);
+        println("info> all tests passed~!");
         exit();
     }
 
-    def call(f: int => unit) { f(42); }
+    def call(f: int => int, g: int => int, i: int): int { 
+        return f(g(i));
+    }
 }
