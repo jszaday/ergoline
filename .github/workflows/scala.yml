@@ -27,7 +27,6 @@ jobs:
         git submodule init
         git submodule update
         cd hypercomm
-        git checkout origin miniFixes
         cmake .
         make -j2
       env:
