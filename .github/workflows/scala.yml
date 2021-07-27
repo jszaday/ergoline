@@ -27,7 +27,7 @@ jobs:
         git submodule init
         git submodule update
         cd hypercomm
-        git pull
+        git pull origin portSource
         git checkout portSource
         cmake .
         make -j2
