@@ -45,11 +45,11 @@ struct object_base_ {
   virtual std::shared_ptr<object_base_> __this_object__(void) = 0;
 };
 
-template<typename T>
-struct object : public std::enable_shared_from_this<T>,
-                virtual public hypercomm::polymorph,
-                virtual public hypercomm::comparable,
-                virtual public object_base_ {
+template <typename T>
+struct object : virtual public object_base_,
+                public hypercomm::polymorph,
+                public hypercomm::virtual_enable_shared_from_this<object_base_>,
+                virtual public hypercomm::comparable {
   virtual bool equals(const std::shared_ptr<comparable>& other) const override {
     return this == dynamic_cast<object*>(other.get());
   }
@@ -59,10 +59,10 @@ struct object : public std::enable_shared_from_this<T>,
   }
 };
 
-template<class T>
+template <class T>
 struct trait : virtual public hypercomm::polymorph::trait,
                virtual public object_base_ {
- friend T;
+  friend T;
 
  private:
   inline std::shared_ptr<T> __self__(void) {

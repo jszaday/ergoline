@@ -177,8 +177,8 @@ object GenerateProxies {
     ctx << "inline void __init_mailboxes__(void) {"
     mailboxes.foreach(mboxName => {
       val ty = mboxName + "type"
-      ctx << "using" << ty << "=" << "typename decltype(" << mboxName << ")::element_type;"
-      ctx << "this->" << mboxName << s"=std::dynamic_pointer_cast<$ty>(" << "this->emplace_component<" << ty << ">());"
+      ctx << "using" << ty << "=" << "typename decltype(" << mboxName << ")::type;"
+      ctx << "this->" << mboxName << s"=" << "this->emplace_component<" << ty << ">();"
     })
     ctx << "}"
 
@@ -250,11 +250,11 @@ object GenerateProxies {
 
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val (name, tys) = mailboxName(ctx, x)
-    ctx << s"std::shared_ptr<ergoline::mailbox<${tys mkString ", "}>> $name;"
+    ctx << s"hypercomm::comproxy<ergoline::mailbox<${tys mkString ", "}>> $name;"
   }
 
   def getMailboxType(name: String): String =
-    s"typename decltype($name)::element_type::type"
+    s"typename decltype($name)::type::type"
 
   def makeMailboxBody(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val mboxName = "this->" + mailboxName(ctx, x)._1
