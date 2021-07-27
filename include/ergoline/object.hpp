@@ -41,19 +41,21 @@ element_t<Proxy> create_element(Proxy& proxy, const Index& idx, CkMessage* msg,
   return element;
 }
 
-struct object_base_
-    : public hypercomm::polymorph,
-      public hypercomm::virtual_enable_shared_from_this<object_base_> {
-  virtual std::shared_ptr<object_base_> __this_object__(void) {
-    return this->shared_from_this();
-  }
+struct object_base_ {
+  virtual std::shared_ptr<object_base_> __this_object__(void) = 0;
 };
 
 template <typename T>
 struct object : virtual public object_base_,
+                public hypercomm::polymorph,
+                public hypercomm::virtual_enable_shared_from_this<object_base_>,
                 virtual public hypercomm::comparable {
   virtual bool equals(const std::shared_ptr<comparable>& other) const override {
     return this == dynamic_cast<object*>(other.get());
+  }
+
+  virtual std::shared_ptr<object_base_> __this_object__(void) override {
+    return this->shared_from_this();
   }
 };
 
