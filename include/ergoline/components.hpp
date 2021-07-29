@@ -29,9 +29,9 @@ class component : public hypercomm::component {
   }
 };
 
-template <typename Index, typename Fn>
+template <typename BaseIndex, typename Index, typename Fn>
 inline hypercomm::comproxy<ergoline::component> make_component(
-    hypercomm::locality_base<Index>& self, const std::size_t& n_inputs,
+    hypercomm::vil<BaseIndex, Index>& self, const std::size_t& n_inputs,
     const Fn& fn) {
   return self.template emplace_component<ergoline::component>(n_inputs, fn);
 }
