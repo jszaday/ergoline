@@ -280,14 +280,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   val corePupables: Seq[String] = Seq(
     "hypercomm::future_port",
     "hypercomm::port_opener",
-    "hypercomm::forwarding_callback",
+    "hypercomm::forwarding_callback<CkArrayIndex>",
     "hypercomm::inter_callback"
   )
 
   val localityPupables: Seq[String] = Seq(
     "hypercomm::vector_section",
     "hypercomm::reduction_port",
-    "hypercomm::broadcaster"
+    "hypercomm::broadcaster<CkArrayIndex,"
   )
 
   def registerPolymorphs(ctx: CodeGenerationContext): Unit = {
@@ -309,7 +309,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     regdIdxs foreach { x =>
       localityPupables foreach (y => {
         ctx << "hypercomm::enroll<" << y
-        ctx << "<" << ctx.typeFor(x, global) << ">>" << "()" << ";"
+        val numLess = y.count(_ == '<')
+        ctx << Option.unless(numLess > 0 && y.count(_ == '>') <= numLess)("<") << ctx.typeFor(x, global) << ">>" << "()" << ";"
       })
     }
 
