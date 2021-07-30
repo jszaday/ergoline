@@ -10,7 +10,7 @@ import ck;
     val senders: sender@group;
     val receivers: receiver@group;
 
-    @entry def avalanche(args: array<string>) {
+    @entry def self(args: array<string>) {
         numIters = (args.size() > 1) ? args[1].toInt() : 256;
         numReps = (numIters >= 256) ? 129 : (numIters / 2 + 1);
 
@@ -46,7 +46,7 @@ import ck;
 class receiver {
     val numIters: int;
 
-    @entry def receiver(=numIters: int) {}
+    @entry def self(=numIters: int) {}
 
     @mailbox def receive(it: int);
 
@@ -63,8 +63,8 @@ class sender {
     val numIters: int;
     val receivers: receiver@group;
 
-    @entry def sender(=numIters: int,
-                      =receivers: receiver@group) {}
+    @entry def self(=numIters: int,
+                    =receivers: receiver@group) {}
 
     @entry def send() {
         for (var i = 0; i < numIters; i += 1) {

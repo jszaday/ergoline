@@ -10,7 +10,7 @@ import ck;
     val arr: array<double>;
     val rcvrs: receiver@array1d;
 
-    @entry def arrsend() {
+    @entry def self() {
         nElements = ck::numPes();
         nIters = 256;
         arr = new array<double>(nIters * 512);
@@ -53,12 +53,12 @@ import ck;
 }
 
 class receiver {
-    @entry def receiver() {}
+    @entry def self() {}
     @entry def receive(h: holder) {}
     @entry def receive(a: array<double>) {}
 }
 
 class holder {
     val arr: array<double>;
-    def holder(=arr: array<double>) {}
+    def self(=arr: array<double>) {}
 }

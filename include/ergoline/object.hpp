@@ -1,7 +1,7 @@
 #ifndef __ERGOLINE_OBJECT_HPP__
 #define __ERGOLINE_OBJECT_HPP__
 
-#include <hypercomm/core/locality_base.hpp>
+#include <hypercomm/core/common.hpp>
 #include <hypercomm/core/comparable.hpp>
 #include <hypercomm/utilities.hpp>
 

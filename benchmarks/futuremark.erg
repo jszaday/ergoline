@@ -8,7 +8,7 @@ import ck;
     val numIters: int;
     val exchangers: exchanger@group;
 
-    @entry def futuremark(args: array<string>) {
+    @entry def self(args: array<string>) {
         numReps = 11;
         numIters = (args.size() > 1) ? args[1].toInt() : 128;
         exchangers = new exchanger@group();
@@ -36,7 +36,7 @@ import ck;
 }
 
 class exchanger {
-    @entry def exchanger() {}
+    @entry def self() {}
 
     @entry def recvFuture(f: ck::future<int>) {
         f.set(self[@]index());
