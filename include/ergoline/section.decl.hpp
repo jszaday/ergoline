@@ -5,6 +5,7 @@
 #include <hypercomm/core/inter_callback.hpp>
 
 #include <hypercomm/sections.hpp>
+#include <hypercomm/sections/imprintable.hpp>
 
 #include "array.hpp"
 
@@ -20,13 +21,16 @@ template <typename T>
 using iterator_t = std::shared_ptr<iterator<iterator_value_t<T>>>;
 
 template <typename T>
+using imprintable_t = hypercomm::imprintable<iterator_value_t<T>>;
+
+template <typename T>
 iterator_t<T> access_value_iter(const T&);
 
 template <typename T>
 iterator_t<T> access_ref_iter(const std::shared_ptr<T>&);
 
 template <typename T>
-hypercomm::vector_section<iterator_value_t<T>> conv2section(const T&);
+std::shared_ptr<imprintable_t<T>> conv2section(const T&);
 
 hypercomm::combiner_ptr make_null_combiner(void);
 }

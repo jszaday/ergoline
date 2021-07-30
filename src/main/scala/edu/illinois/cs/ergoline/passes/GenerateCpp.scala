@@ -788,7 +788,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     } << "ergoline::conv2section(" << stripSection(
       target
-    ) << ").clone()" << "," << {
+    ) << ")" << "," << {
       epIndexFor(proxy, member, hasArgs)
     } << ", hypercomm::pack_to_port({}" << Option.when(hasArgs)(",") << {
       visitArguments(Some(fc), Some(member), args)
