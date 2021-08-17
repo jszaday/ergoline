@@ -264,7 +264,7 @@ object GenerateProxies {
     val ty = name.init + "_type__"
 
     ctx << "using" << ty << "=" << getMailboxType(mboxName) << ";"
-    ctx << "auto" << name << "=" << "std::make_shared<hypercomm::typed_value<" << ty << ">>(" << msg << ");"
+    ctx << "auto" << name << "=" << "hypercomm::typed_value<" << ty << ">::from_message(" << msg << ");"
     ctx << mboxName << "->receive_value(0,std::move(" << name << "));"
   }
 

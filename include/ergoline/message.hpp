@@ -16,7 +16,7 @@ CkMessage* repack(const A& a,
   }
 #endif
 
-  auto msg = hypercomm::utilities::unwrap_message(std::move(array->source));
+  auto msg = (CkMessage*)hypercomm::utilities::unwrap_message(std::move(array->source));
   auto buf = hypercomm::utilities::get_message_buffer(msg);
 
   PUP::toMem p(buf);
