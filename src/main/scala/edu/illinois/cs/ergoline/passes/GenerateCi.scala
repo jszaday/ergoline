@@ -32,7 +32,6 @@ object GenerateCi {
       case None =>
     }
 
-    ctx << "extern module locality;"
     ctx << "initproc void setup_environment(void);"
 
     ProxyManager.proxies
@@ -96,7 +95,7 @@ object GenerateCi {
     // TODO bring template args and inheritance into consideration
     GenerateCpp.visitTemplateArgs(proxy.templateArgs)(ctx)
     ctx << visitChareType(proxy.isMain, proxy.collective) << proxy.baseName
-    ctx << ":" << "locality_base_" << "{" << {
+    ctx << ":" << "hypercomm::locality_base_" << "{" << {
       proxy.membersToGen.foreach(visit(ctx, proxy, _))
     } << "};"
   }

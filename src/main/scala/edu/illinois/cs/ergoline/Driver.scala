@@ -89,10 +89,11 @@ object Driver extends App {
     val hyperLibsPath = Modules.hypercommHome.map(_.resolve("lib"))
 
     val hyperLibs = Seq(
-      "components",
+      "core",
       "utilities",
-      "serialization",
-      "messaging"
+      "components",
+      "messaging",
+      "serialization"
     ).map(x => s"-lhypercomm-$x")
 
     val inclPaths: Seq[String] = (hyperInclPaths ++ ergoInclPaths)
