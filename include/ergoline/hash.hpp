@@ -83,7 +83,8 @@ std::size_t hash(const T&... args) {
 
 namespace hypercomm {
 template <typename K, typename V>
-struct puper<ergoline::hash_map<K, V>> {
+struct puper<ergoline::hash_map<K, V>,
+             typename std::enable_if<!is_specialization_of<std::shared_ptr, K>::value>::type> {
   inline static void impl(serdes& s, ergoline::hash_map<K, V>& t) {
     if (s.unpacking()) {
       std::size_t size;
