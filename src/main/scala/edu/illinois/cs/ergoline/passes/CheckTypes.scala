@@ -14,6 +14,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
+import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
@@ -38,8 +39,15 @@ import edu.illinois.cs.ergoline.util.{
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
-object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
+class CheckTypes extends Pass {
+  override def apply(n: EirNode): Unit = {
+    CheckTypes.visit(n)(Processes.typeContext())
+  }
+  override def after: Seq[Pass] = Seq(Registry.instance[FullyResolve])
+  override def phase: Phase = Phase.Load
+}
 
+object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   // TODO this should consider the current substitutions, and check each unique substitution!
   var classCache: List[EirClass] = Nil
 

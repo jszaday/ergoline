@@ -3,7 +3,12 @@ package edu.illinois.cs.ergoline
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths}
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.passes.{
+  CheckTypes,
+  FullyResolve,
+  Processes,
+  Registry
+}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
