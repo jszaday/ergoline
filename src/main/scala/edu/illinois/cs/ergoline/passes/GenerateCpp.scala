@@ -589,7 +589,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           Errors.expectedCallback(target)
         }
-      case EirSymbol(_, "exit" :: _) if (globals.ergolineModule == disambiguate(ctx, target).parent) =>
+      case EirSymbol(_, "exit" :: _)
+          if (globals.ergolineModule == disambiguate(ctx, target).parent) =>
         ctx << "CkCallback(CkCallback::ckExit)"
       case _ => Errors.expectedCallback(target)
     }
