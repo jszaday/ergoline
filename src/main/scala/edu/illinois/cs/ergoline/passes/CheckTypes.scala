@@ -48,8 +48,6 @@ class CheckTypes extends Pass {
 }
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
-  Registry.instance[CheckTypes]
-
   // TODO this should consider the current substitutions, and check each unique substitution!
   var classCache: List[EirClass] = Nil
 

@@ -21,8 +21,6 @@ class FullyResolve extends Pass {
 }
 
 object FullyResolve {
-  Registry.instance[FullyResolve]
-
   def seekImports(node: EirNode, stack: List[EirNode] = Nil): Unit = {
     val kids = Option.unless(stack.contains(node))(node.children).getOrElse(Nil)
     kids.foreach({

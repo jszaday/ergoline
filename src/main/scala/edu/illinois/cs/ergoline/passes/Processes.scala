@@ -11,6 +11,13 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, TopologicalSort, isSystem}
 
 object Processes {
+  def registerPasses(): Unit = {
+    Registry.instance[FullyResolve]
+    Registry.instance[CheckTypes]
+  }
+
+  registerPasses()
+
   var cppIncludes: Set[String] = Set(
     "algorithm",
     "memory",
@@ -32,12 +39,12 @@ object Processes {
     ("iterable", "ergoline/section.def.hpp")
   )
 
-  private var ctx: TypeCheckContext = new TypeCheckContext()
+  private var ctx: TypeCheckContext = new TypeCheckContext
 
   def typeContext(): TypeCheckContext = ctx
 
   def reset(): Unit = {
-    ctx = new TypeCheckContext()
+    ctx = new TypeCheckContext
   }
 
   def isMain(node: EirNode): Boolean = {
