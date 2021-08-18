@@ -207,7 +207,18 @@ case class EirProxy(
       .exists(opts => {
         val enabled = opts.keys.filter(ProxyManager.isChareDescriptor).toList
         enabled.isEmpty || enabled.contains(descriptor)
-      })
+      }) && {
+      m.member match {
+        case f: EirFunction =>
+          val retTy = Find.uniqueResolution[EirType](f.returnType)
+          (retTy == globals.unitType) || m.annotations.exists(x => {
+            x.name == "local" || x.name == "sync" || x.name == "async" || {
+              Errors.cannotCast(f, retTy, globals.unitType)
+            }
+          })
+        case _ => false
+      }
+    }
   }
 
   private def indices: Option[List[EirType]] = {

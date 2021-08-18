@@ -1,0 +1,15 @@
+package or;
+
+import ergoline::_;
+
+@system struct placeholder<A, N: int = 1> {
+    using shapeType = (int) .* N;
+
+    @system val shape: shapeType;
+
+    @system static def apply(n: *shapeType): placeholder<A, N>;
+
+    @system def get(idx: *shapeType): A;
+
+    @system def set(idx: *shapeType, value: A);
+}

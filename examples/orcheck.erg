@@ -1,0 +1,45 @@
+package examples;
+
+import ergoline::_;
+import ck;
+import or;
+
+@main class orcheck {
+    @entry def self(args: array<string>) {
+        val n = ck::numPes() * 4;
+        val cs = new communicator@array1d(n, n);
+        cs.sample();
+    }
+}
+
+class communicator {
+    val n: int;
+
+    @entry def self(=n: int) {}
+
+    @entry def print_value(x: double): unit {
+        println(`${self[@]index()}> has value: ${x}`);
+    }
+
+    @local @entry def gen_value(): double {
+        return (self[@]index()).toDouble();
+    }
+
+    @local @entry def add_values(x: double, y: double): double {
+        return x + y;
+    }
+
+    @charisma @entry def sample() {
+        val values = or::placeholder<double, 1>(n);
+        val sums = or::placeholder<double, 1>(n);
+
+        for (i <- (0 to n)) {
+            values[i] = self@[i].gen_value();
+            self@[i].print_value(values[i]);
+            sums[i] = self@[i].add_values(values[i], values[(i + 1) % n]);
+            self@[i].print_value(sums[i]);
+        }
+
+        self[@]contribute(exit);
+    }
+}
