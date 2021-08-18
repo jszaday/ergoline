@@ -311,7 +311,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       localityPupables foreach (y => {
         ctx << "hypercomm::enroll<" << y
         val numLess = y.count(_ == '<')
-        ctx << Option.unless(numLess > 0 && y.count(_ == '>') <= numLess)("<") << ctx.typeFor(x, global) << ">>" << "()" << ";"
+        ctx << Option.unless(numLess > 0 && y.count(_ == '>') <= numLess)(
+          "<"
+        ) << ctx.typeFor(x, global) << ">>" << "()" << ";"
       })
     }
 
@@ -785,7 +787,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       stripSection(target, getProxy = true) match {
         case s: EirSymbol[_] if CheckTypes.isSelf(s) =>
           ctx << "this->broadcast("
-        case s => ctx << "hypercomm::broadcast_to(hypercomm::make_proxy(" << s << "),"
+        case s =>
+          ctx << "hypercomm::broadcast_to(hypercomm::make_proxy(" << s << "),"
       }
     } << "ergoline::conv2section(" << stripSection(
       target

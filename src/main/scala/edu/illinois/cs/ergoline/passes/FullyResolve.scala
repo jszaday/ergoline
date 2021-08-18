@@ -6,10 +6,22 @@ import edu.illinois.cs.ergoline.ast.{
   EirNode,
   EirScopedSymbol
 }
+import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
+import scala.reflect.{ClassTag, classTag}
+
+class FullyResolve extends Pass {
+  override def apply(n: EirNode): Unit = FullyResolve.visit(n)
+  override def after: Seq[Pass] = Seq()
+  override def phase: Phase = Phase.Load
+  override def canEnter[B <: EirNode: ClassTag]: Boolean =
+    classTag[B] == classTag[EirFileSymbol]
+}
+
 object FullyResolve {
+  Registry.instance[FullyResolve]
 
   def seekImports(node: EirNode, stack: List[EirNode] = Nil): Unit = {
     val kids = Option.unless(stack.contains(node))(node.children).getOrElse(Nil)

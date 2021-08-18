@@ -1,20 +1,14 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
-import edu.illinois.cs.ergoline.ast.{EirClassLike, _}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirNode
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.{
-  EirPlaceholder,
-  EirTemplateFacade,
-  Find,
-  Modules
-}
-import edu.illinois.cs.ergoline.util.{Errors, isSystem}
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
+import edu.illinois.cs.ergoline.util.{Errors, TopologicalSort, isSystem}
 
 object Processes {
   var cppIncludes: Set[String] = Set(
@@ -38,10 +32,12 @@ object Processes {
     ("iterable", "ergoline/section.def.hpp")
   )
 
-  private var ctx = new TypeCheckContext
+  private var ctx: TypeCheckContext = new TypeCheckContext()
+
+  def typeContext(): TypeCheckContext = ctx
 
   def reset(): Unit = {
-    ctx = new TypeCheckContext
+    ctx = new TypeCheckContext()
   }
 
   def isMain(node: EirNode): Boolean = {
@@ -52,16 +48,19 @@ object Processes {
     val all =
       (node +: Modules.fileSiblings.getOrElse(node, Nil)).sortBy(!isMain(_))
 
-    for (x <- all) {
-      FullyResolve.visit(x)
-
-      x match {
-        case n: EirNamespace =>
-          CheckTypes.visit(n.children.filterNot(_.isInstanceOf[EirFileSymbol]))(
-            ctx
-          )
-        case _ => CheckTypes.visit(x)(ctx)
-      }
+    for (node <- all) {
+      Registry.onLoad.foreach(pass => {
+        if (pass.canEnter[EirFileSymbol]) {
+          pass(node)
+        } else {
+          node match {
+            case n: EirNamespace => n.children
+                .filterNot(_.isInstanceOf[EirFileSymbol])
+                .foreach(pass(_))
+            case _ => pass(node)
+          }
+        }
+      })
     }
   }
 
@@ -218,19 +217,7 @@ object Processes {
   object RichProcessesSyntax {
     implicit class RichEirClassList(self: List[EirClassLike]) {
 
-      // TODO use a topological instead of greedy sorting algorithm
-      def dependenceSort(): List[EirClassLike] = {
-        var unplaced = self.sortBy(_.inherited.size)
-        var placed: List[EirClassLike] = Nil
-        while (unplaced.nonEmpty) {
-          val idx = unplaced.indexWhere(
-            !_.inherited.map(Find.asClassLike).exists(unplaced.contains(_))
-          )
-          placed :+= unplaced(idx)
-          unplaced = unplaced.patch(idx, Nil, 1)
-        }
-        placed
-      }
+      def dependenceSort(): List[EirClassLike] = TopologicalSort.sort(self)
 
       def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
         self.orderedPartition(x => {

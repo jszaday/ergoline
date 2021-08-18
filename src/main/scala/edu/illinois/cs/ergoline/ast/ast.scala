@@ -13,7 +13,12 @@ import edu.illinois.cs.ergoline.resolution.{
   Modules
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, isSystem}
+import edu.illinois.cs.ergoline.util.{
+  AstManipulation,
+  Errors,
+  TopologicalSort,
+  isSystem
+}
 import edu.illinois.cs.ergoline.{globals, util}
 
 import java.io.File
@@ -291,7 +296,8 @@ trait EirClassLike
     with EirType
     with EirScope
     with EirNamedNode
-    with EirSpecializable {
+    with EirSpecializable
+    with TopologicalSort.Constrained[EirClassLike] {
   var isAbstract: Boolean = false
   private var _derived: Set[EirClassLike] = Set()
 
@@ -323,6 +329,8 @@ trait EirClassLike
 
   def inherited: Iterable[EirResolvable[EirType]] =
     extendsThis ++ implementsThese
+
+  def after: Seq[EirClassLike] = this.inherited.map(Find.asClassLike).toSeq
 
   def derived: Set[EirClassLike] = _derived
   def derived_=(x: Set[EirClassLike]): Unit = _derived = x
