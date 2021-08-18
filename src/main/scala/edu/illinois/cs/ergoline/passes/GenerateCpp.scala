@@ -280,8 +280,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   val corePupables: Seq[String] = Seq(
     "hypercomm::future_port",
     "hypercomm::port_opener",
-    "hypercomm::forwarding_callback<CkArrayIndex>",
-    "hypercomm::inter_callback"
+    "hypercomm::null_combiner",
+    "hypercomm::inter_callback",
+    "hypercomm::forwarding_callback<CkArrayIndex>"
   )
 
   val localityPupables: Seq[String] = Seq(
@@ -784,7 +785,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       stripSection(target, getProxy = true) match {
         case s: EirSymbol[_] if CheckTypes.isSelf(s) =>
           ctx << "this->broadcast("
-        case s => ctx << "hypercomm::broadcast_to(" << s << ","
+        case s => ctx << "hypercomm::broadcast_to(hypercomm::make_proxy(" << s << "),"
       }
     } << "ergoline::conv2section(" << stripSection(
       target

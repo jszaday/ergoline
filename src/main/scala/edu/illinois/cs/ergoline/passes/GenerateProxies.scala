@@ -260,11 +260,17 @@ object GenerateProxies {
     val mboxName = "this->" + mailboxName(ctx, x)._1
     val name = "__value__"
     val f = assertValid[EirFunction](x.member)
-    val msg = if (f.functionArgs.isEmpty) "nullptr" else "__msg__"
     val ty = name.init + "_type__"
 
     ctx << "using" << ty << "=" << getMailboxType(mboxName) << ";"
-    ctx << "auto" << name << "=" << "std::make_shared<hypercomm::typed_value<" << ty << ">>(" << msg << ");"
+    ctx << "auto" << name << "="
+
+    if (f.functionArgs.isEmpty) {
+      ctx << "hypercomm::make_unit_value();"
+    } else {
+      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << "__msg__" << ");"
+    }
+
     ctx << mboxName << "->receive_value(0,std::move(" << name << "));"
   }
 
