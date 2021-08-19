@@ -32,6 +32,13 @@ import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
+
+  case class CppNode(s: String) extends EirExpressionNode with EirEncloseExempt {
+    override var parent: Option[EirNode] = None
+    override def children: Iterable[EirNode] = Nil
+    override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  }
+
   var visited: List[EirNode] = Nil
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
     (ctx, x) => visit(x)(ctx)
@@ -91,6 +98,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def fallback(implicit ctx: CodeGenerationContext): Matcher = {
     case EirPlaceholder(_, Some(arg: EirFunctionArgument)) =>
       ctx << ctx.nameFor(arg)
+    case CppNode(s) => ctx << s
   }
 
   import GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}

@@ -7,8 +7,11 @@ import or;
 @main class orcheck {
     @entry def self(args: array<string>) {
         val n = ck::numPes() * 4;
+
         val cs = new communicator@array1d(n, n);
         cs.sample();
+
+        ck::exitAfterQuiescence();
     }
 }
 
@@ -40,6 +43,6 @@ class communicator {
             self@[i].print_value(sums[i]);
         }
 
-        self[@]contribute(exit);
+        // self[@]contribute(exit);
     }
 }

@@ -24,6 +24,15 @@ import scala.reflect.ClassTag
 
 object TypeCompatibility {
 
+  def isSpecializationOf(a: EirType, b: EirType)(implicit
+      ctx: TypeCheckContext
+  ): Boolean = {
+    b match {
+      case t: EirTemplatedType => a == CheckTypes.visit(t.base)
+      case _                   => false
+    }
+  }
+
   private def checkSubclass(a: EirClassLike, b: EirClassLike): Boolean = {
     a.inherited
       .map(Find.uniqueResolution[EirType])
