@@ -1,6 +1,25 @@
 package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
-import edu.illinois.cs.ergoline.ast.{EirArrayReference, EirAssignment, EirBinaryExpression, EirBlock, EirClass, EirDeclaration, EirExpressionNode, EirForLoop, EirFunction, EirGlobalNamespace, EirImport, EirMember, EirNamedNode, EirNode, EirScopedSymbol, EirSymbol, EirSymbolLike, EirVisitor}
+import edu.illinois.cs.ergoline.ast.{
+  EirArrayReference,
+  EirAssignment,
+  EirBinaryExpression,
+  EirBlock,
+  EirClass,
+  EirDeclaration,
+  EirExpressionNode,
+  EirForLoop,
+  EirFunction,
+  EirGlobalNamespace,
+  EirImport,
+  EirMember,
+  EirNamedNode,
+  EirNode,
+  EirScopedSymbol,
+  EirSymbol,
+  EirSymbolLike,
+  EirVisitor
+}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.Orchestrate.visit
 import edu.illinois.cs.ergoline.passes.Pass.Phase
@@ -49,9 +68,9 @@ object Orchestrate {
   @tailrec
   def isProducer(node: EirNode): Boolean = {
     node.parent match {
-      case Some(x: EirAssignment) => x.lval == node
+      case Some(x: EirAssignment)                 => x.lval == node
       case Some(x) if !x.isInstanceOf[EirForLoop] => isProducer(x)
-      case _ => false
+      case _                                      => false
     }
   }
 
@@ -65,8 +84,11 @@ object Orchestrate {
   }
 
   def visit(fn: EirFunction)(implicit ctx: TypeCheckContext): Unit = {
-    val pred = (x: EirNode) => x.annotations.exists(_.name == annotationName)
-    assert(pred(fn) || fn.parent.to[EirMember].exists(pred))
+    val pred = (x: EirNode) => x.annotations.find(_.name == annotationName)
+    val annotation = pred(fn).orElse(fn.parent.to[EirMember].flatMap(pred))
+    assert(annotation.nonEmpty)
+    annotation.foreach(_.name = "threaded")
+
     var loops = Set[EirForLoop]()
     val body = fn.body.getOrElse(???)
 
@@ -79,7 +101,12 @@ object Orchestrate {
           TypeCompatibility.isSpecializationOf(placeholder, declTy)
         }
       )
-      .toList
+      .map(d => {
+        val declTy =
+          CheckTypes.visit(d.declaredType).asInstanceOf[EirTemplatedType]
+        (d, declTy.args.head)
+      })
+      .toMap
 
     val uses = Find
       .descendant(
@@ -101,41 +128,109 @@ object Orchestrate {
 
     val pubs = new mutable.ListBuffer[EirArrayReference]
 
+    // TODO ( check all self[@] refers to self )
+
     for (use <- uses) {
       val loop = use.args.headOption.flatMap(forRelated)
       if (use.args.length != 1 || loop.isEmpty)
         Errors.exit(s"unsure how to use $use")
       val arg = use.args.head
+
       arg match {
         case _: EirSymbolLike[_] =>
-          if (isProducer(use)) pubs.prepend(use)
-          use.parent.foreach(_.replaceChild(use, use.target))
+          if (isProducer(use)) {
+            pubs.prepend(use)
+
+            use.parent.foreach(_.replaceChild(use, use.target))
+          } else {
+            val pubIdx = pubs.indexWhere(
+              _.target.disambiguation == use.target.disambiguation
+            )
+            if (pubIdx < 0) {
+              Errors.exit(s"consumer with no producer, $use")
+            }
+            val pub = pubs(pubIdx)
+
+            use.parent.foreach(
+              _.replaceChild(
+                use,
+                pub.args.head match {
+                  case _: EirSymbolLike[_] => use.target
+                  case _ =>
+                    val node = GenerateCpp.CppNode("...")
+                    node.foundType = use.foundType
+                    node
+                }
+              )
+            )
+            println(s"todo: pairing $pub with $use")
+          }
         case _ =>
           if (isProducer(use)) {
-            Errors.exit("producer with iterator offset")
+            pubs.prepend(use)
+
+            val target = use.target.disambiguation.to[EirDeclaration]
+            val argTy = target.flatMap(decls.get)
+            val name = target.map(_.name)
+
+            val node = GenerateCpp.CppNode({
+              val cgen = new CodeGenerationContext("cpp", ctx)
+              cgen << "auto" << name.map(
+                _ + "_port"
+              ) << "=" << "std::make_shared<hypercomm::temporary_port<std::string>>(std::string(\"" << name << "\"));"
+              cgen.toString()
+            })
+            node.foundType = use.foundType
+
+            val block = Find.ancestors(use) collectFirst { case b: EirBlock =>
+              b
+            }
+            block.foreach(b => {
+              val pos = b.findPositionOf(use)
+              pos.foreach(b.insertAt(_, node))
+            })
+
+            val assign = Find.ancestors(use) collectFirst {
+              case a: EirAssignment => a
+            }
+            assign.flatMap(_.parent).zip(assign) foreach {
+              case (parent, assign) => parent.replaceChild(
+                  assign, {
+                    implicit val visitor
+                        : (CodeGenerationContext, EirNode) => Unit =
+                      GenerateCpp.visitor
+                    val cgen = new CodeGenerationContext("cpp", ctx)
+                    cgen.pushSelf("this->impl_")
+                    cgen << "hypercomm::send2port(this->thisProxy[hypercomm::conv2idx<CkArrayIndex>(" << arg << ")]," << name
+                      .map(
+                        _ + "_port"
+                      ) << ",hypercomm::make_value<hypercomm::typed_value<" << argTy
+                      .map(
+                        cgen.typeFor(_)
+                      ) << ">>(" << assign.rval << "));"
+                    GenerateCpp.CppNode(cgen.toString())
+                  }
+                )
+            }
+          } else {
+            Errors.exit("consumers with offsets unsupported")
           }
-          val pubIdx = pubs.indexWhere(_.target.disambiguation == use.target.disambiguation)
-          if (pubIdx < 0) {
-            Errors.exit(s"consumer with no producer, $use")
-          }
-          val pub = pubs(pubIdx)
-          println(s"todo: pairing $pub with $use")
       }
       loops ++= loop
     }
 
-    decls.foreach(d => {
-      val declTy =
-        CheckTypes.visit(d.declaredType).asInstanceOf[EirTemplatedType]
-      val repl = EirDeclaration(
-        d.parent,
-        isFinal = false,
-        d.name,
-        declTy.args.head,
-        None
-      )
-      body.replaceChild(d, repl)
-    })
+    decls foreach {
+      case (d, argTy) => {
+        val repl = EirDeclaration(
+          d.parent,
+          isFinal = false,
+          d.name,
+          argTy,
+          None
+        )
+        body.replaceChild(d, repl)
+      }
+    }
 
     loops.foreach(loop => {
       val hdrDecls = loop.header.declarations

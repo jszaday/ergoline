@@ -37,9 +37,9 @@ class communicator {
         val sums = or::placeholder<double, 1>(n);
 
         for (i <- (0 to n)) {
-            values[i] = self@[i].gen_value();
-            self@[i].print_value(values[i]);
-            sums[i] = self@[i].add_values(values[i], values[(i + 1) % n]);
+            val value = self@[i].gen_value();
+            values[(i + 1) % n] = value;
+            sums[i] = self@[i].add_values(value, values[i]);
             self@[i].print_value(sums[i]);
         }
 

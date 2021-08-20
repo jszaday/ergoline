@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.resolution.Find.{child, withName}
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -157,6 +157,11 @@ case class EirBlock(var parent: Option[EirNode], var children: List[EirNode])
     (node +: ancestors).sliding(2).collectFirst {
       case prev :: curr :: _ if curr == this => children.indexOf(prev)
     }
+  }
+
+  def insertAt(pos: Int, node: EirNode): Unit = {
+    val (front, back) = children.splitAt(pos)
+    children = front ++ List(node) ++ back
   }
 }
 
