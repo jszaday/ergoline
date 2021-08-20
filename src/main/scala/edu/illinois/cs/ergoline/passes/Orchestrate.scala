@@ -25,7 +25,11 @@ import edu.illinois.cs.ergoline.passes.Orchestrate.visit
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
-import edu.illinois.cs.ergoline.util.{Errors, TypeCompatibility}
+import edu.illinois.cs.ergoline.util.{
+  AstManipulation,
+  Errors,
+  TypeCompatibility
+}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -134,6 +138,9 @@ object Orchestrate {
       val loop = use.args.headOption.flatMap(forRelated)
       if (use.args.length != 1 || loop.isEmpty)
         Errors.exit(s"unsure how to use $use")
+      val target = use.target.disambiguation.to[EirDeclaration]
+      val argTy = target.flatMap(decls.get)
+      val name = target.map(_.name)
       val arg = use.args.head
 
       arg match {
@@ -150,6 +157,30 @@ object Orchestrate {
               Errors.exit(s"consumer with no producer, $use")
             }
             val pub = pubs(pubIdx)
+            val isSymbol =
+              pub.args.headOption.exists(_.isInstanceOf[EirSymbol[_]])
+
+            if (!isSymbol) {
+              AstManipulation.insertBefore(
+                use, {
+                  val node = GenerateCpp.CppNode({
+                    val cgen = new CodeGenerationContext("cpp", ctx)
+                    cgen << "auto" << name.map(_ + "_req") <<
+                      "=std::make_shared<hypercomm::resuming_callback<" << argTy
+                        .map(
+                          cgen.typeFor(_)
+                        ) << ">>();"
+                    cgen << "this->open(" << name.map(
+                      _ + "_port"
+                    ) << "," << name.map(_ + "_req") << ");"
+                    cgen << name.map(_ + "_req") << "->wait();"
+                    cgen.toString()
+                  })
+                  node.foundType = use.foundType
+                  node
+                }
+              )
+            }
 
             use.parent.foreach(
               _.replaceChild(
@@ -157,7 +188,9 @@ object Orchestrate {
                 pub.args.head match {
                   case _: EirSymbolLike[_] => use.target
                   case _ =>
-                    val node = GenerateCpp.CppNode("...")
+                    val node = GenerateCpp.CppNode(
+                      name.get + "_req->value()"
+                    )
                     node.foundType = use.foundType
                     node
                 }
@@ -169,26 +202,21 @@ object Orchestrate {
           if (isProducer(use)) {
             pubs.prepend(use)
 
-            val target = use.target.disambiguation.to[EirDeclaration]
-            val argTy = target.flatMap(decls.get)
-            val name = target.map(_.name)
+            AstManipulation.insertBefore(
+              use, {
+                val node = GenerateCpp.CppNode({
+                  val cgen = new CodeGenerationContext("cpp", ctx)
+                  cgen << "auto" << name.map(
+                    _ + "_port"
+                  ) << "=" << "std::make_shared<hypercomm::temporary_port<std::string>>(std::string(\"" << name << "\"));"
+                  cgen.toString()
+                })
+                node.foundType = use.foundType
+                node
+              }
+            )
 
-            val node = GenerateCpp.CppNode({
-              val cgen = new CodeGenerationContext("cpp", ctx)
-              cgen << "auto" << name.map(
-                _ + "_port"
-              ) << "=" << "std::make_shared<hypercomm::temporary_port<std::string>>(std::string(\"" << name << "\"));"
-              cgen.toString()
-            })
-            node.foundType = use.foundType
-
-            val block = Find.ancestors(use) collectFirst { case b: EirBlock =>
-              b
-            }
-            block.foreach(b => {
-              val pos = b.findPositionOf(use)
-              pos.foreach(b.insertAt(_, node))
-            })
+            GenerateCpp.corePupables += "hypercomm::temporary_port<std::string>"
 
             val assign = Find.ancestors(use) collectFirst {
               case a: EirAssignment => a

@@ -20,21 +20,29 @@ class communicator {
 
     @entry def self(=n: int) {}
 
-    @entry def print_value(x: double): unit {
-        println(`${self[@]index()}> has value: ${x}`);
+    @entry def print_value(x: int): unit {
+        val ours = self[@]index();
+        val theirs = (ours - 1 + n) % n;
+        val y = ours + theirs;
+
+        if (x == y) {
+            println(`${self[@]index()}> received value: ${x}`);
+        } else {
+            abort(`${self[@]index()}> received value ${x}, expected ${y}!`);
+        }
     }
 
-    @local @entry def gen_value(): double {
-        return (self[@]index()).toDouble();
+    @local @entry def gen_value(): int {
+        return self[@]index();
     }
 
-    @local @entry def add_values(x: double, y: double): double {
+    @local @entry def add_values(x: int, y: int): int {
         return x + y;
     }
 
     @charisma @entry def sample() {
-        val values = or::placeholder<double, 1>(n);
-        val sums = or::placeholder<double, 1>(n);
+        val values = or::placeholder<int, 1>(n);
+        val sums = or::placeholder<int, 1>(n);
 
         for (i <- (0 to n)) {
             val value = self@[i].gen_value();
