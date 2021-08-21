@@ -28,9 +28,9 @@ class Orchestrate extends Pass {
 }
 
 object Orchestrate {
-  val annotationName = "charisma"
-  val namespace = Modules("or", EirGlobalNamespace)
-  val placeholder = Find.namedChild[EirClass](namespace, "placeholder")
+  private val annotationName = "charisma"
+  private val namespace = Modules("or", EirGlobalNamespace)
+  private val placeholder = Find.namedChild[EirClass](namespace, "placeholder")
 
   def forRelated(node: EirNode): Option[EirForLoop] = {
     node match {
@@ -59,11 +59,10 @@ object Orchestrate {
     }
   }
 
+  @tailrec
   def visit(node: EirNode)(implicit ctx: TypeCheckContext): Unit = {
     node match {
-      case x: EirMember => {
-        visit(x.member)(ctx)
-      }
+      case x: EirMember   => visit(x.member)(ctx)
       case f: EirFunction => visit(f)(ctx)
     }
   }
@@ -75,7 +74,7 @@ object Orchestrate {
     annotation.foreach(_.name = "threaded")
 
     var loops = Set[EirForLoop]()
-    val body = fn.body.getOrElse(???)
+    val body = fn.body.getOrElse(Errors.unreachable())
 
     // TODO ( use a recursive-descent search algo. here )
     val decls = Find
@@ -101,7 +100,7 @@ object Orchestrate {
           case x: EirArrayReference => x.target.foundType.map(ty => {
               TypeCompatibility.isSpecializationOf(placeholder, ty)
             })
-          case x: EirImport => None
+          case _: EirImport => None
           case _            => Some(false)
         }
       )
@@ -224,17 +223,15 @@ object Orchestrate {
       loops ++= loop
     }
 
-    decls foreach {
-      case (d, argTy) => {
-        val repl = EirDeclaration(
-          d.parent,
-          isFinal = false,
-          d.name,
-          argTy,
-          None
-        )
-        body.replaceChild(d, repl)
-      }
+    decls foreach { case (d, argTy) =>
+      val repl = EirDeclaration(
+        d.parent,
+        isFinal = false,
+        d.name,
+        argTy,
+        None
+      )
+      body.replaceChild(d, repl)
     }
 
     loops.foreach(loop => {
