@@ -1,25 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
-import edu.illinois.cs.ergoline.ast.{
-  EirArrayReference,
-  EirAssignment,
-  EirBinaryExpression,
-  EirBlock,
-  EirClass,
-  EirDeclaration,
-  EirExpressionNode,
-  EirForLoop,
-  EirFunction,
-  EirGlobalNamespace,
-  EirImport,
-  EirMember,
-  EirNamedNode,
-  EirNode,
-  EirScopedSymbol,
-  EirSymbol,
-  EirSymbolLike,
-  EirVisitor
-}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.Orchestrate.visit
 import edu.illinois.cs.ergoline.passes.Pass.Phase
@@ -127,9 +108,6 @@ object Orchestrate {
       .map(_.asInstanceOf[EirArrayReference])
       .toList
 
-    println("decls: " + decls)
-    println("uses: " + uses)
-
     val pubs = new mutable.ListBuffer[EirArrayReference]
 
     // TODO ( check all self[@] refers to self )
@@ -196,7 +174,6 @@ object Orchestrate {
                 }
               )
             )
-            println(s"todo: pairing $pub with $use")
           }
         case _ =>
           if (isProducer(use)) {
