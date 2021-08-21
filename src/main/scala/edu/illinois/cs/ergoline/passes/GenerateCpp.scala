@@ -32,6 +32,15 @@ import scala.collection.mutable
 import scala.util.Properties.{lineSeparator => n}
 
 object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
+
+  case class CppNode(s: String)
+      extends EirExpressionNode
+      with EirEncloseExempt {
+    override var parent: Option[EirNode] = None
+    override def children: Iterable[EirNode] = Nil
+    override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+  }
+
   var visited: List[EirNode] = Nil
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
     (ctx, x) => visit(x)(ctx)
@@ -91,6 +100,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def fallback(implicit ctx: CodeGenerationContext): Matcher = {
     case EirPlaceholder(_, Some(arg: EirFunctionArgument)) =>
       ctx << ctx.nameFor(arg)
+    case CppNode(s) =>
+      val lines = s.split(";").map(_.trim).filterNot(_.isEmpty)
+      lines.init.foreach(l => ctx << (l + ";"))
+      lines.lastOption.foreach(l => {
+        ctx << l << Option.when(s.trim.endsWith(";"))(";")
+      })
   }
 
   import GenCppSyntax.{RichEirNode, RichEirResolvable, RichEirType}
@@ -277,7 +292,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << ")"
   }
 
-  val corePupables: Seq[String] = Seq(
+  var corePupables: Set[String] = Set(
     "hypercomm::future_port",
     "hypercomm::port_opener",
     "hypercomm::null_combiner",
@@ -589,6 +604,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } else {
           Errors.expectedCallback(target)
         }
+      case EirSymbol(_, "exit" :: _)
+          if (globals.ergolineModule == disambiguate(ctx, target).parent) =>
+        ctx << "CkCallback(CkCallback::ckExit)"
       case _ => Errors.expectedCallback(target)
     }
   }
@@ -689,9 +707,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val futureName = "f"
         val retTy = ctx.typeFor(ty, Some(base))
         ctx << "(([&](const hypercomm::future&" << futureName << ")" << "->" << retTy << "{"
-        ctx << "auto cb = std::make_shared<hypercomm::resuming_callback<" << retTy << ">>(CthSelf());"
+        ctx << "auto cb = std::make_shared<hypercomm::resuming_callback<" << retTy << ">>();"
         ctx << "this->request_future(" << futureName << ", cb);"
-        ctx << "if (!cb->ready()) CthSuspend();"
+        ctx << "cb->wait();"
         updateLocalityContext(ctx)
         ctx << "return cb->value();"
         ctx << "})(" << fut << "))"
@@ -2308,8 +2326,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << Option.unless(!topLevel && singleStatement)("{")
     x.children.foreach {
-      case x: EirExpressionNode => ctx << x << ";"
-      case x                    => ctx << x
+      case x: EirExpressionNode =>
+        ctx << x << Option.unless(x.isInstanceOf[CppNode])(";")
+      case x => ctx << x
     }
     ctx << Option.unless(!topLevel && singleStatement)("}")
   }

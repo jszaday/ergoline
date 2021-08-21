@@ -184,6 +184,20 @@ object Find {
 
   import FindSyntax.RichPredicate
 
+  def topLevel(
+      ctx: EirNode,
+      pred: Option[EirAnnotation => Boolean]
+  ): Iterable[EirNode] = {
+    val select =
+      (node: EirNode) => isTopLevel(node) || node.isInstanceOf[EirMember]
+    descendant(
+      ctx,
+      node => {
+        Option.when(select(node))(pred.forall(node.annotations.exists(_)))
+      }
+    )
+  }
+
   // NOTE when trying to resolve members this seems to return
   //      both the EirMember itself and its .member
   //      e.g. EirMember("foo"...), EirFunction("foo"...)

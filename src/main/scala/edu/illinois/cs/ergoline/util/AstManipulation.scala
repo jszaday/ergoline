@@ -1,11 +1,19 @@
 package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
 import scala.reflect.ClassTag
 
 object AstManipulation {
+  def insertBefore(where: EirNode, node: EirNode): Unit = {
+    val block = Find.ancestors(where) collectFirst { case b: EirBlock => b }
+    block.zip(block.flatMap(_.findPositionOf(where))) foreach { case (b, pos) =>
+      b.insertAt(pos, node)
+    }
+  }
+
   def setParent[T <: EirNode](parent: T): T = {
     parent.children.foreach(_.parent = Some(parent))
     parent

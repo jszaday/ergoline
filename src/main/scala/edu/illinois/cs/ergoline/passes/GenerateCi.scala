@@ -101,9 +101,10 @@ object GenerateCi {
   }
 
   val passThruAttributes: Seq[String] = Seq(
+    "local",
     "threaded",
-    "createhome",
-    "createhere"
+    "createhere",
+    "createhome"
   )
 
   def attributesFor(p: EirProxy, m: EirMember): String = {

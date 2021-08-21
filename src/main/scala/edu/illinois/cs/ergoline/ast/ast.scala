@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.withName
+import edu.illinois.cs.ergoline.resolution.Find.{child, withName}
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -141,6 +141,11 @@ trait EirSimpleContainer extends EirNode with EirScope {
       .map(children = _)
       .isDefined
   }
+
+  // TODO this should probably be a standard Node function/more sophisticated (i.e. indicate no match found)
+  def removeChild(node: EirNode): Unit = {
+    children = children.filter(_ != node)
+  }
 }
 
 case class EirBlock(var parent: Option[EirNode], var children: List[EirNode])
@@ -152,6 +157,11 @@ case class EirBlock(var parent: Option[EirNode], var children: List[EirNode])
     (node +: ancestors).sliding(2).collectFirst {
       case prev :: curr :: _ if curr == this => children.indexOf(prev)
     }
+  }
+
+  def insertAt(pos: Int, node: EirNode): Unit = {
+    val (front, back) = children.splitAt(pos)
+    children = front ++ List(node) ++ back
   }
 }
 
@@ -188,12 +198,7 @@ case class EirNamespace(
     var children: List[EirNode],
     var name: String
 ) extends EirSimpleContainer
-    with EirNamedNode {
-  // TODO this should probably be a standard Node function/more sophisticated (i.e. indicate no match found)
-  def removeChild(node: EirNode): Unit = {
-    children = children.filter(_ != node)
-  }
-}
+    with EirNamedNode
 
 case class EirDeclaration(
     var parent: Option[EirNode],
@@ -909,7 +914,7 @@ case class EirScopedSymbol[T <: EirNode: ClassTag](
 
 trait EirForLoopHeader {
   def children: Iterable[EirNode]
-
+  def declarations: List[EirDeclaration]
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
 }
 
@@ -928,6 +933,8 @@ case class EirCStyleHeader(
     (increment.contains(oldNode) && util
       .applyOrFalse[EirExpressionNode](x => increment = Some(x), newNode))
   }
+
+  def declarations: List[EirDeclaration] = declaration.toList
 }
 
 case class EirForAllHeader(
@@ -945,7 +952,7 @@ case class EirForAllHeader(
     })
   }
 
-  def declarations: List[EirDeclaration] = _declarations
+  override def declarations: List[EirDeclaration] = _declarations
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util

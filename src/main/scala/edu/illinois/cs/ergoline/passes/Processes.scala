@@ -14,6 +14,7 @@ object Processes {
   def registerPasses(): Unit = {
     Registry.instance[FullyResolve]
     Registry.instance[CheckTypes]
+    Registry.instance[Orchestrate]
   }
 
   registerPasses()
@@ -51,6 +52,19 @@ object Processes {
     node.annotation("main").nonEmpty
   }
 
+  def onOptimize(node: EirNode): Unit = {
+    Registry.onOptimize.foreach(pass => {
+      Find
+        .topLevel(
+          node,
+          Option.unless(pass.annotations.isEmpty)((a: EirAnnotation) => {
+            pass.annotations.contains(a.name)
+          })
+        )
+        .foreach(pass(_))
+    })
+  }
+
   def onLoad(node: EirNode): Unit = {
     val all =
       (node +: Modules.fileSiblings.getOrElse(node, Nil)).sortBy(!isMain(_))
@@ -69,6 +83,10 @@ object Processes {
         }
       })
     }
+
+    for (node <- all) {
+      onOptimize(node)
+    }
   }
 
   // NOTE This will go away once passes are implemented
@@ -82,6 +100,7 @@ object Processes {
     "#include <hypercomm/components/sentinel.hpp> // ;",
     "#include <hypercomm/core/resuming_callback.hpp> // ;",
     "#include <hypercomm/core/inter_callback.hpp> // ;",
+    "#include <hypercomm/core/temporary_port.hpp> // ;",
     "#include <ergoline/callback.hpp> // ;",
     "#include <ergoline/function.hpp> // ;",
     "#include <ergoline/mailbox.hpp> // ;",
