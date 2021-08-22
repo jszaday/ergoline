@@ -105,7 +105,7 @@ object TypeCompatibility {
     def canAssignTo(theirs: EirType)(implicit ctx: TypeCheckContext): Boolean =
       (ours == theirs) || ((ours, theirs) match {
         case (a, EirReferenceType(_, b))          => a.canAssignTo(CheckTypes.visit(b))
-        case (EirReferenceType(_, a), b)          => CheckTypes.visit(a).canAssignTo(b)
+//        case (EirReferenceType(_, a), b)          => CheckTypes.visit(a).canAssignTo(b)
         case (a: EirLambdaType, b: EirLambdaType) =>
           // TODO make this more robust!
           (a.templateArgs == b.templateArgs) && a.to.canAssignTo(b.to) && {
