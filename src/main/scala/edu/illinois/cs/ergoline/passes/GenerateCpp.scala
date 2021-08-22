@@ -2354,16 +2354,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << x.toString
   }
 
-  def arrayRefIsSystem(x: EirArrayReference): Option[EirAnnotation] = {
-    x.disambiguation
+  def isPlainArrayRef(x: EirArrayReference): Boolean = {
+    val target = x.disambiguation
       .to[EirFunctionCall]
       .flatMap(_.target.disambiguation)
-      .flatMap(_.annotation("system"))
-  }
-
-  def isPlainArrayRef(x: EirArrayReference): Boolean = {
-    val system = arrayRefIsSystem(x)
-    system.flatMap(_("alias").map(_.strip())).contains("[]")
+    val system = target.flatMap(_.annotation("system"))
+    system
+      .flatMap(a =>
+        a("alias")
+          .map(_.strip())
+          .orElse(target collect { case n: EirNamedNode => n.name })
+      )
+      .contains("[]")
   }
 
   def implicitCast(

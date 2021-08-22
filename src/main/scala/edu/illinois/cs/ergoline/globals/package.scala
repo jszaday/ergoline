@@ -39,7 +39,9 @@ package object globals {
   )
 
   def encodeOperator(op: String): String = {
-    if (op == "==") {
+    if (op == "[]") {
+      op
+    } else if (op == "==") {
       operatorNames('=')
     } else {
       (operatorNames(op.head) +: op.tail.toList.map(c =>
