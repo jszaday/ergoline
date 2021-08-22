@@ -1035,7 +1035,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val (lhsTy, rhsTy) = (visit(node.lhs), visit(node.rhs))
 
     if (globals.isIdentityComparator(op)) {
-      if (lhsTy == rhsTy) {
+      if (sameTypes(lhsTy, rhsTy)) {
         boolTy
       } else {
         Errors.unableToUnify(node, lhsTy, rhsTy)
@@ -1143,24 +1143,25 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
-  def isAssignable(ty: EirType): Boolean = {
-    ty match {
-      case _: EirReferenceType => true
-      case _                   => false
-    }
+  // TODO ( implement this! )
+  def isCopyConstructable(ty: EirType): Boolean = {
+    true
   }
 
   override def visitAssignment(
       node: EirAssignment
   )(implicit ctx: TypeCheckContext): EirType = {
-    val lval = visit(node.lval)
-    val rval = visit(node.rval)
-    if (!rval.canAssignTo(lval)) {
-      Errors.cannotCast(node, lval, rval)
-    } else if (!isAssignable(lval)) {
-      Errors.assignToVal(node)
-    } else {
-      globals.unitType
+    val t = visit(node.lval)
+    val b = visit(node.rval)
+
+    t match {
+      case EirReferenceType(_, a: EirType) =>
+        if (!b.canAssignTo(a) || !isCopyConstructable(a)) {
+          Errors.cannotCast(node, b, t)
+        } else {
+          globals.unitType
+        }
+      case _ => Errors.assignToVal(node)
     }
   }
 
@@ -1345,7 +1346,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             .map(visit(_))
             .zip(as2.map(visit(_)))
             .forall(x => sameTypes(x._1, x._2))
-      case _ => false
+      case (EirReferenceType(_, a: EirType), EirReferenceType(_, b: EirType)) =>
+        sameTypes(a, b)
+      case (a, EirReferenceType(_, b: EirType)) => sameTypes(a, b)
+      case (EirReferenceType(_, a: EirType), b) => sameTypes(a, b)
+      case _                                    => false
     })
   }
 

@@ -142,13 +142,6 @@ package object types {
       (base == oldNode) && util
         .applyOrFalse[EirResolvable[EirType]](base = _, newNode)
     }
-
-    override def equals(other: Any): Boolean = {
-      other match {
-        case EirReferenceType(_, base) => base == this.base
-        case _                         => other == this.base
-      }
-    }
   }
 
 }
