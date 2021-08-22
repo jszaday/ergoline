@@ -689,11 +689,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val rsv =
       if (apl) assertValid[EirLambdaType](ctx.typeOf(fut)).to
       else ctx.typeOf(fut)
-    val ty = ctx.resolve(rsv) match {
+    val ty = CheckTypes.stripReference(ctx.resolve(rsv)) match {
       case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
       case _                                         => Errors.unreachable()
     }
-    val ptr = ty.isPointer
     m.name match {
       case "apply" => ctx.proxy match {
           case Some(_) => ctx << "this->make_future()"

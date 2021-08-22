@@ -40,7 +40,7 @@ package object globals {
 
   def encodeOperator(op: String): String = {
     if (op == "[]") {
-      op
+      ???
     } else if (op == "==") {
       operatorNames('=')
     } else {

@@ -10,11 +10,7 @@ class map<K, V> {
     @system(static, alias="ergoline::map_remove")
     @system def remove(key: K): bool;
 
-    @system(alias="[]")
-    def get(key: K): V;
-
-    @system(alias="[]")
-    def set(key: K, value: V);
+    @system def [](key: K): V&;
 
     @system def size(): int;
 }
