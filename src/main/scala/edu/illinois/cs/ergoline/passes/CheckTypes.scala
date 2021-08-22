@@ -33,6 +33,7 @@ import edu.illinois.cs.ergoline.util.{
   addExplicitSelf,
   assertValid,
   isSystem,
+  onLeftSide,
   validAccessibility
 }
 
@@ -78,10 +79,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x.disambiguation = accessor
       visit(accessor)
     } else if (targetClass.nonEmpty) {
-      val assignment = x.parent.to[EirAssignment]
+      // we only consider the assignment if we are on its lhs
+      val assignment = x.parent.to[EirAssignment].filter(onLeftSide(_, x))
       val accessor = assignment.map(generateRval) getOrElse { generateLval(x) }
       x.disambiguation = accessor
       val res = visit(accessor)
+      // TODO ( this will be insufficient when dealing with tuple assigns )
       assignment.map(x => EirReferenceType(None, visit(x.rval))).getOrElse(res)
     } else targetType match {
       case tupleType: EirTupleType =>
