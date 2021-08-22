@@ -19,7 +19,7 @@ case class EirProxy(
 ) extends EirClassLike {
   isAbstract = base.isAbstract
 
-  override def classKind: EirClassKind = EirValueType
+  override def classKind: EirClassKind = EirValueKind
 
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)

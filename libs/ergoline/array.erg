@@ -9,14 +9,9 @@ class array<A, N: int = 1> extends iterable<A> {
     @system def self();
     @system def self(n: *shapeType);
 
-    @system(alias="[]")
-    def get(idx: *shapeType): A;
+    @system def [](idx: *shapeType): A&;
 
-    @system
-    def get(indices: *((range<int>) .* N)): iterable<A>;
-
-    @system(alias="[]")
-    def set(idx: *shapeType, value: A): unit;
+    @system def [](indices: *((range<int>) .* N)): iterable< A& >;
 
     @system def size(): int where N == 1;
 

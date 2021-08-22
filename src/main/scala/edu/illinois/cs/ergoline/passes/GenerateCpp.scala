@@ -689,11 +689,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val rsv =
       if (apl) assertValid[EirLambdaType](ctx.typeOf(fut)).to
       else ctx.typeOf(fut)
-    val ty = ctx.resolve(rsv) match {
+    val ty = CheckTypes.stripReference(ctx.resolve(rsv)) match {
       case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
       case _                                         => Errors.unreachable()
     }
-    val ptr = ty.isPointer
     m.name match {
       case "apply" => ctx.proxy match {
           case Some(_) => ctx << "this->make_future()"
@@ -1839,6 +1838,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             name
         }
       case b: EirTemplateFacade => nameFor(ctx, b.t, includeTemplates, usage)
+      case t: EirReferenceType  => ???
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -1898,7 +1898,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ty = ctx.typeOf(x)
     val captures = x.captures.map(captured => {
       // TODO use specialized version when avail
-      val ty = ctx.typeOf(captured)
+      val ty = CheckTypes.stripReference(ctx.typeOf(captured))
       val name = ctx.nameFor(captured, Some(x))
       if (ty.isPointer) name
       else {
@@ -1922,7 +1922,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ty = assertValid[EirLambdaType](ctx.exprType(lambda))
     assert(ty.templateArgs.isEmpty)
     val args = (ty.to +: ty.from).map(ctx.typeFor(_))
-    val ctypes = captures.map(ctx.typeOf(_))
+    val ctypes = captures.map(ctx.typeOf(_)).map(CheckTypes.stripReference)
     val isTransient = ctypes.exists(_.isTransient)
     val cdecltypes = ctypes.map(_t => {
       val t = ctx.typeFor(_t, Some(lambda))
@@ -1969,6 +1969,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   @tailrec
   def isArray(ctx: CodeGenerationContext, t: EirType): Boolean = {
     t match {
+      case t: EirReferenceType => isArray(ctx, ctx.resolve(t.base))
       case t: EirTemplatedType => isArray(ctx, ctx.resolve(t.base))
       case c: EirClass =>
         c.name == "array" && c.parent == globals.ergolineModule
@@ -1980,7 +1981,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext,
       t: EirResolvable[EirType]
   ): Boolean = {
-    ctx.resolve(t) match {
+    val rsv = CheckTypes.stripReference(ctx.resolve(t))
+    rsv match {
       case t: EirTupleType => t.children.exists(containsArray(ctx, _))
       case t               => isArray(ctx, t)
     }
@@ -1990,7 +1992,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext,
       t: EirType
   ): Option[EirLiteral[_]] = {
-    ctx.resolve(t) match {
+    val rsv = CheckTypes.stripReference(ctx.resolve(t))
+    rsv match {
       case t: EirTemplatedType if isArray(ctx, t) =>
         t.args match {
           case _ +: Nil      => Some(EirIntegerLiteral(1)(None))
@@ -2353,16 +2356,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << x.toString
   }
 
-  def arrayRefIsSystem(x: EirArrayReference): Option[EirAnnotation] = {
-    x.disambiguation
+  def isPlainArrayRef(x: EirArrayReference): Boolean = {
+    val target = x.disambiguation
       .to[EirFunctionCall]
       .flatMap(_.target.disambiguation)
-      .flatMap(_.annotation("system"))
-  }
-
-  def isPlainArrayRef(x: EirArrayReference): Boolean = {
-    val system = arrayRefIsSystem(x)
-    system.flatMap(_("alias").map(_.strip())).contains("[]")
+    val system = target.flatMap(_.annotation("system"))
+    system
+      .flatMap(a =>
+        a("alias")
+          .map(_.strip())
+          .orElse(target collect { case n: EirNamedNode => n.name })
+      )
+      .contains("[]")
   }
 
   def implicitCast(
@@ -2707,4 +2712,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.children.foreach(visit)
     if (peeked.isEmpty) popSentinel(sentinel)
   }
+
+  override def visitReferenceType(x: EirReferenceType)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = ???
 }

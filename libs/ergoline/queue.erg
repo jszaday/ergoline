@@ -5,9 +5,9 @@ class queue<A> extends iterable<A> {
     @system def self();
 
     @system(alias="front")
-    def head(): A;
+    def head(): A&;
     @system(alias="back")
-    def last(): A;
+    def last(): A&;
     @system(alias="empty")
     def isEmpty(): bool;
     @system(alias="empty",invert=true)
@@ -23,11 +23,7 @@ class queue<A> extends iterable<A> {
     @system(applyResult="int")
     def size(): int;
 
-    @system(alias="[]")
-    def get(idx: int): A;
-
-    @system(alias="[]")
-    def set(idx: int, value: A): unit;
+    @system def [](idx: int): A&;
 
     @transient private class iterator_ with iterator<A> {
         var current: int = 0;

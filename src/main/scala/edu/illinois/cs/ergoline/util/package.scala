@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
+import scala.annotation.tailrec
 import scala.collection.View
 import scala.reflect.{ClassTag, classTag}
 
@@ -39,6 +40,16 @@ package object util {
     args.foreach(_.parent = Some(f))
     f.functionArgs = args
     m
+  }
+
+  @tailrec
+  def onLeftSide(assignment: EirAssignment, seek: EirNode): Boolean = {
+    seek.parent match {
+      case Some(parent) =>
+        if (parent == assignment) seek == assignment.lval
+        else onLeftSide(assignment, parent)
+      case None => false
+    }
   }
 
   def makeMemberFunction(

@@ -74,6 +74,7 @@ trait EirVisitor[Context, Value] {
       case x: EirTupleType        => visitTupleType(x)
       case x: EirProxyType        => visitProxyType(x)
       case x: EirLambdaType       => visitLambdaType(x)
+      case x: EirReferenceType    => visitReferenceType(x)
       case x: EirTupleMultiply    => visitTupleMultiply(x)
       case x: EirTemplatedType    => visitTemplatedType(x)
       case x: EirConstantFacade   => visitConstantFacade(x)
@@ -91,6 +92,8 @@ trait EirVisitor[Context, Value] {
       case _                       => fallback(x)
     }
   }
+
+  def visitReferenceType(x: EirReferenceType)(implicit ctx: Context): Value
 
   def visitSymbolLike(
       x: EirSymbolLike[_ <: EirNode]

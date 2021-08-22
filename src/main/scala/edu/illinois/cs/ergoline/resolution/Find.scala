@@ -11,6 +11,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, extractFunction, sweepInherited}
 
+import scala.annotation.tailrec
 import scala.collection.View
 import scala.reflect.ClassTag
 
@@ -291,9 +292,11 @@ object Find {
     case None    => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
+  @tailrec
   def tryClassLike(ty: EirNode): Option[EirClassLike] = ty match {
-    case c: EirClassLike     => Some(c)
-    case t: EirTemplatedType => Some(asClassLike(t.base))
+    case x: EirClassLike     => Some(x)
+    case x: EirTemplatedType => Some(asClassLike(x.base))
+    case x: EirReferenceType => tryClassLike(x.base)
     case _                   => None
   }
 

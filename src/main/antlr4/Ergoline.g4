@@ -210,7 +210,7 @@ implicitArguments
     ;
 
 functionIdentifier
-    :   SelfKwd | identifier
+    :   SelfKwd | '[]' | identifier
     ;
 
 function
@@ -403,6 +403,7 @@ type
     :   basicType
     |   tupleType
     |   lambdaType
+    |   type Ampersand
     ;
 
 annotation

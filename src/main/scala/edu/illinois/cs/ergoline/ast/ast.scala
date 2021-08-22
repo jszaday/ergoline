@@ -403,9 +403,9 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
 
 sealed trait EirClassKind
 
-case object EirValueType extends EirClassKind
-case object EirReferenceType extends EirClassKind
-case object EirSingletonType extends EirClassKind
+case object EirValueKind extends EirClassKind
+case object EirReferenceKind extends EirClassKind
+case object EirSingletonKind extends EirClassKind
 
 case class EirClass(
     var parent: Option[EirNode],
@@ -419,12 +419,12 @@ case class EirClass(
 ) extends EirNode
     with EirClassLike {
   def valueType: Boolean = kind match {
-    case EirValueType => true
+    case EirValueKind => true
     case _            => false
   }
 
   def objectType: Boolean = kind match {
-    case EirSingletonType => true
+    case EirSingletonKind => true
     case _                => false
   }
 
@@ -443,7 +443,7 @@ case class EirTrait(
     with EirClassLike {
   isAbstract = true
 
-  override def classKind: EirClassKind = EirReferenceType
+  override def classKind: EirClassKind = EirReferenceKind
 }
 
 case class EirMember(
