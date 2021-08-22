@@ -71,15 +71,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitArrayReference(
       x: EirArrayReference
   )(implicit ctx: TypeCheckContext): EirType = {
-    val assignment = x.parent.to[EirAssignment]
-    val targetType = visit(x.target)
-    if (assignment.exists(_.lval == x)) {
-      val f = generateRval(assignment.get)
-      x.disambiguation = Some(f)
-      visit(f)
-      // TODO this is redundant, can we maybe return nothing?
-      //      (it gets visited in visitAssignment again)
-      visit(assignment.get.rval)
+    val targetType = stripReference(visit(x.target))
+    val targetClass = Find.tryClassLike(targetType)
+    if (targetClass.exists(_.hasMember("[]"))) {
+      val accessor = makeMemberCall(x.target, "[]", x.args)
+      x.disambiguation = accessor
+      visit(accessor)
+    } else if (targetClass.nonEmpty) {
+      val assignment = x.parent.to[EirAssignment]
+      val accessor = assignment.map(generateRval) getOrElse { generateLval(x) }
+      x.disambiguation = accessor
+      val res = visit(accessor)
+      assignment.map(x => EirReferenceType(None, visit(x.rval))).getOrElse(res)
     } else targetType match {
       case tupleType: EirTupleType =>
         val lit = Option
@@ -87,20 +90,23 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           .map(StaticEvaluator.evaluate(_))
         val idx = lit.map(_.toInt)
         if (idx.exists(_ < tupleType.children.length)) {
-          visit(tupleType.children(idx.get))
+          EirReferenceType(None, visit(tupleType.children(idx.get)))
         } else {
           Errors.invalidTupleIndices(tupleType, x.args)
         }
-      case _ =>
-        val f = generateLval(x)
-        x.disambiguation = Some(f)
-        visit(f)
+      case _ => ???
     }
   }
 
   def handleSpecialization(x: EirType)(implicit
       ctx: TypeCheckContext
   ): Either[EirSpecializable, EirSpecialization] = {
+    x match {
+      case EirReferenceType(_, t: EirType) => return handleSpecialization(t)
+      case _: EirReferenceType             => ???
+      case _                               => ;
+    }
+
     val base = x match {
       case x: EirTemplatedType => visit(x)
       case x                   => x
@@ -834,6 +840,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     null
   }
 
+  def stripReference(t: EirType): EirType = {
+    t match {
+      case EirReferenceType(_, t: EirType) => t
+      case _: EirReferenceType             => ???
+      case _                               => t
+    }
+  }
+
   // TODO fix to be context sensitive! Otherwise this gon' blow up!
   override def visitDeclaration(
       node: EirDeclaration
@@ -846,15 +860,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }).map(visit(_))
     }
     val rval = node.initialValue.map(visit(_))
-    val ty = (lval, rval) match {
-      case (None, None)                           => Errors.missingType(node)
-      case (Some(a), None)                        => a
-      case (None, Some(b))                        => node.declaredType = b; b
+    val infd = (lval, rval) match {
+      case (None, None)    => Errors.missingType(node)
+      case (Some(a), None) => a
+      case (None, Some(b)) =>
+        // TODO ( assert copy-constructible )
+        val tb = stripReference(b)
+        node.declaredType = tb; tb
       case (Some(a), Some(b)) if b.canAssignTo(a) => a
       case (Some(a), Some(b))                     => Errors.cannotCast(node, b, a)
     }
+    val ty = if (node.isFinal) infd else EirReferenceType(None, infd)
     ctx.cache(node, ty)
-    EirReferenceType(None, ty)
+    ty
   }
 
   override def visitTemplateArgument(
@@ -1077,7 +1095,23 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitFunctionArgument(
       node: EirFunctionArgument
   )(implicit ctx: TypeCheckContext): EirType = {
-    visit(node.declaredType)
+    val ty = visit(node.declaredType)
+    if (node.isReference) {
+      EirReferenceType(None, ty)
+    } else {
+      ty
+    }
+  }
+
+  private def constructorReference(from: EirNode, to: EirMember): Boolean = {
+    (to.member match {
+      case d: EirDeclaration => d.isFinal
+      case _                 => false
+    }) && {
+      Find
+        .parentOf[EirMember](from)
+        .exists(x => x.isConstructor && x.base == to.base)
+    }
   }
 
   override def visit(n: EirNode)(implicit ctx: TypeCheckContext): EirType = {
@@ -1087,7 +1121,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
 
     ctx.enterNode(node)
-    val result = super.visit(node)
+    val result = {
+      val res = super.visit(node)
+      node match {
+        case s: EirSymbolLike[_] => asMember(s.disambiguation)
+            .filter(constructorReference(node, _))
+            .map(_ => EirReferenceType(None, res))
+            .getOrElse(res)
+        case _ => res
+      }
+    }
+
     node match {
       case x: EirExpressionNode => x.foundType = Option(result) match {
           case None => Errors.missingType(x)
@@ -1099,37 +1143,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     else ctx.leaveWith(result)
   }
 
-  private def isValidMemberAssign(node: EirAssignment, m: EirMember) = {
-    (m.member match {
-      case d: EirDeclaration => !d.isFinal
-      case _                 => false
-    }) || {
-      Find
-        .parentOf[EirMember](node)
-        .exists(x => x.isConstructor && x.base == m.base)
-    }
-  }
-
-  def isInvalidFinalAssign(node: EirAssignment): Boolean = {
-    node.lval match {
-      case s: EirSymbol[_] =>
-        val resolution = ((x: EirNode) => asMember(x).getOrElse(x))(
-          Find.uniqueResolution[EirNode](s)
-        )
-
-        resolution match {
-          case m: EirMember           => !isValidMemberAssign(node, m)
-          case d: EirDeclaration      => d.isFinal
-          case _: EirFunctionArgument => true
-          case _                      => false
-        }
-      case _: EirArrayReference => false
-      case s: EirScopedSymbol[_] =>
-        asMember(s.disambiguation).orElse(s.disambiguation) match {
-          case Some(m: EirMember) => !isValidMemberAssign(node, m)
-          case _                  => false
-        }
-      case _ => true
+  def isAssignable(ty: EirType): Boolean = {
+    ty match {
+      case _: EirReferenceType => true
+      case _                   => false
     }
   }
 
@@ -1140,7 +1157,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val rval = visit(node.rval)
     if (!rval.canAssignTo(lval)) {
       Errors.cannotCast(node, lval, rval)
-    } else if (isInvalidFinalAssign(node)) {
+    } else if (!isAssignable(lval)) {
       Errors.assignToVal(node)
     } else {
       globals.unitType

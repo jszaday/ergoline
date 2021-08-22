@@ -513,5 +513,5 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitReferenceType(x: EirReferenceType)(implicit
       ctx: UnparseContext
-  ): String = visit(x.base) + "&"
+  ): String = nameFor(x.base) + "&"
 }

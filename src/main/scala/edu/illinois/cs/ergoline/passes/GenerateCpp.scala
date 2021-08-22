@@ -1839,6 +1839,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             name
         }
       case b: EirTemplateFacade => nameFor(ctx, b.t, includeTemplates, usage)
+      case t: EirReferenceType  => ???
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -1898,7 +1899,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ty = ctx.typeOf(x)
     val captures = x.captures.map(captured => {
       // TODO use specialized version when avail
-      val ty = ctx.typeOf(captured)
+      val ty = CheckTypes.stripReference(ctx.typeOf(captured))
       val name = ctx.nameFor(captured, Some(x))
       if (ty.isPointer) name
       else {
@@ -1922,7 +1923,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ty = assertValid[EirLambdaType](ctx.exprType(lambda))
     assert(ty.templateArgs.isEmpty)
     val args = (ty.to +: ty.from).map(ctx.typeFor(_))
-    val ctypes = captures.map(ctx.typeOf(_))
+    val ctypes = captures.map(ctx.typeOf(_)).map(CheckTypes.stripReference)
     val isTransient = ctypes.exists(_.isTransient)
     val cdecltypes = ctypes.map(_t => {
       val t = ctx.typeFor(_t, Some(lambda))

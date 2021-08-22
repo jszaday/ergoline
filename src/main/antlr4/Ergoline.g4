@@ -210,7 +210,7 @@ implicitArguments
     ;
 
 functionIdentifier
-    :   SelfKwd | identifier
+    :   SelfKwd | '[]' | identifier
     ;
 
 function
