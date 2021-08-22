@@ -854,7 +854,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (Some(a), Some(b))                     => Errors.cannotCast(node, b, a)
     }
     ctx.cache(node, ty)
-    ty
+    EirReferenceType(None, ty)
   }
 
   override def visitTemplateArgument(
@@ -1580,4 +1580,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     x.disambiguation = Some(fc)
     visit(fc)
   }
+
+  override def visitReferenceType(x: EirReferenceType)(implicit
+      ctx: TypeCheckContext
+  ): EirType = EirReferenceType(None, visit(x.base))
 }

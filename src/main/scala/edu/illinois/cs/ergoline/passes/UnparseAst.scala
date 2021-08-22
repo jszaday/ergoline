@@ -510,4 +510,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case None    => ""
     }
   }
+
+  override def visitReferenceType(x: EirReferenceType)(implicit
+      ctx: UnparseContext
+  ): String = visit(x.base) + "&"
 }

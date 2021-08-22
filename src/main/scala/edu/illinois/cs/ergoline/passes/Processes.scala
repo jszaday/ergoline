@@ -133,7 +133,7 @@ object Processes {
 
     val redFlag = ctx.checked.filterNot(x => isSystem(x._1)).map { x =>
       val sets = x._2.map(_.types.map(x => {
-        Find.tryClassLike(x).map(_.classKind).getOrElse(EirValueType)
+        Find.tryClassLike(x).map(_.classKind).getOrElse(EirValueKind)
       }))
       val min = if (sets.nonEmpty) sets.map(_.size).min else 0
       sets.map(_.slice(0, min)).toSet

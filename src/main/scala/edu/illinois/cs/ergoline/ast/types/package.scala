@@ -132,4 +132,16 @@ package object types {
     }
   }
 
+  case class EirReferenceType(
+      var parent: Option[EirNode],
+      var base: EirResolvable[EirType]
+  ) extends EirType {
+    override def children: Iterable[EirNode] = Seq(base)
+
+    override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
+      (base == oldNode) && util
+        .applyOrFalse[EirResolvable[EirType]](base = _, newNode)
+    }
+  }
+
 }

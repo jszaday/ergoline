@@ -2707,4 +2707,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.children.foreach(visit)
     if (peeked.isEmpty) popSentinel(sentinel)
   }
+
+  override def visitReferenceType(x: EirReferenceType)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = ???
 }

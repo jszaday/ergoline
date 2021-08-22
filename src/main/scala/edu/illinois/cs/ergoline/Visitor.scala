@@ -157,6 +157,20 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       .getOrElse((topLevel, Nil))
   }
 
+  override def visitType(ctx: TypeContext): EirNode = {
+    if (ctx.Ampersand() != null) {
+      enter(
+        EirReferenceType(parent, null),
+        (t: EirReferenceType) => {
+          t.base =
+            assertValid[EirResolvable[EirType]](super.visitType(ctx.`type`()))
+        }
+      )
+    } else {
+      super.visitType(ctx)
+    }
+  }
+
   override def visitProgram(ctx: ProgramContext): EirScope = {
     assertValid[EirScope](visitProgram(ctx, None)._1)
   }
@@ -257,9 +271,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           None,
           Nil,
           None, {
-            if (isClass) EirReferenceType
-            else if (isObject) EirSingletonType
-            else EirValueType
+            if (isClass) EirReferenceKind
+            else if (isObject) EirSingletonKind
+            else EirValueKind
           }
         )
       } else {

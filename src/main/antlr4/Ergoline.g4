@@ -403,6 +403,7 @@ type
     :   basicType
     |   tupleType
     |   lambdaType
+    |   type Ampersand
     ;
 
 annotation
