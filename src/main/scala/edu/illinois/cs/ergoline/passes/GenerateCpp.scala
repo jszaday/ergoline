@@ -1970,6 +1970,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   @tailrec
   def isArray(ctx: CodeGenerationContext, t: EirType): Boolean = {
     t match {
+      case t: EirReferenceType => isArray(ctx, ctx.resolve(t.base))
       case t: EirTemplatedType => isArray(ctx, ctx.resolve(t.base))
       case c: EirClass =>
         c.name == "array" && c.parent == globals.ergolineModule
@@ -1981,7 +1982,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext,
       t: EirResolvable[EirType]
   ): Boolean = {
-    ctx.resolve(t) match {
+    val rsv = CheckTypes.stripReference(ctx.resolve(t))
+    rsv match {
       case t: EirTupleType => t.children.exists(containsArray(ctx, _))
       case t               => isArray(ctx, t)
     }
@@ -1991,7 +1993,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext,
       t: EirType
   ): Option[EirLiteral[_]] = {
-    ctx.resolve(t) match {
+    val rsv = CheckTypes.stripReference(ctx.resolve(t))
+    rsv match {
       case t: EirTemplatedType if isArray(ctx, t) =>
         t.args match {
           case _ +: Nil      => Some(EirIntegerLiteral(1)(None))
