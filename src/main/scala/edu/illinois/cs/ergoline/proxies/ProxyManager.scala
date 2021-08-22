@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.language.postfixOps
 import scala.util.matching.Regex
@@ -45,8 +46,10 @@ object ProxyManager {
     proxies.flatMap(_.indexType).toSet + globals.integerType
   }
 
+  @tailrec
   def asProxy(t: EirType): Option[EirProxy] = {
     t match {
+      case EirReferenceType(_, t: EirType)     => asProxy(t)
       case EirTemplatedType(_, p: EirProxy, _) => Some(p)
       case p: EirProxy                         => Some(p)
       case _                                   => None

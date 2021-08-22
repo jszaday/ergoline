@@ -3,7 +3,11 @@ package edu.illinois.cs.ergoline.resolution
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichIntOption, RichOption}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichEirNode,
+  RichIntOption,
+  RichOption
+}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirType
 import edu.illinois.cs.ergoline.util.{Errors, extractFunction, sweepInherited}
 
