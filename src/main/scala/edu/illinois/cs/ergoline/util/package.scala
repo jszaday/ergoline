@@ -44,12 +44,11 @@ package object util {
 
   @tailrec
   def onLeftSide(assignment: EirAssignment, seek: EirNode): Boolean = {
-    if (seek == assignment.lval) {
-      true
-    } else seek.parent match {
-      case Some(parent) if parent != assignment =>
-        onLeftSide(assignment, parent)
-      case _ => false
+    seek.parent match {
+      case Some(parent) =>
+        if (parent == assignment) seek == assignment.lval
+        else onLeftSide(assignment, parent)
+      case None => false
     }
   }
 

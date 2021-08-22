@@ -59,6 +59,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     makeMemberCall(x.target, "get", x.args)
   }
 
+  // TODO ( this is not robust against tuple-assigns)
   private def generateRval(x: EirAssignment): EirExpressionNode = {
     val operator = Option.unless(x.op == "=")(x.op.init)
     val arrayRef = assertValid[EirArrayReference](x.lval)
