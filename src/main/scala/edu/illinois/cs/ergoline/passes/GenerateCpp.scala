@@ -1838,7 +1838,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             name
         }
       case b: EirTemplateFacade => nameFor(ctx, b.t, includeTemplates, usage)
-      case t: EirReferenceType  => ???
+      case t: EirReferenceType  =>
+        nameFor(ctx, t.base, includeTemplates, usage) + "&"
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }

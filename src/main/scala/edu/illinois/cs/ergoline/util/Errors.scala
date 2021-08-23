@@ -55,6 +55,12 @@ object Errors {
     exit("this should be unreachable, you may need to report this issue!")
   }
 
+  def missingReference(arg: EirCallArgument): Nothing = {
+    exit(
+      format(arg, "argument %s should be marked as a reference (with &)", arg)
+    )
+  }
+
   def assignToVal(node: EirAssignment): Nothing = {
     exit(format(node, "assignment to val (%s)", node.lval))
   }

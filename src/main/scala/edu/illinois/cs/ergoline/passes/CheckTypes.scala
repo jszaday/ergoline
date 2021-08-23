@@ -331,11 +331,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): Boolean = argumentsMatch(x.toList, y.toList, exact)
 
-  def tryCast(expr: EirExpressionNode, to: EirType)(implicit
+  def tryCast(expr: EirCallArgument, to: EirType)(implicit
       ctx: TypeCheckContext
   ): Boolean = {
     val from = visit(expr)
     if (from.canAssignTo(to)) {
+      if (!expr.isRef && to.isInstanceOf[EirReferenceType]) {
+        Errors.missingReference(expr)
+      }
+
       (from, to) match {
         case (_: EirLambdaType, _: EirLambdaType) => true
         case (_, _: EirLambdaType)                =>
@@ -359,7 +363,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   def argumentsMatch(
-      x: List[EirExpressionNode],
+      x: List[EirCallArgument],
       y: List[EirType]
   )(implicit
       ctx: TypeCheckContext
