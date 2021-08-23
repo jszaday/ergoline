@@ -521,21 +521,29 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     arg
   }
 
-  override def visitValueDeclaration(
-      ctx: ValueDeclarationContext
-  ): EirDeclaration = visitDeclaration(
-    ctx.identifier,
-    ctx.`type`(),
-    ctx.expression(),
-    isFinal = true
+  private case class Declaration(
+      ty: TypeContext,
+      name: IdentifierContext,
+      isRef: Boolean
   )
 
+  private def fromJava(
+      list: java.util.List[DecltypeContext]
+  ): List[Declaration] = {
+    list.asScala
+      .map(ctx =>
+        Declaration(ctx.`type`(), ctx.identifier(), ctx.Ampersand() != null)
+      )
+      .toList
+  }
+
   def visitDeclaration(
-      name: IdentifierContext,
-      declaredType: TypeContext,
+      decls: List[Declaration],
       expressionContext: ExpressionContext,
       isFinal: Boolean
   ): EirDeclaration = {
+    if (decls.length != 1) ???
+    val (name, declaredType) = (decls.head.name, decls.head.ty)
     enter(
       EirDeclaration(parent, isFinal, name.getText, null, None),
       (d: EirDeclaration) => {
@@ -551,8 +559,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitFieldDeclaration(
       ctx: FieldDeclarationContext
   ): EirDeclaration = visitDeclaration(
-    ctx.identifier,
-    ctx.`type`(),
+    List(Declaration(ctx.`type`(), ctx.identifier(), isRef = false)),
     ctx.expression(),
     isFinal = ctx.ValueKeyword() != null
   )
@@ -560,10 +567,17 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitVariableDeclaration(
       ctx: VariableDeclarationContext
   ): EirDeclaration = visitDeclaration(
-    ctx.identifier,
-    ctx.`type`(),
+    fromJava(ctx.decltypes().decltype()),
     ctx.expression(),
     isFinal = false
+  )
+
+  override def visitValueDeclaration(
+      ctx: ValueDeclarationContext
+  ): EirDeclaration = visitDeclaration(
+    fromJava(ctx.decltypes().decltype()),
+    ctx.expression(),
+    isFinal = true
   )
 
   override def visitSliceExpression(ctx: SliceExpressionContext): EirNode = {

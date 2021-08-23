@@ -181,12 +181,21 @@ fqn
     :   (identifier '::')* identifier
     ;
 
+decltype
+    :   Ampersand? identifier (':' type)?
+    ;
+
+decltypes
+    :   decltype
+    |   '(' (decltype ',')* decltype ')'
+    ;
+
 valueDeclaration
-    :   ValueKeyword identifier (':' type)? Equals expression ';'
+    :   ValueKeyword decltypes Equals expression ';'
     ;
 
 variableDeclaration
-    :   VariableKeyword identifier (':' type)? (Equals expression)? ';'
+    :   VariableKeyword decltypes (Equals expression)? ';'
     ;
 
 fieldDeclaration
