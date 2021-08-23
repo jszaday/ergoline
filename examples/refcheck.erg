@@ -1,0 +1,21 @@
+package examples;
+
+import ergoline::_;
+
+@main class refcheck {
+    static def increment(x: int&) { x += 1; }
+
+    @entry def self(args: array<string>) {
+        var i = 21;
+        var j = i * 2;
+        var k = i * 3;
+
+        increment(&j);
+        assert(j == ((i * 2) + 1));
+
+        (i, (j, k)) = (21, (42, 63));
+        assert(j == (i * 2) && k == (i + j));
+
+        exit();
+    }
+}

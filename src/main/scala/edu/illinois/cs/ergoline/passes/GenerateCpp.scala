@@ -22,7 +22,7 @@ import edu.illinois.cs.ergoline.resolution.{
 }
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
-import edu.illinois.cs.ergoline.util.{Errors, assertValid}
+import edu.illinois.cs.ergoline.util.{Errors, assertValid, onLeftSide}
 import edu.illinois.cs.ergoline.util
 
 import java.io.File
@@ -1838,7 +1838,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             name
         }
       case b: EirTemplateFacade => nameFor(ctx, b.t, includeTemplates, usage)
-      case t: EirReferenceType  => ???
+      case t: EirReferenceType =>
+        nameFor(ctx, t.base, includeTemplates, usage) + "&"
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -1882,11 +1883,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTupleExpression(
       x: EirTupleExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val func = x.parent match {
-      case Some(a: EirAssignment) if a.lval == x => "tie"
-      case _                                     => "make_tuple"
+    val fn = Find.ancestors(x) collectFirst { case x: EirAssignment =>
+      x
+    } match {
+      case Some(a) if onLeftSide(a, x) => "forward_as_tuple"
+      case _                           => "make_tuple"
     }
-    ctx << s"std::$func(" << (x.children, ",") << ")"
+
+    ctx << s"std::$fn(" << (x.children, ",") << ")"
   }
 
   private val _lambda_names: mutable.Map[EirLambdaExpression, String] =

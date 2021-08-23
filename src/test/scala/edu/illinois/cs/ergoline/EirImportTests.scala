@@ -210,6 +210,38 @@ class EirImportTests extends AnyFunSuite {
     Processes.onLoad(module)
   }
 
+  test("test passing value as reference") {
+    def program(failing: Boolean): String = {
+      s"""
+         |package foo;
+         |import ergoline::_;
+         |
+         |def increment(i: int&) {
+         |  i += 1;
+         |}
+         |
+         |def test() {
+         |  var i = 42;
+         |  increment(${ if (failing) "i" else "&i" });
+         |}
+         |""".stripMargin
+    }
+
+    {
+      setupEnv()
+      val mod = Modules.load(program(failing = false))
+      Processes.onLoad(mod)
+    }
+
+    {
+      setupEnv()
+      val mod = Modules.load(program(failing = true))
+      assertThrows[EirException]({
+        Processes.onLoad(mod)
+      })
+    }
+  }
+
   test("check upper & lower type bounds") {
     setupEnv()
     val module = Modules.load("""

@@ -55,8 +55,14 @@ object Errors {
     exit("this should be unreachable, you may need to report this issue!")
   }
 
-  def assignToVal(node: EirAssignment): Nothing = {
-    exit(format(node, "assignment to val (%s)", node.lval))
+  def missingReference(arg: EirCallArgument): Nothing = {
+    exit(
+      format(arg, "argument %s should be marked as a reference (with &)", arg)
+    )
+  }
+
+  def assignToVal(node: EirAssignment, ty: EirType): Nothing = {
+    exit(format(node, "cannot assign to type %s within %s", ty, node.lval))
   }
 
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
