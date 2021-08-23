@@ -1159,18 +1159,24 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitAssignment(
       node: EirAssignment
   )(implicit ctx: TypeCheckContext): EirType = {
-    val t = visit(node.lval)
-    val b = visit(node.rval)
-
-    t match {
-      case EirReferenceType(_, a: EirType) =>
-        if (!b.canAssignTo(a) || !isCopyConstructable(a)) {
-          Errors.cannotCast(node, b, t)
-        } else {
-          globals.unitType
-        }
-      case _ => Errors.assignToVal(node)
+    def checkPair(t: EirType, u: EirType): Unit = {
+      (t, u) match {
+        case (EirTupleType(_, as), EirTupleType(_, bs))
+            if as.length == bs.length =>
+          as.zip(bs) foreach { case (a: EirType, b: EirType) =>
+            checkPair(a, b)
+          }
+        case (EirReferenceType(_, a: EirType), b: EirType) =>
+          if (!b.canAssignTo(a) || !isCopyConstructable(a)) {
+            Errors.cannotCast(node, b, t)
+          }
+        case _ => Errors.assignToVal(node, t)
+      }
     }
+
+    checkPair(visit(node.lval), visit(node.rval))
+
+    globals.unitType
   }
 
   override def visitTupleExpression(

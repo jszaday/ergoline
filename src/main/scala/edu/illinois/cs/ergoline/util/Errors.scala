@@ -61,8 +61,8 @@ object Errors {
     )
   }
 
-  def assignToVal(node: EirAssignment): Nothing = {
-    exit(format(node, "assignment to val (%s)", node.lval))
+  def assignToVal(node: EirAssignment, ty: EirType): Nothing = {
+    exit(format(node, "cannot assign to type %s within %s", ty, node.lval))
   }
 
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
