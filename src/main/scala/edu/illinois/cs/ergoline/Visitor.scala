@@ -554,11 +554,11 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   def visitDeclaration(
       decls: List[Declaration],
-      expressionContext: ExpressionContext,
+      expressionContext: Option[ExpressionContext],
       isFinal: Boolean
   ): EirNode = {
     def expr: Option[EirExpressionNode] =
-      Option(expressionContext).map(visitAs[EirExpressionNode])
+      expressionContext.map(visitAs[EirExpressionNode])
     def helper(decl: Declaration, idx: Option[Int]): EirDeclaration = {
       enter(
         EirDeclaration(parent, isFinal, decl.name.getText, null, None),
@@ -594,7 +594,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: FieldDeclarationContext
   ): EirNode = visitDeclaration(
     List(Declaration(ctx.`type`(), ctx.identifier(), isRef = false)),
-    ctx.expression(),
+    Option(ctx.expression()),
     isFinal = ctx.ValueKeyword() != null
   )
 
@@ -602,7 +602,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: VariableDeclarationContext
   ): EirNode = visitDeclaration(
     fromJava(ctx.decltype()),
-    ctx.expression(),
+    Option(ctx.expression()),
     isFinal = false
   )
 
@@ -610,7 +610,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: ValueDeclarationContext
   ): EirNode = visitDeclaration(
     fromJava(ctx.decltype()),
-    ctx.expression(),
+    Option(ctx.expression()),
     isFinal = true
   )
 
@@ -1162,9 +1162,11 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           Option(ctx.incr).map(visitAs[EirExpressionNode])
         )
       } else {
+        val decl =
+          visitDeclaration(fromJava(ctx.decltype()), None, isFinal = true)
         EirForAllHeader(
           parent,
-          ctx.identifierList().identifier().toStringList,
+          Some(decl),
           visitAs[EirExpressionNode](ctx.iter)
         )
       }

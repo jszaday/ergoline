@@ -102,12 +102,8 @@ identifier
     |   WhereKwd
     ;
 
-identifierList
-    :   (identifier ',')* identifier
-    ;
-
 loopHeader
-    :   (identifierList | '(' identifierList ')') '<-' iter=expression
+    :   decltype '<-' iter=expression
     |   (variableDeclaration? | ';') test=expression? ';' incr=expression?
     ;
 

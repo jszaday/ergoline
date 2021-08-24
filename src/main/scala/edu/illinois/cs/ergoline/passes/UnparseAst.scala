@@ -274,8 +274,13 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case EirCStyleHeader(declaration, test, increment) =>
         declaration.mapOrSemi(visit(_)) + " " +
           test.mapOrEmpty(visit(_)) + "; " + increment.mapOrEmpty(visit(_))
-      case EirForAllHeader(_, identifiers, expressionNode) =>
-        (identifiers mkString ", ") + " <- " + visit(expressionNode)
+      case hdr: EirForAllHeader =>
+        val idents = hdr.identifiers
+        (if (idents.length == 1) {
+           idents.head
+         } else {
+           s"(${idents.mkString(",")})"
+         }) + " <- " + visit(hdr.expression)
     }
     s"for ($header) ${visit(loop.body)}"
   }

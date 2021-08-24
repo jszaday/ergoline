@@ -954,31 +954,16 @@ case class EirCStyleHeader(
 
 case class EirForAllHeader(
     var parent: Option[EirNode],
-    var identifiers: List[String],
+    var declaration: Option[EirNode],
     var expression: EirExpressionNode
 ) extends EirForLoopHeader {
-  private val _decl: EirNode = {
-    def mkDecl(parent: Option[EirNode], s: String): EirDeclaration = {
-      val d = EirDeclaration(parent, isFinal = true, s, null, None)
-      d.declaredType = EirPlaceholder(Some(d))
-      d
-    }
-
-    if (identifiers.length >= 2) {
-      val d = EirMultiDeclaration(Nil)(parent)
-      d.children = {
-        identifiers.zipWithIndex.map({ case (s, idx) => mkDecl(Some(d), s) })
-      }
-      d
-    } else {
-      assert(identifiers.length == 1)
-      mkDecl(parent, identifiers.head)
-    }
+  def identifiers: List[String] = declaration match {
+    case Some(d: EirDeclaration)      => List(d.name)
+    case Some(d: EirMultiDeclaration) => d.children.map(_.name)
+    case _                            => ???
   }
 
   override def children: Iterable[EirNode] = declaration ++ Seq(expression)
-
-  override def declaration: Option[EirNode] = Some(this._decl)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util
