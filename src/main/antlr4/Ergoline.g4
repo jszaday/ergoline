@@ -183,7 +183,7 @@ fqn
 
 decltype
     :   Ampersand? identifier (':' type)?
-    |   '(' (decltype ',')* decltype ')'
+    |   '(' (decltype ',')+ decltype ')'
     ;
 
 valueDeclaration
