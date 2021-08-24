@@ -71,7 +71,7 @@ patternList
     ;
 
 pattern
-    :   identifier (':' (tupleType | basicType)?)?
+    :   identifier (':' (tupleType | basicType))?
     |   constant
     |   expression
     |   '(' patternList ')'
@@ -183,19 +183,15 @@ fqn
 
 decltype
     :   Ampersand? identifier (':' type)?
-    ;
-
-decltypes
-    :   decltype
     |   '(' (decltype ',')* decltype ')'
     ;
 
 valueDeclaration
-    :   ValueKeyword decltypes Equals expression ';'
+    :   ValueKeyword decltype Equals expression ';'
     ;
 
 variableDeclaration
-    :   VariableKeyword decltypes (Equals expression)? ';'
+    :   VariableKeyword decltype (Equals expression)? ';'
     ;
 
 fieldDeclaration

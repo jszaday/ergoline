@@ -530,13 +530,29 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   )
 
   private def fromJava(
-      list: java.util.List[DecltypeContext]
+      ctx: DecltypeContext
   ): List[Declaration] = {
-    list.asScala
-      .map(ctx =>
+    def notList(ctx: DecltypeContext): Boolean = {
+      ctx.decltype() == null || ctx.decltype().isEmpty
+    }
+
+    if (notList(ctx)) {
+      List(
         Declaration(ctx.`type`(), ctx.identifier(), ctx.Ampersand() != null)
       )
-      .toList
+    } else {
+      ctx
+        .decltype()
+        .asScala
+        .toList
+        .flatMap(ctx => {
+          assert(
+            notList(ctx),
+            "nested structured assigns currently unsupported"
+          )
+          fromJava(ctx)
+        })
+    }
   }
 
   def visitDeclaration(
@@ -588,7 +604,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitVariableDeclaration(
       ctx: VariableDeclarationContext
   ): EirNode = visitDeclaration(
-    fromJava(ctx.decltypes().decltype()),
+    fromJava(ctx.decltype()),
     ctx.expression(),
     isFinal = false
   )
@@ -596,7 +612,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitValueDeclaration(
       ctx: ValueDeclarationContext
   ): EirNode = visitDeclaration(
-    fromJava(ctx.decltypes().decltype()),
+    fromJava(ctx.decltype()),
     ctx.expression(),
     isFinal = true
   )
