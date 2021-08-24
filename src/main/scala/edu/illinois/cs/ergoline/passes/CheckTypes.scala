@@ -415,9 +415,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         visit(incr)
       case h: EirForAllHeader =>
         val iterTy = resolveIterator(h)
-        if (h.identifiers.length == 1) {
-          h.declarations.head.declaredType = iterTy
-        } else ???
+        (iterTy, h.declaration) match {
+          case (t: EirTupleType, Some(d: EirMultiDeclaration))
+              if d.children.length <= t.children.length =>
+            d.children
+              .zip(t.children)
+              .foreach({ case (d, t) => d.declaredType = t })
+          case (t, Some(d: EirDeclaration)) => d.declaredType = t
+          case _                            => ???
+        }
       case _ => Errors.unreachable()
     }
     visit(loop.body)

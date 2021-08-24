@@ -1,6 +1,10 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirStringLiteral
+}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
@@ -226,6 +230,7 @@ case class EirMultiDeclaration(
     var children: List[EirDeclaration]
 )(var parent: Option[EirNode])
     extends EirNode {
+  assert(children.isEmpty || children.length >= 2)
   def isFinal: Boolean = children.headOption.exists(_.isFinal)
   def initialValue: Option[EirExpressionNode] = children.headOption
     .flatMap(_.initialValue)
@@ -926,7 +931,7 @@ case class EirScopedSymbol[T <: EirNode: ClassTag](
 
 trait EirForLoopHeader {
   def children: Iterable[EirNode]
-  def declarations: List[EirDeclaration]
+  def declaration: Option[EirNode]
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
 }
 
@@ -945,8 +950,6 @@ case class EirCStyleHeader(
     (increment.contains(oldNode) && util
       .applyOrFalse[EirExpressionNode](x => increment = Some(x), newNode))
   }
-
-  def declarations: List[EirDeclaration] = declaration.toList
 }
 
 case class EirForAllHeader(
@@ -954,17 +957,28 @@ case class EirForAllHeader(
     var identifiers: List[String],
     var expression: EirExpressionNode
 ) extends EirForLoopHeader {
-  override def children: Iterable[EirNode] = declarations :+ expression
-
-  var _declarations: List[EirDeclaration] = {
-    identifiers.map(x => {
-      val d = EirDeclaration(parent, isFinal = true, x, null, None)
+  private val _decl: EirNode = {
+    def mkDecl(parent: Option[EirNode], s: String): EirDeclaration = {
+      val d = EirDeclaration(parent, isFinal = true, s, null, None)
       d.declaredType = EirPlaceholder(Some(d))
       d
-    })
+    }
+
+    if (identifiers.length >= 2) {
+      val d = EirMultiDeclaration(Nil)(parent)
+      d.children = {
+        identifiers.zipWithIndex.map({ case (s, idx) => mkDecl(Some(d), s) })
+      }
+      d
+    } else {
+      assert(identifiers.length == 1)
+      mkDecl(parent, identifiers.head)
+    }
   }
 
-  override def declarations: List[EirDeclaration] = _declarations
+  override def children: Iterable[EirNode] = declaration ++ Seq(expression)
+
+  override def declaration: Option[EirNode] = Some(this._decl)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util

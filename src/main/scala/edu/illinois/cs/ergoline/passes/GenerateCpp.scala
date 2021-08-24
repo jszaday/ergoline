@@ -1063,18 +1063,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case h: EirForAllHeader =>
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))(None)
         // TODO find a better name than it_
-        ctx << "{" << "auto it_ =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
-        if (h.identifiers.length == 1) {
-          val ident = h.identifiers.head
-          if (ident != "_") {
-            ctx << "auto" << ident << "= "
-          }
-          ctx << "it_" << fieldAccessor << "next();"
-        } else {
-          // TODO add support for tuple pattern matching
-          //      to for each loop ~!
-          ???
-        }
+        val iterName = "it_"
+        ctx << "{" << s"auto $iterName =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
+        h.declaration.foreach(
+          visitDeclarationLike(
+            _,
+            Some({
+              val node = CppNode(s"$iterName${fieldAccessor}next()")
+              node.foundType = h.declaration.map(ctx.typeOf)
+              node
+            })
+          )
+        )
         // TODO add declarations
         ctx << x.body << "}" << "}"
       case _ => Errors.unreachable()
@@ -1138,12 +1138,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   override def visitDeclaration(
       x: EirDeclaration
-  )(implicit ctx: CodeGenerationContext): Unit = {
-    val lhsTy = ctx.resolve(x.declaredType)
-    ctx << ctx.typeFor(lhsTy, Some(x)) << s"${ctx.nameFor(x)}" << {
-      x.initialValue.foreach { x => assignmentRhs(lhsTy, "=", x) }
-    } << ";"
-  }
+  )(implicit ctx: CodeGenerationContext): Unit =
+    visitDeclarationLike(x, x.initialValue)
 
   override def visitTemplateArgument(
       x: EirTemplateArgument
@@ -2721,26 +2717,38 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): Unit = ???
 
-  override def visitMultiDeclaration(
-      x: EirMultiDeclaration
-  )(implicit ctx: CodeGenerationContext): Unit = {
-    val tmp = x.initialValue.map(value => {
-      (value, x.children.map(_.name).mkString("_") + "_value_")
-    })
-
-    tmp match {
-      case Some((expr, name)) => ctx << "auto" << name << "=" << expr << ";"
-      case _                  =>
-    }
-
-    x.children.zipWithIndex.foreach { case (d, i) =>
-      val ty = ctx.resolve(d.declaredType)
-      ctx << ctx.typeFor(ty, Some(d)) << ctx.nameFor(d)
-      tmp match {
-        case Some((_, name)) => ctx << "=" << s"std::move(std::get<$i>($name))"
-        case _               =>
-      }
-      ctx << ";"
+  def visitDeclarationLike(node: EirNode, value: Option[EirExpressionNode])(
+      implicit ctx: CodeGenerationContext
+  ): Unit = {
+    node match {
+      case x: EirDeclaration =>
+        val ty = ctx.resolve(x.declaredType)
+        ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x)
+        ctx << value.foreach { x => assignmentRhs(ty, "=", x) } << ";"
+      case x: EirMultiDeclaration =>
+        val tmp = value.map(value => {
+          (value, x.children.map(_.name).mkString("_") + "_value_")
+        })
+        tmp match {
+          case Some((expr, name)) => ctx << "auto" << name << "=" << expr << ";"
+          case _                  =>
+        }
+        x.children.zipWithIndex.foreach { case (d, i) =>
+          visitDeclarationLike(
+            d,
+            tmp.map(tmp => {
+              val value = CppNode(s"std::move(std::get<$i>(${tmp._2}))")
+              value.foundType = Some(ctx.resolve(d.declaredType))
+              value
+            })
+          )
+        }
+      case _ => ???
     }
   }
+
+  override def visitMultiDeclaration(
+      x: EirMultiDeclaration
+  )(implicit ctx: CodeGenerationContext): Unit =
+    visitDeclarationLike(x, x.initialValue)
 }
