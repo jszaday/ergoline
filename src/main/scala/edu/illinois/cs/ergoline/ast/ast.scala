@@ -222,6 +222,18 @@ case class EirDeclaration(
   }
 }
 
+case class EirMultiDeclaration(
+    var children: List[EirDeclaration]
+)(var parent: Option[EirNode])
+    extends EirNode {
+  def isFinal: Boolean = children.headOption.exists(_.isFinal)
+  def initialValue: Option[EirExpressionNode] = children.headOption
+    .flatMap(_.initialValue)
+    .to[EirArrayReference]
+    .map(_.target)
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 // NOTE this should be enclose exempt and only creatable through a factory
 case class EirFileSymbol(var parent: Option[EirNode], var file: File)
     extends EirScope

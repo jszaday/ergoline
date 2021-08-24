@@ -16,6 +16,9 @@ import ergoline::_;
         (i, (j, k)) = (21, (42, 63));
         assert(j == (i * 2) && k == (i + j));
 
+        val (x, y) = (i, j);
+        assert(x * 2 == y);
+
         exit();
     }
 }

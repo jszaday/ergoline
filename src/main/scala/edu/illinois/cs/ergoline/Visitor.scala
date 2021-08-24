@@ -357,11 +357,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitTopLevelDeclaration(
       ctx: TopLevelDeclarationContext
-  ): EirDeclaration = {
-    val decl = visitAs[EirDeclaration] {
+  ): EirNode = {
+    val decl = visit {
       Option(ctx.valueDeclaration()).getOrElse(ctx.variableDeclaration())
     }
-    decl.isImplicit = ctx.ImplicitKwd() != null
+    Option(decl)
+      .to[EirDeclaration]
+      .foreach(_.isImplicit = ctx.ImplicitKwd() != null)
     decl
   }
 
@@ -541,24 +543,43 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       decls: List[Declaration],
       expressionContext: ExpressionContext,
       isFinal: Boolean
-  ): EirDeclaration = {
-    if (decls.length != 1) ???
-    val (name, declaredType) = (decls.head.name, decls.head.ty)
-    enter(
-      EirDeclaration(parent, isFinal, name.getText, null, None),
-      (d: EirDeclaration) => {
-        d.declaredType = Option(declaredType)
-          .map(visitAs[EirResolvable[EirType]](_))
-          .getOrElse(EirPlaceholder(Some(d)))
-        d.initialValue =
-          Option(expressionContext).map(visitAs[EirExpressionNode])
-      }
-    )
+  ): EirNode = {
+    def expr: Option[EirExpressionNode] =
+      Option(expressionContext).map(visitAs[EirExpressionNode])
+    def helper(decl: Declaration, idx: Option[Int]): EirDeclaration = {
+      enter(
+        EirDeclaration(parent, isFinal, decl.name.getText, null, None),
+        (d: EirDeclaration) => {
+          d.declaredType = Option(decl.ty)
+            .map(visitAs[EirResolvable[EirType]](_))
+            .getOrElse(EirPlaceholder(Some(d)))
+          d.initialValue = (idx, expr) match {
+            case (Some(i), Some(x)) =>
+              Some(EirArrayReference(None, x, List(EirIntegerLiteral(i)(None))))
+            case (_, expr) => expr
+          }
+        }
+      )
+    }
+
+    if (decls.length >= 2) {
+      enter(
+        EirMultiDeclaration(Nil)(parent),
+        (b: EirMultiDeclaration) => {
+          b.children = decls.zipWithIndex map { case (d, i) =>
+            helper(d, Some(i))
+          }
+        }
+      )
+    } else {
+      assert(decls.length == 1)
+      helper(decls.head, None)
+    }
   }
 
   override def visitFieldDeclaration(
       ctx: FieldDeclarationContext
-  ): EirDeclaration = visitDeclaration(
+  ): EirNode = visitDeclaration(
     List(Declaration(ctx.`type`(), ctx.identifier(), isRef = false)),
     ctx.expression(),
     isFinal = ctx.ValueKeyword() != null
@@ -566,7 +587,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitVariableDeclaration(
       ctx: VariableDeclarationContext
-  ): EirDeclaration = visitDeclaration(
+  ): EirNode = visitDeclaration(
     fromJava(ctx.decltypes().decltype()),
     ctx.expression(),
     isFinal = false
@@ -574,7 +595,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visitValueDeclaration(
       ctx: ValueDeclarationContext
-  ): EirDeclaration = visitDeclaration(
+  ): EirNode = visitDeclaration(
     fromJava(ctx.decltypes().decltype()),
     ctx.expression(),
     isFinal = true
@@ -1120,8 +1141,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     val forLoop = parent.to[EirForLoop].get
     forLoop.header =
       if (ctx.variableDeclaration() != null) {
+        val decl =
+          Option(ctx.variableDeclaration()).map(visitVariableDeclaration)
         EirCStyleHeader(
-          Option(ctx.variableDeclaration()).map(visitVariableDeclaration),
+          decl.to[EirDeclaration],
           Option(ctx.test).map(visitAs[EirExpressionNode]),
           Option(ctx.incr).map(visitAs[EirExpressionNode])
         )

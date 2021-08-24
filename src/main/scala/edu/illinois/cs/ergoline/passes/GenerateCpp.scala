@@ -2720,4 +2720,27 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitReferenceType(x: EirReferenceType)(implicit
       ctx: CodeGenerationContext
   ): Unit = ???
+
+  override def visitMultiDeclaration(
+      x: EirMultiDeclaration
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val tmp = x.initialValue.map(value => {
+      (value, x.children.map(_.name).mkString("_") + "_value_")
+    })
+
+    tmp match {
+      case Some((expr, name)) => ctx << "auto" << name << "=" << expr << ";"
+      case _                  =>
+    }
+
+    x.children.zipWithIndex.foreach { case (d, i) =>
+      val ty = ctx.resolve(d.declaredType)
+      ctx << ctx.typeFor(ty, Some(d)) << ctx.nameFor(d)
+      tmp match {
+        case Some((_, name)) => ctx << "=" << s"std::move(std::get<$i>($name))"
+        case _               =>
+      }
+      ctx << ";"
+    }
+  }
 }
