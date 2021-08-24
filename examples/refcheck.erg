@@ -16,6 +16,15 @@ import ergoline::_;
         (i, (j, k)) = (21, (42, 63));
         assert(j == (i * 2) && k == (i + j));
 
+        val (x, y) = (i, j);
+        assert(x * 2 == y);
+
+        val as = i to j;
+        val bs = j to k;
+        for ((a, b) <- as.zip(bs.iter())) {
+            println(`main> ${a} is paired with ${b}`);
+        }
+
         exit();
     }
 }

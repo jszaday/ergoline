@@ -71,7 +71,7 @@ patternList
     ;
 
 pattern
-    :   identifier (':' (tupleType | basicType)?)?
+    :   identifier (':' (tupleType | basicType))?
     |   constant
     |   expression
     |   '(' patternList ')'
@@ -102,12 +102,8 @@ identifier
     |   WhereKwd
     ;
 
-identifierList
-    :   (identifier ',')* identifier
-    ;
-
 loopHeader
-    :   (identifierList | '(' identifierList ')') '<-' iter=expression
+    :   decltype '<-' iter=expression
     |   (variableDeclaration? | ';') test=expression? ';' incr=expression?
     ;
 
@@ -181,12 +177,17 @@ fqn
     :   (identifier '::')* identifier
     ;
 
+decltype
+    :   Ampersand? identifier (':' type)?
+    |   '(' (decltype ',')+ decltype ')'
+    ;
+
 valueDeclaration
-    :   ValueKeyword identifier (':' type)? Equals expression ';'
+    :   ValueKeyword decltype Equals expression ';'
     ;
 
 variableDeclaration
-    :   VariableKeyword identifier (':' type)? (Equals expression)? ';'
+    :   VariableKeyword decltype (Equals expression)? ';'
     ;
 
 fieldDeclaration

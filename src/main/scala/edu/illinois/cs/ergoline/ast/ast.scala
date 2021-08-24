@@ -1,6 +1,10 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirIntegerLiteral,
+  EirLiteral,
+  EirStringLiteral
+}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
@@ -220,6 +224,19 @@ case class EirDeclaration(
     ((oldValue == declaredType) && util
       .applyOrFalse[EirResolvable[EirType]](declaredType = _, newValue))
   }
+}
+
+case class EirMultiDeclaration(
+    var children: List[EirDeclaration]
+)(var parent: Option[EirNode])
+    extends EirNode {
+  assert(children.isEmpty || children.length >= 2)
+  def isFinal: Boolean = children.headOption.exists(_.isFinal)
+  def initialValue: Option[EirExpressionNode] = children.headOption
+    .flatMap(_.initialValue)
+    .to[EirArrayReference]
+    .map(_.target)
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 // NOTE this should be enclose exempt and only creatable through a factory
@@ -914,12 +931,12 @@ case class EirScopedSymbol[T <: EirNode: ClassTag](
 
 trait EirForLoopHeader {
   def children: Iterable[EirNode]
-  def declarations: List[EirDeclaration]
+  def declaration: Option[EirNode]
   def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean
 }
 
 case class EirCStyleHeader(
-    var declaration: Option[EirDeclaration],
+    var declaration: Option[EirNode],
     var test: Option[EirExpressionNode],
     var increment: Option[EirExpressionNode]
 ) extends EirForLoopHeader {
@@ -933,26 +950,20 @@ case class EirCStyleHeader(
     (increment.contains(oldNode) && util
       .applyOrFalse[EirExpressionNode](x => increment = Some(x), newNode))
   }
-
-  def declarations: List[EirDeclaration] = declaration.toList
 }
 
 case class EirForAllHeader(
     var parent: Option[EirNode],
-    var identifiers: List[String],
+    var declaration: Option[EirNode],
     var expression: EirExpressionNode
 ) extends EirForLoopHeader {
-  override def children: Iterable[EirNode] = declarations :+ expression
-
-  var _declarations: List[EirDeclaration] = {
-    identifiers.map(x => {
-      val d = EirDeclaration(parent, isFinal = true, x, null, None)
-      d.declaredType = EirPlaceholder(Some(d))
-      d
-    })
+  def identifiers: List[String] = declaration match {
+    case Some(d: EirDeclaration)      => List(d.name)
+    case Some(d: EirMultiDeclaration) => d.children.map(_.name)
+    case _                            => ???
   }
 
-  override def declarations: List[EirDeclaration] = _declarations
+  override def children: Iterable[EirNode] = declaration ++ Seq(expression)
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     (expression == oldNode) && util

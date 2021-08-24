@@ -237,9 +237,11 @@ object Orchestrate {
     }
 
     loops.foreach(loop => {
-      val hdrDecls = loop.header.declarations
-      if (hdrDecls.length != 1) {
-        Errors.exit(s"unsure how to declare [ ${hdrDecls mkString ", "} ]")
+      val hdrDecls = loop.header.declaration.to[EirDeclaration].toList
+      if (hdrDecls.isEmpty) {
+        Errors.exit(
+          s"unsure how to declare [ ${loop.header.declaration mkString ", "} ]"
+        )
       }
       val replDecls = hdrDecls.zipWithIndex.map({ case (d, i) =>
         EirDeclaration(

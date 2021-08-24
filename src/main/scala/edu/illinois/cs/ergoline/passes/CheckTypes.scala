@@ -49,9 +49,6 @@ class CheckTypes extends Pass {
 }
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
-  // TODO this should consider the current substitutions, and check each unique substitution!
-  var classCache: List[EirClass] = Nil
-
   final case class MissingSelfException[A <: EirNamedNode](symbol: EirSymbol[A])
       extends Exception
 
@@ -418,9 +415,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         visit(incr)
       case h: EirForAllHeader =>
         val iterTy = resolveIterator(h)
-        if (h.identifiers.length == 1) {
-          h.declarations.head.declaredType = iterTy
-        } else ???
+        (iterTy, h.declaration) match {
+          case (t: EirTupleType, Some(d: EirMultiDeclaration))
+              if d.children.length <= t.children.length =>
+            d.children
+              .zip(t.children)
+              .foreach({ case (d, t) => d.declaredType = t })
+          case (t, Some(d: EirDeclaration)) => d.declaredType = t
+          case _                            => ???
+        }
       case _ => Errors.unreachable()
     }
     visit(loop.body)
@@ -878,9 +881,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (Some(a), Some(b)) if b.canAssignTo(a) => a
       case (Some(a), Some(b))                     => Errors.cannotCast(node, b, a)
     }
-    val ty = if (node.isFinal) infd else EirReferenceType(None, infd)
-    ctx.cache(node, ty)
-    ty
+    ctx.cache(
+      node, {
+        if (node.isFinal) {
+          infd
+        } else {
+          EirReferenceType(None, infd)
+        }
+      }
+    )
   }
 
   override def visitTemplateArgument(
@@ -1182,7 +1191,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitTupleExpression(
       node: EirTupleExpression
   )(implicit ctx: TypeCheckContext): EirType = {
-    EirTupleType(Some(node), visit(node.children).toList)
+    ctx.avail(node).foreach(return _)
+    val assign = ctx.ancestor[EirAssignment]
+    val leftSide = assign.exists(onLeftSide(_, node))
+    ctx.cache(
+      node,
+      EirTupleType(
+        Some(node), {
+          val kids = visit(node.children)
+          (if (!leftSide) kids.map(stripReference) else kids).toList
+        }
+      )
+    )
   }
 
   private def expand(
@@ -1620,4 +1640,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   override def visitReferenceType(x: EirReferenceType)(implicit
       ctx: TypeCheckContext
   ): EirType = EirReferenceType(None, visit(x.base))
+
+  override def visitMultiDeclaration(
+      x: EirMultiDeclaration
+  )(implicit ctx: TypeCheckContext): EirType = {
+    x.children.foreach(visit)
+
+    null
+  }
 }

@@ -122,10 +122,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     s"namespace ${node.name} {${visitStatements(node.children)}}$n"
   }
 
+  private def declKeyword(isFinal: Boolean) = if (isFinal) "val" else "var"
+
   override def visitDeclaration(
       node: EirDeclaration
   )(implicit ctx: UnparseContext): String = {
-    val kwd = if (node.isFinal) "val" else "var"
+    val kwd = declKeyword(node.isFinal)
     val declType = visit(node.declaredType)
     val expr = node.initialValue.mapOrEmpty(x => s"= ${visit(x)}")
     s"$kwd ${node.name}: $declType $expr;"
@@ -272,8 +274,13 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case EirCStyleHeader(declaration, test, increment) =>
         declaration.mapOrSemi(visit(_)) + " " +
           test.mapOrEmpty(visit(_)) + "; " + increment.mapOrEmpty(visit(_))
-      case EirForAllHeader(_, identifiers, expressionNode) =>
-        (identifiers mkString ", ") + " <- " + visit(expressionNode)
+      case hdr: EirForAllHeader =>
+        val idents = hdr.identifiers
+        (if (idents.length == 1) {
+           idents.head
+         } else {
+           s"(${idents.mkString(",")})"
+         }) + " <- " + visit(hdr.expression)
     }
     s"for ($header) ${visit(loop.body)}"
   }
@@ -514,4 +521,15 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitReferenceType(x: EirReferenceType)(implicit
       ctx: UnparseContext
   ): String = nameFor(x.base) + "&"
+
+  override def visitMultiDeclaration(
+      x: EirMultiDeclaration
+  )(implicit ctx: UnparseContext): String = {
+    val kwd = declKeyword(x.isFinal)
+    // TODO ( incorporate types )
+    kwd + " (" + x.children.map(_.name).mkString(",") + ")" + x.initialValue
+      .map(visit)
+      .map(" = " + _)
+      .getOrElse("") + ";"
+  }
 }

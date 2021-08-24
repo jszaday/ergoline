@@ -310,7 +310,7 @@ object Errors {
     exit(
       format(
         node,
-        "due to limitations pertaining to %s, %s",
+        "due to limitations regarding %s, %s",
         why,
         what
       )

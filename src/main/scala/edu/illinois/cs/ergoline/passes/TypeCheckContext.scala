@@ -235,8 +235,10 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def start(c: Context): Unit = _contexts.push(c)
   def stop(c: Context): Unit = assert(_contexts.pop() == c)
   def current: Option[Context] = _contexts.headOption
-  def cache(n: EirNode, t: EirType): Unit =
+  def cache(n: EirNode, t: EirType): EirType = {
     current.foreach(c => _cache += ((c, n) -> t))
+    t
+  }
   def avail(n: EirNode): Option[EirType] =
     current.flatMap(c => _cache.get((c, n)))
 

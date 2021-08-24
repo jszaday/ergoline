@@ -48,6 +48,7 @@ trait EirVisitor[Context, Value] {
       case x: EirBlock            => visitBlock(x)
       case x: EirNamespace        => visitNamespace(x)
       case x: EirDeclaration      => visitDeclaration(x)
+      case x: EirMultiDeclaration => visitMultiDeclaration(x)
       case x: EirMember           => visitMember(x)
       case x: EirFunction         => visitFunction(x)
       case x: EirAnnotation       => visitAnnotation(x)
@@ -93,6 +94,9 @@ trait EirVisitor[Context, Value] {
     }
   }
 
+  def visitMultiDeclaration(x: EirMultiDeclaration)(implicit
+      ctx: Context
+  ): Value
   def visitReferenceType(x: EirReferenceType)(implicit ctx: Context): Value
 
   def visitSymbolLike(

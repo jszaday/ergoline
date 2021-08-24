@@ -220,6 +220,7 @@ object Find {
         Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(
           matches(x)
         )
+      case _: EirMultiDeclaration => Some(false)
       case x if !isTopLevel(x) || x.isInstanceOf[EirFunction] =>
         Option.when(matches(x))(true)
       // TODO how to handle arguments?
