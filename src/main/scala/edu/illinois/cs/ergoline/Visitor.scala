@@ -532,11 +532,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   private def fromJava(
       ctx: DecltypeContext
   ): List[Declaration] = {
-    def notList(ctx: DecltypeContext): Boolean = {
-      ctx.decltype() == null || ctx.decltype().isEmpty
-    }
-
-    if (notList(ctx)) {
+    if (ctx.decltype() == null || ctx.decltype().isEmpty) {
       List(
         Declaration(ctx.`type`(), ctx.identifier(), ctx.Ampersand() != null)
       )
@@ -546,11 +542,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         .asScala
         .toList
         .flatMap(ctx => {
+          val children = fromJava(ctx)
           assert(
-            notList(ctx),
+            children.length == 1,
             "nested structured assigns currently unsupported"
           )
-          fromJava(ctx)
+          children
         })
     }
   }
