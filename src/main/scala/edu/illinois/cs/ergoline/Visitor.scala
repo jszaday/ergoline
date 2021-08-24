@@ -1157,7 +1157,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         val decl =
           Option(ctx.variableDeclaration()).map(visitVariableDeclaration)
         EirCStyleHeader(
-          decl.to[EirDeclaration],
+          decl,
           Option(ctx.test).map(visitAs[EirExpressionNode]),
           Option(ctx.incr).map(visitAs[EirExpressionNode])
         )

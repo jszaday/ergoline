@@ -936,7 +936,7 @@ trait EirForLoopHeader {
 }
 
 case class EirCStyleHeader(
-    var declaration: Option[EirDeclaration],
+    var declaration: Option[EirNode],
     var test: Option[EirExpressionNode],
     var increment: Option[EirExpressionNode]
 ) extends EirForLoopHeader {

@@ -1059,6 +1059,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     x.header match {
       case EirCStyleHeader(declaration, test, increment) =>
+        if (!declaration.forall(_.isInstanceOf[EirDeclaration])) {
+          Errors.unsupportedOperation(
+            x,
+            "structured declarations in for-loops are unsupported",
+            Errors.Limitation.CppCodeGen
+          )
+        }
         ctx << s"for (" <| (declaration, ";") << test << ";" << increment << ")" << "{" << x.body << "}"
       case h: EirForAllHeader =>
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))(None)
