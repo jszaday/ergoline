@@ -16,8 +16,7 @@ import ck;
     }
 
     @entry def receive(at: (array<int>, test)) {
-        val a = at[0];
-        val t = at[1];
+        val (a, t) = at;
 
         for (var i = 0; i < a.size(); i += 1) {
             println(`a[${i}] = ${a[i]}`);
@@ -57,9 +56,7 @@ import ck;
     }
 
     @entry def receive(h: tupleHolder) {
-        val t = h.get()[0];
-        val th = h.get()[1];
-
+        val (t, th) = h.get();
         self@receive(((t, t), th, t.get()));
     }
 }
