@@ -2744,8 +2744,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           visitDeclarationLike(
             d,
             tmp.map(tmp => {
-              val value = CppNode(s"std::move(std::get<$i>(${tmp._2}))")
-              value.foundType = Some(ctx.resolve(d.declaredType))
+              val ty = ctx.resolve(d.declaredType)
+              val value = CppNode({
+                val getter = s"std::get<$i>(${tmp._2})"
+                // do not move reference types -- but may need to be more conservative
+                // to ensure parent is not a reference type?
+                ty match {
+                  case _: EirReferenceType => getter
+                  case _                   => s"std::move(${getter})"
+                }
+              })
+              value.foundType = Some(ty)
               value
             })
           )
