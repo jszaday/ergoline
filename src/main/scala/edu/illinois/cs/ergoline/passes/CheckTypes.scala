@@ -388,10 +388,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def resolveIterator(
       h: EirForAllHeader
   )(implicit ctx: TypeCheckContext): EirType = {
-    visit(h.expression) match {
-      case t: EirTemplatedType =>
-        val iterableTy = globals.iterableType
-        val iteratorTy = globals.iteratorType
+    val iterableTy = globals.iterableType
+    val iteratorTy = globals.iteratorType
+    val ty = visit(h.expression)
+    val implOf = (x: EirTrait) => Find.implementationOf(ty, x)(ctx)
+
+    implOf(iterableTy).orElse(implOf(iteratorTy)) match {
+      case Some(t: EirTemplatedType) =>
         val base = visit(t.base)
         if (base.canAssignTo(iterableTy)) {
           h.expression = makeMemberCall(h.expression, "iter")
@@ -400,7 +403,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           Errors.unableToUnify(h.expression, List(base, iterableTy, iteratorTy))
         }
         visit(t.args.head)
-      case t => Errors.incorrectType(t, EirTemplatedType.getClass)
+      case _ =>
+        Errors.cannotCast(h.parent.get, ty, List(iterableTy, iteratorTy))
     }
   }
 
@@ -1275,7 +1279,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitNew(x: EirNew)(implicit ctx: TypeCheckContext): EirType = {
+    val before = ctx.ancestor[EirMember]
     val base = visit(x.target)
+    val after = ctx.ancestor[EirMember]
+    assert(before == after)
+
     val spec = handleSpecialization(base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
     val found = screenCandidates(

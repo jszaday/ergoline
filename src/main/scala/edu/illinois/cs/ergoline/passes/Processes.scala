@@ -201,7 +201,7 @@ object Processes {
       } << "}"
     })
 
-    val iterableTy = globals.iterableType.asInstanceOf[EirTrait]
+    val iterableTy = globals.iterableType
     val iterables = sorted
       .collect({
         case s: EirClass if s.isDescendantOf(iterableTy) => s
