@@ -1279,11 +1279,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   override def visitNew(x: EirNew)(implicit ctx: TypeCheckContext): EirType = {
-    val before = ctx.ancestor[EirMember]
     val base = visit(x.target)
-    val after = ctx.ancestor[EirMember]
-    assert(before == after)
-
     val spec = handleSpecialization(base)
     val candidates = Find.accessibleConstructor(base, x, mustBeConcrete = true)
     val found = screenCandidates(
