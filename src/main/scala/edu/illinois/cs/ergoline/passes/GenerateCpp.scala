@@ -2472,18 +2472,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitInterpolatedString(
       str: EirInterpolatedString
   )(implicit ctx: CodeGenerationContext): Unit = {
-    def matchChild(x: EirExpressionNode) = {
-      val isLiteral = x.isInstanceOf[EirLiteral[_]]
-      val isString = ctx.typeOf(x) == globals.stringType
-
+    def matchChild(x: EirExpressionNode): CodeGenerationContext = {
       x match {
-        case _ if isString && !isLiteral => ctx << x
-        // TODO is this right?? Idk...
-        case x if x.disambiguation.isDefined =>
-          ctx << "(([&](){ return " << visit(x.disambiguation.get) << "; })())"
         case EirStringLiteral(value) if !value.startsWith("\"") =>
           ctx << escapeInterpString(value)
-        case _ => ctx << x
+        case _ => ctx << "(" << x << ")"
       }
     }
     ctx << "("

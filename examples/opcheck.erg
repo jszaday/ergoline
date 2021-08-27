@@ -46,6 +46,9 @@ import ck;
         println(`main> there are ${numOnes} ones in ${d}.`);
         assert(numOnes == 2);
 
+        val s = "a" + "b";
+        assert(s == "ab");
+
         println("main> operators seem operational~!");
 
         exit();
