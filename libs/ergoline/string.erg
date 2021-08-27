@@ -5,7 +5,7 @@ struct string with iterable<char> {
     @system(operator) def +(other: char): string;
     @system(operator) def +(other: string): string;
 
-    @system(operator) def ==(other: string): string;
+    @system(operator) def ==(other: string): bool;
 
     @system(alias="empty")
     def isEmpty(): bool;
