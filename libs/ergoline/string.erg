@@ -1,8 +1,14 @@
 package ergoline;
 
-@system(alias="std::string") struct string {
+@system(alias="std::string")
+struct string with iterable<char> {
+    @system(operator) def +(other: char): string;
     @system(operator) def +(other: string): string;
+
     @system(operator) def ==(other: string): string;
+
+    @system(alias="empty")
+    def isEmpty(): bool;
 
     @system def toString(): string;
 
@@ -10,4 +16,36 @@ package ergoline;
     def toInt(): int;
 
     @system def tryParse<A>(): option<A>;
+
+    @system def [](idx: int): char;
+
+    @system def size(): int;
+
+    override def iter(): iterator<char> {
+        // TODO use slicing syntax when it becomes available
+        return self[0 to self.size()];
+    }
+
+    def [](rng: iterable<int>): iterator<char> {
+        return self[rng.iter()];
+    }
+
+    def [](rng: iterator<int>): iterator<char> {
+        return new iterator_(self, rng);
+    }
+
+    @transient private class iterator_  with iterator<char> {
+        val itr: iterator<int>;
+        val base: string;
+
+        def self(=base: string, =itr: iterator<int>) {}
+
+        override def hasNext(): bool {
+            return itr.hasNext();
+        }
+
+        override def next(): char {
+            return base[itr.next()];
+        }
+    }
 }

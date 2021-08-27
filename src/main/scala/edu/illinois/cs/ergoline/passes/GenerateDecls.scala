@@ -218,7 +218,9 @@ object GenerateDecls {
       )(x)
     }
 
-    ctx << visitTemplateArgs(args)
+    if (args.isEmpty) ctx << "template<>"
+    else ctx << visitTemplateArgs(args)
+
     ctx << "struct" << "iterator_for" << "<" << qualifiedName << ">" << "{"
     ctx << "using" << "value_type" << "=" << ctx.typeFor(
       y.types.head,

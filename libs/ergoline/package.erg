@@ -1,5 +1,6 @@
 package ergoline;
 
+@system(alias="CkPrintf") def print(s : string): unit;
 @system(alias="CkPrintf") def println(s : string): unit;
 @system(alias="CkAbort") def abort(s : string): unit;
 @system(alias="CkAssert") def assert(b : bool): unit;

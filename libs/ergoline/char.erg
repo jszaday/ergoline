@@ -1,0 +1,9 @@
+package ergoline;
+
+@system struct char {
+    @system(operator, alias="-")
+    def <=>(other: char): char;
+
+    @system(format="std::string(1,{0})")
+    def toString(): string;
+}

@@ -40,7 +40,7 @@ package object globals {
 
   def encodeOperator(op: String): String = {
     if (op == "[]") {
-      ???
+      "at"
     } else if (op == "==") {
       operatorNames('=')
     } else {
@@ -83,12 +83,12 @@ package object globals {
 
   val implicitProxyName: String = "__proxy__"
 
-  def iterableType: EirType = {
-    Find.namedChild[EirClassLike](ergolineModule, "iterable")
+  def iterableType: EirTrait = {
+    Find.namedChild[EirTrait](ergolineModule, "iterable")
   }
 
-  def iteratorType: EirType = {
-    Find.namedChild[EirClassLike](ergolineModule, "iterator")
+  def iteratorType: EirTrait = {
+    Find.namedChild[EirTrait](ergolineModule, "iterator")
   }
 
   def objectType: EirType = {

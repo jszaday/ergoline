@@ -65,12 +65,30 @@ object Errors {
     exit(format(node, "cannot assign to type %s within %s", ty, node.lval))
   }
 
-  def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing = {
-    exit(format(ctx, "%s cannot be cast to %s", a, b))
-  }
+  def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing =
+    cannotCast(ctx, nameFor(a), b)
 
-  def cannotCast(ctx: EirNode, a: String, b: EirType): Nothing = {
-    exit(format(ctx, "%s cannot be cast to %s", a, b))
+  def cannotCast(ctx: EirNode, a: EirType, b: List[EirType]): Nothing =
+    cannotCast(ctx, nameFor(a), b)
+
+  def cannotCast(ctx: EirNode, a: String, b: EirType): Nothing =
+    cannotCast(ctx, a, List(b))
+
+  def cannotCast(ctx: EirNode, a: String, b: List[EirType]): Nothing = {
+    assert(b.nonEmpty)
+
+    if (b.length == 1) {
+      exit(format(ctx, "%s cannot be cast to %s", a, b.head))
+    } else {
+      exit(
+        format(
+          ctx,
+          "%s cannot be cast to [ %s ]",
+          a,
+          b.map(nameFor).mkString(", ")
+        )
+      )
+    }
   }
 
   def missingField(ctx: EirNode, a: EirType, field: String): Nothing = {

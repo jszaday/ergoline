@@ -31,6 +31,16 @@ import ck;
 
         for ( s <- q ) { println(s); }
 
+        self@checkIter();
+    }
+
+    @entry def checkIter() {
+        val s = "hello, world!\n";
+
+        for (c <- s) {
+            print(c.toString());
+        }
+
         exit();
     }
 }

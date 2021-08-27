@@ -516,11 +516,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       (ctx.typeOf(t._1), Find.uniqueResolution[EirType](t._2.declaredType))
     val shouldDeref = ours.isPointer && t._2.isReference
 
-    ctx << Option.when(shouldDeref)("*(") << implicitCast(
+    ctx << Option.when(shouldDeref)("(*(") << implicitCast(
       (t._1, ours),
       theirs,
       requiresRef
-    ) << Option.when(shouldDeref)(")")
+    ) << Option.when(shouldDeref)("))")
   }
 
   def visitArguments(
@@ -835,11 +835,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val cast = system("cast").exists(_.toBoolean)
     val name =
       system("alias").map(_.strip()).getOrElse(ctx.nameFor(disambiguated))
-    val argWrapper = system("applyArg").map(_.strip())
-    val resWrapper = system("applyResult").map(_.strip())
-    if (!argWrapper.forall(_ => name == "apply")) ???
-    resWrapper.foreach(x => ctx << s"$x(")
+    val resWrapper = system("applyResult").map(_.strip()).map(_ + "(")
+    val format = system("format").map(_.strip())
+    ctx << resWrapper
     disambiguated match {
+      case _ if format.nonEmpty =>
+        format.foreach(fmt => {
+          val placeholderPtn = "\\{(\\d+)}".r
+          val matches = placeholderPtn.findAllMatchIn(fmt).toList
+          val startPos = (i: Int) =>
+            if (i >= matches.length) fmt.length else matches(i).start
+          val baseArg = EirCallArgument(base, isRef = false)(None)
+          val gathered = (baseArg +: args._1) ++ args._2
+          ctx << fmt.substring(0, startPos(0))
+          matches.zipWithIndex.map { case (m, i) =>
+            // TODO use visit call argument here?
+            val which = m.group(1).toInt
+            ctx << gathered(which) << fmt.substring(m.end, startPos(i + 1))
+          }
+        })
       case _ if operator =>
         val flattened = flattenArgs(args)
         if (flattened.isEmpty) {
@@ -898,12 +912,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirMember(_, f: EirFunction, _) if cast =>
         ctx << s"((" << ctx.typeFor(f.returnType) << ")" << base << ")"
       case m: EirMember =>
-        if (name == "apply")
-          ctx << base << s"(" << argWrapper.map(x => s"$x(") << visitArguments(
-            Some(fc),
-            Some(disambiguated),
-            args
-          ) << argWrapper.map(_ => ")") << ")"
+        if (name == "apply") ctx << base << s"(" << visitArguments(
+          Some(fc),
+          Some(disambiguated),
+          args
+        ) << ")"
         else {
           val fqnOrDot = fieldAccessorFor(ctx.exprType(base))(Some(m.isStatic))
           ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(
@@ -912,8 +925,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             args
           ) << ")"
         }
-      case _: EirFunction if name == "CkPrintf" || name == "CkAbort" =>
-        ctx << name << "(\"%s\\n\"," << "(" << {
+      case f: EirFunction if name == "CkPrintf" || name == "CkAbort" =>
+        val endl = if (f.name == "println") "\\n" else ""
+        ctx << name << "(\"%s" << endl << "\"," << "(" << {
           visitArguments(Some(fc), Some(disambiguated), args)
         } << ")" << ".c_str())"
       case _ => ctx << s"($name(" << visitArguments(
@@ -922,7 +936,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           args
         ) << "))"
     }
-    resWrapper.foreach(_ => ctx << ")")
+    ctx << resWrapper.map(_ => ")")
   }
 
   def disambiguate(
@@ -1539,11 +1553,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << (args, ",")
     }
     ctx << ")" << overrides
+
+    // TODO this is a temporary solution that may cause failures when
+    //      function bodies are defined ahead of their used symbols
+    val nested = parent.flatMap(_.parent).to[EirMember].nonEmpty
     if (isMember) {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
         return
-      } else if (langCi || (x.templateArgs.isEmpty && !hasDependentScope(x))) {
+      } else if (
+        langCi || (x.templateArgs.isEmpty && !hasDependentScope(x) && !nested)
+      ) {
         ctx << ";"
         return
       }
@@ -1673,7 +1693,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ) + "::shared_from_this())"
       }
     } else {
-      "*" + ctx.currentSelf
+      "(*" + ctx.currentSelf + ")"
     }
   }
 
