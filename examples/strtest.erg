@@ -13,7 +13,7 @@ import ck;
 
         a[0] = "0";
         for (var i = 1; i < n; i += 1) {
-            a[i] = a[i - 1] + ` ${i}`;
+            a[i] = `${a[i - 1]} ${i}`;
         }
 
         for ( s <- a ) { println(s); }
@@ -37,9 +37,7 @@ import ck;
     @entry def checkIter() {
         val s = "hello, world!\n";
 
-        for (c <- s) {
-            print(c.toString());
-        }
+        for ( c <- s ) { print(`${c}`); }
 
         exit();
     }
