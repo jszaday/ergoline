@@ -59,7 +59,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     implicit class RichEirType(self: EirType) {
-      def isReconstructible: Boolean = {
+      def isReconstructible(implicit ctx: CodeGenerationContext): Boolean = {
         // TODO refine this with @system(reconstructible=true)
         // TODO eliminate the check for EirTemplateArgument here
         // TODO fix reconstruction of tuple types!
@@ -70,10 +70,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       }
 
-      def isPointer: Boolean = {
-        self.isInstanceOf[EirLambdaType] || Find
-          .tryClassLike(self)
-          .exists(!_.isValueType)
+      def isPointer(implicit ctx: CodeGenerationContext): Boolean = {
+        self match {
+          case t: EirTemplateArgument => Option(ctx)
+              .zip(t.parent.to[EirSpecializable])
+              .map { case (ctx, s) => zipWithSpecializations(Seq(s))(ctx) }
+              .exists(pairs => {
+                pairs forall { case (s, sp) =>
+                  val idx = s.templateArgs.indexOf(t)
+                  ctx.resolve(sp(idx)).isPointer
+                }
+              })
+          case _: EirLambdaType => true
+          case _ => Find
+              .tryClassLike(self)
+              .exists(!_.isValueType)
+        }
       }
 
       def isSystem: Boolean =
@@ -628,7 +640,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     args._1.map(_.expr) ++ args._2
   }
 
-  def handleOptionMember(
+  def handleOptionMember(implicit
       ctx: CodeGenerationContext,
       m: EirMember,
       base: EirExpressionNode,
@@ -1073,7 +1085,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def fieldAccessorFor(x: EirType)(static: Option[Boolean]): String = {
     if (static.contains(true)) {
       "::"
-    } else if (x.isPointer) {
+    } else if (x.isPointer(null)) {
       "->"
     } else {
       "."
@@ -1703,7 +1715,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _                                  => Errors.missingType(n)
     }
 
-    if (ty.isPointer) {
+    if (ty.isPointer(ctx)) {
       if (ctx.currentSelf == "self") {
         "self"
       } else if (ty.isTrait) {
@@ -1964,7 +1976,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ) << ">(" << (captures, ",") << ")" << ")"
   }
 
-  def makeLambdaWrapper(
+  def makeLambdaWrapper(implicit
       ctx: CodeGenerationContext,
       lambda: EirLambdaExpression
   ): Unit = {
@@ -2114,7 +2126,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << ")" << ")" << ")"
       case (t: EirType, None) if t.isPointer =>
-        ctx << "std::make_shared<" << ctx.nameFor(t, Some(x)) << ">(" << {
+        ctx << "std::make_shared<ergoline::extricate_t<" << ctx.nameFor(
+          t,
+          Some(x)
+        ) << ">>(" << {
           arrayDim(ctx, t) match {
             case Some(n) =>
               ctx << "std::array<std::size_t," << n << ">" << makeIndex(
@@ -2217,7 +2232,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               )
             }
         }
-      case i @ EirIdentifierPattern(_, n, t) if parent.resolve(t).isPointer =>
+      case i @ EirIdentifierPattern(_, n, t)
+          if parent.resolve(t).isPointer(parent) =>
         val wildcard = n == "_"
         parentType match {
           case None => Errors.missingType(x)

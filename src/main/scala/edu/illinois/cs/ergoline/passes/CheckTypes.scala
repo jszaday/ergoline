@@ -505,25 +505,52 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def inferSpecialization(s: EirSpecializable, fc: EirFunctionCall)(implicit
       ctx: TypeCheckContext
   ): Option[EirSpecialization] = {
-    // TODO use partial information from specialization when applicable!
-    // val known = s.templateArgs.zip(fc.types)
-    // val unknowns = s.templateArgs.drop(known.size)
-    inferSpecialization(s, fc.args.map(CheckTypes.visit(_)))
+    extractInformation(Some(fc)) flatMap { case (args, tys) =>
+      inferSpecialization(s, args, tys)
+    }
   }
 
-  def inferSpecialization(s: EirSpecializable, args: List[EirType])(implicit
+  private def pairKnown(
+      s: EirSpecializable,
+      types: List[EirType]
+  ): Map[EirTemplateArgument, EirType] = {
+    var known: Map[EirTemplateArgument, EirType] = Map()
+    val iter = s.templateArgs.iterator
+    var tys = types
+    while (tys.nonEmpty && iter.hasNext) {
+      val arg = iter.next()
+      if (arg.isPack) {
+        known += (arg -> EirTupleType(None, tys))
+        tys = Nil
+      } else {
+        known += (arg -> tys.head)
+        tys = tys.tail
+      }
+    }
+    known
+  }
+
+  def inferSpecialization(
+      s: EirSpecializable,
+      args: List[EirType],
+      known: List[EirType]
+  )(implicit
       ctx: TypeCheckContext
   ): Option[EirSpecialization] = {
+    val knownArgs = pairKnown(s, known)
+    val unknownArgs = s.templateArgs.filterNot(known.contains)
     val unknowns = s match {
       case s: EirLambdaType => Option(s.from)
-      case _                => Option.when(s.templateArgs.nonEmpty)(s.templateArgs)
+      case _                => Option.when(unknownArgs.nonEmpty)(unknownArgs)
     } // TODO this needs further testing to ensure it doesn't mess with things!
 
-    val insights = unknowns
-      .filter(_.length == args.length)
-      .map(_.zip(args).map(learn(_)))
-      .map(_.reduce(merge))
-      .getOrElse(Map())
+    val insights = knownArgs ++ {
+      unknowns
+        .filter(_.length == args.length)
+        .map(_.zip(args).map(learn(_)))
+        .map(_.reduce(merge))
+        .getOrElse(Map())
+    }
 
     val paired = s.templateArgs.map(t => {
       insights.get(t).orElse(t.defaultValue.map(visit(_)))
@@ -651,12 +678,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
 
     val member = visit(candidate)
-    val args = getArguments(scope.args)
+    val info = extractInformation(scope.args)
+    val args = info.map(_._1)
+
     val ispec = handleSpecialization(member) match {
       case Right(sp) => sp
-      case Left(s) => args // TODO use fc's partial information if given
-          .filterNot(_.isEmpty) // TODO make this UNIT in the future?
-          .flatMap(inferSpecialization(s, _))
+      case Left(s) => info
+          .filterNot(_ => args.isEmpty) // TODO make this UNIT in the future?
+          .flatMap(info => inferSpecialization(s, info._1, info._2))
           .flatMap(ctx.trySpecialize(s, _))
           .getOrElse({
             ospec.foreach(ctx.leave)
@@ -746,14 +775,23 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def getArguments(
+  private def extractInformation(
       opt: Option[EirExpressionNode]
-  )(implicit ctx: TypeCheckContext): Option[List[EirType]] = {
-    val args = opt.collect {
-      case f: EirFunctionCall => f.args
-      case n: EirNew          => n.args
+  )(implicit ctx: TypeCheckContext): Option[(List[EirType], List[EirType])] = {
+    opt.collect {
+      case f: EirFunctionCall => (
+          f.args.map(visit), {
+            Option
+              .when(f.types.nonEmpty)(f.types)
+              .getOrElse(f.target match {
+                case s: EirSpecializedSymbol => s.types
+                case _                       => Nil
+              })
+              .map(visit)
+          }
+        )
+      case n: EirNew => (n.args.map(visit), Nil)
     }
-    args.map(_.map(visit(_)))
   }
 
   def mkAccessor[A <: EirNamedNode: ClassTag](cls: EirClassLike, name: String)(
