@@ -10,6 +10,8 @@ import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 object GenerateProxies {
 
+  val msgName = "__ckMsgPtr__"
+
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
     (ctx, x) => GenerateCpp.visit(x)(ctx)
 
@@ -42,19 +44,18 @@ object GenerateProxies {
   def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
-    val msg = "__msg__"
     // TODO support non-void returns?
     // TODO make a helper function that does a "send-thru" operation
     ctx << s"void $name(" << Option.when(args.nonEmpty)(
-      s"CkMessage* $msg"
+      s"CkMessage* $msgName"
     ) << ")" << "{" << {
       if (args.isEmpty) {
-        ctx << "auto* " << msg << "=" << "CkAllocateMarshallMsg(0, nullptr);"
+        ctx << "auto* " << msgName << "=" << "CkAllocateMarshallMsg(0, nullptr);"
       }
 
       ctx << "ckCheck();"
-      ctx << "UsrToEnv(" << msg << ")->setMsgtype(ForArrayEltMsg);"
-      ctx << "CkArrayMessage* impl_amsg=(CkArrayMessage*)" << msg << ";"
+      ctx << "UsrToEnv(" << msgName << ")->setMsgtype(ForArrayEltMsg);"
+      ctx << "CkArrayMessage* impl_amsg=(CkArrayMessage*)" << msgName << ";"
       ctx << "impl_amsg->array_setIfNotThere(CkArray_IfNotThere_buffer);"
       ctx << "ckSend(impl_amsg," << (name + "_idx__") << ",0);"
     } << "}"
@@ -272,7 +273,7 @@ object GenerateProxies {
     if (f.functionArgs.isEmpty) {
       ctx << "hypercomm::make_unit_value();"
     } else {
-      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << "__msg__" << ");"
+      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << msgName << ");"
     }
 
     ctx << mboxName << "->receive_value(0,std::move(" << name << "));"
@@ -303,7 +304,6 @@ object GenerateProxies {
     val isAsync = x.annotation("async").isDefined
     val isMailbox = x.isMailbox
     val args = f.functionArgs
-    val msgName = "__ck_msg__"
     if (isMailbox) {
       visitTemplateArgs(f)(ctx)
       makeMailboxDecl(ctx, x)

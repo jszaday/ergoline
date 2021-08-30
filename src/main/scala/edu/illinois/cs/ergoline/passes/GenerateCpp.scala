@@ -182,7 +182,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ns = Some(EirGlobalNamespace)
     GenerateCi.generatedMain match {
       case Some(mainName) =>
-        val msgName = "__msg__"
+        val msgName = GenerateProxies.msgName
         ctx << "struct" << mainName << ":" << "public" << ("CBase_" + mainName) << "{"
         ctx << mainName << "(" << "CkArgMsg*" << msgName << ")" << "{"
         val concreteSingletons = zipWithSpecializations(
@@ -1572,7 +1572,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     currSelf.foreach(ctx.pushSelf)
     if (proxyParent.isDefined && (args.nonEmpty || asyncCi)) {
-      ctx << "CkMessage* __msg__"
+      ctx << s"CkMessage* ${GenerateProxies.msgName}"
     } else {
       ctx << (args, ",")
     }
