@@ -259,8 +259,17 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
     specialization.flatMap(trySpecialize(s, _))
   }
 
+  private var _synthesized
+      : Map[List[EirResolvable[EirType]], EirSyntheticSpecialization] = Map()
+
   def synthesize(types: List[EirResolvable[EirType]]): EirSpecialization = {
-    EirSyntheticSpecialization(types)
+    _synthesized.getOrElse(
+      types, {
+        val sp = EirSyntheticSpecialization(types)
+        _synthesized += (types -> sp)
+        sp
+      }
+    )
   }
 
   def checkPredicate(opt: Option[EirExpressionNode]): Boolean = {

@@ -10,6 +10,8 @@ import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
 object GenerateProxies {
 
+  val msgName = "__ckMsgPtr__"
+
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
     (ctx, x) => GenerateCpp.visit(x)(ctx)
 
@@ -42,19 +44,18 @@ object GenerateProxies {
   def visitAbstractEntry(ctx: CodeGenerationContext, f: EirFunction): Unit = {
     val args = f.functionArgs
     val name = ctx.nameFor(f)
-    val msg = "__msg__"
     // TODO support non-void returns?
     // TODO make a helper function that does a "send-thru" operation
     ctx << s"void $name(" << Option.when(args.nonEmpty)(
-      s"CkMessage* $msg"
+      s"CkMessage* $msgName"
     ) << ")" << "{" << {
       if (args.isEmpty) {
-        ctx << "auto* " << msg << "=" << "CkAllocateMarshallMsg(0, nullptr);"
+        ctx << "auto* " << msgName << "=" << "CkAllocateMarshallMsg(0, nullptr);"
       }
 
       ctx << "ckCheck();"
-      ctx << "UsrToEnv(" << msg << ")->setMsgtype(ForArrayEltMsg);"
-      ctx << "CkArrayMessage* impl_amsg=(CkArrayMessage*)" << msg << ";"
+      ctx << "UsrToEnv(" << msgName << ")->setMsgtype(ForArrayEltMsg);"
+      ctx << "CkArrayMessage* impl_amsg=(CkArrayMessage*)" << msgName << ";"
       ctx << "impl_amsg->array_setIfNotThere(CkArray_IfNotThere_buffer);"
       ctx << "ckSend(impl_amsg," << (name + "_idx__") << ",0);"
     } << "}"
@@ -196,12 +197,17 @@ object GenerateProxies {
     ) << ">" << s" impl_;" << s"};"
   }
 
-  def makeArgsVector(ctx: CodeGenerationContext, name: String): Unit = {
-    assert(name != "msg" && name != "_argc_")
-    ctx << "auto" << "msg" << "=" << s"(CkArgMsg*)__msg_tmp__" << ";"
-    ctx << "std::array<std::size_t, 1> _argc_ = {(std::size_t) msg->argc};"
-    ctx << s"auto $name = std::make_shared<ergoline::array<std::string, 1>>(_argc_);"
-    ctx << s"for (auto i = 0; i < args->size(); i++) { new (&(*$name)[i]) std::string(msg->argv[i]); }"
+  def makeArgsVector(
+      ctx: CodeGenerationContext,
+      name: String
+  ): Unit = {
+    val implMsg = "__ckArgsMsgPtr__"
+    val argc = "__ckArgsShape__"
+    assert(name != implMsg && name != argc)
+    ctx << "auto*" << implMsg << "=" << s"(CkArgMsg*)$msgName" << ";"
+    ctx << "std::array<std::size_t, 1>" << argc << s"= {(std::size_t) $implMsg->argc};"
+    ctx << s"auto $name = std::make_shared<ergoline::array<std::string, 1>>(" << argc << ");"
+    ctx << s"for (auto i = 0; i < $name->size(); i++) { new (&(*$name)[i]) std::string($implMsg->argv[i]); }"
   }
 
   def updateLocalityContext(implicit ctx: CodeGenerationContext): Unit = {
@@ -268,7 +274,7 @@ object GenerateProxies {
     if (f.functionArgs.isEmpty) {
       ctx << "hypercomm::make_unit_value();"
     } else {
-      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << "__msg__" << ");"
+      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << msgName << ");"
     }
 
     ctx << mboxName << "->receive_value(0,std::move(" << name << "));"
@@ -299,7 +305,11 @@ object GenerateProxies {
     val isAsync = x.annotation("async").isDefined
     val isMailbox = x.isMailbox
     val args = f.functionArgs
-    if (isMailbox) makeMailboxDecl(ctx, x)
+    if (isMailbox) {
+      visitTemplateArgs(f)(ctx)
+      makeMailboxDecl(ctx, x)
+    }
+    visitTemplateArgs(f)(ctx)
     if (isAsync) ctx << "void"
     else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
     ctx << {
@@ -311,9 +321,9 @@ object GenerateProxies {
       }
     } << "(" << {
       if (isMain && isConstructor) {
-        ctx << (if (args.nonEmpty) "CkMessage* __msg_tmp__" else "void")
+        ctx << (if (args.nonEmpty) s"CkMessage* $msgName" else "void")
       } else {
-        ctx << Option.when(args.nonEmpty || isAsync)("CkMessage* __msg__")
+        ctx << Option.when(args.nonEmpty || isAsync)(s"CkMessage* $msgName")
       }
     } << ")" << "{"
     if (isMain && isConstructor) {
@@ -323,7 +333,7 @@ object GenerateProxies {
         ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
       }
       args.foreach(makeParameter(ctx, _))
-      ctx << "hypercomm::unpack(__msg__," << (Option.when(isAsync)(
+      ctx << s"hypercomm::unpack($msgName," << (Option.when(isAsync)(
         "__future__"
       ) ++ args.map(_.name), ",") << ");"
     }

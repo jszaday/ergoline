@@ -9,7 +9,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
 }
 import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.assertValid
 
 object GenerateCi {
@@ -59,6 +59,39 @@ object GenerateCi {
     })
   }
 
+  def makeEntrySpecialization(
+      proxy: EirProxy,
+      m: EirMember,
+      tys: List[EirResolvable[EirType]]
+  )(ctx: CiUnparseContext): Unit = {
+    m.member match {
+      case f: EirFunction if f.templateArgs.nonEmpty =>
+        ctx << "extern" << "entry" << attributesFor(proxy, m) << ctx.typeFor(
+          f.returnType,
+          Some(m)
+        ) << proxy.baseName << ctx.nameFor(f) << "<" << {
+          (tys.map(ctx.typeFor(_, Some(m))), ",")
+        } << ">" << "(" << {
+          if (f.functionArgs.nonEmpty || m.annotations.contains("async")) {
+            "CkMessage*"
+          } else {
+            "void"
+          }
+        } << ");"
+      case _ => ???
+    }
+  }
+
+  def makeEntrySpecializations(proxy: EirProxy)(ctx: CiUnparseContext): Unit = {
+    proxy.members collect {
+      case m @ EirMember(_, sp: EirSpecializable, _)
+          if m.isEntry && sp.templateArgs.nonEmpty => (m, sp)
+    } foreach { case (m, sp) =>
+      val ss = ctx.checked(sp)
+      ss foreach { s => makeEntrySpecialization(proxy, m, s.types)(ctx) }
+    }
+  }
+
   def visitNamespaces(
       ctx: CiUnparseContext,
       namespaces: List[EirNamespace],
@@ -78,6 +111,8 @@ object GenerateCi {
         if (p.templateArgs.nonEmpty) {
           makeChareSpecializations(ctx, p)
         }
+
+        makeEntrySpecializations(p)(ctx)
 
         if (p.collective.isEmpty) {
           zipWithSpecializations(Seq(p))(ctx) foreach { case (p, types) =>
@@ -117,10 +152,11 @@ object GenerateCi {
 //    if (p.isMain && f.isConstructor) {
 //      ctx << s"entry [nokeep] " << p.baseName << "(CkArgMsg* msg);"
 //    } else {
-    ctx << "entry" << attributesFor(p, f)
+    val entry = "entry" + attributesFor(p, f)
     GenerateCpp.visitFunction(
       assertValid[EirFunction](f.member),
-      isMember = true
+      isMember = true,
+      Some(entry)
     )(ctx)
 //    }
   }

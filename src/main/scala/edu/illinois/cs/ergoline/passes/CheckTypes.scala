@@ -13,7 +13,11 @@ import edu.illinois.cs.ergoline.ast.literals.{
 }
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isFuture}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{
+  asMember,
+  isFuture,
+  templateArgsOf
+}
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -498,6 +502,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  def inferSpecialization(s: EirSpecializable, fc: EirFunctionCall)(implicit
+      ctx: TypeCheckContext
+  ): Option[EirSpecialization] = {
+    // TODO use partial information from specialization when applicable!
+    // val known = s.templateArgs.zip(fc.types)
+    // val unknowns = s.templateArgs.drop(known.size)
+    inferSpecialization(s, fc.args.map(CheckTypes.visit(_)))
+  }
+
   def inferSpecialization(s: EirSpecializable, args: List[EirType])(implicit
       ctx: TypeCheckContext
   ): Option[EirSpecialization] = {
@@ -641,7 +654,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val args = getArguments(scope.args)
     val ispec = handleSpecialization(member) match {
       case Right(sp) => sp
-      case Left(s) => args
+      case Left(s) => args // TODO use fc's partial information if given
           .filterNot(_.isEmpty) // TODO make this UNIT in the future?
           .flatMap(inferSpecialization(s, _))
           .flatMap(ctx.trySpecialize(s, _))
@@ -945,15 +958,24 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       node: EirMember
   )(implicit ctx: TypeCheckContext): EirType = {
     val proxy = ctx.ancestor[EirClassLike].collect { case p: EirProxy => p }
-    visit((proxy, node.counterpart) match {
+    val counterpart = node.counterpart
+
+    counterpart collectFirst {
+      case m @ EirMember(_, sp: EirFunction, _)
+          if templateArgsOf(sp).nonEmpty => m.makeEntryOnly()
+    }
+
+    (proxy, counterpart) match {
       case (_, Some(m)) =>
         visit(m.member)
         visit(node.member)
-      case (Some(p), _) => p.members
-          .find(_.counterpart.contains(node))
-          .getOrElse(node.member)
-      case (_, _) => node.member
-    })
+      case (Some(p), _) => visit(
+          p.members
+            .find(_.counterpart.contains(node))
+            .getOrElse(node.member)
+        )
+      case (_, _) => visit(node.member)
+    }
   }
 
   def handleSpecializable(
