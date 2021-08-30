@@ -976,6 +976,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirFunctionCall
   )(implicit ctx: CodeGenerationContext): Unit = {
     val disambiguated = disambiguate(ctx, x.target)
+    val member = asMember(disambiguated)
     val systemParent = disambiguated.systemParent
     val implicits = CheckTypes.getImplicitArgs(disambiguated) map { i =>
       // TODO enforce implicitness
@@ -983,6 +984,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       symbol.foundType = Some(ctx.typeOf(i.declaredType))
       symbol
     }
+    val s = member collect {
+      case m @ EirMember(_, s: EirSpecializable, _)
+          if m.isEntry && s.templateArgs.nonEmpty => s
+    }
+    val sp = s
+      .flatMap { s =>
+        val counterpart = member.flatMap(_.counterpart)
+        // a recursive call -- so reuse the args! this is a hack :')
+        if (counterpart.exists(Find.ancestors(x).contains(_))) {
+          Some(ctx.tyCtx.synthesize(s.templateArgs))
+        } else {
+          val inner = new TypeCheckContext(Some(ctx.tyCtx))
+          val spec = CheckTypes.inferSpecialization(s, x)(inner)
+          assert(spec.nonEmpty)
+          spec
+        }
+      }
+      .getOrElse(x)
     val isAsync = disambiguated.annotation("async").isDefined
     if (disambiguated.isSystem) {
       ctx << visitSystemCall(
@@ -1028,7 +1047,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } << ")"
       } else {
         if (functor) {
-          val static = asMember(disambiguated).map(_.isStatic)
+          val static = member.map(_.isStatic)
           ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
             ctx.nameFor(disambiguated)
           }
@@ -1037,7 +1056,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << x.target
           if (isPointer) ctx << ")"
         }
-        ctx << visitSpecialization(x) << "(" << {
+        ctx << visitSpecialization(sp) << "(" << {
           ctx << visitArguments(
             Some(x),
             Some(disambiguated),
@@ -1472,7 +1491,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def visitFunction(x: EirFunction, isMember: Boolean)(implicit
+  def visitFunction(
+      x: EirFunction,
+      isMember: Boolean,
+      entryKwd: Option[String] = None
+  )(implicit
       ctx: CodeGenerationContext
   ): Unit = {
     val member = x.parent.to[EirMember]
@@ -1501,6 +1524,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val virtual =
       Option.when(annotatable && member.exists(_.isVirtual))("virtual")
     visitTemplateArgs(x, systemParent)
+    ctx << entryKwd
     ctx << virtual
     // TODO add templates when !isMember
     if (!isConstructor) generateReturnType(x, asyncCi)

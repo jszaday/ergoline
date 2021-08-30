@@ -1,0 +1,29 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    @entry def self(args: array<string>) {
+        val scale = (args.size() >= 2) ? args[1].toInt() : 4;
+        val n = scale * ck::numPes();
+        val greeters = new greeter@array1d(n);
+        greeters[n - 1].greet("hello");
+    }
+}
+
+class greeter {
+    @entry def self() {}
+
+    @entry def greet<A>(msg: A) {
+        val mine = self[@]index();
+
+        println(`${mine}> says ${msg}!`);
+
+        if (mine > 0) {
+            self@[mine - 1].greet(msg);
+        } else {
+            exit();
+        }
+    }
+}
