@@ -286,7 +286,7 @@ object GenerateProxies {
   ): Unit = {
     val ty = ctx.resolve(x.declaredType)
     val s = ctx.typeFor(x.declaredType, Some(x))
-    if (ty.isPointer) {
+    if (ty.isPointer(ctx)) {
       ctx << s << x.name << ";"
     } else {
       ctx << "char" << s"__${x.name}__" << s"[sizeof($s)];"

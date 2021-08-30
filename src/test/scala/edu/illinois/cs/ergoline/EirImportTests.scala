@@ -216,7 +216,7 @@ class EirImportTests extends AnyFunSuite {
       |package foo;
       |import ergoline::_;
       |def instantiate<A, B>(b: B): A {
-      |    return new A(B);
+      |    return new A(b);
       |}
       |
       |def test(): unit {

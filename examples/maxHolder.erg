@@ -10,13 +10,17 @@ def seedRand(seed: int): unit;
 @system(fromHeader="ctime",alias="std::time")
 def time(value: int): int;
 
+def instantiate<A, B>(b: B): A {
+    return new A(b);
+}
+
 @main class main {
     @entry def self() {
         // seed the random number generator
         seedRand(time(0));
         // make an int and a double holder
-        val ih = new maxHolder<int>(0);
-        val dh = new maxHolder<double>(0.0);
+        val ih = instantiate<maxHolder<int>>(0);
+        val dh = instantiate<maxHolder<double>>(0.0);
         // generate 10 random numbers (between 1-100) for each
         for (var i: int = 0; i < 10; i += 1) {
             ih.setValue(rand() % 100 + 1);
