@@ -149,8 +149,15 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
         s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
       case t: EirTemplatedType if isOption(resolve(t.base)) =>
         val arg = resolve(t.args.head)
+        // optionals are wrapped when they're not already pointers
         makeShared(!arg.isPointer(this), typeFor(arg, ctx))
-      case _ => makeShared(x.isPointer(this), nameFor(x, ctx))
+      case _ => makeShared(
+          x match {
+            case _: EirTemplateArgument => false
+            case _                      => x.isPointer(this)
+          },
+          nameFor(x, ctx)
+        )
     }
   }
 

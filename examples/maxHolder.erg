@@ -10,6 +10,7 @@ def seedRand(seed: int): unit;
 @system(fromHeader="ctime",alias="std::time")
 def time(value: int): int;
 
+// helper function to test whether partial inference works
 def instantiate<A, B>(b: B): A {
     return new A(b);
 }

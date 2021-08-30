@@ -210,24 +210,6 @@ class EirImportTests extends AnyFunSuite {
     Processes.onLoad(module)
   }
 
-  test("ensure we can do partial inference") {
-    setupEnv()
-    val module = Modules.load("""
-      |package foo;
-      |import ergoline::_;
-      |def instantiate<A, B>(b: B): A {
-      |    return new A(b);
-      |}
-      |
-      |def test(): unit {
-      |    val n = 1;
-      |    val inst = instantiate<array<string>>(n);
-      |    inst[n - 1] = "hi!";
-      |}
-      |""".stripMargin)
-    Processes.onLoad(module)
-  }
-
   test("test passing value as reference") {
     def program(failing: Boolean): String = {
       s"""
