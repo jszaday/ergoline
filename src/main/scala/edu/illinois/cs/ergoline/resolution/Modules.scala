@@ -6,6 +6,7 @@ import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import org.antlr.v4.runtime._
 
 import java.io.File
@@ -82,26 +83,35 @@ object Modules {
     parser
   }
 
-  def retrieve(qualified: List[String], scope: EirScope): EirNamespace = {
-    retrieve(qualified.last, qualified.reverse.tail.foldRight(scope)(retrieve))
-  }
+//  def retrieve(qualified: List[String], scope: EirScope): EirNamespace = {
+//    retrieve(qualified.last, qualified.reverse.tail.foldRight(scope)(retrieve))
+//  }
 
   def apply(qualified: List[String], scope: EirScope): Option[EirNamedNode] = {
     qualified match {
       case head :: Nil => this(head, scope)
-      case head :: tail => this(head, scope).map(x =>
-          retrieve(tail, util.assertValid[EirScope](x))
+      case head :: tail => this(head, scope).flatMap(x =>
+          this(tail, util.assertValid[EirScope](x))
         )
-      case Nil => None
+      case Nil => Some(scope).to[EirNamedNode]
     }
   }
 
   def apply(name: String, scope: EirScope): Option[EirNamedNode] = {
     // find a directory/file with the desired name, and provisionally import it
-    searchPath
-      .map(_.resolve(name).toFile)
-      .find(_.exists())
-      .flatMap(provisional(_, scope))
+    Find
+      .child[EirNamedNode](scope, withName(name))
+      .headOption
+      .map({
+        case x: EirFileSymbol => Find.uniqueResolution[EirNamedNode](x)
+        case x                => x
+      })
+      .orElse({
+        searchPath
+          .map(_.resolve(name).toFile)
+          .find(_.exists())
+          .flatMap(provisional(_, scope))
+      })
   }
 
   def discoverSources(f: File): (Option[File], Iterable[File]) = {
@@ -144,6 +154,20 @@ object Modules {
       val ns = EirNamespace(Some(scope), Nil, name)
       AstManipulation.placeNodes(scope, List(ns))
       ns
+    }
+  }
+
+  def retrieve(name: List[String], scope: EirScope): EirNamespace = {
+    val init = ({
+      if (name.length <= 1) Some(scope)
+      else this(name.init, scope).to[EirScope]
+    }).zip(name.lastOption)
+    init.flatMap { case (init, last) => this(last, init) } match {
+      case Some(x: EirNamespace) => x
+      case Some(x)               => Errors.incorrectType(x, classOf[EirNamespace])
+      case None => init
+          .map { case (init, last) => retrieve(last, init) }
+          .getOrElse(Errors.unableToResolve(name, scope))
     }
   }
 

@@ -5,7 +5,11 @@ program
     ;
 
 annotatedTopLevelStatement
-    :   annotation* (topLevelStatement | namespace)
+    :   annotation* (publicImport | topLevelStatement | namespace)
+    ;
+
+publicImport
+    :   PublicKwd importStatement
     ;
 
 topLevelStatement
@@ -138,7 +142,7 @@ templateDecl
     ;
 
 accessModifier
-    :   'public' | 'protected' | 'private'
+    :   PublicKwd | 'protected' | 'private'
     ;
 
 inheritanceDecl
@@ -498,6 +502,7 @@ StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
 WhereKwd : 'where' ;
 EnumKwd : 'enum' ;
+PublicKwd : 'public' ;
 
 fragment Sign
     :   '+' | '-'

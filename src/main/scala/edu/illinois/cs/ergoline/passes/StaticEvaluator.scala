@@ -1,6 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.literals.{EirBooleanLiteral, EirIntegerLiteral, EirLiteral, EirLiteralSymbol, EirLiteralTuple, EirLiteralType}
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirBooleanLiteral,
+  EirIntegerLiteral,
+  EirLiteral,
+  EirLiteralSymbol,
+  EirLiteralTuple,
+  EirLiteralType
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals

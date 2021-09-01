@@ -216,8 +216,11 @@ object Find {
         Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike =>
         Option.when(!ancestors.contains(x) || matches(x))(matches(x))
-      case x: EirImport =>
-        Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(
+      case x: EirImport => Option.when(
+          x.isPublic || Find
+            .commonAncestor(ctx, x)
+            .exists(ancestors.contains(_))
+        )(
           matches(x)
         )
       case _: EirMultiDeclaration => Some(false)

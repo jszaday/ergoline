@@ -5,8 +5,17 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals._
 import edu.illinois.cs.ergoline.ast.types._
-import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find, Modules}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption, RichResolvableTypeIterable}
+import edu.illinois.cs.ergoline.resolution.{
+  EirPlaceholder,
+  EirResolvable,
+  Find,
+  Modules
+}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichEirNode,
+  RichOption,
+  RichResolvableTypeIterable
+}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors, assertValid}
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.ParseTree
@@ -184,8 +193,18 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     pop()
   }
 
+  override def visitPublicImport(ctx: PublicImportContext): EirImport = {
+    val node = visitImportStatement(ctx.importStatement())
+    node.publicOverride = true
+    node
+  }
+
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
-    EirImport(parent, ctx.fqn().identifier().toStringList)
+    EirImport(
+      parent,
+      ctx.fqn().identifier().toStringList,
+      publicOverride = false
+    )
   }
 
   override def visitInterpolatedString(
@@ -302,12 +321,11 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitMember(ctx: MemberContext): EirMember = {
-    val modifier: EirAccessibility = Option(ctx.accessModifier())
+    val modifier = Option(ctx.accessModifier())
       .map(_.getText.capitalize)
       .map(EirAccessibility.withName)
-      .getOrElse(defaultMemberAccessibility)
     enter(
-      EirMember(parent, null, modifier),
+      EirMember(parent, null, null),
       (m: EirMember) => {
         m.isStatic = ctx.StaticKwd() != null
         m.isOverride = ctx.OverrideKwd() != null
@@ -315,6 +333,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           .orElse(Option(ctx.topLevelStatement()))
           .map(x => visitAs[EirNamedNode](x))
           .foreach(m.member = _)
+        m.accessibility = modifier.getOrElse({
+          m.member match {
+            case _: EirImport => EirAccessibility.Private
+            case _            => defaultMemberAccessibility
+          }
+        })
       }
     )
   }
@@ -332,8 +356,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitAnnotatedTopLevelStatement(
       ctx: AnnotatedTopLevelStatementContext
   ): EirNode = {
-    val target: ParseTree =
-      Option(ctx.namespace()).getOrElse(ctx.topLevelStatement())
+    val target: ParseTree = Option(ctx.namespace())
+      .orElse(Option(ctx.publicImport()))
+      .getOrElse(ctx.topLevelStatement())
     enter(
       visit(target),
       (n: EirNode) => {
@@ -1218,38 +1243,45 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     init.toList :+ last
   }
 
-  def mkSpecialization[A <: EirNamedNode : ClassTag](): EirResolvable[A] with EirSpecialization = {
+  def mkSpecialization[A <: EirNamedNode: ClassTag]()
+      : EirResolvable[A] with EirSpecialization = {
     (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
-      EirTemplatedType(parent, null, null)
-    } else {
-      EirSpecializedSymbol(parent, null, null)
-    }).asInstanceOf[EirResolvable[A] with EirSpecialization]
+       EirTemplatedType(parent, null, null)
+     } else {
+       EirSpecializedSymbol(parent, null, null)
+     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
   }
 
-  def parseIdentifier[A <: EirNamedNode : ClassTag](ctx: IdentifierExpressionContext): EirResolvable[A] = {
+  def parseIdentifier[A <: EirNamedNode: ClassTag](
+      ctx: IdentifierExpressionContext
+  ): EirResolvable[A] = {
     type goalType = EirExpressionNode with EirResolvable[A]
 
-    def conv2expr(s: EirResolvable[A] with EirSpecialization): goalType = s match {
-      case x: goalType => x
-      case x: A        => EirPlaceholder[A](None, Some(x))
-    }
+    def conv2expr(s: EirResolvable[A] with EirSpecialization): goalType =
+      s match {
+        case x: goalType => x
+        case x: A        => EirPlaceholder[A](None, Some(x))
+      }
 
     val curr =
       Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
-        case Some(spec) => conv2expr(enter(
-          mkSpecialization[A](),
-          (s: EirSpecialization) => {
-            s.types = specializationToList(spec)
-            s.setBase(symbolize[
-              A with EirSpecializable,
-              IdentifierContext
-            ](
-              ctx.fqn().identifier()
-            ))
-          }
-        ))
-        case None =>
-          symbolize[A, IdentifierContext](ctx.fqn().identifier())
+        case Some(spec) => conv2expr(
+            enter(
+              mkSpecialization[A](),
+              (s: EirSpecialization) => {
+                s.types = specializationToList(spec)
+                s.setBase(
+                  symbolize[
+                    A with EirSpecializable,
+                    IdentifierContext
+                  ](
+                    ctx.fqn().identifier()
+                  )
+                )
+              }
+            )
+          )
+        case None => symbolize[A, IdentifierContext](ctx.fqn().identifier())
       }
 
     Option(ctx.identifierExpression())

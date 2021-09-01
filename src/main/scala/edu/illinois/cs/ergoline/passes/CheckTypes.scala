@@ -139,11 +139,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case Some(_: EirClassLike) => true
           case _                     => false
         }
-      case x: EirPlaceholder[_] =>
-        x.expectation match {
-          case Some(_: EirType) => true
+      case x: EirPlaceholder[_] => x.expectation match {
+          case Some(_: EirType)           => true
           case Some(x: EirExpressionNode) => isStatic(x)
-          case _ => false
+          case _                          => false
         }
       case _ => false // TODO figure out what goes here?
     }
@@ -347,7 +346,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         x.isRef || (
           x.expr match {
             case _: EirFunctionCall => true
-            case _ => false
+            case _                  => false
           }
         )
       }
