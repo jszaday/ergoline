@@ -1,17 +1,10 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirBooleanLiteral,
-  EirIntegerLiteral,
-  EirLiteral,
-  EirLiteralSymbol,
-  EirLiteralTuple,
-  EirLiteralType
-}
+import edu.illinois.cs.ergoline.ast.literals.{EirBooleanLiteral, EirIntegerLiteral, EirLiteral, EirLiteralSymbol, EirLiteralTuple, EirLiteralType}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
@@ -54,7 +47,8 @@ object StaticEvaluator {
   def evaluate(x: EirNode)(implicit ctx: TypeCheckContext): EirLiteral[_] = {
     x match {
       case x: EirConstantFacade   => evaluate(x.value)
-      case x: EirSymbol[_]        => valueWithin(x)
+      case x: EirSymbolLike[_]    => valueWithin(x)
+      case x: EirPlaceholder[_]   => valueWithin(x)
       case x: EirLiteral[_]       => evaluate(x)
       case x: EirTupleExpression  => evaluate(x)
       case x: EirUnaryExpression  => evaluate(x)

@@ -279,10 +279,13 @@ trait EirSpecializable extends EirNode with EirPredicated {
 }
 
 trait EirSpecialization extends EirNode {
+  def setBase(ty: EirResolvable[EirSpecializable]): Unit = ???
+
   def types: List[EirResolvable[EirType]]
+  def types_=(tys: List[EirResolvable[EirType]]): Unit = ???
 }
 
-case class EirSyntheticSpecialization(var types: List[EirResolvable[EirType]])
+case class EirSyntheticSpecialization(override var types: List[EirResolvable[EirType]])
     extends EirSpecialization {
   override var parent: Option[EirNode] = None
   override def children: Iterable[EirNode] = types
@@ -904,7 +907,7 @@ case class EirFunctionCall(
     var parent: Option[EirNode],
     var target: EirExpressionNode,
     var args: List[EirCallArgument],
-    var types: List[EirResolvable[EirType]]
+    override var types: List[EirResolvable[EirType]]
 ) extends EirPostfixExpression[EirCallArgument]
     with EirSpecialization {
   override def children: Iterable[EirNode] = super.children ++ types
@@ -997,9 +1000,14 @@ case class EirForLoop(
 case class EirSpecializedSymbol(
     var parent: Option[EirNode],
     var symbol: EirResolvable[EirNamedNode with EirSpecializable],
-    var types: List[EirResolvable[EirType]]
+    override var types: List[EirResolvable[EirType]]
 ) extends EirSymbolLike[EirNamedNode with EirSpecializable]
     with EirSpecialization {
+
+  override def setBase(ty: EirResolvable[EirSpecializable]): Unit = {
+    this.symbol = ty.asInstanceOf[EirResolvable[EirNamedNode with EirSpecializable]]
+  }
+
   override def children: Iterable[EirNode] = symbol +: types
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
@@ -1150,14 +1158,14 @@ case class EirInterpolatedString(var children: List[EirExpressionNode])(
   def append(n: EirExpressionNode): Unit = children :+= n
 }
 
-case class EirPackExpansion(var fqn: List[String])(var parent: Option[EirNode])
-    extends EirResolvable[EirType] {
+case class EirPackExpansion(var base: EirResolvable[EirType])(
+    var parent: Option[EirNode]
+) extends EirResolvable[EirType] {
   private var _resolved: Option[EirTemplateArgument] = None
 
   override def resolve(): Seq[EirType] = {
     if (_resolved.isEmpty) {
-      val symbol = EirSymbol[EirNamedNode with EirType](parent, fqn)
-      _resolved = Some(Find.uniqueResolution[EirTemplateArgument](symbol))
+      _resolved = Some(Find.uniqueResolution[EirTemplateArgument](base))
       if (!_resolved.forall(_.isPack)) {
         Errors.expectedParameterPack(this)
       }

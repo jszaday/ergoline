@@ -35,14 +35,13 @@ innerStatement
     :   block
     |   forLoop
     |   whileLoop
-    |   function
     |   ifThenElse
     |   matchStatement
     |   expression ';'
     |   returnStatement
-    |   classDeclaration
     |   whenStatement
     |   awaitManyStatement
+    |   topLevelStatement
     |   topLevelDeclaration
     ;
 
@@ -71,7 +70,7 @@ patternList
     ;
 
 pattern
-    :   identifier (':' (tupleType | basicType))?
+    :   identifier (':' basicType)?
     |   constant
     |   expression
     |   '(' patternList ')'
@@ -391,20 +390,27 @@ proxySuffix
     |   prefix=(Atpersand | ProxySuffix) CollectiveKwd
     ;
 
+templateType
+    :   identifierExpression
+    ;
+
+proxyType
+    :   templateType proxySuffix?
+    ;
+
 basicType
-    :   fqn specialization? proxySuffix?
-    |   fqn Ellipses
+    :   proxyType | tupleType
     ;
 
 lambdaType
-    :   (basicType | tupleType) '=>' (basicType | tupleType)
+    :   head=basicType '=>' tail=basicType
     ;
 
 type
-    :   basicType
+    :   proxyType
     |   tupleType
     |   lambdaType
-    |   type Ampersand
+    |   type (Ampersand | Ellipses)
     ;
 
 annotation
