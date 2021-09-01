@@ -1018,8 +1018,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: StaticPrimaryExpressionContext
   ): EirExpressionNode = {
     super.visitStaticPrimaryExpression(ctx) match {
-      case x: EirLiteral[_]     => x
       case x: EirResolvable[_]  => EirLiteralSymbol(x)(parent)
+      case x: EirExpressionNode => x
       case x                    => Errors.incorrectType(x, classOf[EirLiteral[_]])
     }
   }
