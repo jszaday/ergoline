@@ -1424,7 +1424,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x: types.EirTupleType
   )(implicit ctx: TypeCheckContext): EirType = {
     val children = x.children.flatMap {
-      case x: EirPackExpansion => visit(x) match {
+      case x: EirPackExpansion => visit(x.base) match {
           case EirTupleType(_, ts) => ts
           case t                   => List(t)
         }
