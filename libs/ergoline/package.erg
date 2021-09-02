@@ -1,5 +1,7 @@
 package ergoline;
 
+public import ergoline::matchers::_;
+
 @system(alias="CkPrintf") def print(s : string): unit;
 @system(alias="CkPrintf") def println(s : string): unit;
 @system(alias="CkAbort") def abort(s : string): unit;

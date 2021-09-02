@@ -1,0 +1,13 @@
+package ergoline;
+
+@system(alias="ergoline::either")
+class either<L, R> {
+    @system def self(l: L);
+    @system def self(r: R);
+
+    @system def isLeft(): bool;
+    @system def isRight(): bool;
+
+    @system def left(): L&;
+    @system def right(): R&;
+}

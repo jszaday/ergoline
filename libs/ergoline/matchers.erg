@@ -1,0 +1,23 @@
+package ergoline;
+
+namespace matchers {
+@system class left {
+    static def unapply<L, R>(x: either<L, R>): option<L& > {
+        if (x.isLeft()) {
+            return option<L& >(x.left());
+        } else {
+            return option<L& >();
+        }
+    }
+}
+
+@system class right {
+    static def unapply<L, R>(x: either<L, R>): option<R& > {
+        if (x.isLeft()) {
+            return option<R& >();
+        } else {
+            return option<R& >(x.right());
+        }
+    }
+}
+}

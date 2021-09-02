@@ -26,7 +26,7 @@ class foo {
         check(o4);
         check(o5);
 
-        exit();
+        checkEither();
     }
 
     def check<A>(o: option<A>) {
@@ -35,5 +35,13 @@ class foo {
         } else {
             println("optional does not have a value");
         }
+    }
+
+    def checkEither() {
+        val l = new either<int, double>(42);
+        val o = left::unapply(l);
+        assert(o.nonEmpty());
+
+        exit();
     }
 }
