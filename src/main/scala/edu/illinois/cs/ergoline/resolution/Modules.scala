@@ -87,17 +87,15 @@ object Modules {
 //    retrieve(qualified.last, qualified.reverse.tail.foldRight(scope)(retrieve))
 //  }
 
-  def apply(qualified: List[String], scope: EirScope): Option[EirNamedNode] = {
+  def apply(qualified: List[String], scope: EirScope): Option[EirScope] = {
     qualified match {
-      case head :: Nil => this(head, scope)
-      case head :: tail => this(head, scope).flatMap(x =>
-          this(tail, util.assertValid[EirScope](x))
-        )
-      case Nil => Some(scope).to[EirNamedNode]
+      case Nil          => Some(scope)
+      case head :: Nil  => this(head, scope)
+      case head :: tail => this(head, scope).flatMap(this(tail, _))
     }
   }
 
-  def apply(name: String, scope: EirScope): Option[EirNamedNode] = {
+  def apply(name: String, scope: EirScope): Option[EirScope] = {
     // find a directory/file with the desired name, and provisionally import it
     Find
       .child[EirNamedNode](scope, withName(name))
@@ -112,6 +110,7 @@ object Modules {
           .find(_.exists())
           .flatMap(provisional(_, scope))
       })
+      .to[EirScope]
   }
 
   def discoverSources(f: File): (Option[File], Iterable[File]) = {
@@ -158,10 +157,7 @@ object Modules {
   }
 
   def retrieve(name: List[String], scope: EirScope): EirNamespace = {
-    val init = ({
-      if (name.length <= 1) Some(scope)
-      else this(name.init, scope).to[EirScope]
-    }).zip(name.lastOption)
+    val init = this(name.init, scope).zip(name.lastOption)
     init.flatMap { case (init, last) => this(last, init) } match {
       case Some(x: EirNamespace) => x
       case Some(x)               => Errors.incorrectType(x, classOf[EirNamespace])

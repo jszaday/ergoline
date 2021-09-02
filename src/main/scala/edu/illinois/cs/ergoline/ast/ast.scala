@@ -645,7 +645,7 @@ case class EirImport(
       Option.when(qualified.length > 1)(qualified.init).getOrElse(qualified)
     val last = Option.when(!wildcard && qualified.length > 1)(qualified.last)
     if (_resolved.isEmpty) {
-      _resolved = Modules(name, EirGlobalNamespace).to[EirScope]
+      _resolved = Modules(name, EirGlobalNamespace)
     }
     _resolved match {
       case Some(x) => Option

@@ -1043,9 +1043,10 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       ctx: StaticPrimaryExpressionContext
   ): EirExpressionNode = {
     super.visitStaticPrimaryExpression(ctx) match {
-      case x: EirResolvable[_]  => EirLiteralSymbol(x)(parent)
       case x: EirExpressionNode => x
-      case x                    => Errors.incorrectType(x, classOf[EirLiteral[_]])
+      // TODO -- this isn't the best solution, but unsure what would be better?
+      case x: EirResolvable[_] => EirLiteralSymbol(x)(parent)
+      case x                   => Errors.incorrectType(x, classOf[EirLiteral[_]])
     }
   }
 

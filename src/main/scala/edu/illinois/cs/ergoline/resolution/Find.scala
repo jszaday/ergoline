@@ -72,13 +72,13 @@ object Find {
     }
   }
 
-  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(
+  def namedChild[T <: EirNamedNode](node: Option[EirScope], name: String)(
       implicit tag: ClassTag[T]
   ): T = {
     node
       .flatMap(firstNamedChild[T](_, name))
       .getOrElse(
-        Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name")
+        Errors.unableToResolve(List(name), node.getOrElse(???))
       )
   }
 
