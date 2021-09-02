@@ -75,5 +75,6 @@ struct trait : virtual public hypercomm::polymorph::trait,
 #include "util.hpp"
 #include "message.hpp"
 #include "singleton.hpp"
+#include "either.hpp"
 
 #endif

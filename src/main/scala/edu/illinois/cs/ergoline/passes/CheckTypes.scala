@@ -1522,7 +1522,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   def makeMemberCall(
       target: EirExpressionNode,
       field: String,
-      args: List[EirExpressionNode] = Nil
+      args: List[EirExpressionNode] = Nil,
+      isStatic: Boolean = false
   ): EirFunctionCall = {
     val f = EirFunctionCall(
       Some(target),
@@ -1532,6 +1533,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     )
     val s = EirScopedSymbol(target, null)(Some(f))
     s.pending = EirSymbol(Some(s), List(field))
+    s.isStatic = isStatic
     f.target = s
     f
   }
@@ -1724,6 +1726,36 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): EirType = {
     x.children.foreach(visit)
 
+    null
+  }
+
+  override def visitExtractorPattern(
+      x: EirExtractorPattern
+  )(implicit ctx: TypeCheckContext): EirType = {
+    val goal = ctx.goal.pop()
+    val expr = EirPlaceholder[EirType](None, Some(goal))
+    val unapply =
+      makeMemberCall(x.identifier, "unapply", List(expr), isStatic = true)
+    x.disambiguation = Some(unapply)
+    val ty = visit(unapply)
+    val option = globals.optionType
+    val goals = ty match {
+      case EirTemplatedType(_, base, args) if base == option =>
+        args match {
+          case EirTupleType(_, tys) :: Nil => tys
+          case ty :: Nil                   => List(ty)
+          case _                           => ???
+        }
+      case _ => Errors.cannotCast(x, ty, option)
+    }
+    val patterns = x.list.patterns
+    if (goals.length != patterns.length) {
+      Errors.wrongNbrOfArgs(x, goals.length, patterns.length)
+    }
+    patterns.zip(goals).foreach { case (pattern, goal: EirType) =>
+      ctx.goal.push(goal)
+      visit(pattern)
+    }
     null
   }
 }

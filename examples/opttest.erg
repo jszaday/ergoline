@@ -26,7 +26,7 @@ class foo {
         check(o4);
         check(o5);
 
-        exit();
+        checkEither();
     }
 
     def check<A>(o: option<A>) {
@@ -35,5 +35,22 @@ class foo {
         } else {
             println("optional does not have a value");
         }
+    }
+
+    def check<L, R>(x: either<L, R>) {
+        match (x) {
+            case left(l) => println(`got a left value of ${l}!`);
+            case right(r) => println(`got a right value of ${r}!`);
+        }
+    }
+
+    def checkEither() {
+        val l = new either<int, double>(42);
+        val r = new either<int, double>(42.0);
+
+        check(l);
+        check(r);
+
+        exit();
     }
 }

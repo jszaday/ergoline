@@ -18,6 +18,14 @@ import ergoline::_;
     }
 
     @entry def activate(a: animal): unit {
+        if (isBird(a)) println("hey> it's a bird!");
+
+        match (a) {
+            case animal(kind, legs) => {
+                println(`hey> a(n) ${kind} has ${legs} legs!`);
+            }
+        }
+
         match (a) {
             case d: duck => {
                 identify(d);
@@ -28,8 +36,6 @@ import ergoline::_;
                 makeSound(l);
             }
         }
-
-        if (isBird(a)) println("hey> it's a bird!");
 
         count += 1;
         if (count >= 2) {
@@ -48,12 +54,12 @@ def makeSound<A>(a: A) where A == duck {
 
 def identify<A <: animal>(a: A) where (bird >: A) {
     val tid = typeid(a);
-    println(`hey> a(n) ${tid.name()} has ${a.numLegs()} legs and a ${a.beak()}!`);
+    println(`hey> a(n) ${tid.name()} has a ${a.beak()}!`);
 }
 
 def identify<A <: animal>(a: A) where !(A <: bird) {
     val tid = typeid(a);
-    println(`hey> a(n) ${tid.name()} has ${a.numLegs()} legs!`);
+    println(`hey> a(n) ${tid.name()} does not have a beak!`);
 }
 
 class lion with animal {
@@ -78,4 +84,9 @@ trait bird extends animal {
 
 trait animal {
     def numLegs(): int;
+
+    static def unapply(a: animal): option<(string, int)> {
+        val tid = typeid(a);
+        return option<(string, int)>((tid.name(), a.numLegs()));
+    }
 }

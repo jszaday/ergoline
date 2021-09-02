@@ -70,10 +70,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
   override def visit(tree: ParseTree): EirNode = {
     val res = super.visit(tree)
-    res.location = tree match {
-      case c: ParserRuleContext => Some(c.sourceInfo)
-      case _                    => None
-    }
+    Option(res).foreach(res => {
+      res.location = tree match {
+        case c: ParserRuleContext => Some(c.sourceInfo)
+        case _                    => None
+      }
+    })
     res
   }
 
@@ -745,9 +747,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitPattern(ctx: PatternContext): EirNode = {
-    if (ctx.identifier() != null) {
+    if (ctx.id != null) {
       enter(
-        EirIdentifierPattern(parent, ctx.identifier().getText, null),
+        EirIdentifierPattern(parent, ctx.id.getText, null),
         (i: EirIdentifierPattern) => {
           i.ty = Option(ctx.basicType())
             .map(visitAs[EirResolvable[EirType]])
@@ -772,6 +774,14 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         EirExpressionPattern(parent, null),
         (e: EirExpressionPattern) => {
           e.expression = visitAs[EirExpressionNode](ctx.expression())
+        }
+      )
+    } else if (ctx.fn != null) {
+      enter(
+        EirExtractorPattern(parent, null, null),
+        (x: EirExtractorPattern) => {
+          x.identifier = visitAs[EirExpressionNode](ctx.fn)
+          x.list = visitAs[EirPatternList](ctx.patternList())
         }
       )
     } else {

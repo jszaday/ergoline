@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types.{
+  EirReferenceType,
   EirTemplatedType,
   EirTupleType,
   EirType
@@ -148,7 +149,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
       case t: EirTupleType =>
         s"std::tuple<${t.children.map(typeFor(_, ctx)) mkString ", "}>"
       case t: EirTemplatedType if isOption(resolve(t.base)) =>
-        val arg = resolve(t.args.head)
+        val arg = resolve(t.args.head) match {
+          case EirReferenceType(_, ty) => resolve(ty)
+          case ty                      => ty
+        }
         // optionals are wrapped when they're not already pointers
         makeShared(!arg.isPointer(this), typeFor(arg, ctx))
       case _ => makeShared(

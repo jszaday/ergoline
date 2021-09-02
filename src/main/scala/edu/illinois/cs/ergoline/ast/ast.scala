@@ -554,17 +554,19 @@ case class EirMember(
     }
   }
 
-  def isVirtual: Boolean = member match {
-    case _: EirFunction =>
-      !isConstructor && (base.isAbstract || isOverride) && {
-        !annotations.exists(_.name == "system")
-      } && {
-        member match {
-          case s: EirSpecializable => s.templateArgs.isEmpty
-          case _                   => false
+  def isVirtual: Boolean = {
+    !isStatic && (member match {
+      case _: EirFunction =>
+        !isConstructor && (base.isAbstract || isOverride) && {
+          !annotations.exists(_.name == "system")
+        } && {
+          member match {
+            case s: EirSpecializable => s.templateArgs.isEmpty
+            case _                   => false
+          }
         }
-      }
-    case _ => false
+      case _ => false
+    })
   }
 
   override def name: String = member.name
@@ -1095,6 +1097,17 @@ trait EirPattern extends EirNode {
   override def children: Iterable[EirNode] = declarations ++ conditions
   def position: Int =
     parent.to[EirPatternList].map(_.patterns.indexOf(this)).getOrElse(-1)
+}
+
+case class EirExtractorPattern(
+    var parent: Option[EirNode],
+    var identifier: EirExpressionNode,
+    var list: EirPatternList
+) extends EirPattern {
+  var disambiguation: Option[EirFunctionCall] = None
+  override def declarations: List[EirDeclaration] = list.declarations
+  override def conditions: List[EirExpressionNode] = list.conditions
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 case class EirPatternList(

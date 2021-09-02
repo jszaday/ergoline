@@ -643,33 +643,63 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def handleOptionMember(implicit
       ctx: CodeGenerationContext,
       m: EirMember,
-      base: EirExpressionNode,
+      fc: EirFunctionCall,
       args: List[EirExpressionNode]
   ): Unit = {
+    val base = fc.target
     val apl = m.name == "apply"
     val opt = base match {
       case s: EirScopedSymbol[_] => s.target
       case _ if apl              => base
       case _                     => Errors.unreachable()
     }
-    val rsv =
-      if (apl) assertValid[EirLambdaType](ctx.typeOf(opt)).to
-      else ctx.typeOf(opt)
-    val ty = ctx.resolve(rsv) match {
+    val rsv = {
+      if (apl) {
+        opt match {
+          case EirSpecializedSymbol(_, base, tys) => EirTemplatedType(
+              None,
+              assertValid[EirResolvable[EirType]](base),
+              tys
+            )
+          case _ =>
+            val option = globals.optionType
+            val spec = CheckTypes.inferSpecialization(option, fc)(ctx.tyCtx)
+            spec
+              .map(s => EirTemplatedType(None, option, s.types))
+              .getOrElse(Errors.missingType(opt))
+        }
+      } else {
+        // TODO this overly specializes! e.g., option<A> ==> option<int>
+        ctx.typeOf(opt)
+      }
+    }
+    val headTy = ctx.resolve(rsv) match {
       case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
       case _                                         => Errors.unreachable()
+    }
+    val (ref, ty) = headTy match {
+      case EirReferenceType(_, t) => (true, ctx.resolve(t))
+      case t                      => (false, t)
     }
     val ptr = ty.isPointer
     val astr = Option.unless(ptr)("*")
     def wrap(ty: EirType): Option[String] = Option.unless(ty.isPointer)(
-      s"std::make_shared<${ctx.typeFor(ty, Some(base))}>"
+      (if (ref) "std::shared_ptr" else "std::make_shared") + s"<${ctx
+        .typeFor(ty, Some(base))}>"
     )
     m.name match {
       case "get"                   => ctx << "(" << astr << opt << ")"
       case "apply" if args.isEmpty => ctx << "nullptr"
       case "apply" if args.nonEmpty =>
         if (ptr) ctx << args.head
-        else ctx << wrap(ty) << "(" << args.head << ")"
+        else {
+          ctx << wrap(ty) << "("
+          if (ref && !ptr) {
+            ctx << "&(" << args.head << "), [](void*){})"
+          } else {
+            ctx << args.head << ")"
+          }
+        }
       case "nonEmpty" | "isEmpty" =>
         ctx << "(" << opt << (if (m.name == "nonEmpty") "!="
                               else "==") << "nullptr" << ")"
@@ -909,7 +939,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => ???
         }
       case m: EirMember if isOption(disambiguated.parent) =>
-        handleOptionMember(ctx, m, target, flattenArgs(args))
+        handleOptionMember(ctx, m, fc, flattenArgs(args))
       case m: EirMember if isFuture(disambiguated.parent) =>
         handleFutureMember(ctx, m, target, flattenArgs(args))
       case _: EirMember if static =>
@@ -2169,6 +2199,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << "})(" << x.expression << ")"
   }
 
+  private def pickName(current: String, ctx: CodeGenerationContext)(
+      x: EirExtractorPattern
+  ): String = {
+    x.list.patterns match {
+      case EirIdentifierPattern(_, name, _) :: Nil => name
+      case _                                       => current + ctx.temporary
+    }
+  }
+
   def visitPatternDecl(
       parent: CodeGenerationContext,
       x: EirPattern,
@@ -2177,6 +2216,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   ): String = {
     implicit val ctx = parent.makeSubContext()
     x match {
+      case x: EirExtractorPattern => x.disambiguation.foreach(f => {
+          val tmp = pickName(current, parent)(x)
+          val node = CppNode(current)
+          node.foundType = f.args.lastOption.flatMap(_.foundType)
+          f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
+          ctx << "auto" << tmp << "=" << f << ";"
+          val patterns = x.list.patterns
+          if (patterns.length > 1) {
+            patterns.zipWithIndex.foreach { case (p, i) =>
+              val nextTmp = s"((bool)$tmp ? &std::get<$i>(*$tmp) : nullptr)"
+              ctx << visitPatternDecl(ctx, p, nextTmp)
+            }
+          }
+        })
       case EirPatternList(_, ps) => ps match {
           case p :: Nil if !forceTuple =>
             ctx << visitPatternDecl(ctx, p, current)
@@ -2187,13 +2240,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             })
         }
       case i @ EirIdentifierPattern(_, n, t) if n != "_" =>
+        val declName = i.declarations.headOption.map(ctx.nameFor(_))
         val ty = ctx.resolve(t)
-        ctx.ignoreNext(";")
         if (ty.isPointer && i.needsCasting)
-          ctx << i.declarations.head << "=" << "std::dynamic_pointer_cast<" << ctx
+          ctx << "auto" << declName << "=" << "std::dynamic_pointer_cast<" << ctx
             .nameFor(t) << ">(" << current << ");"
         // TODO make this a reference!
-        else ctx << i.declarations.head << s" = $current;"
+        else ctx << "auto" << declName << "=" << current << ";"
       case i: EirIdentifierPattern => if (i.name != "_") Errors.missingType(x)
       case _: EirExpressionPattern =>
     }
@@ -2220,6 +2273,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       parentType: Option[EirType]
   ): List[String] = {
     x match {
+      case x: EirExtractorPattern =>
+        val nextTemp = pickName(current, parent)(x)
+        val ty = x.disambiguation.flatMap(_.foundType)
+        List("(bool)" + nextTemp) ++ visitPatternCond(
+          parent,
+          x.list,
+          nextTemp,
+          ty
+        )
       case EirPatternList(_, ps) => ps match {
           case p :: Nil => parentType match {
               case Some(t: EirTupleType) => visitPatternCond(
@@ -2264,6 +2326,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def findPointers(x: EirPattern): List[EirNode] = {
+    x match {
+      case x: EirPatternList      => x.patterns.flatMap(findPointers)
+      case x: EirExtractorPattern => x.list.patterns.flatMap(_.declarations)
+      case _                      => Nil
+    }
+  }
+
   override def visitMatchCase(
       x: EirMatchCase
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -2275,15 +2345,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "{" << visitPatternDecl(ctx, x.patterns, ctx.temporary).split(n)
     val conditions = visitPatternCond(ctx, x.patterns, ctx.temporary, exprType)
       .mkString(" && ")
+    val ptrs = findPointers(x.patterns)
     val needsIf = x.condition.nonEmpty || conditions.nonEmpty
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
     val (primary, secondary) =
       (Option.unless(isUnit)("return"), Option.when(isUnit)("return;"))
+    ptrs.foreach(ctx.makePointer)
     ctx << primary << x.body << ";" << secondary << Option.when(needsIf)(
       "}"
     ) << "}"
+    ptrs.foreach(ctx.unsetPointer)
   }
 
   override def visitTupleType(
@@ -2827,4 +2900,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirMultiDeclaration
   )(implicit ctx: CodeGenerationContext): Unit =
     visitDeclarationLike(x, x.initialValue)
+
+  override def visitExtractorPattern(x: EirExtractorPattern)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = ???
 }

@@ -90,11 +90,16 @@ trait EirVisitor[Context, Value] {
       case x: EirPatternList       => visitPatternList(x)
       case x: EirExpressionPattern => visitExpressionPattern(x)
       case x: EirIdentifierPattern => visitIdentifierPattern(x)
+      case x: EirExtractorPattern  => visitExtractorPattern(x)
       case _                       => fallback(x)
     }
   }
 
   def visitMultiDeclaration(x: EirMultiDeclaration)(implicit
+      ctx: Context
+  ): Value
+
+  def visitExtractorPattern(x: EirExtractorPattern)(implicit
       ctx: Context
   ): Value
   def visitReferenceType(x: EirReferenceType)(implicit ctx: Context): Value
