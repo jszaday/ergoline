@@ -91,6 +91,10 @@ package object globals {
     Find.namedChild[EirTrait](ergolineModule, "iterator")
   }
 
+  def optionType: EirClass = {
+    Find.namedChild[EirClass](ergolineModule, "option")
+  }
+
   def objectType: EirType = {
     Find.namedChild[EirClassLike](ergolineModule, "object")
   }

@@ -643,33 +643,62 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def handleOptionMember(implicit
       ctx: CodeGenerationContext,
       m: EirMember,
-      base: EirExpressionNode,
+      fc: EirFunctionCall,
       args: List[EirExpressionNode]
   ): Unit = {
+    val base = fc.target
     val apl = m.name == "apply"
     val opt = base match {
       case s: EirScopedSymbol[_] => s.target
       case _ if apl              => base
       case _                     => Errors.unreachable()
     }
-    val rsv =
-      if (apl) assertValid[EirLambdaType](ctx.typeOf(opt)).to
-      else ctx.typeOf(opt)
-    val ty = ctx.resolve(rsv) match {
+    val rsv = {
+      if (apl) {
+        opt match {
+          case EirSpecializedSymbol(_, base, tys) => EirTemplatedType(
+              None,
+              assertValid[EirResolvable[EirType]](base),
+              tys
+            )
+          case _ =>
+            val option = globals.optionType
+            val spec = CheckTypes.inferSpecialization(option, fc)(ctx.tyCtx)
+            spec
+              .map(s => EirTemplatedType(None, option, s.types))
+              .getOrElse(Errors.missingType(opt))
+        }
+      } else {
+        // TODO this overly specializes! e.g., option<A> ==> option<int>
+        ctx.typeOf(opt)
+      }
+    }
+    val headTy = ctx.resolve(rsv) match {
       case t: EirTemplatedType if t.args.length == 1 => ctx.resolve(t.args.head)
       case _                                         => Errors.unreachable()
+    }
+    val (ref, ty) = headTy match {
+      case EirReferenceType(_, t) => (true, ctx.resolve(t))
+      case t                      => (false, t)
     }
     val ptr = ty.isPointer
     val astr = Option.unless(ptr)("*")
     def wrap(ty: EirType): Option[String] = Option.unless(ty.isPointer)(
-      s"std::make_shared<${ctx.typeFor(ty, Some(base))}>"
+      (if (ref) "std::shared_ptr" else "std::make_shared") + s"<${ctx.typeFor(ty, Some(base))}>"
     )
     m.name match {
       case "get"                   => ctx << "(" << astr << opt << ")"
       case "apply" if args.isEmpty => ctx << "nullptr"
       case "apply" if args.nonEmpty =>
         if (ptr) ctx << args.head
-        else ctx << wrap(ty) << "(" << args.head << ")"
+        else {
+          ctx << wrap(ty) << "("
+          if (ref && !ptr) {
+            ctx << "&(" << args.head << "), [](void*){})"
+          } else {
+            ctx << args.head << ")"
+          }
+        }
       case "nonEmpty" | "isEmpty" =>
         ctx << "(" << opt << (if (m.name == "nonEmpty") "!="
                               else "==") << "nullptr" << ")"
@@ -909,7 +938,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => ???
         }
       case m: EirMember if isOption(disambiguated.parent) =>
-        handleOptionMember(ctx, m, target, flattenArgs(args))
+        handleOptionMember(ctx, m, fc, flattenArgs(args))
       case m: EirMember if isFuture(disambiguated.parent) =>
         handleFutureMember(ctx, m, target, flattenArgs(args))
       case _: EirMember if static =>

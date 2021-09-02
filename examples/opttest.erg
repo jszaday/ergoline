@@ -39,8 +39,12 @@ class foo {
 
     def checkEither() {
         val l = new either<int, double>(42);
-        val o = left::unapply(l);
-        assert(o.nonEmpty());
+        val opl = left::unapply(l);
+
+        val r = new either<int, double>(42.0);
+        val opr = right::unapply(r);
+
+        assert(opl.nonEmpty() && opr.nonEmpty());
 
         exit();
     }
