@@ -67,6 +67,10 @@ object Errors {
     exit(format(node, "cannot assign to type %s within %s", ty, node.lval))
   }
 
+  def wrongNbrOfArgs(ctx: EirNode, got: Int, expected: Int): Nothing = {
+    exit(format(ctx, "wrong number of args, got %d expected %d", got, expected))
+  }
+
   def cannotCast(ctx: EirNode, a: EirType, b: EirType): Nothing =
     cannotCast(ctx, nameFor(a), b)
 

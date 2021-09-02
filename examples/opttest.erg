@@ -37,14 +37,19 @@ class foo {
         }
     }
 
+    def check<L, R>(x: either<L, R>) {
+        match (x) {
+            case left(l) => println(`got a left value of ${l}!`);
+            case right(r) => println(`got a right value of ${r}!`);
+        }
+    }
+
     def checkEither() {
         val l = new either<int, double>(42);
-        val opl = left::unapply(l);
-
         val r = new either<int, double>(42.0);
-        val opr = right::unapply(r);
 
-        assert(opl.nonEmpty() && opr.nonEmpty());
+        check(l);
+        check(r);
 
         exit();
     }

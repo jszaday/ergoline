@@ -2199,6 +2199,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << "})(" << x.expression << ")"
   }
 
+  private def pickName(current: String, ctx: CodeGenerationContext)(
+      x: EirExtractorPattern
+  ): String = {
+    x.list.patterns match {
+      case EirIdentifierPattern(_, name, _) :: Nil => name
+      case _                                       => current + ctx.temporary
+    }
+  }
+
   def visitPatternDecl(
       parent: CodeGenerationContext,
       x: EirPattern,
@@ -2207,6 +2216,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   ): String = {
     implicit val ctx = parent.makeSubContext()
     x match {
+      case x: EirExtractorPattern => x.disambiguation.foreach(f => {
+          val nextTemp = pickName(current, parent)(x)
+          val node = CppNode(current)
+          node.foundType = f.args.lastOption.flatMap(_.foundType)
+          f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
+          ctx << "auto" << nextTemp << "=" << f << ";"
+          if (x.list.patterns.length > 1) ???
+        })
       case EirPatternList(_, ps) => ps match {
           case p :: Nil if !forceTuple =>
             ctx << visitPatternDecl(ctx, p, current)
@@ -2250,6 +2267,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       parentType: Option[EirType]
   ): List[String] = {
     x match {
+      case x: EirExtractorPattern =>
+        val nextTemp = pickName(current, parent)(x)
+        val ty = x.disambiguation.flatMap(_.foundType)
+        List("(bool)" + nextTemp) ++ visitPatternCond(
+          parent,
+          x.list,
+          nextTemp,
+          ty
+        )
       case EirPatternList(_, ps) => ps match {
           case p :: Nil => parentType match {
               case Some(t: EirTupleType) => visitPatternCond(
@@ -2294,6 +2320,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def findPointers(x: EirPattern): List[EirNode] = {
+    x match {
+      case x: EirPatternList      => x.patterns.flatMap(findPointers)
+      case x: EirExtractorPattern => x.list.patterns.flatMap(_.declarations)
+      case _                      => Nil
+    }
+  }
+
   override def visitMatchCase(
       x: EirMatchCase
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -2305,15 +2339,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "{" << visitPatternDecl(ctx, x.patterns, ctx.temporary).split(n)
     val conditions = visitPatternCond(ctx, x.patterns, ctx.temporary, exprType)
       .mkString(" && ")
+    val ptrs = findPointers(x.patterns)
     val needsIf = x.condition.nonEmpty || conditions.nonEmpty
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
     val (primary, secondary) =
       (Option.unless(isUnit)("return"), Option.when(isUnit)("return;"))
+    ptrs.foreach(ctx.makePointer)
     ctx << primary << x.body << ";" << secondary << Option.when(needsIf)(
       "}"
     ) << "}"
+    ptrs.foreach(ctx.unsetPointer)
   }
 
   override def visitTupleType(

@@ -1102,8 +1102,9 @@ case class EirExtractorPattern(
     var identifier: EirExpressionNode,
     var list: EirPatternList
 ) extends EirPattern {
-  override def declarations: List[EirDeclaration] = ???
-  override def conditions: List[EirExpressionNode] = ???
+  var disambiguation: Option[EirFunctionCall] = None
+  override def declarations: List[EirDeclaration] = list.declarations
+  override def conditions: List[EirExpressionNode] = list.conditions
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 

@@ -1734,9 +1734,28 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): EirType = {
     val goal = ctx.goal.pop()
     val expr = EirPlaceholder[EirType](None, Some(goal))
-    val unparse =
+    val unapply =
       makeMemberCall(x.identifier, "unapply", List(expr), isStatic = true)
-    val opt = visit(unparse)
-    ???
+    x.disambiguation = Some(unapply)
+    val ty = visit(unapply)
+    val option = globals.optionType
+    val goals = ty match {
+      case EirTemplatedType(_, base, args) if base == option =>
+        args match {
+          case EirTupleType(_, tys) :: Nil => tys
+          case ty :: Nil                   => List(ty)
+          case _                           => ???
+        }
+      case _ => Errors.cannotCast(x, ty, option)
+    }
+    val patterns = x.list.patterns
+    if (goals.length != patterns.length) {
+      Errors.wrongNbrOfArgs(x, goals.length, patterns.length)
+    }
+    patterns.zip(goals).foreach { case (pattern, goal: EirType) =>
+      ctx.goal.push(goal)
+      visit(pattern)
+    }
+    null
   }
 }
