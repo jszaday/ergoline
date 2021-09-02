@@ -2217,12 +2217,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     implicit val ctx = parent.makeSubContext()
     x match {
       case x: EirExtractorPattern => x.disambiguation.foreach(f => {
-          val nextTemp = pickName(current, parent)(x)
+          val tmp = pickName(current, parent)(x)
           val node = CppNode(current)
           node.foundType = f.args.lastOption.flatMap(_.foundType)
           f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
-          ctx << "auto" << nextTemp << "=" << f << ";"
-          if (x.list.patterns.length > 1) ???
+          ctx << "auto" << tmp << "=" << f << ";"
+          val patterns = x.list.patterns
+          if (patterns.length > 1) {
+            patterns.zipWithIndex.foreach { case (p, i) =>
+              val nextTmp = s"((bool)$tmp ? &std::get<$i>(*$tmp) : nullptr)"
+              ctx << visitPatternDecl(ctx, p, nextTmp)
+            }
+          }
         })
       case EirPatternList(_, ps) => ps match {
           case p :: Nil if !forceTuple =>
@@ -2234,13 +2240,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             })
         }
       case i @ EirIdentifierPattern(_, n, t) if n != "_" =>
+        val declName = i.declarations.headOption.map(ctx.nameFor(_))
         val ty = ctx.resolve(t)
-        ctx.ignoreNext(";")
         if (ty.isPointer && i.needsCasting)
-          ctx << i.declarations.head << "=" << "std::dynamic_pointer_cast<" << ctx
+          ctx << "auto" << declName << "=" << "std::dynamic_pointer_cast<" << ctx
             .nameFor(t) << ">(" << current << ");"
         // TODO make this a reference!
-        else ctx << i.declarations.head << s" = $current;"
+        else ctx << "auto" << declName << "=" << current << ";"
       case i: EirIdentifierPattern => if (i.name != "_") Errors.missingType(x)
       case _: EirExpressionPattern =>
     }

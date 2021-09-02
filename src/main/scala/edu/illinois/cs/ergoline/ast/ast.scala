@@ -554,17 +554,19 @@ case class EirMember(
     }
   }
 
-  def isVirtual: Boolean = member match {
-    case _: EirFunction =>
-      !isConstructor && (base.isAbstract || isOverride) && {
-        !annotations.exists(_.name == "system")
-      } && {
-        member match {
-          case s: EirSpecializable => s.templateArgs.isEmpty
-          case _                   => false
+  def isVirtual: Boolean = {
+    !isStatic && (member match {
+      case _: EirFunction =>
+        !isConstructor && (base.isAbstract || isOverride) && {
+          !annotations.exists(_.name == "system")
+        } && {
+          member match {
+            case s: EirSpecializable => s.templateArgs.isEmpty
+            case _                   => false
+          }
         }
-      }
-    case _ => false
+      case _ => false
+    })
   }
 
   override def name: String = member.name
