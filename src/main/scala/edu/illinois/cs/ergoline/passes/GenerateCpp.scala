@@ -684,7 +684,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ptr = ty.isPointer
     val astr = Option.unless(ptr)("*")
     def wrap(ty: EirType): Option[String] = Option.unless(ty.isPointer)(
-      (if (ref) "std::shared_ptr" else "std::make_shared") + s"<${ctx.typeFor(ty, Some(base))}>"
+      (if (ref) "std::shared_ptr" else "std::make_shared") + s"<${ctx
+        .typeFor(ty, Some(base))}>"
     )
     m.name match {
       case "get"                   => ctx << "(" << astr << opt << ")"
@@ -2856,4 +2857,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirMultiDeclaration
   )(implicit ctx: CodeGenerationContext): Unit =
     visitDeclarationLike(x, x.initialValue)
+
+  override def visitExtractorPattern(x: EirExtractorPattern)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = ???
 }

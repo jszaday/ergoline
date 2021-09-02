@@ -1097,6 +1097,16 @@ trait EirPattern extends EirNode {
     parent.to[EirPatternList].map(_.patterns.indexOf(this)).getOrElse(-1)
 }
 
+case class EirExtractorPattern(
+    var parent: Option[EirNode],
+    var identifier: EirExpressionNode,
+    var list: EirPatternList
+) extends EirPattern {
+  override def declarations: List[EirDeclaration] = ???
+  override def conditions: List[EirExpressionNode] = ???
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
 case class EirPatternList(
     var parent: Option[EirNode],
     var patterns: List[EirPattern]

@@ -74,10 +74,10 @@ patternList
     ;
 
 pattern
-    :   identifier (':' basicType)?
+    :   id=identifier (':' basicType)?
+    |   fn=identifierExpression? '(' patternList ')'
     |   constant
     |   expression
-    |   '(' patternList ')'
     ;
 
 caseStatement

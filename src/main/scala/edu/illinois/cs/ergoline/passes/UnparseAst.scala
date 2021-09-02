@@ -532,4 +532,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       .map(" = " + _)
       .getOrElse("") + ";"
   }
+
+  override def visitExtractorPattern(
+      x: EirExtractorPattern
+  )(implicit ctx: UnparseContext): String = {
+    visit(x.identifier) + visit(x.list)
+  }
 }
