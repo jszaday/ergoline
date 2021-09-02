@@ -989,6 +989,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): Unit = {
     val disambiguated = disambiguate(ctx, x.target)
     val member = asMember(disambiguated)
+    val static = member.map(_.isStatic)
     val systemParent = disambiguated.systemParent
     val implicits = CheckTypes.getImplicitArgs(disambiguated) map { i =>
       // TODO enforce implicitness
@@ -1047,19 +1048,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       if (systemParent) {
         assert(!isPointer) // TODO can this be relaxed?
 
-        ctx << ctx.nameFor(disambiguated, Some(x)) << "(" << (x.target match {
-          case y: EirScopedSymbol[_] => y.target
-          case y                     => y
-        }) << Option.unless(x.args.isEmpty && implicits.isEmpty)(",") << {
-          ctx << visitArguments(
-            Some(x),
-            Some(disambiguated),
-            (x.args, implicits)
-          )
-        } << ")"
+        ctx << ctx.nameFor(disambiguated, Some(x)) << "("
+        if (!static.contains(true)) {
+          ctx << (x.target match {
+            case y: EirScopedSymbol[_] => y.target
+            case y                     => y
+          }) << Option.unless(x.args.isEmpty && implicits.isEmpty)(",")
+        }
+        ctx << visitArguments(
+          Some(x),
+          Some(disambiguated),
+          (x.args, implicits)
+        ) << ")"
       } else {
         if (functor) {
-          val static = member.map(_.isStatic)
           ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
             ctx.nameFor(disambiguated)
           }
@@ -1518,6 +1520,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val langCi = ctx.language == "ci"
     val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
     val canEnter = ctx.hasChecked(x) || langCi
+
     if (
       !canEnter || (!langCi && entryOnly) || x.isSystem || abstractMember || isTempl
     ) {
@@ -1526,6 +1529,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     val isConstructor = member.exists(_.isConstructor)
     val systemParent = parent.exists(_.isSystem)
+    val isStatic = member.exists(_.isStatic)
     val proxyParent = parent.to[EirProxy]
 
     val annotatable = isMember && !(systemParent || langCi)
@@ -1555,8 +1559,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
 
     ctx << "("
-    val currSelf =
-      if (systemParent) {
+    val currSelf = {
+      if (isStatic) None
+      else if (systemParent) {
         if (proxyParent.isDefined) {
           Errors.unreachable()
         } else {
@@ -1582,6 +1587,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       } else {
         proxyParent.map(_ => "this->impl_").orElse(Some("this"))
       }
+    }
     currSelf.foreach(ctx.pushSelf)
     if (proxyParent.isDefined && (args.nonEmpty || asyncCi)) {
       ctx << s"CkMessage* ${GenerateProxies.msgName}"
@@ -1607,7 +1613,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Errors.missingBody(x)
     }
 
-    assert(currSelf.nonEmpty)
+    assert(isStatic || currSelf.nonEmpty)
+
     visitFunctionBody(x)
 
     currSelf.foreach(_ => ctx.popSelf())
@@ -1708,12 +1715,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   def selfName(ctx: CodeGenerationContext, n: EirNode): String = {
-    val ty = n match {
+    val ty = CheckTypes.stripReference(n match {
       case e: EirExpressionNode               => ctx.exprType(e)
       case d: EirDeclaration                  => ctx.resolve(d.declaredType)
       case EirMember(_, d: EirDeclaration, _) => ctx.resolve(d.declaredType)
       case _                                  => Errors.missingType(n)
-    }
+    })
 
     if (ty.isPointer(ctx)) {
       if (ctx.currentSelf == "self") {
