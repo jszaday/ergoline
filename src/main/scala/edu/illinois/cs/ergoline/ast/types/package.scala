@@ -72,6 +72,10 @@ package object types {
   ) extends EirType
       with EirSpecialization {
 
+    override def setBase(ty: EirResolvable[EirSpecializable]): Unit = {
+      this.base = ty.asInstanceOf[EirResolvable[EirType]]
+    }
+
     override def children: List[EirResolvable[EirType]] = List(base) ++ args
 
     // TODO upon resolution TT's should register with their base class
@@ -95,6 +99,7 @@ package object types {
     }
 
     override def types: List[EirResolvable[EirType]] = args
+    override def types_=(tys: List[EirResolvable[EirType]]): Unit = args = tys
   }
 
   sealed trait EirProxyKind
@@ -141,6 +146,13 @@ package object types {
     override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
       (base == oldNode) && util
         .applyOrFalse[EirResolvable[EirType]](base = _, newNode)
+    }
+
+    override def equals(any: Any): Boolean = {
+      any match {
+        case EirReferenceType(_, theirBase) => this.base == theirBase
+        case _                              => false
+      }
     }
   }
 

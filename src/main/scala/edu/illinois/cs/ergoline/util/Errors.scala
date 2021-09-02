@@ -47,7 +47,9 @@ object Errors {
       extends EirExceptionBase(arg.name)
 
   def useDebugAction(): Unit = {
-    exitAction = (s: String) => throw EirException(s)
+    exitAction = (s: String) => {
+      throw EirException(s)
+    }
   }
 
   def unreachable(): Nothing = {
@@ -127,6 +129,10 @@ object Errors {
 
   def unableToResolve(s: String): Nothing = {
     exit(format(null, "unable to resolve %s", s))
+  }
+
+  def unableToResolve(s: List[String], scope: EirScope): Nothing = {
+    exit(format(null, "unable to resolve %s in %s", s.mkString("::"), scope))
   }
 
   def missingType(node: EirNode): Nothing = {

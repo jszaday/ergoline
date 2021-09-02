@@ -72,13 +72,13 @@ object Find {
     }
   }
 
-  def namedChild[T <: EirNamedNode](node: Option[EirNamedNode], name: String)(
+  def namedChild[T <: EirNamedNode](node: Option[EirScope], name: String)(
       implicit tag: ClassTag[T]
   ): T = {
     node
       .flatMap(firstNamedChild[T](_, name))
       .getOrElse(
-        Errors.unableToResolve(s"${node.map(_.name).getOrElse("???")}::$name")
+        Errors.unableToResolve(List(name), node.getOrElse(???))
       )
   }
 
@@ -216,8 +216,11 @@ object Find {
         Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike =>
         Option.when(!ancestors.contains(x) || matches(x))(matches(x))
-      case x: EirImport =>
-        Option.when(Find.commonAncestor(ctx, x).exists(ancestors.contains(_)))(
+      case x: EirImport => Option.when(
+          x.isPublic || Find
+            .commonAncestor(ctx, x)
+            .exists(ancestors.contains(_))
+        )(
           matches(x)
         )
       case _: EirMultiDeclaration => Some(false)

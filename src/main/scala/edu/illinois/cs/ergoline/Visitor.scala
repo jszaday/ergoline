@@ -25,7 +25,7 @@ import java.nio.file.Files
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.reflect.ClassTag
+import scala.reflect.{ClassTag, classTag}
 
 class Visitor(global: EirScope = EirGlobalNamespace)
     extends ErgolineBaseVisitor[EirNode] {
@@ -158,13 +158,16 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitType(ctx: TypeContext): EirNode = {
+    val base = () => visitAs[EirResolvable[EirType]](ctx.`type`())
     if (ctx.Ampersand() != null) {
       enter(
         EirReferenceType(parent, null),
-        (t: EirReferenceType) => {
-          t.base =
-            assertValid[EirResolvable[EirType]](super.visitType(ctx.`type`()))
-        }
+        (t: EirReferenceType) => { t.base = base() }
+      )
+    } else if (ctx.Ellipses() != null) {
+      enter(
+        EirPackExpansion(null)(parent),
+        (t: EirPackExpansion) => { t.base = base() }
       )
     } else {
       super.visitType(ctx)
@@ -190,8 +193,18 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     pop()
   }
 
+  override def visitPublicImport(ctx: PublicImportContext): EirImport = {
+    val node = visitImportStatement(ctx.importStatement())
+    node.publicOverride = true
+    node
+  }
+
   override def visitImportStatement(ctx: ImportStatementContext): EirImport = {
-    EirImport(parent, ctx.fqn().identifier().toStringList)
+    EirImport(
+      parent,
+      ctx.fqn().identifier().toStringList,
+      publicOverride = false
+    )
   }
 
   override def visitInterpolatedString(
@@ -308,12 +321,11 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitMember(ctx: MemberContext): EirMember = {
-    val modifier: EirAccessibility = Option(ctx.accessModifier())
+    val modifier = Option(ctx.accessModifier())
       .map(_.getText.capitalize)
       .map(EirAccessibility.withName)
-      .getOrElse(defaultMemberAccessibility)
     enter(
-      EirMember(parent, null, modifier),
+      EirMember(parent, null, null),
       (m: EirMember) => {
         m.isStatic = ctx.StaticKwd() != null
         m.isOverride = ctx.OverrideKwd() != null
@@ -321,6 +333,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           .orElse(Option(ctx.topLevelStatement()))
           .map(x => visitAs[EirNamedNode](x))
           .foreach(m.member = _)
+        m.accessibility = modifier.getOrElse({
+          m.member match {
+            case _: EirImport => EirAccessibility.Private
+            case _            => defaultMemberAccessibility
+          }
+        })
       }
     )
   }
@@ -338,8 +356,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   override def visitAnnotatedTopLevelStatement(
       ctx: AnnotatedTopLevelStatementContext
   ): EirNode = {
-    val target: ParseTree =
-      Option(ctx.namespace()).getOrElse(ctx.topLevelStatement())
+    val target: ParseTree = Option(ctx.namespace())
+      .orElse(Option(ctx.publicImport()))
+      .getOrElse(ctx.topLevelStatement())
     enter(
       visit(target),
       (n: EirNode) => {
@@ -703,31 +722,25 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       })
   }
 
-  override def visitBasicType(ctx: BasicTypeContext): EirResolvable[EirType] = {
-    if (ctx.Ellipses() != null) {
-      return EirPackExpansion(ctx.fqn.identifier.toStringList)(parent)
-    }
-    var base: EirResolvable[EirType] = symbolizeType(ctx.fqn.identifier())
-    val templates = specializationToList(ctx.specialization())
-    if (templates.nonEmpty) {
-      val templatedType = EirTemplatedType(parent, base, templates)
-      base.parent = Some(templatedType)
-      base = templatedType
-    }
+  override def visitTemplateType(
+      ctx: TemplateTypeContext
+  ): EirResolvable[EirType] = {
+    symbolizeType(ctx.identifierExpression())
+  }
+
+  override def visitProxyType(ctx: ProxyTypeContext): EirResolvable[EirType] = {
+    val base = () => visitAs[EirResolvable[EirType]](ctx.templateType())
     Option(ctx.proxySuffix()) match {
       case Some(proxySuffix) =>
         val collective = Option(proxySuffix.CollectiveKwd()).map(_.getText)
         val prefix = Option(proxySuffix.prefix).map(_.getText)
-        val proxyType = EirProxyType(
-          parent,
-          base,
-          collective,
-          kindFrom(prefix, collective)
+        enter(
+          EirProxyType(parent, null, collective, kindFrom(prefix, collective)),
+          (ty: EirProxyType) => {
+            ty.base = base()
+          }
         )
-        assert(collective.isEmpty || proxyType.kind.nonEmpty)
-        base.parent = Some(proxyType)
-        proxyType
-      case None => base
+      case None => base()
     }
   }
 
@@ -737,7 +750,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         EirIdentifierPattern(parent, ctx.identifier().getText, null),
         (i: EirIdentifierPattern) => {
           i.ty = Option(ctx.basicType())
-            .orElse(Option(ctx.tupleType()))
             .map(visitAs[EirResolvable[EirType]])
             .getOrElse(EirPlaceholder(i.declarations.headOption))
         }
@@ -811,10 +823,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   def symbolizeType[T <: ParserRuleContext](
-      identifiers: java.util.List[T]
-  ): EirResolvable[EirType] = {
-    EirSymbol[EirNamedType](parent, identifiers.toStringList)
-  }
+      ctx: IdentifierExpressionContext
+  ): EirResolvable[EirType] = parseIdentifier[EirNamedType](ctx)
 
   private def pop[T](): T = parents.pop().asInstanceOf[T]
 
@@ -1034,8 +1044,9 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   ): EirExpressionNode = {
     super.visitStaticPrimaryExpression(ctx) match {
       case x: EirExpressionNode => x
-      case x: EirResolvable[_]  => EirLiteralSymbol(x)(parent)
-      case x                    => Errors.incorrectType(x, classOf[EirExpressionNode])
+      // TODO -- this isn't the best solution, but unsure what would be better?
+      case x: EirResolvable[_] => EirLiteralSymbol(x)(parent)
+      case x                   => Errors.incorrectType(x, classOf[EirLiteral[_]])
     }
   }
 
@@ -1174,21 +1185,17 @@ class Visitor(global: EirScope = EirGlobalNamespace)
   }
 
   override def visitLambdaType(ctx: LambdaTypeContext): EirType = {
-    val children: List[ParseTree] = ctx.children.asScala.toList
-    val l = EirLambdaType(parent, null, null, Nil, None)
-    parents.push(l)
-    l.from = children.head match {
-      case x: TupleTypeContext => visitTupleType(x) match {
-          case x: EirTupleType => x.children
-          case x               => List(x)
+    enter(
+      EirLambdaType(parent, null, null, Nil, None),
+      (l: EirLambdaType) => {
+        val head = visitAs[EirResolvable[EirType]](ctx.head)
+        l.from = head match {
+          case t: EirTupleType => t.children
+          case t               => List(t)
         }
-      case x: BasicTypeContext => List(visitBasicType(x))
-    }
-    l.to = children.last match {
-      case x: TupleTypeContext => visitTupleType(x)
-      case x: BasicTypeContext => visitBasicType(x)
-    }
-    pop()
+        l.to = visitAs[EirResolvable[EirType]](ctx.tail)
+      }
+    )
   }
 
   override def visitAwaitManyStatement(
@@ -1237,38 +1244,63 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     init.toList :+ last
   }
 
-  override def visitIdentifierExpression(
+  def mkSpecialization[A <: EirNamedNode: ClassTag]()
+      : EirResolvable[A] with EirSpecialization = {
+    (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
+       EirTemplatedType(parent, null, null)
+     } else {
+       EirSpecializedSymbol(parent, null, null)
+     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
+  }
+
+  def parseIdentifier[A <: EirNamedNode: ClassTag](
       ctx: IdentifierExpressionContext
-  ): EirResolvable[EirNode] = {
+  ): EirResolvable[A] = {
+    type goalType = EirExpressionNode with EirResolvable[A]
+
+    def conv2expr(s: EirResolvable[A] with EirSpecialization): goalType =
+      s match {
+        case x: goalType => x
+        case x: A        => EirPlaceholder[A](None, Some(x))
+      }
+
     val curr =
       Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
-        case Some(spec) => enter(
-            EirSpecializedSymbol(parent, null, null),
-            (s: EirSpecializedSymbol) => {
-              s.types = specializationToList(spec)
-              s.symbol = symbolize[
-                EirNamedNode with EirSpecializable,
-                IdentifierContext
-              ](
-                ctx.fqn().identifier()
-              )
-            }
+        case Some(spec) => conv2expr(
+            enter(
+              mkSpecialization[A](),
+              (s: EirSpecialization) => {
+                s.types = specializationToList(spec)
+                s.setBase(
+                  symbolize[
+                    A with EirSpecializable,
+                    IdentifierContext
+                  ](
+                    ctx.fqn().identifier()
+                  )
+                )
+              }
+            )
           )
-        case None =>
-          symbolize[EirNamedNode, IdentifierContext](ctx.fqn().identifier())
+        case None => symbolize[A, IdentifierContext](ctx.fqn().identifier())
       }
+
     Option(ctx.identifierExpression())
       .map(next => {
         enter(
-          EirScopedSymbol[EirNode](curr, null)(parent),
-          (r: EirScopedSymbol[EirNode]) => {
+          EirScopedSymbol[A](curr, null)(parent),
+          (r: EirScopedSymbol[A]) => {
             r.isStatic = true
-            r.pending = visitAs[EirResolvable[EirNamedNode]](next)
+            r.pending = visitAs[EirResolvable[A]](next)
           }
         )
       })
       .getOrElse(curr)
   }
+
+  override def visitIdentifierExpression(
+      ctx: IdentifierExpressionContext
+  ): EirResolvable[EirNode] = parseIdentifier[EirNamedNode](ctx)
 
   override def visitUsingStatement(ctx: UsingStatementContext): EirNode = {
     enter(

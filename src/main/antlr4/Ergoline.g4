@@ -5,7 +5,11 @@ program
     ;
 
 annotatedTopLevelStatement
-    :   annotation* (topLevelStatement | namespace)
+    :   annotation* (publicImport | topLevelStatement | namespace)
+    ;
+
+publicImport
+    :   PublicKwd importStatement
     ;
 
 topLevelStatement
@@ -35,14 +39,13 @@ innerStatement
     :   block
     |   forLoop
     |   whileLoop
-    |   function
     |   ifThenElse
     |   matchStatement
     |   expression ';'
     |   returnStatement
-    |   classDeclaration
     |   whenStatement
     |   awaitManyStatement
+    |   topLevelStatement
     |   topLevelDeclaration
     ;
 
@@ -71,7 +74,7 @@ patternList
     ;
 
 pattern
-    :   identifier (':' (tupleType | basicType))?
+    :   identifier (':' basicType)?
     |   constant
     |   expression
     |   '(' patternList ')'
@@ -139,7 +142,7 @@ templateDecl
     ;
 
 accessModifier
-    :   'public' | 'protected' | 'private'
+    :   PublicKwd | 'protected' | 'private'
     ;
 
 inheritanceDecl
@@ -391,20 +394,27 @@ proxySuffix
     |   prefix=(Atpersand | ProxySuffix) CollectiveKwd
     ;
 
+templateType
+    :   identifierExpression
+    ;
+
+proxyType
+    :   templateType proxySuffix?
+    ;
+
 basicType
-    :   fqn specialization? proxySuffix?
-    |   fqn Ellipses
+    :   proxyType | tupleType
     ;
 
 lambdaType
-    :   (basicType | tupleType) '=>' (basicType | tupleType)
+    :   head=basicType '=>' tail=basicType
     ;
 
 type
-    :   basicType
+    :   proxyType
     |   tupleType
     |   lambdaType
-    |   type Ampersand
+    |   type (Ampersand | Ellipses)
     ;
 
 annotation
@@ -492,6 +502,7 @@ StaticKwd : 'static';
 ImplicitKwd : 'implicit' ;
 WhereKwd : 'where' ;
 EnumKwd : 'enum' ;
+PublicKwd : 'public' ;
 
 fragment Sign
     :   '+' | '-'

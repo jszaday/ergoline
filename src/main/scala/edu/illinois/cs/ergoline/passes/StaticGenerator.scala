@@ -1,8 +1,8 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.util.Errors.EirSubstitutionException
 

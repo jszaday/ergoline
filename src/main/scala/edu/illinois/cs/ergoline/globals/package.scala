@@ -125,9 +125,8 @@ package object globals {
   def shortType: EirType = typeFor("short")
   def integerType: EirType = typeFor("int")
 
-  def ckModule: Option[EirNamedNode] = Modules("ck", EirGlobalNamespace)
-  def ergolineModule: Option[EirNamedNode] =
-    Modules("ergoline", EirGlobalNamespace)
+  def ckModule: Option[EirScope] = Modules("ck", EirGlobalNamespace)
+  def ergolineModule: Option[EirScope] = Modules("ergoline", EirGlobalNamespace)
 
   private def typeFor(name: String): EirType = {
     this.ergolineModule

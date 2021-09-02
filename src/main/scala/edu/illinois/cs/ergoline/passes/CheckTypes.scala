@@ -139,6 +139,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case Some(_: EirClassLike) => true
           case _                     => false
         }
+      case x: EirPlaceholder[_] => x.expectation match {
+          case Some(_: EirType)           => true
+          case Some(x: EirExpressionNode) => isStatic(x)
+          case _                          => false
+        }
       case _ => false // TODO figure out what goes here?
     }
   }
@@ -337,7 +342,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   ): Boolean = {
     val from = visit(expr)
     if (from.canAssignTo(to)) {
-      if (!expr.isRef && to.isInstanceOf[EirReferenceType]) {
+      def isRef(x: EirCallArgument): Boolean = {
+        x.isRef || (
+          x.expr match {
+            case _: EirFunctionCall => true
+            case _                  => false
+          }
+        )
+      }
+
+      if (!isRef(expr) && to.isInstanceOf[EirReferenceType]) {
         Errors.missingReference(expr)
       }
 
@@ -1424,7 +1438,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x: types.EirTupleType
   )(implicit ctx: TypeCheckContext): EirType = {
     val children = x.children.flatMap {
-      case x: EirPackExpansion => visit(x) match {
+      case x: EirPackExpansion => visit(x.base) match {
           case EirTupleType(_, ts) => ts
           case t                   => List(t)
         }

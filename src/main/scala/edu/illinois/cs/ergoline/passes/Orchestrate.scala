@@ -29,8 +29,7 @@ class Orchestrate extends Pass {
 
 object Orchestrate {
   private val annotationName = "charisma"
-  private def namespace: Option[EirNamedNode] =
-    Modules("or", EirGlobalNamespace)
+  private def namespace: Option[EirScope] = Modules("or", EirGlobalNamespace)
   private def placeholder: EirClass =
     Find.namedChild[EirClass](namespace, "placeholder")
 
