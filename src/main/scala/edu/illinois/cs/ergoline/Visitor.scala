@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.{ClassTag, classTag}
 
 class Visitor(global: EirScope = EirGlobalNamespace)
-    extends ErgolineBaseVisitor[EirNode] {
+    extends ErgolineParserBaseVisitor[EirNode] {
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
@@ -681,7 +681,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
             .mapOrEmpty(_.sliceExpression, visitAs[EirExpressionNode])
         }
       )
-    } else if (ctx.LParen() != null) {
+    } else if (ctx.LeftParen() != null) {
       enter(
         EirFunctionCall(parent, null, null, null),
         (f: EirFunctionCall) => {
