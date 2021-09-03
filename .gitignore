@@ -13,3 +13,4 @@ charmrun
 .idea/
 .vscode/
 ergc.jar
+gen/*
