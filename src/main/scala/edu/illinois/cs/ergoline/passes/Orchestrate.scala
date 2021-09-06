@@ -252,7 +252,7 @@ object Orchestrate {
         )
       })
       // TODO ( assert idx is in range of for-loop )
-      val block = EirBlock(loop.parent, replDecls :+ loop.body)
+      val block = EirBlock(loop.parent, replDecls ++ loop.body)
       loop.parent.foreach(_.replaceChild(loop, block))
     })
   }

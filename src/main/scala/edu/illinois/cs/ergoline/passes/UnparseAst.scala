@@ -265,7 +265,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitWhileLoop(
       loop: EirWhileLoop
   )(implicit ctx: UnparseContext): String =
-    s"while (${loop.condition.map(visit(_)).getOrElse("")}) ${visit(loop.body)}"
+    s"while (${visit(loop.condition)}) ${visit(loop.body)}"
 
   override def visitForLoop(
       loop: EirForLoop
@@ -282,7 +282,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
            s"(${idents.mkString(",")})"
          }) + " <- " + visit(hdr.expression)
     }
-    s"for ($header) ${visit(loop.body)}"
+    val body = loop.body.map(visit).map(" " + _).getOrElse(";")
+    s"for ($header)$body"
   }
 
   override def visitFunctionCall(
@@ -378,8 +379,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     s"${visit(x.target)}[${x.args.map(visit(_)) mkString ", "}]"
   }
 
-  override def visitSpecializedSymbol(
-      x: EirSpecializedSymbol
+  override def visitSpecializedSymbol[A <: EirNamedNode](
+      x: EirSpecializedSymbol[A]
   )(implicit ctx: UnparseContext): String = {
     nameFor(x.symbol) + visitSpecialization(x)
   }
