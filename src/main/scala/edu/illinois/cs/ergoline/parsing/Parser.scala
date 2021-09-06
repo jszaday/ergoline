@@ -20,6 +20,8 @@ import edu.illinois.cs.ergoline.resolution.{
 import fastparse.SingleLineWhitespace._
 import fastparse._
 
+import edu.illinois.cs.ergoline.Visitor.{isAssignOperator, sortInfixes}
+
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
@@ -385,7 +387,36 @@ object Parser {
         EirTernaryOperator(None, expr, ifTrue, ifFalse)
     }
 
-  def InfixExpr[_: P]: P[EirExpressionNode] = P(ConditionalExpr)
+  def buildInfix(
+      expr: EirExpressionNode,
+      pairs: Seq[(String, EirExpressionNode)]
+  ): EirExpressionNode = {
+    def mkNode(
+        lhs: EirExpressionNode,
+        op: String,
+        rhs: EirExpressionNode
+    ): EirExpressionNode = {
+      if (isAssignOperator(op)) EirAssignment(None, lhs, op, rhs)
+      else EirBinaryExpression(None, lhs, op, rhs)
+    }
+
+    pairs match {
+      case Nil              => expr
+      case (op, rhs) :: Nil => mkNode(expr, op, rhs)
+      case _ => sortInfixes(
+          Left(expr) +: pairs.flatMap { case (op, rhs) =>
+            Seq(Right(op), Left(rhs))
+          },
+          { case Left(lhs) :: Right(op) :: Left(rhs) :: Nil =>
+            mkNode(lhs, op, rhs)
+          }
+        )
+    }
+  }
+
+  def InfixExpr[_: P]: P[EirExpressionNode] = P(
+    ConditionalExpr ~ (Id ~/ ConditionalExpr).rep(0)
+  ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
   def NewExpr[_: P]: P[EirNew] = P(`new` ~/ Type ~ TupleExpr.?).map {
     case (ty, tuple) => EirNew(None, ty, extractArgs(tuple))

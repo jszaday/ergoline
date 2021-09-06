@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ErgolineParser._
+import edu.illinois.cs.ergoline.Visitor.{InfixPart, isAssignOperator}
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals._
@@ -27,8 +28,98 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.{ClassTag, classTag}
 
+object Visitor {
+  type InfixPart = Either[EirExpressionNode, String]
+
+  val precedences: Seq[Seq[Char]] = Seq(
+    Seq('*', '/', '%'),
+    Seq('+', '-'),
+    //    Seq(':'),
+    Seq('=', '!'),
+    Seq('<', '>'),
+    Seq('&'),
+    Seq('^'),
+    Seq('|')
+  )
+
+  def isAssignOperator(op: String): Boolean = {
+    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
+      .isComparisonOperator(op))
+  }
+
+  def precedenceOf(op: String): Int = {
+    if (op.head.isLetter || isAssignOperator(op)) {
+      precedences.size + 2
+    } else {
+      precedences.indexWhere(_.contains(op.head)) + 1
+    }
+  }
+
+  def sortInfixes(
+      parts: Seq[InfixPart],
+      former: Seq[InfixPart] => EirExpressionNode
+  ): EirExpressionNode = {
+    var infixes = parts
+    var ops = infixes.zipWithIndex
+      .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
+      .sortBy(_._2)
+      .map(_._1)
+
+    while (ops.nonEmpty) {
+      val start = ops.head - 1
+      val slice = infixes.slice(start, start + 3)
+      val expr = former(slice)
+
+      infixes = infixes.patch(start, Seq(Left(expr)), 3)
+      ops = ops.tail.map(x => if (x > start) x - 2 else x)
+    }
+
+    infixes match {
+      case Left(x) :: Nil => x
+      case _              => ???
+    }
+  }
+}
+
 class Visitor(global: EirScope = EirGlobalNamespace)
     extends ErgolineParserBaseVisitor[EirNode] {
+
+  import Visitor._
+
+  def flattenInfix[T <: ParseTree](ctx: T): Seq[InfixPart] = {
+    if (ctx.getChildCount == 3) {
+      val (lhs, rhs) = (ctx.getChild(0), ctx.getChild(2))
+      flattenInfix(lhs) ++ {
+        Option(ctx.getChild(1))
+          .map(_.getText)
+          .map(Right(_))
+      } ++ flattenInfix(rhs)
+    } else {
+      Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
+    }
+  }
+
+  def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
+    seq match {
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
+        enter(
+          EirAssignment(parent, lhs, op, rhs),
+          (expr: EirAssignment) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil => enter(
+          EirBinaryExpression(parent, lhs, op, rhs),
+          (expr: EirBinaryExpression) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+      case _ => ???
+    }
+  }
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
@@ -935,95 +1026,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     )
   }
 
-  type InfixPart = Either[EirExpressionNode, String]
-
-  def flattenInfix[T <: ParseTree](ctx: T): Seq[InfixPart] = {
-    if (ctx.getChildCount == 3) {
-      val (lhs, rhs) = (ctx.getChild(0), ctx.getChild(2))
-      flattenInfix(lhs) ++ {
-        Option(ctx.getChild(1))
-          .map(_.getText)
-          .map(Right(_))
-      } ++ flattenInfix(rhs)
-    } else {
-      Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
-    }
-  }
-
   override def visitBody(ctx: BodyContext): EirNode = {
     Option(ctx.statement()).map(visit(_)).orNull
   }
 
   def bodyToOptional(ctx: BodyContext): Option[EirBlock] = {
     forceEnclosed(Option(visit(ctx)))
-  }
-
-  def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
-    seq match {
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
-        enter(
-          EirAssignment(parent, lhs, op, rhs),
-          (expr: EirAssignment) => {
-            lhs.parent = Some(expr)
-            rhs.parent = Some(expr)
-          }
-        )
-
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil => enter(
-          EirBinaryExpression(parent, lhs, op, rhs),
-          (expr: EirBinaryExpression) => {
-            lhs.parent = Some(expr)
-            rhs.parent = Some(expr)
-          }
-        )
-      case _ => ???
-    }
-  }
-
-  val precedences: Seq[Seq[Char]] = Seq(
-    Seq('*', '/', '%'),
-    Seq('+', '-'),
-//    Seq(':'),
-    Seq('=', '!'),
-    Seq('<', '>'),
-    Seq('&'),
-    Seq('^'),
-    Seq('|')
-  )
-
-  def isAssignOperator(op: String): Boolean = {
-    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
-      .isComparisonOperator(op))
-  }
-
-  def precedenceOf(op: String): Int = {
-    if (op.head.isLetter || isAssignOperator(op)) {
-      precedences.size + 2
-    } else {
-      precedences.indexWhere(_.contains(op.head)) + 1
-    }
-  }
-
-  def sortInfixes(parts: Seq[InfixPart]): EirExpressionNode = {
-    var infixes = parts
-    var ops = infixes.zipWithIndex
-      .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
-      .sortBy(_._2)
-      .map(_._1)
-
-    while (ops.nonEmpty) {
-      val start = ops.head - 1
-      val slice = infixes.slice(start, start + 3)
-      val expr = formBinaryExpression(slice)
-
-      infixes = infixes.patch(start, Seq(Left(expr)), 3)
-      ops = ops.tail.map(x => if (x > start) x - 2 else x)
-    }
-
-    infixes match {
-      case Left(x) :: Nil => x
-      case _              => ???
-    }
   }
 
   private def visitInfixLikeExpression[T <: ParseTree](
@@ -1033,7 +1041,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
     exprs match {
       case Left(x) :: Nil => x
-      case _              => sortInfixes(exprs)
+      case _              => sortInfixes(exprs, this.formBinaryExpression)
     }
   }
 
