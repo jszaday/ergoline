@@ -5,6 +5,14 @@ import Basics._
 import SingleLineWhitespace._
 
 object Keywords {
+  def Alphabetic: Seq[String] = {
+    this.getClass.getDeclaredMethods
+      .map(_.getName)
+      .filter(_.forall(_.isLower))
+      .toSet
+      .toSeq
+  }
+
   case class NamedFunction(f: Char => Boolean)(implicit name: sourcecode.Name)
       extends (Char => Boolean) {
     def apply(t: Char): Boolean = f(t)
@@ -34,6 +42,11 @@ object Keywords {
   def `using`[_: P]: P[Unit] = ?:(Key.W("using"))
   def `import`[_: P]: P[Unit] = ?:(Key.W("import"))
 
+  def `if`[_: P]: P[Unit] = ?:(Key.W("if"))
+  def `else`[_: P]: P[Unit] = ?:(Key.W("else"))
+
+  def `return`[_: P]: P[Unit] = ?:(Key.W("return"))
+
   def `...` = "..."
 
   val LowerBound = ">:"
@@ -41,6 +54,18 @@ object Keywords {
 
   def `>:`[_: P]: P[String] = Key.O(LowerBound)
   def `<:`[_: P]: P[String] = Key.O(UpperBound)
+
+  def `@`[_: P]: P[String] = Key.O("@")
+  def `[@]`[_: P]: P[String] = Key.O("[@]")
+  def `{@}`[_: P]: P[String] = Key.O("{@}")
+
+  def Plus[_: P]: P[String] = Key.O("+")
+  def Minus[_: P]: P[String] = Key.O("-")
+  def BitNot[_: P]: P[String] = Key.O("~")
+  def Not[_: P]: P[String] = Key.O("!")
+  def `?`[_: P]: P[Unit] = ?:(Key.O("?"))
+
+  def PrefixOp[_: P]: P[String] = P(Plus | Minus | Not | BitNot)
 
   def ?:[_: P, A](rule: P[A]): P[Unit] = P(rule).map(_ => ())
   def !:[_: P, A](rule: P[A]): P[Option[A]] = P(rule).map(Some(_))
@@ -52,6 +77,7 @@ object Keywords {
 
   def `;`[_: P, A](a: A): P[A] = Semi.map(_ => a)
 
+  def `new`[_: P]: P[Unit] = ?:(Key.W("new"))
   def `var`[_: P]: P[String] = Key.W("var")
   def `val`[_: P]: P[String] = Key.W("val")
   def `public`[_: P]: P[String] = Key.W("public")
@@ -59,8 +85,10 @@ object Keywords {
   def `protected`[_: P]: P[String] = Key.W("protected")
   def `static`[_: P]: P[String] = Key.W("static")
   def `override`[_: P]: P[String] = Key.W("override")
-
-  def where[_: P]: P[Unit] = ?:(Key.W("where"))
   def `package`[_: P]: P[Unit] = ?:(Key.W("package"))
+
+  def self[_: P]: P[String] = Key.W("self")
+  def await[_: P]: P[Unit] = ?:(Key.W("await"))
+  def where[_: P]: P[Unit] = ?:(Key.W("where"))
   def namespace[_: P]: P[Unit] = ?:(Key.W("namespace"))
 }

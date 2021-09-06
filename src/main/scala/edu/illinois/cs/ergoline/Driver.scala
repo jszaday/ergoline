@@ -1,8 +1,9 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
+import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
 import edu.illinois.cs.ergoline.parsing.Parser
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.passes.{CheckEnclose, Processes}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -35,8 +36,12 @@ object Driver extends App {
       val txt = Files.readString(Path.of(file))
       val res = parse(txt, Parser.Program(_))
       res match {
-        case Parsed.Success(value, _) => println(value)
-        case f: Parsed.Failure => new RuntimeException(f.trace().longAggregateMsg)
+        case Parsed.Success((_, nodes), _) =>
+          nodes.foreach(CheckEnclose.enclose(_, Some(EirGlobalNamespace)))
+          println(nodes)
+        case f: Parsed.Failure =>
+          println(f.trace().longAggregateMsg)
+          System.exit(-1)
       }
     }
 

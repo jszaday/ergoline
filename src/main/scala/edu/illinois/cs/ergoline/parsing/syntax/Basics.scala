@@ -39,7 +39,39 @@ object Basics {
   def WL0[_: P]: P[Unit] = P(ScalaWhitespace.whitespace(P.current))
   def WL[_: P]: P[Unit] = P(NoCut(WL0))
 
-  def Id[_: P]: P[String] = P(("_" | Lower | Upper).rep(1).!)
+  def AlphabeticKeywords[_: P]: P[Unit] = P(
+    StringIn(
+      "package",
+      "await",
+      "do",
+      "self",
+      "public",
+      "object",
+      "import",
+      "implicit",
+      "struct",
+      "where",
+      "namespace",
+      "static",
+      "for",
+      "protected",
+      "using",
+      "private",
+      "return",
+      "if",
+      "override",
+      "else",
+      "new",
+      "while",
+      "class",
+      "def",
+      "var",
+      "val"
+    )
+  ).opaque("Alphabetic")
+
+  def Id[_: P]: P[String] =
+    P(!AlphabeticKeywords ~ ("_" | Lower | Upper).rep(1).!)
 
   /** Most keywords don't just require the correct characters to match,
     * they have to ensure that subsequent characters *don't* match in

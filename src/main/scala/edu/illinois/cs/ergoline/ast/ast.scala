@@ -1079,8 +1079,8 @@ case class EirSpecializedSymbol[A <: EirNamedNode: ClassTag](
 case class EirIfElse(
     var parent: Option[EirNode],
     var test: EirExpressionNode,
-    var ifTrue: Option[EirBlock],
-    var ifFalse: Option[EirBlock]
+    var ifTrue: Option[EirNode],
+    var ifFalse: Option[EirNode]
 ) extends EirNode {
   override def children: Iterable[EirNode] = Seq(test) ++ ifTrue ++ ifFalse
 

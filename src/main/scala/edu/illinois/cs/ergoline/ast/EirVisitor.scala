@@ -39,6 +39,8 @@ trait EirVisitor[Context, Value] {
       ctx: Context
   ): Iterable[Value] = it.map(visit)
 
+  def visitDoWhileLoop(x: EirDoWhileLoop)(implicit ctx: Context): Value = ???
+
   def visit(node: EirNode)(implicit ctx: Context): Value = {
     node match {
       case x: EirType             => visitType(x)
@@ -56,6 +58,7 @@ trait EirVisitor[Context, Value] {
       case x: EirReturn           => visitReturn(x)
       case x: EirForLoop          => visitForLoop(x)
       case x: EirWhileLoop        => visitWhileLoop(x)
+      case x: EirDoWhileLoop      => visitDoWhileLoop(x)
       case x: EirImport           => visitImport(x)
       case x: EirIfElse           => visitIfElse(x)
       case x: EirMatchCase        => visitMatchCase(x)

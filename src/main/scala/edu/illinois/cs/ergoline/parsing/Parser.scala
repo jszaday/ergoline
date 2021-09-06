@@ -4,7 +4,8 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
-  EirLiteralSymbol
+  EirLiteralSymbol,
+  EirUnitLiteral
 }
 import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.globals
@@ -19,6 +20,7 @@ import edu.illinois.cs.ergoline.resolution.{
 import fastparse.SingleLineWhitespace._
 import fastparse._
 
+import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
 object Parser {
@@ -34,6 +36,15 @@ object Parser {
         s.isStatic = isStatic
         s
       }
+    }
+  }
+
+  def extractArgs(node: Option[EirExpressionNode]): List[EirExpressionNode] = {
+    node match {
+      case None                        => Nil
+      case Some(_: EirUnitLiteral)     => Nil
+      case Some(x: EirTupleExpression) => x.expressions
+      case Some(x)                     => List(x)
     }
   }
 
@@ -57,7 +68,8 @@ object Parser {
       case x: EirBlock => x
       case x: EirExpressionNode =>
         EirBlock(None, List(if (addReturn) EirReturn(None, x) else x))
-      case _ => ???
+      case _ if !addReturn => EirBlock(None, List(node))
+      case _               => ???
     }
   }
 
@@ -92,12 +104,12 @@ object Parser {
   }
 
   def ImportStatement[_: P]: P[EirImport] =
-    P(`import` ~ Id.rep(sep = "::", min = 1) ~ Semi).map { ids =>
+    P(`import` ~/ Id.rep(sep = "::", min = 1) ~ Semi).map { ids =>
       EirImport(None, ids.toList, publicOverride = false)
     }
 
   def UsingStatement[_: P]: P[EirTypeAlias] = P(
-    `using` ~ Id ~ TDeclaration.? ~ "=" ~ ConstExpr ~ Semi
+    `using` ~/ Id ~ TDeclaration.? ~ "=" ~ ConstExpr ~ Semi
   ).map { case (id, tArgs, expr) =>
     EirTypeAlias(id, tArgs.getOrElse(Nil), expr)(None)
   }
@@ -116,14 +128,14 @@ object Parser {
       case (id, None) => id
     }
 
-  def Expression[_: P]: P[EirExpressionNode] = PrimaryExpr
+  def Expression[_: P]: P[EirExpressionNode] = InfixExpr
 
   def WhileLoop[_: P]: P[EirWhileLoop] = P(
     `while` ~ `(` ~ Expression ~ `)` ~ OptionalStatement
   ).map { case (expr, body) => EirWhileLoop(None, expr, body) }
 
   def DoWhileLoop[_: P]: P[EirDoWhileLoop] = P(
-    `do` ~ OptionalStatement ~ `while` ~ `(` ~ Expression ~ `)`
+    `do` ~ OptionalStatement ~ `while` ~ `(` ~ Expression ~ `)` ~ Semi
   ).map { case (body, expr) => EirDoWhileLoop(None, expr, body) }
 
   def ForAllHeader[_: P]: P[EirForLoopHeader] = P(
@@ -132,25 +144,46 @@ object Parser {
     EirForAllHeader(None, mkDeclaration(symbols), expr)
   }
 
-  def Statement[_: P]: P[EirNode] = P(
-    ForLoop | DoWhileLoop | WhileLoop | Block | InnerDeclaration | (Expression ~ Semi)
+  def CStyleHeader[_: P]: P[EirForLoopHeader] = P(
+    (!:(VarDeclaration) | `;`(None)) ~ Expression.? ~ Semi ~ Expression.?
+  ).map { case (decl, test, incr) => EirCStyleHeader(decl, test, incr) }
+
+  def InnerStatement[_: P]: P[EirNode] = P(
+    Block | ForLoop | DoWhileLoop | WhileLoop | IfElseStatement | NamespaceMember | InnerDeclaration | ReturnStatement | (Expression ~ Semi)
   )
 
-  def Block[_: P]: P[EirBlock] =
-    P(`{` ~ Statement.rep(0) ~ `}`).map(_.toList).map(EirBlock(None, _))
+  def Statement[_: P]: P[EirNode] = P(Annotations.? ~ InnerStatement).map {
+    case (as, node) => addAnnotations(node, as)
+  }
+
+  def ReturnStatement[_: P]: P[EirReturn] = P(`return` ~ OptionalExpression)
+    .map(expr => EirReturn(None, expr.getOrElse(globals.unitLiteral(None))))
+
+  def IfElseStatement[_: P]: P[EirIfElse] = P(
+    `if` ~ `(` ~ Expression ~ `)` ~ OptionalStatement ~ (`else` ~ OptionalStatement).?
+  ).map { case (expr, ifTrue, ifFalse) =>
+    EirIfElse(None, expr, ifTrue, ifFalse.flatten)
+  }
+
+  def Block[_: P]: P[EirBlock] = P(`{` ~ OptionalStatement.rep(0) ~ `}`)
+    .map(_.flatten.toList)
+    .map(EirBlock(None, _))
+
+  def OptionalExpression[_: P]: P[Option[EirExpressionNode]] =
+    P((!:(Expression) ~ Semi) | `;`(None))
 
   def OptionalStatement[_: P]: P[Option[EirNode]] = P(!:(Statement) | `;`(None))
 
   def OptionalBlock[_: P]: P[Option[EirBlock]] = P(!:(Block) | `;`(None))
 
   def ForLoop[_: P]: P[EirForLoop] = P(
-    `for` ~ `(` ~ ForAllHeader ~ `)` ~ OptionalStatement
+    `for` ~ `(` ~ (CStyleHeader | ForAllHeader) ~ `)` ~ OptionalStatement
   ).map { case (hdr, body) => EirForLoop(None, hdr, body) }
 
   def Specialization[p: P]: P[Seq[EirSymbolLike[EirType]]] =
     P("<" ~ Specialized[p, EirNamedType].rep(min = 0, sep = ",") ~ ">")
 
-  def Class[_: P]: P[EirClass] = P(ClassKind ~ Id ~ TDeclaration.? ~ ClassBody)
+  def Class[_: P]: P[EirClass] = P(ClassKind ~/ Id ~ TDeclaration.? ~ ClassBody)
     .map { case (kind, id, args, body) =>
       EirClass(
         None,
@@ -180,7 +213,7 @@ object Parser {
   def Annotations[_: P]: P[Seq[EirAnnotation]] = P(Annotation.rep(1))
 
   def FieldDeclaration[_: P]: P[EirDeclaration] = P(
-    (`var` | `val`) ~ Id ~ ":" ~ Type ~ ("=" ~ Expression).? ~ Semi
+    (`var` | `val`) ~/ Id ~ ":" ~ Type ~ ("=" ~ Expression).? ~ Semi
   ).map { case (varOrVal, id, ty, expr) =>
     EirDeclaration(None, isFinal = varOrVal == "val", id, ty, expr)
   }
@@ -200,14 +233,17 @@ object Parser {
   def Program[_: P]: P[(Option[Seq[String]], Seq[EirNode])] =
     Package.? ~ ProgramMember.rep(0) ~ End
 
-  def addAnnotations[A <: EirNode](node: A, as: Option[Seq[EirAnnotation]]): A = {
+  def addAnnotations[A <: EirNode](
+      node: A,
+      as: Option[Seq[EirAnnotation]]
+  ): A = {
     as.foreach(node.annotations ++= _)
     node
   }
 
   def ProgramMember[_: P]: P[EirNode] =
-    P(Annotations.? ~ (Namespace | NamespaceMember)).map {
-      case (as, node) => addAnnotations(node, as)
+    P(Annotations.? ~ (Namespace | NamespaceMember)).map { case (as, node) =>
+      addAnnotations(node, as)
     }
 
   def NamespaceMember[_: P]: P[EirNode] =
@@ -256,15 +292,114 @@ object Parser {
 
   def ConstExpr[_: P]: P[EirLiteral[_]] = P(Constant | ConstantSymbol)
 
+  def ProxySuffix[_: P]: P[String] = P(`@` | `[@]` | `{@}`)
+
+  def ProxySelfExpr[_: P]: P[EirSymbol[EirNamedNode]] =
+    P(`self` ~/ ProxySuffix).map { case (self, suffix) =>
+      EirSymbol[EirNamedNode](None, List(self + suffix))
+    }
+
+  def SelfExpr[_: P]: P[EirSymbol[EirNamedNode]] =
+    ProxySelfExpr | P(`self`).map { self =>
+      EirSymbol[EirNamedNode](None, List(self))
+    }
+
   def PrimaryExpr[p: P]: P[EirExpressionNode] =
-    P(Qualified[p, EirNamedNode] | Constant | TupleExpr | LambdaExpr)
+    P(SelfExpr | Qualified[p, EirNamedNode] | Constant | TupleExpr | LambdaExpr)
+
+  def ProxyAccessor[_: P]: P[EirExpressionNode] = P(ProxySelfExpr ~ Id).map {
+    case (self, id) => EirScopedSymbol(self, EirSymbol(None, List(id)))(None)
+  }
+
+  def FnCallArg[_: P]: P[EirCallArgument] = P("&".!.? ~ Expression).map {
+    case (amp, expr) => EirCallArgument(expr, amp.nonEmpty)(None)
+  }
+
+  sealed trait ExprSuffixTuple
+
+  case class CallSuffixTuple(
+      sp: List[EirResolvable[EirType]],
+      args: List[EirCallArgument]
+  ) extends ExprSuffixTuple
+
+  case class AccessSuffixTuple(id: String) extends ExprSuffixTuple
+
+  case class AtSuffixTuple(exprs: Seq[EirExpressionNode])
+      extends ExprSuffixTuple
+
+  def CallSuffix[_: P]: P[ExprSuffixTuple] = P(
+    Specialization.? ~ `(` ~/ FnCallArg.rep(min = 0, sep = ",") ~ `)`
+  ).map { case (sp, args) =>
+    CallSuffixTuple(sp.map(_.toList).getOrElse(Nil), args.toList)
+  }
+
+  def AccessSuffix[_: P]: P[ExprSuffixTuple] =
+    P("." ~/ Id).map(AccessSuffixTuple)
+
+  def Slice[_: P]: P[EirExpressionNode] = P(Expression)
+
+  def AtSuffix[_: P]: P[ExprSuffixTuple] =
+    P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(AtSuffixTuple)
+
+  def ExprSuffix[_: P]: P[ExprSuffixTuple] =
+    P(CallSuffix | AccessSuffix | AtSuffix)
+
+  def applySuffix(
+      base: EirExpressionNode,
+      suffix: ExprSuffixTuple
+  ): EirExpressionNode = {
+    suffix match {
+      case CallSuffixTuple(sp, args) => EirFunctionCall(None, base, args, sp)
+      case AccessSuffixTuple(id) =>
+        EirScopedSymbol(base, EirSymbol(None, List(id)))(None)
+      case AtSuffixTuple(args) => EirArrayReference(None, base, args.toList)
+    }
+  }
+
+  @tailrec
+  def applySuffixes(
+      base: EirExpressionNode,
+      suffixes: Seq[ExprSuffixTuple]
+  ): EirExpressionNode = {
+    suffixes match {
+      case Nil          => base
+      case head :: tail => applySuffixes(applySuffix(base, head), tail)
+    }
+  }
+
+  def PostfixExpr[_: P]: P[EirExpressionNode] = P(
+    (ProxyAccessor | PrimaryExpr) ~ ExprSuffix.rep(0)
+  ).map { case (expr, suffixes) => applySuffixes(expr, suffixes) }
+
+  def UnaryExpr[_: P]: P[EirExpressionNode] = P(PrefixOp.? ~ PostfixExpr).map {
+    case (None, expr)     => expr
+    case (Some(op), expr) => EirUnaryExpression(None, op, expr)
+  }
+
+  def BasicExpr[_: P]: P[EirExpressionNode] = P(NewExpr | AwaitExpr | UnaryExpr)
+
+  def ConditionalExpr[_: P]: P[EirExpressionNode] =
+    P(BasicExpr ~ (`?` ~ Expression ~ ":" ~ ConditionalExpr).?).map {
+      case (expr, None) => expr
+      case (expr, Some((ifTrue, ifFalse))) =>
+        EirTernaryOperator(None, expr, ifTrue, ifFalse)
+    }
+
+  def InfixExpr[_: P]: P[EirExpressionNode] = P(ConditionalExpr)
+
+  def NewExpr[_: P]: P[EirNew] = P(`new` ~/ Type ~ TupleExpr.?).map {
+    case (ty, tuple) => EirNew(None, ty, extractArgs(tuple))
+  }
+
+  def AwaitExpr[_: P]: P[EirAwait] =
+    P(await ~/ PostfixExpr).map(EirAwait(None, _))
 
   def TupleExpr[_: P]: P[EirExpressionNode] = P(
-    `(` ~ Expression.rep(min = 1, sep = ",") ~ `)`
+    `(` ~ Expression.rep(min = 0, sep = ",") ~ `)`
   ).map(s => EirTupleExpression.fromExpressions(None, s.toList))
 
   def LambdaExpr[_: P]: P[EirLambdaExpression] = P(
-    `(` ~ FnArg.rep(min = 0, sep = ",") ~ `)` ~ "=>" ~ (Block | Expression)
+    `(` ~ FnArg.rep(min = 0, sep = ",") ~ `)` ~ "=>" ~/ (Block | Expression)
   ).map { case (args, body) =>
     EirLambdaExpression(
       None,
@@ -296,7 +431,7 @@ object Parser {
     }
 
   def FnDeclaration[_: P]: P[EirFunction] = P(
-    `def` ~ Id ~ TDeclaration.? ~ `(` ~ FnArg.rep(
+    `def` ~/ (`self` | Id) ~ TDeclaration.? ~ `(` ~ FnArg.rep(
       min = 0,
       sep = ","
     ) ~ `)` ~ (`(` ~ ImplicitArg.rep(
@@ -331,11 +466,11 @@ object Parser {
     P(`(` ~ Decltype.rep(1).map(_.toList) ~ `)`) | Decltype.map(List(_))
 
   def ValDeclaration[_: P]: P[EirNode] = P(
-    ?:(`val`) ~ Decltypes ~ "=" ~ !:(Expression) ~ Semi
+    ?:(`val`) ~/ Decltypes ~ "=" ~ !:(Expression) ~ Semi
   ).map { case (triples, expr) => mkDeclaration(triples, expr, isFinal = true) }
 
   def VarDeclaration[_: P]: P[EirNode] =
-    P(?:(`var`) ~ Decltypes ~ ("=" ~ Expression).? ~ Semi).map {
+    P(?:(`var`) ~/ Decltypes ~ ("=" ~ Expression).? ~ Semi).map {
       case (triples, expr) => mkDeclaration(triples, expr, isFinal = false)
     }
 
