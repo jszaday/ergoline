@@ -958,12 +958,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     forceEnclosed(Option(visit(ctx)))
   }
 
-  def bodyToDefinite(ctx: BodyContext): EirBlock = {
-    bodyToOptional(ctx) getOrElse {
-      EirBlock(parent, Nil)
-    }
-  }
-
   def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
     seq match {
       case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
@@ -1155,8 +1149,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     enter(
       EirWhileLoop(parent, null, null),
       (l: EirWhileLoop) => {
-        l.condition = Option(ctx.expression()).map(visitAs[EirExpressionNode])
-        l.body = bodyToDefinite(ctx.body())
+        l.condition = visitAs[EirExpressionNode](ctx.expression())
+        l.body = bodyToOptional(ctx.body())
       }
     )
   }
@@ -1166,7 +1160,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       EirForLoop(parent, null, null),
       (f: EirForLoop) => {
         visitLoopHeader(ctx.loopHeader())
-        f.body = bodyToDefinite(ctx.body())
+        f.body = bodyToOptional(ctx.body())
       }
     )
   }
@@ -1384,7 +1378,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           )
         )
         n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-        n.body = bodyToDefinite(ctx.body())
+        n.body = bodyToOptional(ctx.body()).getOrElse(EirBlock(parent, Nil))
       }
     )
   }

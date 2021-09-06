@@ -422,6 +422,30 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
     false
 }
 
+object EirTemplateArgument {
+  def apply(
+      name: String,
+      isPack: Boolean,
+      bounds: Option[
+        (Option[EirResolvable[EirType]], Option[EirResolvable[EirType]])
+      ],
+      declType: Option[EirResolvable[EirType]],
+      defaultValue: Option[EirLiteral[_]]
+  ): EirTemplateArgument = {
+    val arg = EirTemplateArgument(None, name)
+    arg.isPack = isPack
+    bounds match {
+      case Some((lowerBound, upperBound)) =>
+        arg.lowerBound = lowerBound
+        arg.upperBound = upperBound
+      case None =>
+    }
+    arg.argumentType = declType
+    arg.defaultValue = defaultValue.map(EirConstantFacade(_)(Some(arg)))
+    arg
+  }
+}
+
 sealed trait EirClassKind
 
 case object EirValueKind extends EirClassKind
@@ -469,7 +493,7 @@ case class EirTrait(
 
 case class EirMember(
     var parent: Option[EirNode],
-    var member: EirNamedNode,
+    var member: EirNode,
     var accessibility: EirAccessibility.Value
 ) extends EirNamedNode {
   var isOverride: Boolean = false
@@ -569,7 +593,10 @@ case class EirMember(
     })
   }
 
-  override def name: String = member.name
+  override def name: String = member match {
+    case n: EirNamedNode => n.name
+    case _               => Errors.incorrectType(member, classOf[EirNamedNode])
+  }
 
   override def children: Iterable[EirNode] = selfDeclarations :+ member
 
@@ -713,7 +740,7 @@ case class EirFunctionArgument(
     var name: String,
     var declaredType: EirResolvable[EirType],
     var isExpansion: Boolean,
-    var isSelfAssigning: Boolean,
+    var isSelfAssigning: Boolean = false,
     var isReference: Boolean = false
 ) extends EirImplicitDeclaration {
   override def children: Iterable[EirNode] = Seq(declaredType)
@@ -993,37 +1020,45 @@ case class EirForAllHeader(
 
 case class EirWhileLoop(
     var parent: Option[EirNode],
-    var condition: Option[EirExpressionNode],
-    var body: EirBlock
+    var condition: EirExpressionNode,
+    var body: Option[EirNode]
 ) extends EirNode {
-  override def children: Iterable[EirNode] = condition ++ List(body)
+  override def children: Iterable[EirNode] = condition +: body.toList
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+}
+
+case class EirDoWhileLoop(
+    var parent: Option[EirNode],
+    var condition: EirExpressionNode,
+    var body: Option[EirNode]
+) extends EirNode {
+  override def children: Iterable[EirNode] = condition +: body.toList
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
 case class EirForLoop(
     var parent: Option[EirNode],
     var header: EirForLoopHeader,
-    var body: EirBlock
+    var body: Option[EirNode]
 ) extends EirNode
     with EirScope {
-  override def children: Iterable[EirNode] = header.children ++ List(body)
+  override def children: Iterable[EirNode] = header.children ++ body
 
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
-    ((body == oldNode) && util.applyOrFalse[EirBlock](body = _, newNode)) ||
-    header.replaceChild(oldNode, newNode)
-  }
+  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
+//    ((body == oldNode) && util.applyOrFalse[EirBlock](body = _, newNode)) ||
+//    header.replaceChild(oldNode, newNode)
+//  }
 }
 
-case class EirSpecializedSymbol(
+case class EirSpecializedSymbol[A <: EirNamedNode: ClassTag](
     var parent: Option[EirNode],
-    var symbol: EirResolvable[EirNamedNode with EirSpecializable],
+    var symbol: EirResolvable[A with EirSpecializable],
     override var types: List[EirResolvable[EirType]]
-) extends EirSymbolLike[EirNamedNode with EirSpecializable]
+) extends EirSymbolLike[A]
     with EirSpecialization {
 
   override def setBase(ty: EirResolvable[EirSpecializable]): Unit = {
-    this.symbol =
-      ty.asInstanceOf[EirResolvable[EirNamedNode with EirSpecializable]]
+    this.symbol = ty.asInstanceOf[EirResolvable[A with EirSpecializable]]
   }
 
   override def children: Iterable[EirNode] = symbol +: types
@@ -1034,7 +1069,7 @@ case class EirSpecializedSymbol(
       .map(types = _)
       .isDefined ||
     ((symbol == oldNode) && util
-      .applyOrFalse[EirResolvable[EirNamedNode with EirSpecializable]](
+      .applyOrFalse[EirResolvable[A with EirSpecializable]](
         symbol = _,
         newNode
       ))

@@ -384,8 +384,8 @@ object Find {
         case m: EirMember => m
       }
     // TODO add support for this
-    case s: EirSpecializedSymbol => Errors.unableToResolve(s)
-    case _                       => Errors.unreachable()
+    case s: EirSpecializedSymbol[_] => Errors.unableToResolve(s)
+    case _                          => Errors.unreachable()
   }
 
   def accessibleMember(

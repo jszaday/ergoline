@@ -108,10 +108,10 @@ trait EirVisitor[Context, Value] {
       x: EirSymbolLike[_ <: EirNode]
   )(implicit ctx: Context): Value = {
     x match {
-      case x: EirSymbol[_]         => visitSymbol(x)
-      case x: EirScopedSymbol[_]   => visitScopedSymbol(x)
-      case x: EirSpecializedSymbol => visitSpecializedSymbol(x)
-      case _                       => fallback(x)
+      case x: EirSymbol[_]            => visitSymbol(x)
+      case x: EirScopedSymbol[_]      => visitScopedSymbol(x)
+      case x: EirSpecializedSymbol[_] => visitSpecializedSymbol(x)
+      case _                          => fallback(x)
     }
   }
 
@@ -179,8 +179,8 @@ trait EirVisitor[Context, Value] {
 //  def visitDefault(x: EirNode)(implicit ctx: Context): Value
 
 //  def visitGlobalNamespace(ctx: Context, x: Value
-  def visitSpecializedSymbol(x: EirSpecializedSymbol)(implicit
-      ctx: Context
+  def visitSpecializedSymbol[A <: EirNamedNode](x: EirSpecializedSymbol[A])(
+      implicit ctx: Context
   ): Value
 
   def visitArrayReference(x: EirArrayReference)(implicit ctx: Context): Value

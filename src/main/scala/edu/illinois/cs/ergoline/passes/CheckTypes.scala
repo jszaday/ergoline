@@ -448,7 +448,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
       case _ => Errors.unreachable()
     }
-    visit(loop.body)
+    loop.body.map(visit).getOrElse(globals.unitType)
   }
 
   override def visitLiteral(
@@ -509,7 +509,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           .zip(b.from.map(visit(_)))
           .map(learn)).reduce(merge)
       case (t: EirTemplateArgument, b) => Map(t -> b)
-      case (_: EirSymbol[_] | _: EirSpecializedSymbol, b) =>
+      case (_: EirSymbol[_] | _: EirSpecializedSymbol[_], b) =>
         learn((Find.uniqueResolution[EirResolvable[EirType]](pair._1), b))
       case (_: EirProxyType, _: EirProxyType) => ???
       case _                                  => Map()
@@ -644,7 +644,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   }
 
   private def resolve(
-      x: EirSpecializedSymbol
+      x: EirSpecializedSymbol[_]
   )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val found = resolve(x.symbol, x.types.map(visit(_)))
     x.disambiguation = found
@@ -655,10 +655,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): Option[EirType] = {
     (t, args) match {
-      case (t: EirSpecializedSymbol, _)  => resolve(t)
-      case (t: EirType, None)            => Some(t)
-      case (t: EirSymbol[_], Some(args)) => resolve(t, args)
-      case _                             => ???
+      case (t: EirSpecializedSymbol[_], _) => resolve(t)
+      case (t: EirType, None)              => Some(t)
+      case (t: EirSymbol[_], Some(args))   => resolve(t, args)
+      case _                               => ???
     }
   }
 
@@ -798,8 +798,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             Option
               .when(f.types.nonEmpty)(f.types)
               .getOrElse(f.target match {
-                case s: EirSpecializedSymbol => s.types
-                case _                       => Nil
+                case s: EirSpecializedSymbol[_] => s.types
+                case _                          => Nil
               })
               .map(visit)
           }
@@ -1312,8 +1312,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class TypeCheckException(message: String)
       extends Exception(message)
 
-  override def visitSpecializedSymbol(
-      x: EirSpecializedSymbol
+  override def visitSpecializedSymbol[A <: EirNamedNode](
+      x: EirSpecializedSymbol[A]
   )(implicit ctx: TypeCheckContext): EirType = {
     val prevFc: Option[EirFunctionCall] =
       ctx.immediateAncestor[EirFunctionCall].filter(_.target.contains(x))
@@ -1349,7 +1349,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x: EirWhileLoop
   )(implicit ctx: TypeCheckContext): EirType = {
     checkCondition(x.condition)
-    visit(x.body)
+    x.body.map(visit).getOrElse(globals.unitType)
   }
 
   override def visitNew(x: EirNew)(implicit ctx: TypeCheckContext): EirType = {

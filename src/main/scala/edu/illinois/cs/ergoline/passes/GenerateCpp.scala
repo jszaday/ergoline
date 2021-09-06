@@ -2425,8 +2425,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  override def visitSpecializedSymbol(
-      x: EirSpecializedSymbol
+  override def visitSpecializedSymbol[A <: EirNamedNode](
+      x: EirSpecializedSymbol[A]
   )(implicit ctx: CodeGenerationContext): Unit = {
     val base = ctx.resolve(x.symbol)
     ctx << ctx.nameFor(base) << visitSpecialization(x)
