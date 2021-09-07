@@ -54,7 +54,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   def visitAnnotations(
       annotations: Iterable[EirAnnotation]
   )(implicit ctx: UnparseContext): String = {
-    annotations.map(visitAnnotation(_)).mkString(" ")
+    annotations.map(visitAnnotation(_)).mkString("")
   }
 
   override def visit(node: EirNode)(implicit ctx: UnparseContext): String = {
@@ -205,7 +205,14 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitAnnotation(node: EirAnnotation)(implicit
       ctx: UnparseContext
-  ): String = s"@${node.name} "
+  ): String = {
+    val opts = Option(node.opts)
+      .filterNot(_.isEmpty)
+      .mapOrEmpty(opts => {
+        s"(${opts.map { case (id, value) => s"$id=${visit(value)}" } mkString (",")})"
+      })
+    s"@${node.name}$opts "
+  }
 
   override def visitBinaryExpression(
       node: EirBinaryExpression

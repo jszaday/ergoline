@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.Visitor.{
 }
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{
+  EirBooleanLiteral,
   EirIntegerLiteral,
   EirLiteral,
   EirLiteralSymbol,
@@ -23,7 +24,7 @@ import edu.illinois.cs.ergoline.resolution.{
   EirResolvable,
   Modules
 }
-import fastparse.SingleLineWhitespace._
+import fastparse.JavaWhitespace._
 import fastparse._
 
 import scala.annotation.tailrec
@@ -253,9 +254,16 @@ object Parser {
   def ClassBody[_: P]: P[Seq[EirMember]] =
     P((`{` ~/ ClassMember.rep(0) ~ `}`) | `;`(Nil))
 
+  def AnnotationParameter[_: P]: P[(String, EirLiteral[_])] =
+    P((`static` | Id) ~ ("=" ~/ Constant).?).map { case (id, opt) =>
+      (id, opt.getOrElse(EirBooleanLiteral(value = true)(None)))
+    }
+
   def Annotation[_: P]: P[EirAnnotation] = P(
-    "@" ~ Id ~ Newline.rep(0)
-  ).map(EirAnnotation(_, Map()))
+    "@" ~ Id ~ (`(` ~/ AnnotationParameter.rep(min = 0, sep = ",") ~ `)`).?
+  ).map { case (id, opts) =>
+    EirAnnotation(id, opts.map(_.toMap).getOrElse(Map()))
+  }
 
   def Annotations[_: P]: P[Seq[EirAnnotation]] = P(Annotation.rep(1))
 

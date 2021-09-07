@@ -2,14 +2,14 @@ package edu.illinois.cs.ergoline.parsing.syntax
 
 import fastparse.CharPredicates._
 import fastparse.NoWhitespace._
-import fastparse._, ScalaWhitespace._
+import fastparse._
 import Keywords._
 
 object Basics {
   def UnicodeEscape[_: P] = P("u" ~ HexDigit ~ HexDigit ~ HexDigit ~ HexDigit)
 
   //Numbers and digits
-  def Digit[_: P] = P(CharIn("0-9"))
+  def Digit[_: P]: P[String] = P(CharIn("0-9").!)
 
   def HexDigit[_: P] = P(CharIn("0-9a-fA-F"))
   def HexNum[_: P] = P("0x" ~ CharsWhileIn("0-9a-fA-F"))
@@ -19,7 +19,7 @@ object Basics {
 
   def WSChars[_: P] = P(NoTrace(CharsWhileIn("\u0020\u0009")))
   def Newline[_: P] = P(NoTrace(StringIn("\r\n", "\n")))
-  def Semi[_: P] = P((";" | Newline) ~ Newline.rep(0))
+  def Semi[_: P] = P(";")
   def OpChar[_: P] = P(CharPred(isOpChar))
 
   val isOpChar = NamedFunction {
@@ -38,6 +38,23 @@ object Basics {
 
   def WL0[_: P]: P[Unit] = P(ScalaWhitespace.whitespace(P.current))
   def WL[_: P]: P[Unit] = P(NoCut(WL0))
+
+  def SymbolicKeywords[_: P]: P[Unit] = P {
+    StringIn(
+      ":",
+      ";",
+      "=>",
+      "=",
+      "<-",
+      "<:",
+      "<%",
+      ">:",
+      "#",
+      "@",
+      "\u21d2",
+      "\u2190"
+    ) ~ !OpChar
+  }.opaque("SymbolicKeywords")
 
   def AlphabeticKeywords[_: P]: P[Unit] = P(
     StringIn(
@@ -71,11 +88,27 @@ object Basics {
       "val",
       "true",
       "false"
-    )
+    ) ~ !CharPred(LetterDigitDollarUnderscore)
   ).opaque("Alphabetic")
 
-  def Id[_: P]: P[String] =
-    P(!AlphabeticKeywords ~ ("_" | Lower | Upper).rep(1).!)
+  def AlphanumericHead[_: P]: P[String] = P(("_" | Lower | Upper).!)
+
+  def AlphanumericTail[_: P]: P[String] = P(AlphanumericHead | Digit)
+
+  def AlphanumericId[_: P]: P[String] = P(
+    !AlphabeticKeywords ~ (AlphanumericHead ~ AlphanumericTail.rep(0))
+  ).map { case (head, tail) => (head +: tail).mkString("") }
+
+  val OpCharNotSlash: NamedFunction =
+    NamedFunction(x => isOpChar(x) && x != '/')
+
+  def OperatorId[_: P]: P[String] = P(
+    !SymbolicKeywords ~ (!StringIn("/*", "//") ~ (CharsWhile(
+      OpCharNotSlash
+    ).! | "/".!)).rep(1)
+  ).map { case (seq) => seq.mkString("") }
+
+  def Id[_: P]: P[String] = P(AlphanumericId | OperatorId)
 
   /** Most keywords don't just require the correct characters to match,
     * they have to ensure that subsequent characters *don't* match in
