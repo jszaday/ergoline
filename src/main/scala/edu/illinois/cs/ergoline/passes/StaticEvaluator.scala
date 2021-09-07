@@ -35,7 +35,7 @@ object StaticEvaluator {
 
     val result = CheckTypes.visit(resolvable)
     result match {
-      case x: EirConstantFacade => x.value
+      case x: EirConstantFacade => evaluate(x.value)
       case x: EirType           => EirLiteralType(x)(None)
     }
   }

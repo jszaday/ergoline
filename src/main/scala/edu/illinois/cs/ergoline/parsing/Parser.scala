@@ -145,7 +145,11 @@ object Parser {
       case (id, None) => id
     }
 
-  def Expression[_: P]: P[EirExpressionNode] = P(MatchExpr | InfixExpr)
+  def Expression[_: P](implicit
+      static: Boolean = false
+  ): P[EirExpressionNode] = {
+    if (static) P(InfixExpr) else P(MatchExpr | InfixExpr)
+  }
 
   def WhileLoop[_: P]: P[EirWhileLoop] = P(
     `while` ~ `(` ~ Expression ~ `)` ~ OptionalStatement
@@ -386,7 +390,11 @@ object Parser {
       case (ty, Some(_))     => ???
     }
 
-  def ConstExpr[_: P]: P[EirLiteral[_]] = P(Constant | ConstantSymbol)
+  def ConstExpr[_: P]: P[EirExpressionNode] = {
+    implicit val static: Boolean = true
+
+    P(Expression)
+  }
 
   def ProxySuffix[_: P]: P[String] = P(`@` | `[@]` | `{@}`)
 
@@ -400,12 +408,25 @@ object Parser {
       EirSymbol[EirNamedNode](None, List(self))
     }
 
-  def PrimaryExpr[p: P]: P[EirExpressionNode] = P(
-    SelfExpr | Qualified[
+  def ConstSymbol[p: P]: P[EirLiteralSymbol] = P(
+    Qualified[
       p,
-      EirNamedNode
-    ] | Constant | TupleExpr | LambdaExpr | InterpolatedString
-  )
+      EirNamedType
+    ]
+  ).map(EirLiteralSymbol(_)(None))
+
+  def PrimaryExpr[p: P](implicit static: Boolean): P[EirExpressionNode] = {
+    if (static) {
+      P(ConstSymbol | Constant | TupleExpr)
+    } else {
+      P(
+        SelfExpr | Qualified[
+          p,
+          EirNamedNode
+        ] | Constant | TupleExpr | LambdaExpr | InterpolatedString
+      )
+    }
+  }
 
   def ProxyAccessor[_: P]: P[EirExpressionNode] = P(ProxySelfExpr ~ Id).map {
     case (self, id) => EirScopedSymbol(self, EirSymbol(None, List(id)))(None)
@@ -436,13 +457,15 @@ object Parser {
   def AccessSuffix[_: P]: P[ExprSuffixTuple] =
     P("." ~/ Id).map(AccessSuffixTuple)
 
-  def Slice[_: P]: P[EirExpressionNode] = P(Expression)
+  def Slice[_: P](implicit static: Boolean): P[EirExpressionNode] =
+    P(Expression)
 
-  def AtSuffix[_: P]: P[ExprSuffixTuple] =
+  def AtSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] =
     P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(AtSuffixTuple)
 
-  def ExprSuffix[_: P]: P[ExprSuffixTuple] =
-    P(CallSuffix | AccessSuffix | AtSuffix)
+  def ExprSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] = {
+    if (static) P(AtSuffix) else P(CallSuffix | AccessSuffix | AtSuffix)
+  }
 
   def applySuffix(
       base: EirExpressionNode,
@@ -467,18 +490,22 @@ object Parser {
     }
   }
 
-  def PostfixExpr[_: P]: P[EirExpressionNode] = P(
-    (ProxyAccessor | PrimaryExpr) ~ ExprSuffix.rep(0)
-  ).map { case (expr, suffixes) => applySuffixes(expr, suffixes) }
+  def PostfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = {
+    if (static) P(PrimaryExpr ~ ExprSuffix.rep(0))
+    else P((ProxyAccessor | PrimaryExpr) ~ ExprSuffix.rep(0))
+  }.map { case (expr, suffixes) => applySuffixes(expr, suffixes) }
 
-  def UnaryExpr[_: P]: P[EirExpressionNode] = P(PrefixOp.? ~ PostfixExpr).map {
-    case (None, expr)     => expr
-    case (Some(op), expr) => EirUnaryExpression(None, op, expr)
+  def UnaryExpr[_: P](implicit static: Boolean): P[EirExpressionNode] =
+    P(PrefixOp.? ~ PostfixExpr).map {
+      case (None, expr)     => expr
+      case (Some(op), expr) => EirUnaryExpression(None, op, expr)
+    }
+
+  def BasicExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = {
+    if (static) P(UnaryExpr) else P(UnaryExpr | NewExpr | AwaitExpr)
   }
 
-  def BasicExpr[_: P]: P[EirExpressionNode] = P(UnaryExpr | NewExpr | AwaitExpr)
-
-  def ConditionalExpr[_: P]: P[EirExpressionNode] =
+  def ConditionalExpr[_: P](implicit static: Boolean): P[EirExpressionNode] =
     P(BasicExpr ~ (`?` ~ Expression ~ ":" ~ ConditionalExpr).?).map {
       case (expr, None) => expr
       case (expr, Some((ifTrue, ifFalse))) =>
@@ -512,18 +539,19 @@ object Parser {
     }
   }
 
-  def InfixExpr[_: P]: P[EirExpressionNode] = P(
+  def InfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
     ConditionalExpr ~ (Id ~/ ConditionalExpr).rep(0)
   ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
-  def NewExpr[_: P]: P[EirNew] = P(`new` ~/ Type ~ TupleExpr.?).map {
-    case (ty, tuple) => EirNew(None, ty, extractArgs(tuple))
-  }
+  def NewExpr[_: P](implicit static: Boolean): P[EirNew] =
+    P(`new` ~/ Type ~ TupleExpr.?).map { case (ty, tuple) =>
+      EirNew(None, ty, extractArgs(tuple))
+    }
 
-  def AwaitExpr[_: P]: P[EirAwait] =
+  def AwaitExpr[_: P](implicit static: Boolean): P[EirAwait] =
     P(await ~/ PostfixExpr).map(EirAwait(None, _))
 
-  def TupleExpr[_: P]: P[EirExpressionNode] = P(
+  def TupleExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
     `(` ~ Expression.rep(min = 0, sep = ",") ~ `)`
   ).map(s => EirTupleExpression.fromExpressions(None, s.toList))
 

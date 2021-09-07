@@ -430,7 +430,7 @@ object EirTemplateArgument {
         (Option[EirResolvable[EirType]], Option[EirResolvable[EirType]])
       ],
       declType: Option[EirResolvable[EirType]],
-      defaultValue: Option[EirLiteral[_]]
+      defaultValue: Option[EirExpressionNode]
   ): EirTemplateArgument = {
     val arg = EirTemplateArgument(None, name)
     arg.isPack = isPack
@@ -1246,7 +1246,7 @@ case class EirPackExpansion(var base: EirResolvable[EirType])(
 case class EirTypeAlias(
     var name: String,
     var templateArgs: List[EirTemplateArgument],
-    var value: EirLiteral[_]
+    var value: EirExpressionNode
 )(var parent: Option[EirNode])
     extends EirNamedNode
     with EirType
@@ -1264,7 +1264,7 @@ case class EirTypeAlias(
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirConstantFacade(var value: EirLiteral[_])(
+case class EirConstantFacade(var value: EirExpressionNode)(
     var parent: Option[EirNode]
 ) extends EirType {
   override def children: Iterable[EirNode] = List(value)
