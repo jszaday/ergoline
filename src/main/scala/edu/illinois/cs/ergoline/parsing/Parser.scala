@@ -1,5 +1,10 @@
 package edu.illinois.cs.ergoline.parsing
 
+import edu.illinois.cs.ergoline.Visitor.{
+  isAssignOperator,
+  kindFrom,
+  sortInfixes
+}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
@@ -7,20 +12,12 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirLiteralSymbol,
   EirUnitLiteral
 }
-import edu.illinois.cs.ergoline.ast.types.{
-  EirLambdaType,
-  EirNamedType,
-  EirProxyKind,
-  EirProxyType,
-  EirReferenceType,
-  EirTupleMultiply,
-  EirTupleType,
-  EirType
-}
+import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.parsing.syntax.Basics._
-import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
 import edu.illinois.cs.ergoline.parsing.syntax.Keywords._
+import edu.illinois.cs.ergoline.parsing.syntax.Literals._
+import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -28,11 +25,6 @@ import edu.illinois.cs.ergoline.resolution.{
 }
 import fastparse.SingleLineWhitespace._
 import fastparse._
-import edu.illinois.cs.ergoline.Visitor.{
-  isAssignOperator,
-  kindFrom,
-  sortInfixes
-}
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
@@ -338,7 +330,7 @@ object Parser {
   def Id[_: P]: P[String] = P(WL ~ Basics.Id)
 
   def Constant[_: P]: P[EirLiteral[_]] =
-    P(CharIn("0-9").rep(1).!).map(_.toInt).map(EirIntegerLiteral(_)(None))
+    P(NumericLiteral | BooleanLiteral | StringLiteral)
 
   def ConstantSymbol[_: P]: P[EirLiteralSymbol] =
     Type.map(EirLiteralSymbol(_)(None))
@@ -400,8 +392,12 @@ object Parser {
       EirSymbol[EirNamedNode](None, List(self))
     }
 
-  def PrimaryExpr[p: P]: P[EirExpressionNode] =
-    P(SelfExpr | Qualified[p, EirNamedNode] | Constant | TupleExpr | LambdaExpr)
+  def PrimaryExpr[p: P]: P[EirExpressionNode] = P(
+    SelfExpr | Qualified[
+      p,
+      EirNamedNode
+    ] | Constant | TupleExpr | LambdaExpr | InterpolatedString
+  )
 
   def ProxyAccessor[_: P]: P[EirExpressionNode] = P(ProxySelfExpr ~ Id).map {
     case (self, id) => EirScopedSymbol(self, EirSymbol(None, List(id)))(None)
@@ -472,7 +468,7 @@ object Parser {
     case (Some(op), expr) => EirUnaryExpression(None, op, expr)
   }
 
-  def BasicExpr[_: P]: P[EirExpressionNode] = P(NewExpr | AwaitExpr | UnaryExpr)
+  def BasicExpr[_: P]: P[EirExpressionNode] = P(UnaryExpr | NewExpr | AwaitExpr)
 
   def ConditionalExpr[_: P]: P[EirExpressionNode] =
     P(BasicExpr ~ (`?` ~ Expression ~ ":" ~ ConditionalExpr).?).map {

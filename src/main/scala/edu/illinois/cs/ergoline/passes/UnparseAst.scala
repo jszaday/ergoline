@@ -253,7 +253,12 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def visitLiteral(x: EirLiteral[_])(implicit
       ctx: UnparseContext
-  ): String = x.value.toString
+  ): String = {
+    x match {
+      case EirStringLiteral(s) => "\"" + s + "\""
+      case _                   => x.value.toString
+    }
+  }
 
   def visitStatement(x: EirNode)(implicit ctx: UnparseContext): String = {
     x match {

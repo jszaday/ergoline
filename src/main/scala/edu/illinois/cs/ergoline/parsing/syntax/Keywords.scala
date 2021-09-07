@@ -89,6 +89,8 @@ object Keywords {
   def `static`[_: P]: P[String] = Key.W("static")
   def `override`[_: P]: P[String] = Key.W("override")
   def `package`[_: P]: P[Unit] = ?:(Key.W("package"))
+  def `true`[_: P]: P[String] = Key.W("true")
+  def `false`[_: P]: P[String] = Key.W("false")
 
   def self[_: P]: P[String] = Key.W("self")
   def await[_: P]: P[Unit] = ?:(Key.W("await"))

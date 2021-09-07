@@ -68,7 +68,9 @@ object Basics {
       "class",
       "def",
       "var",
-      "val"
+      "val",
+      "true",
+      "false"
     )
   ).opaque("Alphabetic")
 
