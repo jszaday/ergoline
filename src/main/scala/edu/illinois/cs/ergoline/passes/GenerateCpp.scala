@@ -2658,7 +2658,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   def findInplaceOpportunities(
       from: EirMember,
       arrArgs: List[Int],
-      body: EirBlock
+      body: EirNode
   )(implicit
       ctx: CodeGenerationContext
   ): Unit = {
@@ -2731,7 +2731,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "[=](hypercomm::component::value_set&&" << set << ")" << "{"
 
     val quadruplets = x.patterns.map({ case (symbol, _) =>
-      val m = Find.namedChild[EirMember](ctx.proxy, symbol.qualifiedName.last)
+      val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
+        ctx.proxy,
+        Some(false)
+      )(ctx.tyCtx)
+      val m =
+        accessors.headOption.map(_._1).getOrElse(Errors.unableToResolve(symbol))
       val f = assertValid[EirFunction](m.member)
       val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
       val tys = declTys.map(ctx.typeFor(_, Some(x)))
@@ -2758,7 +2763,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ).split(n)
 
       if (arrayArgs.nonEmpty) {
-        findInplaceOpportunities(m, arrayArgs, x.body)
+        x.body.map(findInplaceOpportunities(m, arrayArgs, _))
       }
     })
 

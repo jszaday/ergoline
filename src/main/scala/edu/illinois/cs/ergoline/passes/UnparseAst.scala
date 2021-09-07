@@ -263,9 +263,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   }
 
   def visitOptionalStatement(
-      x: Option[EirNode]
+      x: Option[EirNode],
+      alt: String = ";"
   )(implicit ctx: UnparseContext): String = {
-    x.map(visitStatement).map(" " + _).getOrElse(";")
+    x.map(visitStatement).map(" " + _).getOrElse(alt)
   }
 
   override def visitWhileLoop(
@@ -427,7 +428,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   )(implicit ctx: UnparseContext): String = {
     val ifCond = x.condition.map(y => s"if ${visit(y)} ").getOrElse("")
     val pattern = visit(x.patterns).init.tail
-    s"$n${ctx.t}case $pattern $ifCond=> ${visit(x.body)}"
+    s"$n${ctx.t}case $pattern $ifCond=>${visitOptionalStatement(x.body, alt = " ;")}"
   }
 
   override def visitPatternList(
@@ -488,7 +489,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       .map(p => s"${visit(p._1)}${visit(p._2)}")
       .mkString(", ") + {
       x.condition.map(visitExpression(_)).map(" if " + _).getOrElse("")
-    } + s" => ${visit(x.body)}"
+    } + s" =>${visitOptionalStatement(x.body, alt = " ;")}"
   }
 
   override def visitSlice(x: EirSlice)(implicit ctx: UnparseContext): String = {

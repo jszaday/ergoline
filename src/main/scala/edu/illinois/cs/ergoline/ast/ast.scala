@@ -1118,7 +1118,7 @@ case class EirMatchCase(
     var parent: Option[EirNode],
     var patterns: EirPatternList,
     var condition: Option[EirExpressionNode],
-    var body: Option[EirBlock]
+    var body: Option[EirNode]
 ) extends EirNode
     with EirScope {
   def declarations: List[EirDeclaration] = patterns.declarations
@@ -1280,14 +1280,14 @@ case class EirConstantFacade(var value: EirLiteral[_])(
 }
 
 case class EirSdagWhen(
-    var patterns: List[(EirSymbol[EirNamedNode], EirPatternList)],
+    var patterns: List[(EirSymbolLike[EirNamedNode], EirPatternList)],
     var condition: Option[EirExpressionNode],
-    var body: EirBlock
+    var body: Option[EirNode]
 )(var parent: Option[EirNode])
     extends EirNode
     with EirScope {
   override def children: Iterable[EirNode] =
-    patterns.map(_._1) ++ declarations ++ condition :+ body
+    patterns.map(_._1) ++ declarations ++ condition ++ body
 
   def declarations: List[EirDeclaration] = patterns.flatMap(_._2.declarations)
 

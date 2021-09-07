@@ -1615,7 +1615,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     checkCondition(x.condition)
 
-    visit(x.body)
+    x.body.map(visit).getOrElse(globals.unitType)
   }
 
   override def visitSlice(slice: EirSlice)(implicit

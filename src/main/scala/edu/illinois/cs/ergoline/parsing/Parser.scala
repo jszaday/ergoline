@@ -130,7 +130,7 @@ object Parser {
       case (id, None) => id
     }
 
-  def Expression[_: P]: P[EirExpressionNode] = P(InfixExpr)
+  def Expression[_: P]: P[EirExpressionNode] = P(MatchExpr | InfixExpr)
 
   def WhileLoop[_: P]: P[EirWhileLoop] = P(
     `while` ~ `(` ~ Expression ~ `)` ~ OptionalStatement
@@ -151,8 +151,12 @@ object Parser {
   ).map { case (decl, test, incr) => EirCStyleHeader(decl, test, incr) }
 
   def InnerStatement[_: P]: P[EirNode] = P(
-    Block | ForLoop | DoWhileLoop | WhileLoop | IfElseStatement | NamespaceMember | InnerDeclaration | ReturnStatement | (Expression ~ Semi)
+    Block | ForLoop | DoWhileLoop | WhileLoop | IfElseStatement | NamespaceMember |
+      InnerDeclaration | ReturnStatement | AwaitManyStatement | WhenStatement | ExprStatement
   )
+
+  def ExprStatement[_: P]: P[EirExpressionNode] =
+    P(MatchExpr | (Expression ~ Semi))
 
   def Statement[_: P]: P[EirNode] = P(Annotations.? ~ InnerStatement).map {
     case (as, node) => addAnnotations(node, as)
@@ -162,12 +166,39 @@ object Parser {
     .map(expr => EirReturn(None, expr.getOrElse(globals.unitLiteral(None))))
 
   def IfElseStatement[_: P]: P[EirIfElse] = P(
-    `if` ~ `(` ~ Expression ~ `)` ~ OptionalStatement ~ (`else` ~ OptionalStatement).?
+    `if` ~/ `(` ~ Expression ~ `)` ~ OptionalStatement ~ (`else` ~/ OptionalStatement).?
   ).map { case (expr, ifTrue, ifFalse) =>
     EirIfElse(None, expr, ifTrue, ifFalse.flatten)
   }
 
-  def Block[_: P]: P[EirBlock] = P(`{` ~ OptionalStatement.rep(0) ~ `}`)
+  def WhenStatement[_: P]: P[EirSdagWhen] = P(
+    `when` ~/ WhenFn.rep(
+      min = 1,
+      sep = ","
+    ) ~ (`if` ~/ Expression).? ~ "=>" ~ OptionalStatement
+  ).map { case (fns, cond, body) =>
+    EirSdagWhen(
+      fns.toList.map {
+        case (id, Some(list)) => (id, list)
+        case (id, None)       => (id, EirPatternList(None, Nil))
+      },
+      cond,
+      body
+    )(None)
+  }
+
+  def AwaitManyStatement[_: P]: P[EirAwaitMany] = P(
+    `await` ~ ("any" | "all").! ~/ `{` ~ WhenStatement.rep(1) ~ `}`
+  ).map { case (anyOrAll, body) =>
+    EirAwaitMany(anyOrAll == "all", body.toList)(None)
+  }
+
+  def WhenFn[p: P]: P[(EirSymbolLike[EirNamedNode], Option[EirPatternList])] =
+    P(
+      Identifier[p, EirNamedNode] ~ `(` ~/ PatternList.? ~ `)`
+    )
+
+  def Block[_: P]: P[EirBlock] = P(`{` ~/ OptionalStatement.rep(0) ~ `}`)
     .map(_.flatten.toList)
     .map(EirBlock(None, _))
 
@@ -206,7 +237,7 @@ object Parser {
   }
 
   def ClassBody[_: P]: P[Seq[EirMember]] =
-    P((`{` ~ ClassMember.rep(0) ~ `}`) | `;`(Nil))
+    P((`{` ~/ ClassMember.rep(0) ~ `}`) | `;`(Nil))
 
   def Annotation[_: P]: P[EirAnnotation] = P(
     "@" ~ Id ~ Newline.rep(0)
@@ -221,7 +252,7 @@ object Parser {
   }
 
   def Namespace[_: P]: P[EirNamespace] = P(
-    namespace ~ Id.rep(sep = "::", min = 1) ~ (`;`(Nil) | (`{` ~ ProgramMember
+    namespace ~ Id.rep(sep = "::", min = 1) ~ (`;`(Nil) | (`{` ~/ ProgramMember
       .rep(0) ~ `}`))
   ).map { case (ids, nodes: Seq[EirNode]) =>
     val scope = Modules.retrieve(ids.toList, EirGlobalNamespace)
@@ -440,14 +471,12 @@ object Parser {
   }
 
   def MatchExpr[_: P]: P[EirMatch] = P(
-    `match` ~/ `(` ~ Expression ~ `)` ~ `{` ~ CaseStatement.rep(1) ~ `}`
+    `match` ~/ `(` ~ Expression ~ `)` ~ `{` ~/ CaseStatement.rep(1) ~ `}`
   ).map { case (expr, cases) => EirMatch(None, expr, cases.toList) }
 
   def CaseStatement[_: P]: P[EirMatchCase] = P(
     `case` ~/ PatternList ~ (`if` ~ Expression).? ~ "=>" ~/ OptionalStatement
-  ).map { case (list, expr, body) =>
-    EirMatchCase(None, list, expr, body.map(forceEnclosed(_, addReturn = true)))
-  }
+  ).map { case (list, expr, body) => EirMatchCase(None, list, expr, body) }
 
   def PatternList[_: P]: P[EirPatternList] =
     P(Pattern.rep(min = 1, sep = ",")).map(s => EirPatternList(None, s.toList))
@@ -483,7 +512,7 @@ object Parser {
   def BasicType[_: P]: P[EirResolvable[EirType]] = P(Type)
 
   def BasicArg[_: P]: P[(String, Option[String], EirResolvable[EirType])] =
-    P(Id ~ ":" ~ "*".!.? ~ Type)
+    P(Id ~ ":" ~ "*".!.? ~/ Type)
 
   def FnArg[_: P]: P[EirFunctionArgument] =
     P(("&" | "=").!.? ~ BasicArg).map { case (refOrEq, (id, exp, ty)) =>

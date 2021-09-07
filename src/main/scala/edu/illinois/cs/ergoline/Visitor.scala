@@ -1386,7 +1386,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           )
         )
         n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-        n.body = bodyToOptional(ctx.body()).getOrElse(EirBlock(parent, Nil))
+        n.body = Option(ctx.body()).map(visitAs[EirNode])
       }
     )
   }
