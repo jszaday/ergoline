@@ -130,7 +130,7 @@ object Parser {
       case (id, None) => id
     }
 
-  def Expression[_: P]: P[EirExpressionNode] = InfixExpr
+  def Expression[_: P]: P[EirExpressionNode] = P(InfixExpr)
 
   def WhileLoop[_: P]: P[EirWhileLoop] = P(
     `while` ~ `(` ~ Expression ~ `)` ~ OptionalStatement
@@ -438,6 +438,49 @@ object Parser {
       forceEnclosed(body, addReturn = true)
     )
   }
+
+  def MatchExpr[_: P]: P[EirMatch] = P(
+    `match` ~/ `(` ~ Expression ~ `)` ~ `{` ~ CaseStatement.rep(1) ~ `}`
+  ).map { case (expr, cases) => EirMatch(None, expr, cases.toList) }
+
+  def CaseStatement[_: P]: P[EirMatchCase] = P(
+    `case` ~/ PatternList ~ (`if` ~ Expression).? ~ "=>" ~/ OptionalStatement
+  ).map { case (list, expr, body) =>
+    EirMatchCase(None, list, expr, body.map(forceEnclosed(_, addReturn = true)))
+  }
+
+  def PatternList[_: P]: P[EirPatternList] =
+    P(Pattern.rep(min = 1, sep = ",")).map(s => EirPatternList(None, s.toList))
+
+  def Pattern[_: P]: P[EirPattern] =
+    P(IdPattern | ExtractorPattern | ConstantPattern | ExprPattern)
+
+  def IdPattern[_: P]: P[EirIdentifierPattern] =
+    P(Id ~ (":" ~ BasicType).?).map { case (id, ty) =>
+      EirIdentifierPattern(None, id, ty.getOrElse(EirPlaceholder(None)))
+    }
+
+  def ExtractorPattern[p: P]: P[EirExtractorPattern] = P(
+    Identifier[p, EirNamedNode] ~ `(` ~ PatternList ~ `)`
+  ).map { case (id, list) => EirExtractorPattern(None, id, list) }
+
+  def ConstantPattern[_: P]: P[EirExpressionPattern] =
+    P(Constant).map { constant =>
+      EirExpressionPattern(
+        None,
+        EirBinaryExpression(
+          None,
+          EirSymbol[EirNamedNode](None, List("_")),
+          "==",
+          constant
+        )
+      )
+    }
+
+  def ExprPattern[_: P]: P[EirExpressionPattern] =
+    P(Expression).map(EirExpressionPattern(None, _))
+
+  def BasicType[_: P]: P[EirResolvable[EirType]] = P(Type)
 
   def BasicArg[_: P]: P[(String, Option[String], EirResolvable[EirType])] =
     P(Id ~ ":" ~ "*".!.? ~ Type)

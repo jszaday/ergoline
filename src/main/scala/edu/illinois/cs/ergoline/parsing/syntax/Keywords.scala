@@ -78,6 +78,8 @@ object Keywords {
   def `;`[_: P, A](a: A): P[A] = Semi.map(_ => a)
 
   def `new`[_: P]: P[Unit] = ?:(Key.W("new"))
+  def `match`[_: P]: P[Unit] = ?:(Key.W("match"))
+  def `case`[_: P]: P[Unit] = ?:(Key.W("case"))
   def `var`[_: P]: P[String] = Key.W("var")
   def `val`[_: P]: P[String] = Key.W("val")
   def `public`[_: P]: P[String] = Key.W("public")

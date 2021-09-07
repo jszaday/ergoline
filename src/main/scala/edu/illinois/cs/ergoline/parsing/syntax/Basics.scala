@@ -41,6 +41,8 @@ object Basics {
 
   def AlphabeticKeywords[_: P]: P[Unit] = P(
     StringIn(
+      "match",
+      "case",
       "package",
       "await",
       "do",
