@@ -42,6 +42,20 @@ object Visitor {
     Seq('|')
   )
 
+  def kindFrom(
+      prefix: Option[String],
+      collective: Option[String]
+  ): Option[EirProxyKind] = {
+    prefix
+      .filter(_ => collective.nonEmpty)
+      .map({
+        case "[@]" => EirElementProxy
+        case "{@}" => EirSectionProxy
+        case "@"   => EirCollectiveProxy
+        case _     => ???
+      })
+  }
+
   def isAssignOperator(op: String): Boolean = {
     op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
       .isComparisonOperator(op))
@@ -799,20 +813,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     } else {
       ctx.typeList().toList.toTupleType()(parent)
     }
-  }
-
-  def kindFrom(
-      prefix: Option[String],
-      collective: Option[String]
-  ): Option[EirProxyKind] = {
-    prefix
-      .filter(_ => collective.nonEmpty)
-      .map({
-        case "[@]" => EirElementProxy
-        case "{@}" => EirSectionProxy
-        case "@"   => EirCollectiveProxy
-        case _     => ???
-      })
   }
 
   override def visitTemplateType(

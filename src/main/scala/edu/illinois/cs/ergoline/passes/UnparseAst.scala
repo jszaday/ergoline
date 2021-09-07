@@ -122,8 +122,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   )(implicit ctx: UnparseContext): String = {
     val kwd = declKeyword(node.isFinal)
     val declType = visit(node.declaredType)
-    val expr = node.initialValue.mapOrEmpty(x => s"= ${visit(x)}")
-    s"$kwd ${node.name}: $declType $expr;"
+    val expr = node.initialValue.mapOrEmpty(x => s" = ${visit(x)}")
+    s"$kwd ${node.name}: $declType$expr;"
   }
 
   override def visitTemplateArgument(

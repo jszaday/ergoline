@@ -7,7 +7,16 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirLiteralSymbol,
   EirUnitLiteral
 }
-import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
+import edu.illinois.cs.ergoline.ast.types.{
+  EirLambdaType,
+  EirNamedType,
+  EirProxyKind,
+  EirProxyType,
+  EirReferenceType,
+  EirTupleMultiply,
+  EirTupleType,
+  EirType
+}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.parsing.syntax.Basics._
 import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
@@ -19,8 +28,11 @@ import edu.illinois.cs.ergoline.resolution.{
 }
 import fastparse.SingleLineWhitespace._
 import fastparse._
-
-import edu.illinois.cs.ergoline.Visitor.{isAssignOperator, sortInfixes}
+import edu.illinois.cs.ergoline.Visitor.{
+  isAssignOperator,
+  kindFrom,
+  sortInfixes
+}
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
@@ -47,6 +59,16 @@ object Parser {
       case Some(_: EirUnitLiteral)     => Nil
       case Some(x: EirTupleExpression) => x.expressions
       case Some(x)                     => List(x)
+    }
+  }
+
+  def extractTypes(
+      node: EirResolvable[EirType]
+  ): List[EirResolvable[EirType]] = {
+    node match {
+      case x: EirTupleType              => x.children
+      case x if x == globals.unitSymbol => Nil
+      case x                            => List(x)
     }
   }
 
@@ -213,8 +235,8 @@ object Parser {
     `for` ~ `(` ~ (CStyleHeader | ForAllHeader) ~ `)` ~ OptionalStatement
   ).map { case (hdr, body) => EirForLoop(None, hdr, body) }
 
-  def Specialization[p: P]: P[Seq[EirSymbolLike[EirType]]] =
-    P("<" ~ Specialized[p, EirNamedType].rep(min = 0, sep = ",") ~ ">")
+  def Specialization[_: P]: P[Seq[EirResolvable[EirType]]] =
+    P("<" ~/ Type.rep(min = 0, sep = ",") ~ ">")
 
   def Class[_: P]: P[EirClass] = P(ClassKind ~/ Id ~ TDeclaration.? ~ ClassBody)
     .map { case (kind, id, args, body) =>
@@ -321,7 +343,48 @@ object Parser {
   def ConstantSymbol[_: P]: P[EirLiteralSymbol] =
     Type.map(EirLiteralSymbol(_)(None))
 
-  def Type[p: P]: P[EirResolvable[EirType]] = Qualified[p, EirNamedType]
+  def NodeGroupKwd[_: P]: P[String] = P("node".!.? ~ "group".!).map {
+    case (lhs, rhs) => lhs.map(_ + rhs).getOrElse(rhs)
+  }
+
+  def ArrayKwd[_: P]: P[String] =
+    P("array".! ~ CharIn("1-9").! ~ "d".!).map { case (i, j, k) => i + j + k }
+
+  def CollectiveKwd[_: P]: P[String] = P(ArrayKwd | NodeGroupKwd)
+
+  def ProxyType[p: P]: P[EirResolvable[EirType]] =
+    P(Qualified[p, EirNamedType] ~ (ProxySuffix ~/ CollectiveKwd.?).?).map {
+      case (ty, None) => ty
+      case (ty, Some((proxy, collective))) =>
+        EirProxyType(None, ty, collective, kindFrom(Some(proxy), collective))
+    }
+
+  def TupleType[p: P]: P[EirResolvable[EirType]] =
+    P(`(` ~/ Type.rep(min = 1, sep = ",") ~ `)`).map {
+      case ty :: Nil => ty
+      case tys       => EirTupleType(None, tys.toList)
+    }
+
+  def TupleMultiply[p: P]: P[EirResolvable[EirType]] =
+    P(TupleType ~ (".*" ~/ ConstExpr).?).map {
+      case (lhs, None)      => lhs
+      case (lhs, Some(rhs)) => EirTupleMultiply(lhs, rhs)(None)
+    }
+
+  def BasicType[p: P]: P[EirResolvable[EirType]] = P(ProxyType | TupleMultiply)
+
+  def LambdaType[p: P]: P[EirResolvable[EirType]] =
+    P(BasicType ~ "=>" ~/ BasicType).map { case (lhs, rhs) =>
+      EirLambdaType(None, extractTypes(lhs), rhs, Nil, None)
+    }
+
+  def Type[p: P]: P[EirResolvable[EirType]] =
+    P((BasicType | LambdaType) ~/ ("&".! | "...".!).?).map {
+      case (ty, Some("...")) => EirPackExpansion(ty)(None)
+      case (ty, Some("&"))   => EirReferenceType(None, ty)
+      case (ty, None)        => ty
+      case (ty, Some(_))     => ???
+    }
 
   def ConstExpr[_: P]: P[EirLiteral[_]] = P(Constant | ConstantSymbol)
 
@@ -508,8 +571,6 @@ object Parser {
 
   def ExprPattern[_: P]: P[EirExpressionPattern] =
     P(Expression).map(EirExpressionPattern(None, _))
-
-  def BasicType[_: P]: P[EirResolvable[EirType]] = P(Type)
 
   def BasicArg[_: P]: P[(String, Option[String], EirResolvable[EirType])] =
     P(Id ~ ":" ~ "*".!.? ~/ Type)
