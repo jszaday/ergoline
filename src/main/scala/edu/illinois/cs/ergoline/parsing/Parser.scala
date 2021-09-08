@@ -233,18 +233,26 @@ object Parser {
   ).map { case (hdr, body) => EirForLoop(None, hdr, body) }
 
   def Specialization[_: P]: P[Seq[EirResolvable[EirType]]] =
-    P("<" ~/ Type.rep(min = 0, sep = ",") ~ ">")
+    P("<" ~ Type.rep(min = 0, sep = ",") ~ ">")
 
-  def Class[_: P]: P[EirClass] = P(ClassKind ~/ Id ~ TDeclaration.? ~ ClassBody)
-    .map { case (kind, id, args, body) =>
+  def Extends[_: P]: P[EirResolvable[EirType]] = {
+    `extends` ~/ Type
+  }
+
+  def With[_: P]: P[EirResolvable[EirType]] = {
+    `with` ~/ Type
+  }
+
+  def Class[_: P]: P[EirClass] = P(ClassKind ~/ Id ~ TDeclaration.? ~ Extends.? ~ With.rep(0) ~ WhereClause.? ~ ClassBody)
+    .map { case (kind, id, args, ext, ints, wh, body) =>
       EirClass(
         None,
         body.toList,
         id,
         args.getOrElse(Nil),
-        None,
-        Nil,
-        None,
+        ext,
+        ints.toList,
+        wh,
         kind
       )
     }
@@ -417,13 +425,13 @@ object Parser {
 
   def PrimaryExpr[p: P](implicit static: Boolean): P[EirExpressionNode] = {
     if (static) {
-      P(ConstSymbol | Constant | TupleExpr)
+      P(Constant | ConstSymbol | TupleExpr)
     } else {
       P(
-        SelfExpr | Qualified[
+        Constant | SelfExpr | Qualified[
           p,
           EirNamedNode
-        ] | Constant | TupleExpr | LambdaExpr | InterpolatedString
+        ] | TupleExpr | LambdaExpr | InterpolatedString
       )
     }
   }

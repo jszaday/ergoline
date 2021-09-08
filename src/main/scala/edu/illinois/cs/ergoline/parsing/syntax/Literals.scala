@@ -51,7 +51,7 @@ object Literals {
   def Numerals[_: P]: P[String] = P(CharIn("0-9").rep(1).!)
 
   def NumericLiteral[_: P]: P[EirLiteral[_]] =
-    P(Numerals ~ ("." ~/ Numerals).?).map {
+    P(Numerals ~ ("." ~ Numerals).?).map {
       case (lhs, None)      => EirIntegerLiteral(lhs.toInt)(None)
       case (lhs, Some(rhs)) => EirFloatLiteral(s"$lhs.$rhs".toFloat)(None)
     }

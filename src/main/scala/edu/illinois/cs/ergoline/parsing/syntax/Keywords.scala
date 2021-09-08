@@ -83,6 +83,8 @@ object Keywords {
   def `package`[_: P]: P[Unit] = ?:(Key.W("package"))
   def `true`[_: P]: P[String] = Key.W("true")
   def `false`[_: P]: P[String] = Key.W("false")
+  def `extends`[_: P]: P[Unit] = ?:(Key.W("extends"))
+  def `with`[_: P]: P[Unit] = ?:(Key.W("with"))
 
   def self[_: P]: P[String] = Key.W("self")
   def await[_: P]: P[Unit] = ?:(Key.W("await"))

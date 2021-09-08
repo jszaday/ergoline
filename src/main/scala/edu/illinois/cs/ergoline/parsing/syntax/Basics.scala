@@ -44,7 +44,7 @@ object Basics {
       ":",
       ";",
       "=>",
-      "=",
+//      "=",
       "<-",
       "<:",
       "<%",
@@ -87,7 +87,9 @@ object Basics {
       "var",
       "val",
       "true",
-      "false"
+      "false",
+      "with",
+      "extends"
     ) ~ !CharPred(LetterDigitDollarUnderscore)
   ).opaque("Alphabetic")
 
