@@ -148,7 +148,12 @@ trait EirSimpleContainer extends EirNode with EirScope {
 
   // TODO this should probably be a standard Node function/more sophisticated (i.e. indicate no match found)
   def removeChild(node: EirNode): Unit = {
-    children = children.filter(_ != node)
+    val idx = children.indexOf(node)
+    if (idx >= 0) {
+      children = children.patch(idx, Nil, 1)
+    } else {
+      Errors.exit(s"could not find $node inside of $this")
+    }
   }
 }
 
@@ -169,7 +174,10 @@ case class EirBlock(var parent: Option[EirNode], var children: List[EirNode])
   }
 }
 
-case object EirGlobalNamespace extends EirNode with EirScope {
+case object EirGlobalNamespace
+    extends EirNode
+    with EirScope
+    with EirEncloseExempt {
   private val modules: mutable.HashMap[String, EirNamespace] =
     new mutable.HashMap
 
@@ -655,8 +663,8 @@ case class EirImport(
     var qualified: List[String],
     var publicOverride: Boolean
 ) extends EirResolvable[EirNode]
-    with EirScope
-    with EirEncloseExempt {
+    with EirScope {
+//    with EirEncloseExempt {
   var _resolved: Option[EirScope] = None
 
   def isPublic: Boolean =

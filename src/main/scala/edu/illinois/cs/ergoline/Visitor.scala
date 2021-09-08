@@ -93,6 +93,19 @@ object Visitor {
       case _              => ???
     }
   }
+
+  def dropSelf(scope: EirScope, fileOption: Option[File]): Unit = {
+    fileOption match {
+      case Some(file) => AstManipulation.dropNodes(
+          scope,
+          Find.child[EirFileSymbol](
+            scope,
+            f => Files.isSameFile(f.file.toPath, file.toPath)
+          )
+        )
+      case _ =>
+    }
+  }
 }
 
 class Visitor(global: EirScope = EirGlobalNamespace)
@@ -191,51 +204,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  private def loadPackage(
-      qualified: List[String],
-      fileOption: Option[File]
-  ): EirScope = {
-    fileOption match {
-      case None => Modules.retrieve(qualified, global)
-      case Some(file) =>
-        val absPath = file.getCanonicalFile.toPath
-        qualified.reverse
-          .foldRight((absPath, global))((name, pathScope) => {
-            val parent = pathScope._1.getParent
-            if (parent.getFileName.endsWith(name)) {
-              val loaded = Modules.provisional(parent.toFile, pathScope._2).get
-              (parent, util.assertValid[EirScope](loaded))
-            } else {
-              throw new RuntimeException(
-                s"could not locate $name within ${pathScope._1}"
-              )
-            }
-          })
-          ._2
-    }
-  }
-
-  def dropSelf(scope: EirScope, fileOption: Option[File]): Unit = {
-    fileOption match {
-      case Some(file) => AstManipulation.dropNodes(
-          scope,
-          Find.child[EirFileSymbol](
-            scope,
-            f => Files.isSameFile(f.file.toPath, file.toPath)
-          )
-        )
-      case _ =>
-    }
-  }
-
   def visitProgram(
       ctx: ProgramContext,
       file: Option[File]
   ): (EirNode, List[EirNode]) = {
-    val expectation = file.map(Modules.expectation)
     val topLevel: EirScope = Option(ctx.packageStatement())
       .map(_.fqn().identifier.toStringList)
-      .map(loadPackage(_, file))
+      .map(Modules.loadPackage(_, file, global))
       .getOrElse(global)
     // A provisional package sweep will include us, so we'll just drop that...
     dropSelf(topLevel, file)
@@ -244,24 +219,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       _.annotatedTopLevelStatement,
       visitAnnotatedTopLevelStatement
     )
-    // namespaces are automatically placed into the top-level, and should not be replicated
-    AstManipulation.placeNodes(
-      topLevel,
-      nodes.filterNot(_.isInstanceOf[EirNamespace])
-    )
     parents.pop()
-    expectation
-      .map(name => {
-        if (file.exists(Modules.isPackageFile) && topLevel.hasName(name))
-          (topLevel, nodes)
-        else nodes.partition(_.hasName(name)) match {
-          case (head :: Nil, x) => (head, x)
-          case _ => throw new RuntimeException(
-              s"could not locate $name in ${file.get.getName}"
-            )
-        }
-      })
-      .getOrElse((topLevel, Nil))
+    Modules.exportNodes(file, topLevel, nodes)
   }
 
   override def visitType(ctx: TypeContext): EirNode = {
@@ -281,9 +240,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  override def visitProgram(ctx: ProgramContext): EirScope = {
-    assertValid[EirScope](visitProgram(ctx, None)._1)
-  }
+  override def visitProgram(ctx: ProgramContext): EirNode = ???
 
   private def parent: Option[EirNode] =
     Option.when(parents.isEmpty)(global).orElse(parents.headOption)
@@ -534,7 +491,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         f.implicitArgs.foreach(_.isImplicit = true)
         f.returnType = Option(ctx.`type`())
           .map(visitAs[EirResolvable[EirType]](_))
-          .getOrElse(globals.unitSymbol)
+          .getOrElse({ globals.unitSymbol(parent) })
         f.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
         f.body = Option(ctx.block()).map(visitAs[EirBlock])
       }

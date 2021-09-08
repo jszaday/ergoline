@@ -117,8 +117,13 @@ package object globals {
 
   def unitName: String = "unit"
 
-  def unitSymbol: EirResolvable[EirType] =
-    EirSymbol[EirNamedType](ergolineModule, List(unitName))
+  // uhhh... what???
+  val ergolineName = "ergoline"
+
+  def unitSymbol(parent: Option[EirNode]): EirResolvable[EirType] = {
+    // TODO make this more robust!
+    EirSymbol[EirNamedType](parent, List(unitName))
+  }
 
   def unitType: EirType = typeFor(unitName)
 
@@ -130,7 +135,8 @@ package object globals {
   def integerType: EirType = typeFor("int")
 
   def ckModule: Option[EirScope] = Modules("ck", EirGlobalNamespace)
-  def ergolineModule: Option[EirScope] = Modules("ergoline", EirGlobalNamespace)
+  def ergolineModule: Option[EirScope] =
+    Modules(ergolineName, EirGlobalNamespace)
 
   private def typeFor(name: String): EirType = {
     this.ergolineModule

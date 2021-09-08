@@ -31,22 +31,7 @@ object Driver extends App {
   if (options.contains("-h") || files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
 
-  if (options.contains("--fastparse")) {
-    for (file <- files) {
-      val txt = Files.readString(Path.of(file))
-      val res = parse(txt, Parser.Program(_))
-      res match {
-        case Parsed.Success((_, nodes), _) =>
-          nodes.foreach(CheckEnclose.enclose(_, Some(EirGlobalNamespace)))
-          println(nodes)
-        case f: Parsed.Failure =>
-          println(f.trace().longAggregateMsg)
-          System.exit(-1)
-      }
-    }
-
-    System.exit(0)
-  }
+  Modules.useFastParse = options.contains("--fastparse")
 
   val skipCompilation = options.contains("--no-compile")
   globals.strict = options.contains("-Wall")

@@ -1,7 +1,7 @@
 package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.passes.{CheckEnclose, Processes}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
@@ -14,11 +14,14 @@ import java.io.File.pathSeparator
 import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable
 import scala.util.Properties
+import fastparse._
+import edu.illinois.cs.ergoline.parsing.Parser
 
 object Modules {
   val packageFile = "package.erg"
   val homePathEnv = "ERG_HOME"
   val searchPathEnv = "ERG_CLASSPATH"
+  var useFastParse = false
 
   val ergolineHome = Option(Properties.envOrElse(homePathEnv, "."))
     .map(Paths.get(_))
@@ -67,8 +70,106 @@ object Modules {
     }
   }
 
-  def load(body: String, scope: EirScope = EirGlobalNamespace): EirScope = {
-    new Visitor(scope).visitProgram(parserFromString(body).program())
+  def load(src: String, scope: EirScope = EirGlobalNamespace): EirScope = {
+    load(Left(src), scope) match {
+      case (res: EirScope, _) => res
+      case (res, _)           => Errors.incorrectType(res, classOf[EirScope])
+    }
+  }
+
+  def load(
+      src: Either[String, File],
+      scope: EirScope
+  ): (EirNode, List[EirNode]) = {
+    if (useFastParse) {
+      val file = src.toOption
+      val txt = src match {
+        case Left(src)   => src
+        case Right(file) => Files.readString(file.toPath)
+      }
+      val (ids, nodes) = parse(txt, Parser.Program(_)) match {
+        case Parsed.Success(res, _) => res
+        case f: Parsed.Failure =>
+          Errors.exit(f.label + ": " + f.trace().longAggregateMsg)
+      }
+      val pkg = ids.map(_.toList).map(loadPackage(_, file, scope))
+      pkg
+        .map(pkg => {
+          Visitor.dropSelf(pkg, file)
+          exportNodes(file, pkg, nodes.toList, enclose = true)
+        })
+        .getOrElse({
+          Errors.exit(s"could not load $src")
+        })
+    } else {
+      new Visitor(scope).visitProgram(
+        (src match {
+          case Left(str)   => parserFromString(str)
+          case Right(file) => parserFromPath(file.toPath)
+        }).program(),
+        src.toOption
+      )
+    }
+  }
+
+  def loadPackage(
+      ids: List[String],
+      fileOption: Option[File],
+      scope: EirScope
+  ): EirScope = {
+    fileOption match {
+      case None => Modules.retrieve(ids, scope)
+      case Some(file) =>
+        val absPath = file.getCanonicalFile.toPath
+        ids.reverse
+          .foldRight((absPath, scope))((name, pathScope) => {
+            val parent = pathScope._1.getParent
+            if (parent.getFileName.endsWith(name)) {
+              val loaded = Modules.provisional(parent.toFile, pathScope._2).get
+              (parent, util.assertValid[EirScope](loaded))
+            } else {
+              throw new RuntimeException(
+                s"could not locate $name within ${pathScope._1}"
+              )
+            }
+          })
+          ._2
+    }
+  }
+
+  def exportNodes(
+      file: Option[File],
+      scope: EirScope,
+      nodes: List[EirNode],
+      enclose: Boolean = false
+  ): (EirNode, List[EirNode]) = {
+    // put the nodes into the module
+    nodes.foreach(node => {
+      if (enclose) {
+        CheckEnclose.enclose(node, Some(scope))
+      }
+
+      node match {
+        // namespaces always exist at the top-level, so we avoid replication
+        case ns: EirNamespace => assert(ns.parent.contains(scope))
+        // otherwise we want to place it!
+        case node => AstManipulation.placeNode(scope, node)
+      }
+    })
+    // seek the file's exported object
+    file
+      .map(expectation)
+      .map(name => {
+        if (file.exists(Modules.isPackageFile) && scope.hasName(name))
+          (scope, nodes)
+        else nodes.partition(_.hasName(name)) match {
+          case (head :: Nil, x) => (head, x)
+          case _ => throw new RuntimeException(
+              s"could not locate $name in ${file.get.getName}"
+            )
+        }
+      })
+      .getOrElse((scope, Nil))
   }
 
   def parserFromString(s: String): ErgolineParser =
@@ -82,10 +183,6 @@ object Modules {
     parser.addErrorListener(ErgolineErrorListener)
     parser
   }
-
-//  def retrieve(qualified: List[String], scope: EirScope): EirNamespace = {
-//    retrieve(qualified.last, qualified.reverse.tail.foldRight(scope)(retrieve))
-//  }
 
   def apply(qualified: List[String], scope: EirScope): Option[EirScope] = {
     qualified match {
@@ -151,7 +248,7 @@ object Modules {
   def retrieve(name: String, scope: EirScope): EirNamespace = {
     Find.child[EirNamespace](scope, withName(name)).headOption.getOrElse {
       val ns = EirNamespace(Some(scope), Nil, name)
-      AstManipulation.placeNodes(scope, List(ns))
+      AstManipulation.placeNode(scope, ns)
       ns
     }
   }
@@ -177,8 +274,7 @@ object Modules {
     val file = f.getCanonicalFile
     val expected = Modules.expectation(f)
     val (startMb, startMs) = (memoryUsageMb, currTimeMs)
-    val parser = parserFromPath(file.toPath)
-    val result = new Visitor(scope).visitProgram(parser.program(), Some(file))
+    val result = load(Right(file), scope)
     result match {
       case (value: EirNamedNode, siblings) if value.hasName(expected) =>
         fileSiblings(value) = siblings

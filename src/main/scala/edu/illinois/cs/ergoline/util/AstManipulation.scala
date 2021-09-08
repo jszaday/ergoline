@@ -47,14 +47,12 @@ object AstManipulation {
     }
   }
 
-  def placeNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
-    for (node <- nodes) {
-      (scope, node) match {
-        case (EirGlobalNamespace, x: EirNamespace) =>
-          EirGlobalNamespace.put(x.name, x)
-        case (x: EirNamespace, _) => x.children +:= node
-        case _                    => throw new RuntimeException(s"cannot place $node into $scope")
-      }
+  def placeNode(scope: EirScope, node: EirNode): Unit = {
+    (scope, node) match {
+      case (EirGlobalNamespace, x: EirNamespace) =>
+        EirGlobalNamespace.put(x.name, x)
+      case (x: EirNamespace, _) => x.children +:= node
+      case _                    => throw new RuntimeException(s"cannot place $node into $scope")
     }
   }
 

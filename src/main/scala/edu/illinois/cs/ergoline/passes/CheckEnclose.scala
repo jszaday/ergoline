@@ -1,6 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.ast.{EirEncloseExempt, EirMember, EirNode}
+import edu.illinois.cs.ergoline.ast.{
+  EirEncloseExempt,
+  EirImport,
+  EirMember,
+  EirNode
+}
 import edu.illinois.cs.ergoline.passes.CheckEnclose.CheckEncloseSyntax.RichEirNode
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 
@@ -34,9 +39,15 @@ object CheckEnclose {
   def apply(node: EirNode): Option[EirNode] = visit(node).headOption
 
   def enclose(node: EirNode, scope: Option[EirNode]): Unit = {
-    if (node.parent.isEmpty && !node.isInstanceOf[EirEncloseExempt]) {
-      node.parent = scope
-      node.children.foreach(enclose(_, Some(node)))
+    val setParent = () => node.parent = node.parent.orElse(scope)
+    val recurse = () => node.children.foreach(enclose(_, Some(node)))
+
+    node match {
+      case _: EirEncloseExempt =>
+      case _: EirImport        => setParent()
+      case _ =>
+        setParent()
+        recurse()
     }
   }
 }

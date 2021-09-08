@@ -60,9 +60,8 @@ object Parser {
       node: EirResolvable[EirType]
   ): List[EirResolvable[EirType]] = {
     node match {
-      case x: EirTupleType              => x.children
-      case x if x == globals.unitSymbol => Nil
-      case x                            => List(x)
+      case x: EirTupleType => x.children
+      case x               => List(x)
     }
   }
 
@@ -249,32 +248,32 @@ object Parser {
       0
     ) ~ WhereClause.? ~ ClassBody
   ).map { case (abs, kind, id, args, ext, ints, wh, body) =>
-      ((cls: EirClassLike) => {
-        cls.isAbstract = abs
-        cls
-      })(if (kind == EirTraitKind) {
-        EirTrait(
-          None,
-          body.toList,
-          id,
-          args.getOrElse(Nil),
-          ext,
-          ints.toList,
-          wh
-        )
-      } else {
-        EirClass(
-          None,
-          body.toList,
-          id,
-          args.getOrElse(Nil),
-          ext,
-          ints.toList,
-          wh,
-          kind
-        )
-      })
-    }
+    ((cls: EirClassLike) => {
+      cls.isAbstract = abs
+      cls
+    })(if (kind == EirTraitKind) {
+      EirTrait(
+        None,
+        body.toList,
+        id,
+        args.getOrElse(Nil),
+        ext,
+        ints.toList,
+        wh
+      )
+    } else {
+      EirClass(
+        None,
+        body.toList,
+        id,
+        args.getOrElse(Nil),
+        ext,
+        ints.toList,
+        wh,
+        kind
+      )
+    })
+  }
 
   def ClassKind[_: P]: P[(Boolean, EirClassKind)] = P(
     (`abstract`.? ~ `class`) | `object`.map((None, _)) | `struct`.map(
@@ -314,6 +313,7 @@ object Parser {
     namespace ~ Id.rep(sep = "::", min = 1) ~ (`;`(Nil) | (`{` ~/ ProgramMember
       .rep(0) ~ `}`))
   ).map { case (ids, nodes: Seq[EirNode]) =>
+    // TODO ( this urgently needs to be fixed~! )
     val scope = Modules.retrieve(ids.toList, EirGlobalNamespace)
     scope.children ++= nodes
     scope
@@ -333,10 +333,18 @@ object Parser {
     node
   }
 
-  def ProgramMember[_: P]: P[EirNode] =
-    P(Annotations.? ~ (Namespace | NamespaceMember)).map { case (as, node) =>
-      addAnnotations(node, as)
+  def ProgramMember[_: P]: P[EirNode] = P(
+    Annotations.? ~ (Namespace | PublicImport | NamespaceMember)
+  ).map { case (as, node) => addAnnotations(node, as) }
+
+  def PublicImport[_: P]: P[EirImport] = {
+    P(?:(`public`) ~ ImportStatement)
+  }.map { imp =>
+    {
+      imp.publicOverride = true
+      imp
     }
+  }
 
   def NamespaceMember[_: P]: P[EirNode] =
     P(Class | FnDeclaration | ImportStatement | UsingStatement)
@@ -677,7 +685,7 @@ object Parser {
       tArgs.getOrElse(Nil),
       fArgs.toList,
       iArgs.getOrElse(Nil).toList,
-      retTy.getOrElse(globals.unitSymbol),
+      retTy.getOrElse({ globals.unitSymbol(None) }),
       where
     )
   }
