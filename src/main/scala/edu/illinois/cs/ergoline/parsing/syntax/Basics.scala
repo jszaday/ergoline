@@ -89,7 +89,9 @@ object Basics {
       "true",
       "false",
       "with",
-      "extends"
+      "extends",
+      "abstract",
+      "trait"
     ) ~ !CharPred(LetterDigitDollarUnderscore)
   ).opaque("Alphabetic")
 

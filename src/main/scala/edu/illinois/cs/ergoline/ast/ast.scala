@@ -448,6 +448,7 @@ object EirTemplateArgument {
 
 sealed trait EirClassKind
 
+case object EirTraitKind extends EirClassKind
 case object EirValueKind extends EirClassKind
 case object EirReferenceKind extends EirClassKind
 case object EirSingletonKind extends EirClassKind

@@ -24,6 +24,7 @@ import edu.illinois.cs.ergoline.resolution.{
   EirResolvable,
   Modules
 }
+import edu.illinois.cs.ergoline.util.Errors
 import fastparse.JavaWhitespace._
 import fastparse._
 
@@ -243,24 +244,48 @@ object Parser {
     `with` ~/ Type
   }
 
-  def Class[_: P]: P[EirClass] = P(ClassKind ~/ Id ~ TDeclaration.? ~ Extends.? ~ With.rep(0) ~ WhereClause.? ~ ClassBody)
-    .map { case (kind, id, args, ext, ints, wh, body) =>
-      EirClass(
-        None,
-        body.toList,
-        id,
-        args.getOrElse(Nil),
-        ext,
-        ints.toList,
-        wh,
-        kind
-      )
+  def Class[_: P]: P[EirClassLike] = P(
+    ClassKind ~/ Id ~ TDeclaration.? ~ Extends.? ~ With.rep(
+      0
+    ) ~ WhereClause.? ~ ClassBody
+  ).map { case (abs, kind, id, args, ext, ints, wh, body) =>
+      ((cls: EirClassLike) => {
+        cls.isAbstract = abs
+        cls
+      })(if (kind == EirTraitKind) {
+        EirTrait(
+          None,
+          body.toList,
+          id,
+          args.getOrElse(Nil),
+          ext,
+          ints.toList,
+          wh
+        )
+      } else {
+        EirClass(
+          None,
+          body.toList,
+          id,
+          args.getOrElse(Nil),
+          ext,
+          ints.toList,
+          wh,
+          kind
+        )
+      })
     }
 
-  def ClassKind[_: P]: P[EirClassKind] = P(`class` | `object` | `struct`).map {
-    case "class"  => EirReferenceKind
-    case "object" => EirSingletonKind
-    case "struct" => EirValueKind
+  def ClassKind[_: P]: P[(Boolean, EirClassKind)] = P(
+    (`abstract`.? ~ `class`) | `object`.map((None, _)) | `struct`.map(
+      (None, _)
+    ) | `trait`.map((None, _))
+  ).map {
+    case (a, "class")  => (a.nonEmpty, EirReferenceKind)
+    case (_, "object") => (false, EirSingletonKind)
+    case (_, "struct") => (false, EirValueKind)
+    case (_, "trait")  => (true, EirTraitKind)
+    case (_, _)        => Errors.unreachable()
   }
 
   def ClassBody[_: P]: P[Seq[EirMember]] =
@@ -386,12 +411,14 @@ object Parser {
   def BasicType[p: P]: P[EirResolvable[EirType]] = P(ProxyType | TupleMultiply)
 
   def LambdaType[p: P]: P[EirResolvable[EirType]] =
-    P(BasicType ~ "=>" ~/ BasicType).map { case (lhs, rhs) =>
-      EirLambdaType(None, extractTypes(lhs), rhs, Nil, None)
+    P(BasicType ~ ("=>" ~/ BasicType).?).map {
+      case (lhs, Some(rhs)) =>
+        EirLambdaType(None, extractTypes(lhs), rhs, Nil, None)
+      case (lhs, None) => lhs
     }
 
   def Type[p: P]: P[EirResolvable[EirType]] =
-    P((BasicType | LambdaType) ~/ ("&".! | "...".!).?).map {
+    P(LambdaType ~ ("&".! | "...".!).?).map {
       case (ty, Some("...")) => EirPackExpansion(ty)(None)
       case (ty, Some("&"))   => EirReferenceType(None, ty)
       case (ty, None)        => ty
@@ -666,8 +693,9 @@ object Parser {
     case (amp, id, ty) => (amp.nonEmpty, id, ty)
   }
 
-  def Decltypes[_: P]: P[List[DTriple]] =
-    P(`(` ~ Decltype.rep(1).map(_.toList) ~ `)`) | Decltype.map(List(_))
+  def Decltypes[_: P]: P[List[DTriple]] = P(
+    `(` ~/ Decltype.rep(min = 1, sep = ",").map(_.toList) ~ `)`
+  ) | Decltype.map(List(_))
 
   def ValDeclaration[_: P]: P[EirNode] = P(
     ?:(`val`) ~/ Decltypes ~ "=" ~ !:(Expression) ~ Semi
