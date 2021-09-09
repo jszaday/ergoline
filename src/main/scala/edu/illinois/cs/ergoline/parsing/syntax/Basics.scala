@@ -97,11 +97,22 @@ object Basics {
 
   def AlphanumericHead[_: P]: P[String] = P(("_" | Lower | Upper).!)
 
-  def AlphanumericTail[_: P]: P[String] = P(AlphanumericHead | Digit)
+  def NotOpChar[_: P]: P[String] = P(!CharPred(isOpChar)).map(_ => "")
+
+  def AlphanumericTail[_: P](min: Int): P[String] = P(
+    CharsWhile(c => c != '_' && LetterDigitDollarUnderscore(c), min).! ~
+      ("_".! ~ (AlphanumericTail(1) | NotOpChar)).?
+  ).map { case (lhs, rhs) => lhs + rhs.map(join).getOrElse("") }
+
+  private def join(t: (String, String)): String = t._1 + t._2
 
   def AlphanumericId[_: P]: P[String] = P(
-    !AlphabeticKeywords ~ (AlphanumericHead ~ AlphanumericTail.rep(0))
-  ).map { case (head, tail) => (head +: tail).mkString("") }
+    !AlphabeticKeywords ~ (AlphanumericHead ~ AlphanumericTail(
+      0
+    )) ~ ("_".! ~ OperatorId).?
+  ).map { case (head, tail, suffix) =>
+    ((head +: tail) ++ suffix.map(join)).mkString("")
+  }
 
   val OpCharNotSlash: NamedFunction =
     NamedFunction(x => isOpChar(x) && x != '/')

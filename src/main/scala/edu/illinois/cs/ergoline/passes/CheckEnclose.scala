@@ -39,15 +39,18 @@ object CheckEnclose {
   def apply(node: EirNode): Option[EirNode] = visit(node).headOption
 
   def enclose(node: EirNode, scope: Option[EirNode]): Unit = {
-    val setParent = () => node.parent = node.parent.orElse(scope)
+    val setParent = () => {
+      node.parent.nonEmpty || {
+        node.parent = scope
+        scope.nonEmpty
+      }
+    }
     val recurse = () => node.children.foreach(enclose(_, Some(node)))
 
     node match {
       case _: EirEncloseExempt =>
       case _: EirImport        => setParent()
-      case _ =>
-        setParent()
-        recurse()
+      case _                   => if (setParent()) recurse()
     }
   }
 }

@@ -309,15 +309,18 @@ object Parser {
     EirDeclaration(None, isFinal = varOrVal == "val", id, ty, expr)
   }
 
+  def mkNamespace(ids: Seq[String], nodes: Seq[EirNode]): EirNamespace = {
+    ids match {
+      case head :: Nil => EirNamespace(None, nodes.toList, head)
+      case head :: tail =>
+        EirNamespace(None, List(mkNamespace(tail, nodes)), head)
+    }
+  }
+
   def Namespace[_: P]: P[EirNamespace] = P(
     namespace ~ Id.rep(sep = "::", min = 1) ~ (`;`(Nil) | (`{` ~/ ProgramMember
       .rep(0) ~ `}`))
-  ).map { case (ids, nodes: Seq[EirNode]) =>
-    // TODO ( this urgently needs to be fixed~! )
-    val scope = Modules.retrieve(ids.toList, EirGlobalNamespace)
-    scope.children ++= nodes
-    scope
-  }
+  ).map { case (ids, nodes) => mkNamespace(ids, nodes) }
 
   def Package[_: P]: P[Seq[String]] =
     P(Keywords.`package` ~ Id.rep(sep = "::", min = 1) ~ Semi)
@@ -442,7 +445,7 @@ object Parser {
   def ProxySuffix[_: P]: P[String] = P(`@` | `[@]` | `{@}`)
 
   def ProxySelfExpr[_: P]: P[EirSymbol[EirNamedNode]] =
-    P(`self` ~/ ProxySuffix).map { case (self, suffix) =>
+    P(`self` ~ ProxySuffix).map { case (self, suffix) =>
       EirSymbol[EirNamedNode](None, List(self + suffix))
     }
 
@@ -596,7 +599,9 @@ object Parser {
 
   def TupleExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
     `(` ~ Expression.rep(min = 0, sep = ",") ~ `)`
-  ).map(s => EirTupleExpression.fromExpressions(None, s.toList))
+  ).map(s =>
+    EirTupleExpression.fromExpressions(None, s.toList, enclose = false)
+  )
 
   def LambdaExpr[_: P]: P[EirLambdaExpression] = P(
     `(` ~ FnArg.rep(min = 0, sep = ",") ~ `)` ~ "=>" ~/ (Block | Expression)
@@ -669,8 +674,10 @@ object Parser {
       arg
     }
 
+  def FnId[_: P]: P[String] = P(`self` | `[]` | Id)
+
   def FnDeclaration[_: P]: P[EirFunction] = P(
-    `def` ~/ (`self` | Id) ~ TDeclaration.? ~ `(` ~ FnArg.rep(
+    `def` ~/ FnId ~ TDeclaration.? ~ `(` ~ FnArg.rep(
       min = 0,
       sep = ","
     ) ~ `)` ~ (`(` ~ ImplicitArg.rep(
@@ -692,8 +699,9 @@ object Parser {
 
   def WhereClause[_: P]: P[EirExpressionNode] = P(where ~ ConstExpr)
 
-  def AccessModifier[_: P]: P[EirAccessibility.Value] =
-    P(`public` | `private` | `protected`).map(EirAccessibility.withName)
+  def AccessModifier[_: P]: P[EirAccessibility.Value] = P(
+    `public` | `private` | `protected`
+  ).map(s => s.head.toUpper +: s.tail).map(EirAccessibility.withName)
 
   type DTriple = (Boolean, String, Option[EirResolvable[EirType]])
 

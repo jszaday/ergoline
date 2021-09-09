@@ -67,6 +67,8 @@ object Keywords {
   def `(`[_: P]: P[Unit] = P("(")
   def `)`[_: P]: P[Unit] = P(")")
 
+  def `[]`[_: P]: P[String] = P("[]".!)
+
   def `;`[_: P, A](a: A): P[A] = Semi.map(_ => a)
 
   def `when`[_: P]: P[Unit] = ?:(Key.W("when"))

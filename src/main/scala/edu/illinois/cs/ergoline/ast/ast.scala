@@ -799,13 +799,14 @@ case class EirTupleExpression(
 object EirTupleExpression {
   def fromExpressions(
       parent: Option[EirNode],
-      expressions: List[EirExpressionNode]
+      expressions: List[EirExpressionNode],
+      enclose: Boolean = true
   ): EirExpressionNode = expressions match {
     case Nil         => globals.unitLiteral(parent)
     case head :: Nil => head
     case lst =>
       val t = EirTupleExpression(parent, lst)
-      lst.foreach(_.parent = Some(t))
+      if (enclose) lst.foreach(_.parent = Some(t))
       t
   }
 }
@@ -1065,6 +1066,20 @@ case class EirSpecializedSymbol[A <: EirNamedNode: ClassTag](
     override var types: List[EirResolvable[EirType]]
 ) extends EirSymbolLike[A]
     with EirSpecialization {
+
+  def asType: Option[EirResolvable[EirType]] = {
+    Option.when(classTag[A].runtimeClass.isAssignableFrom(classOf[EirType]))({
+      EirTemplatedType(
+        parent,
+        symbol.asInstanceOf[EirResolvable[EirType]],
+        types
+      )
+    })
+  }
+
+  override def resolve(): Seq[EirNode] = {
+    asType.map(_.resolve()).getOrElse(Nil)
+  }
 
   override def setBase(ty: EirResolvable[EirSpecializable]): Unit = {
     this.symbol = ty.asInstanceOf[EirResolvable[A with EirSpecializable]]

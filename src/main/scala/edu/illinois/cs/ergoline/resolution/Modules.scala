@@ -1,12 +1,13 @@
 package edu.illinois.cs.ergoline.resolution
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes.{CheckEnclose, Processes}
+import edu.illinois.cs.ergoline.parsing.Parser
+import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{RichEirNode, RichOption}
 import edu.illinois.cs.ergoline.util.{AstManipulation, Errors}
 import edu.illinois.cs.ergoline.{ErgolineLexer, ErgolineParser, Visitor, util}
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import fastparse._
 import org.antlr.v4.runtime._
 
 import java.io.File
@@ -14,8 +15,6 @@ import java.io.File.pathSeparator
 import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable
 import scala.util.Properties
-import fastparse._
-import edu.illinois.cs.ergoline.parsing.Parser
 
 object Modules {
   val packageFile = "package.erg"
@@ -137,6 +136,22 @@ object Modules {
     }
   }
 
+  private def placeNamespace(
+      scope: EirScope,
+      ns: EirNamespace
+  ): EirNamespace = {
+    if (ns.parent.contains(scope)) {
+      ns
+    } else {
+      val alt = retrieve(ns.name, scope)
+      ns.children.foreach {
+        case ns: EirNamespace => placeNamespace(alt, ns)
+        case node             => AstManipulation.placeNode(alt, node, enclose = true)
+      }
+      alt
+    }
+  }
+
   def exportNodes(
       file: Option[File],
       scope: EirScope,
@@ -144,18 +159,17 @@ object Modules {
       enclose: Boolean = false
   ): (EirNode, List[EirNode]) = {
     // put the nodes into the module
-    nodes.foreach(node => {
-      if (enclose) {
-        CheckEnclose.enclose(node, Some(scope))
-      }
-
-      node match {
-        // namespaces always exist at the top-level, so we avoid replication
-        case ns: EirNamespace => assert(ns.parent.contains(scope))
-        // otherwise we want to place it!
-        case node => AstManipulation.placeNode(scope, node)
-      }
-    })
+    nodes.foreach {
+      // namespaces are singletons, so we need to avoid replication
+      case ns: EirNamespace =>
+        if (enclose) {
+          placeNamespace(scope, ns)
+        } else {
+          assert(ns.parent.contains(scope))
+        }
+      // otherwise we simply want to place it!
+      case node => AstManipulation.placeNode(scope, node, enclose)
+    }
     // seek the file's exported object
     file
       .map(expectation)

@@ -197,10 +197,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
         "<" + node.templateArgs.map(visit(_)).mkString(", ") + ">"
       else ""
     val retType = nameFor(node.returnType)
-    s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)} " + node.body
-      .mapOrSemi(
-        visit(_)
-      )
+    s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)}${visitOptionalStatement(node.body)}"
   }
 
   override def visitAnnotation(node: EirAnnotation)(implicit
