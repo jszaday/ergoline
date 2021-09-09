@@ -78,14 +78,6 @@ object Parser {
     }
   }
 
-  def mkDeclaration(decls: Seq[String]): Option[EirNode] = {
-    decls match {
-      case Nil => None
-      case _ =>
-        Some(mkDeclaration(decls.map((false, _, None)), None, isFinal = true))
-    }
-  }
-
   def forceEnclosed(node: EirNode, addReturn: Boolean): EirBlock = {
     node match {
       case x: EirBlock => x
@@ -170,9 +162,13 @@ object Parser {
   ).map { case (body, expr) => EirDoWhileLoop(None, expr, body) }
 
   def ForAllHeader[_: P]: P[EirForLoopHeader] = P(
-    Id.rep(min = 1, sep = ",") ~ `<-` ~ Expression
+    Decltypes ~ `<-` ~ Expression
   ).map { case (symbols, expr) =>
-    EirForAllHeader(None, mkDeclaration(symbols), expr)
+    EirForAllHeader(
+      None,
+      Some(mkDeclaration(symbols, None, isFinal = true)),
+      expr
+    )
   }
 
   def CStyleHeader[_: P]: P[EirForLoopHeader] = P(
