@@ -1,29 +1,20 @@
 package edu.illinois.cs.ergoline.parsing
 
+import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.Visitor.{
   isAssignOperator,
   kindFrom,
   sortInfixes
 }
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirBooleanLiteral,
-  EirIntegerLiteral,
-  EirLiteral,
-  EirLiteralSymbol,
-  EirUnitLiteral
-}
+import edu.illinois.cs.ergoline.ast.literals._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.parsing.syntax.Basics._
 import edu.illinois.cs.ergoline.parsing.syntax.Keywords._
 import edu.illinois.cs.ergoline.parsing.syntax.Literals._
 import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
-import edu.illinois.cs.ergoline.resolution.{
-  EirPlaceholder,
-  EirResolvable,
-  Modules
-}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 import fastparse.JavaWhitespace._
 import fastparse._
@@ -32,19 +23,38 @@ import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
 object Parser {
-  def scopeSymbols[A <: EirNode: ClassTag](
+  def scopeSymbols[A <: EirNamedNode: ClassTag](
       s: Seq[EirSymbolLike[A]],
       isStatic: Boolean
   ): EirSymbolLike[A] = {
-    s match {
-      case Nil         => ???
-      case head :: Nil => head
-      case head :: tail => {
-        val s = EirScopedSymbol(head, scopeSymbols(tail, isStatic))(None)
-        s.isStatic = isStatic
-        s
+    def helper(seq: Seq[EirSymbolLike[A]]): EirSymbolLike[A] = {
+      seq match {
+        case Nil         => ???
+        case head :: Nil => head
+        case head :: tail =>
+          val s = EirScopedSymbol(head, helper(tail))(None)
+          s.isStatic = isStatic
+          s
       }
     }
+
+    helper(
+      s.orderedPartition {
+        case _: EirSymbol[_] => isStatic
+        case _               => false
+      }.flatMap {
+        case (true, seq) => Option.when(seq.length <= 1)(seq) getOrElse {
+            Seq(
+              EirSymbol[A](
+                None, {
+                  seq.map(_.asInstanceOf[EirSymbol[A]]).flatMap(_.qualifiedName)
+                }
+              )
+            )
+          }
+        case (false, seq) => seq
+      }
+    )
   }
 
   def extractArgs(node: Option[EirExpressionNode]): List[EirExpressionNode] = {
@@ -366,7 +376,7 @@ object Parser {
     P("<" ~ TDeclarationArg.rep(min = 0, sep = ",") ~ ">").map(_.toList)
 
   def TDeclarationArg[_: P]: P[EirTemplateArgument] = P(
-    Id ~ `...`.!.? ~ Bounds.? ~ (":" ~ Type).? ~ ("=" ~ ConstExpr).?
+    Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr).?
   ).map { case (id, ellipses, bounds, declTy, defaultVal) =>
     EirTemplateArgument(id, ellipses.nonEmpty, bounds, declTy, defaultVal)
   }
@@ -454,12 +464,8 @@ object Parser {
       EirSymbol[EirNamedNode](None, List(self))
     }
 
-  def ConstSymbol[p: P]: P[EirLiteralSymbol] = P(
-    Qualified[
-      p,
-      EirNamedType
-    ]
-  ).map(EirLiteralSymbol(_)(None))
+  def ConstSymbol[_: P]: P[EirLiteralSymbol] =
+    P(Type).map(EirLiteralSymbol(_)(None))
 
   def PrimaryExpr[p: P](implicit static: Boolean): P[EirExpressionNode] = {
     if (static) {
@@ -586,7 +592,7 @@ object Parser {
   }
 
   def InfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
-    ConditionalExpr ~ (Id ~/ ConditionalExpr).rep(0)
+    ConditionalExpr ~ (Id ~ ConditionalExpr).rep(0)
   ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
   def NewExpr[_: P](implicit static: Boolean): P[EirNew] =
@@ -668,7 +674,7 @@ object Parser {
     }
 
   def ImplicitArg[_: P]: P[EirFunctionArgument] =
-    P(?:(`implicit`) ~ BasicArg).map { case (id, exp, ty) =>
+    P(?:(`implicit`) ~/ BasicArg).map { case (id, exp, ty) =>
       val arg = EirFunctionArgument(None, id, ty, isExpansion = exp.nonEmpty)
       arg.isImplicit = true
       arg
@@ -677,10 +683,10 @@ object Parser {
   def FnId[_: P]: P[String] = P(`self` | `[]` | Id)
 
   def FnDeclaration[_: P]: P[EirFunction] = P(
-    `def` ~/ FnId ~ TDeclaration.? ~ `(` ~ FnArg.rep(
+    `def` ~/ FnId ~ TDeclaration.? ~ `(` ~/ FnArg.rep(
       min = 0,
       sep = ","
-    ) ~ `)` ~ (`(` ~ ImplicitArg.rep(
+    ) ~ `)` ~ (`(` ~/ ImplicitArg.rep(
       min = 0,
       sep = ","
     ) ~ `)`).? ~ (":" ~ Type).? ~ WhereClause.? ~ OptionalBlock

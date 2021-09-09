@@ -132,7 +132,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     node.name +
       node.upperBound.mapOrEmpty(x => " <: " + nameFor(x)) +
       node.lowerBound.mapOrEmpty(x => " >: " + nameFor(x)) +
-      node.argumentType.mapOrEmpty(x => " : " + nameFor(x))
+      node.argumentType.mapOrEmpty(x => ": " + nameFor(x)) +
+      node.defaultValue.mapOrEmpty(x => s" = ${visit(x)}")
   }
 
   def visitChildren(

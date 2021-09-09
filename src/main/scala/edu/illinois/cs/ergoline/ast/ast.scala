@@ -424,7 +424,8 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
 
   def hasDefaultValue: Boolean = defaultValue.nonEmpty
 
-  override def children: Iterable[EirNode] = Nil
+  override def children: Iterable[EirNode] =
+    lowerBound ++ upperBound ++ argumentType ++ defaultValue
 
   override def replaceChild(oldValue: EirNode, newValue: EirNode): Boolean =
     false
@@ -637,7 +638,7 @@ case class EirFunction(
   }
 
   override def children: Iterable[EirNode] =
-    body.toList ++ templateArgs ++ functionArgs ++ implicitArgs :+ returnType
+    body.toList ++ templateArgs ++ functionArgs ++ implicitArgs ++ predicate :+ returnType
 
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = {
     if (body.contains(oldNode)) {

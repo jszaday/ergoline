@@ -241,22 +241,15 @@ object Processes {
 
   // TODO this logic should be moved into its own file or generate cpp
   object RichProcessesSyntax {
-    implicit class RichEirClassList(self: List[EirClassLike]) {
-
-      def dependenceSort(): List[EirClassLike] = TopologicalSort.sort(self)
-
-      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
-        self.orderedPartition(x => {
-          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
-        })
+    implicit class RichSeq[A](self: Seq[A]) {
 
       // TODO find a more idiomatic way to do this
-      def orderedPartition[A](
-          f: EirClassLike => A
-      ): List[(A, List[EirClassLike])] = {
-        var current: Option[A] = None
-        var group: List[EirClassLike] = Nil
-        var result: List[(A, List[EirClassLike])] = Nil
+      def orderedPartition[B](
+          f: A => B
+      ): List[(B, List[A])] = {
+        var current: Option[B] = None
+        var group: List[A] = Nil
+        var result: List[(B, List[A])] = Nil
         for (a <- self) {
           val b = f(a)
           if (!current.contains(b)) {
@@ -275,6 +268,16 @@ object Processes {
         }
         result
       }
+    }
+
+    implicit class RichEirClassList(self: List[EirClassLike]) {
+
+      def dependenceSort(): List[EirClassLike] = TopologicalSort.sort(self)
+
+      def namespacePartitioned: List[(EirNamespace, List[EirClassLike])] =
+        self.orderedPartition(x => {
+          Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
+        })
 
       def hasValidOrder: Boolean = {
         self.zipWithIndex.forall({ case (c, i) =>

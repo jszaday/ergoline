@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.CheckEnclose
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
@@ -62,6 +63,7 @@ object AstManipulation {
 
     if (enclose) {
       CheckEnclose.enclose(node, Some(scope))
+      if (globals.strict) CheckEnclose(node)
     }
   }
 

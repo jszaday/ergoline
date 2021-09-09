@@ -46,7 +46,7 @@ object Literals {
 
   def StringLiteral[_: P]: P[EirStringLiteral] = {
     P("\"" ~/ StringFragment.rep(0) ~ "\"")
-  }.map { seq => EirStringLiteral(seq.mkString(""))(None) }
+  }.map { seq => EirStringLiteral("\"" + seq.mkString("") + "\"")(None) }
 
   def Numerals[_: P]: P[String] = P(CharIn("0-9").rep(1).!)
 
