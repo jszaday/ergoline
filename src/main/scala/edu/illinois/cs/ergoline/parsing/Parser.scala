@@ -242,8 +242,11 @@ object Parser {
     `for` ~ `(` ~ (CStyleHeader | ForAllHeader) ~ `)` ~ OptionalStatement
   ).map { case (hdr, body) => EirForLoop(None, hdr, body) }
 
+  def ConstantFacade[_: P]: P[EirResolvable[EirType]] =
+    P(Constant).map { EirConstantFacade(_)(None) }
+
   def Specialization[_: P]: P[Seq[EirResolvable[EirType]]] =
-    P("<" ~ Type.rep(min = 0, sep = ",") ~ ">")
+    P("<" ~ (ConstantFacade | Type).rep(min = 0, sep = ",") ~ ">")
 
   def Extends[_: P]: P[EirResolvable[EirType]] = {
     `extends` ~/ Type
