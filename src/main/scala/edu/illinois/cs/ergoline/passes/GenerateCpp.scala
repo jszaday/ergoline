@@ -2353,9 +2353,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val (primary, secondary) =
       (Option.unless(isUnit)("return"), Option.when(isUnit)("return;"))
     ptrs.foreach(ctx.makePointer)
-    ctx << primary << x.body << ";" << secondary << Option.when(needsIf)(
-      "}"
-    ) << "}"
+    ctx << primary << visitOptionalStatement(x.body) << secondary << Option
+      .when(needsIf)(
+        "}"
+      ) << "}"
     ptrs.foreach(ctx.unsetPointer)
   }
 
@@ -2435,9 +2436,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitIfElse(
       x: EirIfElse
   )(implicit ctx: CodeGenerationContext): Unit = {
-    ctx << "if (" << x.test << ")" << x.ifTrue << x.ifFalse.map(_ =>
-      "else "
-    ) << x.ifFalse
+    ctx << "if" << "(" << x.test << ")" << visitOptionalStatement(
+      x.ifTrue
+    ) << x.ifFalse.map(_ => "else") << visitOptionalStatement(
+      x.ifFalse,
+      alt = ""
+    )
   }
 
   override def visitTernaryOperator(
@@ -2481,6 +2485,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case x => ctx << x
     }
     ctx << Option.unless(!topLevel && singleStatement)("}")
+  }
+
+  def visitStatement(
+      node: EirNode
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    node match {
+      case x: EirExpressionNode =>
+        ctx << x << Option.unless(x.isInstanceOf[CppNode])(";")
+      case _ => ctx << node
+    }
+  }
+
+  def visitOptionalStatement(
+      opt: Option[EirNode],
+      alt: String = ";"
+  )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
+    opt match {
+      case Some(x) => visitStatement(x)
+      case None    => ctx << alt
+    }
   }
 
   override def visitNamespace(
@@ -2767,7 +2791,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     })
 
-    ctx << x.body << "}" << ");"
+    ctx << visitOptionalStatement(x.body) << "}" << ");"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
       val (m, mboxName, resolved, arrayArgs) = quadruplets(i)
