@@ -21,7 +21,8 @@ import edu.illinois.cs.ergoline.util.{
   AstManipulation,
   Errors,
   TopologicalSort,
-  isSystem
+  isSystem,
+  isType
 }
 import edu.illinois.cs.ergoline.{globals, util}
 
@@ -44,7 +45,7 @@ class EirSourceInfo(
     var sourceName: String,
     var line: Int,
     var start: Int,
-    var text: String
+    var text: Option[String] = None
 ) {
   override def toString: String = s"$sourceName:$line:$start"
 }
@@ -891,8 +892,6 @@ case class EirTernaryOperator(
 abstract class EirSymbolLike[+A <: EirNode: ClassTag]
     extends EirExpressionNode
     with EirResolvable[A] {
-  val needsType: Boolean =
-    classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])
   override def resolve(): Seq[EirNode] = Nil
   override def resolved: Boolean = false
 }
@@ -1067,21 +1066,6 @@ case class EirSpecializedSymbol[A <: EirNamedNode: ClassTag](
     override var types: List[EirResolvable[EirType]]
 ) extends EirSymbolLike[A]
     with EirSpecialization {
-
-  def asType: Option[EirResolvable[EirType]] = {
-    Option.when(classTag[A].runtimeClass.isAssignableFrom(classOf[EirType]))({
-      EirTemplatedType(
-        parent,
-        symbol.asInstanceOf[EirResolvable[EirType]],
-        types
-      )
-    })
-  }
-
-  override def resolve(): Seq[EirNode] = {
-    asType.map(_.resolve()).getOrElse(Nil)
-  }
-
   override def setBase(ty: EirResolvable[EirSpecializable]): Unit = {
     this.symbol = ty.asInstanceOf[EirResolvable[A with EirSpecializable]]
   }
@@ -1263,7 +1247,7 @@ case class EirPackExpansion(var base: EirResolvable[EirType])(
   }
 
   override def resolved: Boolean = _resolved.isDefined
-  override def children: Iterable[EirNode] = Nil
+  override def children: Iterable[EirNode] = Seq(base)
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = false
 }
 

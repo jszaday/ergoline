@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.Visitor.{
   isAssignOperator,
   kindFrom,
+  mkSpecialization,
   sortInfixes
 }
 import edu.illinois.cs.ergoline.ast._
@@ -14,7 +15,11 @@ import edu.illinois.cs.ergoline.parsing.syntax.Basics._
 import edu.illinois.cs.ergoline.parsing.syntax.Keywords._
 import edu.illinois.cs.ergoline.parsing.syntax.Literals._
 import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
-import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
+import edu.illinois.cs.ergoline.resolution.{
+  EirPlaceholder,
+  EirResolvable,
+  Modules
+}
 import edu.illinois.cs.ergoline.util.Errors
 import fastparse.JavaWhitespace._
 import fastparse._
@@ -24,14 +29,14 @@ import scala.reflect.ClassTag
 
 object Parser {
   def scopeSymbols[A <: EirNamedNode: ClassTag](
-      s: Seq[EirSymbolLike[A]],
+      s: Seq[EirResolvable[A]],
       isStatic: Boolean
-  ): EirSymbolLike[A] = {
-    def helper(seq: Seq[EirSymbolLike[A]]): EirSymbolLike[A] = {
+  ): EirResolvable[A] = {
+    def helper(seq: Seq[EirResolvable[A]]): EirResolvable[A] = {
       seq match {
         case Nil         => ???
         case head :: Nil => head
-        case head :: tail =>
+        case (head: EirExpressionNode) :: tail =>
           val s = EirScopedSymbol(head, helper(tail))(None)
           s.isStatic = isStatic
           s
@@ -55,15 +60,6 @@ object Parser {
         case (false, seq) => seq
       }
     )
-  }
-
-  def extractArgs(node: Option[EirExpressionNode]): List[EirExpressionNode] = {
-    node match {
-      case None                        => Nil
-      case Some(_: EirUnitLiteral)     => Nil
-      case Some(x: EirTupleExpression) => x.expressions
-      case Some(x)                     => List(x)
-    }
   }
 
   def extractTypes(
@@ -141,15 +137,19 @@ object Parser {
     EirTypeAlias(id, tArgs.getOrElse(Nil), expr)(None)
   }
 
-  def Qualified[p: P, A <: EirNamedNode: ClassTag]: P[EirSymbolLike[A]] = P(
-    Specialized[p, A].rep(min = 1, sep = "::")
-  ).map(scopeSymbols(_, isStatic = true))
+  def Qualified[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] = P(
+    Index ~ Specialized[p, A].rep(min = 1, sep = "::")
+  ).map { case (idx, seq) =>
+    val expr = scopeSymbols(seq, isStatic = true)
+    expr.location = PrettyIndex(idx)
+    expr
+  }
 
-  def Specialized[p: P, A <: EirNamedNode: ClassTag]: P[EirSymbolLike[A]] =
+  def Specialized[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] =
     P(Identifier[p, A] ~ Specialization.?).map {
-      case (id, Some(sp)) => EirSpecializedSymbol[A](
+      case (id, Some(sp)) => mkSpecialization[A](
           None,
-          id.asInstanceOf[EirResolvable[A with EirSpecializable]],
+          id,
           sp.toList
         )
       case (id, None) => id
@@ -176,7 +176,7 @@ object Parser {
   }
 
   def CStyleHeader[_: P]: P[EirForLoopHeader] = P(
-    (!:(VarDeclaration) | `;`(None)) ~ Expression.? ~ Semi ~ Expression.?
+    (!:(VarDeclaration) | `;`(None)) ~/ Expression.? ~ Semi ~/ Expression.?
   ).map { case (decl, test, incr) => EirCStyleHeader(decl, test, incr) }
 
   def InnerStatement[_: P]: P[EirNode] = P(
@@ -333,10 +333,14 @@ object Parser {
   ).map { case (ids, nodes) => mkNamespace(ids, nodes) }
 
   def Package[_: P]: P[Seq[String]] =
-    P(Keywords.`package` ~ Id.rep(sep = "::", min = 1) ~ Semi)
+    P(WL ~ Keywords.`package` ~/ Id.rep(sep = "::", min = 1) ~ Semi)
 
   def Program[_: P]: P[(Option[Seq[String]], Seq[EirNode])] =
     Package.? ~ ProgramMember.rep(0) ~ End
+
+  def TestRule[A](rule: P[_] => P[A])(implicit ctx: P[Any]): P[A] = {
+    P(rule(ctx) ~ End)
+  }
 
   def addAnnotations[A <: EirNode](
       node: A,
@@ -391,7 +395,11 @@ object Parser {
     }
 
   def Identifier[_: P, A <: EirNamedNode: ClassTag]: P[EirSymbol[A]] =
-    Id.map(x => EirSymbol[A](None, List(x)))
+    (Index ~ Id.rep(sep = "::", min = 1)).map { case (idx, ids) =>
+      val expr = EirSymbol[A](None, ids.toList)
+      expr.location = PrettyIndex(idx)
+      expr
+    }
 
   def Id[_: P]: P[String] = P(WL ~ Basics.Id)
 
@@ -418,7 +426,7 @@ object Parser {
     }
 
   def TupleType[p: P]: P[EirResolvable[EirType]] =
-    P(`(` ~/ Type.rep(min = 1, sep = ",") ~ `)`).map {
+    P(`(` ~ Type.rep(min = 1, sep = ",") ~ `)`).map {
       case ty :: Nil => ty
       case tys       => EirTupleType(None, tys.toList)
     }
@@ -475,7 +483,9 @@ object Parser {
         Constant | SelfExpr | Qualified[
           p,
           EirNamedNode
-        ] | TupleExpr | LambdaExpr | InterpolatedString
+        ].map(
+          _.asInstanceOf[EirSymbolLike[EirNamedNode]]
+        ) | TupleExpr | LambdaExpr | InterpolatedString
       )
     }
   }
@@ -509,8 +519,15 @@ object Parser {
   def AccessSuffix[_: P]: P[ExprSuffixTuple] =
     P("." ~/ Id).map(AccessSuffixTuple)
 
-  def Slice[_: P](implicit static: Boolean): P[EirExpressionNode] =
-    P(Expression)
+  def Slice[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
+    Index ~ Expression.? ~ (":" ~/ (Expression ~ ":").? ~ Expression.?).?
+  ).map {
+    case (_, Some(expr), None)         => expr
+    case (_, start, Some((step, end))) => EirSlice(start, step, end)(None)
+    case (idx, None, None) => Errors.exit(
+        s"${PrettyIndex(idx).getOrElse("???")}: expected expression, instead got nothing!"
+      )
+  }
 
   def AtSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] =
     P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(AtSuffixTuple)
@@ -591,32 +608,58 @@ object Parser {
     }
   }
 
+  def BoundOp[_: P]: P[String] = P(`<:` | `>:`)
+
+  def InfixOp[_: P](implicit static: Boolean): P[String] = {
+    if (static) {
+      P(BoundOp | Id)
+    } else {
+      P(Id)
+    }
+  }
+
   def InfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
-    ConditionalExpr ~ (Id ~ ConditionalExpr).rep(0)
+    ConditionalExpr ~ (InfixOp ~ ConditionalExpr).rep(0)
   ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
   def NewExpr[_: P](implicit static: Boolean): P[EirNew] =
-    P(`new` ~/ Type ~ TupleExpr.?).map { case (ty, tuple) =>
-      EirNew(None, ty, extractArgs(tuple))
+    P(`new` ~/ Type ~ ExprList.?).map { case (ty, tuple) =>
+      EirNew(None, ty, tuple.getOrElse(Nil))
     }
 
   def AwaitExpr[_: P](implicit static: Boolean): P[EirAwait] =
     P(await ~/ PostfixExpr).map(EirAwait(None, _))
 
-  def TupleExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
+  def ExprList[_: P](implicit static: Boolean): P[List[EirExpressionNode]] = P(
     `(` ~ Expression.rep(min = 0, sep = ",") ~ `)`
-  ).map(s =>
-    EirTupleExpression.fromExpressions(None, s.toList, enclose = false)
-  )
+  ).map(_.toList)
+
+  def TupleExpr[_: P](implicit static: Boolean): P[EirExpressionNode] =
+    P(ExprList).map(
+      EirTupleExpression.fromExpressions(None, _, enclose = false)
+    )
+
+  def PrettyIndex(idx: Int)(implicit ctx: P[Any]): Option[EirSourceInfo] = {
+    val pos = ctx.input.prettyIndex(idx).split(":").map(_.toInt)
+    val (line, col) = (pos(0), pos(1))
+    Modules.CurrentFile.map(f =>
+      new EirSourceInfo(f.getCanonicalPath, line, col)
+    )
+  }
 
   def LambdaExpr[_: P]: P[EirLambdaExpression] = P(
-    `(` ~ FnArg.rep(min = 0, sep = ",") ~ `)` ~ "=>" ~/ (Block | Expression)
-  ).map { case (args, body) =>
-    EirLambdaExpression(
+    Index ~ `(` ~ FnArg.rep(
+      min = 0,
+      sep = ","
+    ) ~ `)` ~ "=>" ~/ (Block | Expression)
+  ).map { case (idx, args, body) =>
+    val expr = EirLambdaExpression(
       None,
       args.toList,
       forceEnclosed(body, addReturn = true)
     )
+    expr.location = PrettyIndex(idx)
+    expr
   }
 
   def MatchExpr[_: P]: P[EirMatch] = P(
@@ -703,7 +746,7 @@ object Parser {
     )
   }
 
-  def WhereClause[_: P]: P[EirExpressionNode] = P(where ~ ConstExpr)
+  def WhereClause[_: P]: P[EirExpressionNode] = P(where ~/ ConstExpr)
 
   def AccessModifier[_: P]: P[EirAccessibility.Value] = P(
     `public` | `private` | `protected`

@@ -2,9 +2,14 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.{
   EirEncloseExempt,
+  EirExpressionPattern,
+  EirExtractorPattern,
+  EirIdentifierPattern,
   EirImport,
+  EirMatchCase,
   EirMember,
-  EirNode
+  EirNode,
+  EirPatternList
 }
 import edu.illinois.cs.ergoline.passes.CheckEnclose.CheckEncloseSyntax.RichEirNode
 import edu.illinois.cs.ergoline.resolution.EirResolvable
@@ -23,29 +28,36 @@ object CheckEnclose {
           case _                                         => node.parent.contains(other)
         }
       }
+
+      def enclosable: Iterable[EirNode] = {
+        node match {
+          case EirPatternList(_, list)           => list
+          case EirExpressionPattern(_, expr)     => List(expr)
+          case EirExtractorPattern(_, id, list)  => List(id, list)
+          case EirMatchCase(_, list, cond, body) => List(list) ++ cond ++ body
+          case EirMember(_, member, _)           => List(member)
+          case _                                 => node.children
+        }
+      }
     }
   }
 
   private def visit(node: EirNode): Iterable[EirNode] = {
-    val children = node match {
-      case m: EirMember => Iterable(m.member)
-      case _            => node.children.view
+    node.enclosable.flatMap { child =>
+      Option.unless(child.validEnclose(node))(child) ++ visit(child)
     }
-
-    children.filterNot(_.validEnclose(node)) ++
-      children.flatMap(visit)
   }
 
   def apply(node: EirNode): Option[EirNode] = visit(node).headOption
 
   def enclose(node: EirNode, scope: Option[EirNode]): Unit = {
+    val recurse = () => node.enclosable.foreach(enclose(_, Some(node)))
     val setParent = () => {
       node.parent.nonEmpty || {
         node.parent = scope
         scope.nonEmpty
       }
     }
-    val recurse = () => node.children.foreach(enclose(_, Some(node)))
 
     node match {
       case _: EirEncloseExempt =>

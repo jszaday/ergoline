@@ -106,6 +106,26 @@ object Visitor {
       case _ =>
     }
   }
+
+  def mkSpecialization[A <: EirNamedNode: ClassTag](
+      parent: Option[EirNode],
+      base: EirResolvable[A] = null,
+      tys: List[EirResolvable[EirType]] = null
+  ): EirResolvable[A] with EirSpecialization = {
+    (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
+       EirTemplatedType(
+         parent,
+         Option(base).to[EirResolvable[EirType]].orNull,
+         tys
+       )
+     } else {
+       EirSpecializedSymbol(
+         parent,
+         Option(base).to[EirResolvable[A with EirSpecializable]].orNull,
+         tys
+       )
+     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
+  }
 }
 
 class Visitor(global: EirScope = EirGlobalNamespace)
@@ -167,7 +187,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           t.start.getTokenSource.getSourceName,
           t.start.getLine,
           t.start.getCharPositionInLine + 1,
-          t.getText
+          text = Some(t.getText)
         )
       }
     }
@@ -1213,15 +1233,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     init.toList :+ last
   }
 
-  def mkSpecialization[A <: EirNamedNode: ClassTag]()
-      : EirResolvable[A] with EirSpecialization = {
-    (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
-       EirTemplatedType(parent, null, null)
-     } else {
-       EirSpecializedSymbol(parent, null, null)
-     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
-  }
-
   def parseIdentifier[A <: EirNamedNode: ClassTag](
       ctx: IdentifierExpressionContext
   ): EirResolvable[A] = {
@@ -1237,7 +1248,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
         case Some(spec) => conv2expr(
             enter(
-              mkSpecialization[A](),
+              mkSpecialization[A](parent),
               (s: EirSpecialization) => {
                 s.types = specializationToList(spec)
                 s.setBase(

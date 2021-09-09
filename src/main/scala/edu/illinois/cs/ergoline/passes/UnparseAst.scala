@@ -253,7 +253,10 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitSymbol[A <: EirNamedNode](
       value: EirSymbol[A]
   )(implicit ctx: UnparseContext): String = {
-    value.qualifiedName mkString "::"
+    (value.qualifiedName match {
+      case "::" :: rest => "" +: rest
+      case list         => list
+    }).mkString("::")
   }
 
   override def visitLiteral(x: EirLiteral[_])(implicit

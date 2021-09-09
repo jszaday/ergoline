@@ -20,7 +20,7 @@ object Modules {
   val packageFile = "package.erg"
   val homePathEnv = "ERG_HOME"
   val searchPathEnv = "ERG_CLASSPATH"
-  var useFastParse = false
+  var useFastParse = true
 
   val ergolineHome = Option(Properties.envOrElse(homePathEnv, "."))
     .map(Paths.get(_))
@@ -56,6 +56,10 @@ object Modules {
   val loadedFiles: mutable.Map[File, EirNamedNode] = mutable.Map()
   val fileSiblings: mutable.Map[EirNode, List[EirNode]] = mutable.Map()
 
+  private val fileStack: mutable.Stack[File] = mutable.Stack()
+
+  def CurrentFile: Option[File] = fileStack.headOption
+
   private object ErgolineErrorListener extends ConsoleErrorListener {
     override def syntaxError(
         recognizer: Recognizer[_, _],
@@ -80,35 +84,44 @@ object Modules {
       src: Either[String, File],
       scope: EirScope
   ): (EirNode, List[EirNode]) = {
-    if (useFastParse) {
-      val file = src.toOption
-      val txt = src match {
-        case Left(src)   => src
-        case Right(file) => Files.readString(file.toPath)
+    val file = src.toOption
+    file.foreach(fileStack.push)
+    val res =
+      if (useFastParse) {
+        val txt = src match {
+          case Left(src)   => src
+          case Right(file) => Files.readString(file.toPath)
+        }
+        val (ids, nodes) = parse(txt, Parser.Program(_)) match {
+          case Parsed.Success(res, _) => res
+          case f: Parsed.Failure =>
+            val pos = f.extra.input.prettyIndex(f.index)
+            Errors.exit(
+              s"${file.map(_.getCanonicalFile).getOrElse("???")}:$pos: " + f
+                .trace()
+                .longAggregateMsg
+            )
+        }
+        val pkg = ids.map(_.toList).map(loadPackage(_, file, scope))
+        pkg
+          .map(pkg => {
+            Visitor.dropSelf(pkg, file)
+            exportNodes(file, pkg, nodes.toList, enclose = true)
+          })
+          .getOrElse({
+            Errors.exit(s"could not load $src")
+          })
+      } else {
+        new Visitor(scope).visitProgram(
+          (src match {
+            case Left(str) => parserFromString(str)
+            case Right(f)  => parserFromPath(f.toPath)
+          }).program(),
+          file
+        )
       }
-      val (ids, nodes) = parse(txt, Parser.Program(_)) match {
-        case Parsed.Success(res, _) => res
-        case f: Parsed.Failure =>
-          Errors.exit(f.label + ": " + f.trace().longAggregateMsg)
-      }
-      val pkg = ids.map(_.toList).map(loadPackage(_, file, scope))
-      pkg
-        .map(pkg => {
-          Visitor.dropSelf(pkg, file)
-          exportNodes(file, pkg, nodes.toList, enclose = true)
-        })
-        .getOrElse({
-          Errors.exit(s"could not load $src")
-        })
-    } else {
-      new Visitor(scope).visitProgram(
-        (src match {
-          case Left(str)   => parserFromString(str)
-          case Right(file) => parserFromPath(file.toPath)
-        }).program(),
-        src.toOption
-      )
-    }
+    file.foreach(f => assert(f == fileStack.pop()))
+    res
   }
 
   def loadPackage(
@@ -268,12 +281,12 @@ object Modules {
   }
 
   def retrieve(name: List[String], scope: EirScope): EirNamespace = {
-    val init = this(name.init, scope).zip(name.lastOption)
-    init.flatMap { case (init, last) => this(last, init) } match {
+    val init = name.lastOption.zip(this(name.init, scope))
+    init.flatMap { case (last, init) => this(last, init) } match {
       case Some(x: EirNamespace) => x
       case Some(x)               => Errors.incorrectType(x, classOf[EirNamespace])
       case None => init
-          .map { case (init, last) => retrieve(last, init) }
+          .map { case (last, init) => retrieve(last, init) }
           .getOrElse(Errors.unableToResolve(name, scope))
     }
   }

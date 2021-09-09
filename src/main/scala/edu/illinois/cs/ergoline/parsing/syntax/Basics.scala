@@ -105,7 +105,7 @@ object Basics {
   ).map { case (lhs, rhs) => lhs + rhs.map(t => t._1 + t._2).getOrElse("") }
 
   private def Closer[_: P]: P[String] = P(
-    "_".! ~ OperatorId.?
+    "_".! ~ PrefixOp.?
   ).map {
     case (lhs, Some(rhs)) => lhs + rhs
     case (lhs, None)      => lhs

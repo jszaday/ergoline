@@ -257,6 +257,10 @@ object Find {
   def fromSymbol(symbol: EirSymbol[_]): Iterable[EirNode] = {
     symbol.qualifiedName match {
       case last :: Nil => anywhereAccessible(symbol, last)
+      case "::" :: head :: tail => Modules(head, EirGlobalNamespace)
+          .to[EirNamedNode]
+          .view
+          .flatMap(qualified(symbol, _, tail))
       case head :: tail =>
         anywhereAccessible(symbol, head).flatMap(qualified(symbol, _, tail))
       case Nil => Nil

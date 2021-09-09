@@ -23,8 +23,7 @@ object TupleFactory {
   def apply[A <: EirResolvable[EirType]: ClassTag](
       tys: Iterable[A]
   ): EirTupleType = {
-    val runtimeClass = classTag[A].runtimeClass
-    if (classOf[EirType].isAssignableFrom(runtimeClass)) {
+    if (isType[A]) {
       apply(tys.map(_.asInstanceOf[EirType]))
     } else {
       EirTupleType(None, tys.toList)
