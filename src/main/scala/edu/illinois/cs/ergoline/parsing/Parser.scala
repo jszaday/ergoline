@@ -158,7 +158,7 @@ object Parser {
   def Expression[_: P](implicit
       static: Boolean = false
   ): P[EirExpressionNode] = {
-    if (static) P(InfixExpr) else P(MatchExpr | InfixExpr)
+    if (static) P(InfixExpr(0)) else P(MatchExpr | InfixExpr(0))
   }
 
   def WhileLoop[_: P]: P[EirWhileLoop] = P(
@@ -621,8 +621,10 @@ object Parser {
     }
   }
 
-  def InfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
-    ConditionalExpr ~ (InfixOp ~ ConditionalExpr).rep(0)
+  def InfixExpr[_: P](
+      min: Int
+  )(implicit static: Boolean): P[EirExpressionNode] = P(
+    ConditionalExpr ~ (InfixOp ~ ConditionalExpr).rep(min)
   ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
   def NewExpr[_: P](implicit static: Boolean): P[EirNew] =
@@ -677,15 +679,15 @@ object Parser {
     P(Pattern.rep(min = 1, sep = ",")).map(s => EirPatternList(None, s.toList))
 
   def Pattern[_: P]: P[EirPattern] =
-    P(IdPattern | ExtractorPattern | ConstantPattern | ExprPattern)
+    P(ExtractorPattern | ConstantPattern | ExprPattern | IdPattern)
 
   def IdPattern[_: P]: P[EirIdentifierPattern] =
-    P(Id ~ (":" ~ BasicType).?).map { case (id, ty) =>
+    P(Id ~ (":" ~/ BasicType).?).map { case (id, ty) =>
       EirIdentifierPattern(None, id, ty.getOrElse(EirPlaceholder(None)))
     }
 
   def ExtractorPattern[p: P]: P[EirExtractorPattern] = P(
-    Identifier[p, EirNamedNode] ~ `(` ~ PatternList ~ `)`
+    Identifier[p, EirNamedNode] ~ `(` ~/ PatternList ~ `)`
   ).map { case (id, list) => EirExtractorPattern(None, id, list) }
 
   def ConstantPattern[_: P]: P[EirExpressionPattern] =
@@ -701,8 +703,10 @@ object Parser {
       )
     }
 
-  def ExprPattern[_: P]: P[EirExpressionPattern] =
-    P(Expression).map(EirExpressionPattern(None, _))
+  def ExprPattern[_: P]: P[EirExpressionPattern] = {
+    implicit val static: Boolean = false
+    P(InfixExpr(1)).map(EirExpressionPattern(None, _))
+  }
 
   def BasicArg[_: P]: P[(String, Option[String], EirResolvable[EirType])] =
     P(Id ~ ":" ~ "*".!.? ~/ Type)

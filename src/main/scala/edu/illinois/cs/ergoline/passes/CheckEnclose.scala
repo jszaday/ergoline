@@ -9,7 +9,8 @@ import edu.illinois.cs.ergoline.ast.{
   EirMatchCase,
   EirMember,
   EirNode,
-  EirPatternList
+  EirPatternList,
+  EirSdagWhen
 }
 import edu.illinois.cs.ergoline.passes.CheckEnclose.CheckEncloseSyntax.RichEirNode
 import edu.illinois.cs.ergoline.resolution.EirResolvable
@@ -36,6 +37,7 @@ object CheckEnclose {
           case EirExtractorPattern(_, id, list)  => List(id, list)
           case EirMatchCase(_, list, cond, body) => List(list) ++ cond ++ body
           case EirMember(_, member, _)           => List(member)
+          case when: EirSdagWhen                 => when.children ++ when.patterns.map(_._2)
           case _                                 => node.children
         }
       }
