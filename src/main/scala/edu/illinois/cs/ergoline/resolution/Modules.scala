@@ -12,6 +12,7 @@ import org.antlr.v4.runtime._
 
 import java.io.File
 import java.io.File.pathSeparator
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable
 import scala.util.Properties
@@ -73,6 +74,10 @@ object Modules {
     }
   }
 
+  private def readString(file: File): String = {
+    new String(Files.readAllBytes(file.toPath), StandardCharsets.UTF_8)
+  }
+
   def load(src: String, scope: EirScope = EirGlobalNamespace): EirScope = {
     load(Left(src), scope) match {
       case (res: EirScope, _) => res
@@ -89,8 +94,8 @@ object Modules {
     val res =
       if (useFastParse) {
         val txt = src match {
+          case Right(file) => readString(file)
           case Left(src)   => src
-          case Right(file) => Files.readString(file.toPath)
         }
         val (ids, nodes) = parse(txt, Parser.Program(_)) match {
           case Parsed.Success(res, _) => res
