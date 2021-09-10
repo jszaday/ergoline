@@ -9,6 +9,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
 import edu.illinois.cs.ergoline.ast.types.{EirNamedType, EirType}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
+import edu.illinois.cs.ergoline.util.Errors
 
 package object globals {
   def unitLiteral(parent: Option[EirNode]): EirLiteral[_] =
@@ -117,8 +118,13 @@ package object globals {
 
   def unitName: String = "unit"
 
-  def unitSymbol: EirResolvable[EirType] =
-    EirSymbol[EirNamedType](ergolineModule, List(unitName))
+  // uhhh... what???
+  val ergolineName = "ergoline"
+
+  def unitSymbol(parent: Option[EirNode]): EirResolvable[EirType] = {
+    // TODO make this more robust!
+    EirSymbol[EirNamedType](parent, List("::", ergolineName, unitName))
+  }
 
   def unitType: EirType = typeFor(unitName)
 
@@ -130,16 +136,25 @@ package object globals {
   def integerType: EirType = typeFor("int")
 
   def ckModule: Option[EirScope] = Modules("ck", EirGlobalNamespace)
-  def ergolineModule: Option[EirScope] = Modules("ergoline", EirGlobalNamespace)
+  def ergolineModule: Option[EirScope] =
+    Modules(ergolineName, EirGlobalNamespace)
 
-  private def typeFor(name: String): EirType = {
-    this.ergolineModule
-      .flatMap(Find.child[EirNamedNode](_, withName(name)).headOption)
-      .collect({
-        case f: EirFileSymbol => Find.uniqueResolution[EirClassLike](f)
-        case c: EirClassLike  => c
-      })
-      .getOrElse(throw new RuntimeException(s"could not find type $name"))
+  private def typeFor(name: String): EirClassLike = {
+    val candidates = ergolineModule
+      .map(Find.child[EirNamedNode](_, withName(name)))
+      .getOrElse(Nil)
+      .toList
+    candidates.collectFirst({
+      case c: EirClassLike  => c
+      case f: EirFileSymbol => Find.uniqueResolution[EirClassLike](f)
+      case node             => Errors.incorrectType(node, classOf[EirClassLike])
+    }) match {
+      case Some(res) => res
+      case None => Errors.unableToResolve(
+          List(name),
+          ergolineModule.getOrElse(Errors.unableToResolve(ergolineName))
+        )
+    }
   }
 
   def typeFor(literal: EirLiteral[_]): EirType =

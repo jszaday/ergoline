@@ -54,7 +54,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   def visitAnnotations(
       annotations: Iterable[EirAnnotation]
   )(implicit ctx: UnparseContext): String = {
-    annotations.map(visitAnnotation(_)).mkString(" ")
+    annotations.map(visitAnnotation(_)).mkString("")
   }
 
   override def visit(node: EirNode)(implicit ctx: UnparseContext): String = {
@@ -64,13 +64,6 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
         case _                    => super.visit(node)
       }
     )
-  }
-
-  def addSemi(x: String): String = {
-    val trimmed = x.replaceAll("""(?m)\s+$""", "") // .stripTrailing()
-    if (trimmed.endsWith("}") || trimmed.endsWith(";") || trimmed.isEmpty)
-      trimmed
-    else s"$trimmed;"
   }
 
   def split(
@@ -97,8 +90,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   def visitStatements(
       lst: Iterable[EirNode]
   )(implicit ctx: UnparseContext): String = {
-    val x = visit(lst)
-      .map(addSemi)
+    val x = lst
+      .map(visitStatement)
       .map(split(ctx, _))
       .filter(_.nonEmpty)
       .map(x => s"$n${ctx.t}$x")
@@ -129,8 +122,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   )(implicit ctx: UnparseContext): String = {
     val kwd = declKeyword(node.isFinal)
     val declType = visit(node.declaredType)
-    val expr = node.initialValue.mapOrEmpty(x => s"= ${visit(x)}")
-    s"$kwd ${node.name}: $declType $expr;"
+    val expr = node.initialValue.mapOrEmpty(x => s" = ${visit(x)}")
+    s"$kwd ${node.name}: $declType$expr;"
   }
 
   override def visitTemplateArgument(
@@ -139,7 +132,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     node.name +
       node.upperBound.mapOrEmpty(x => " <: " + nameFor(x)) +
       node.lowerBound.mapOrEmpty(x => " >: " + nameFor(x)) +
-      node.argumentType.mapOrEmpty(x => " : " + nameFor(x))
+      node.argumentType.mapOrEmpty(x => ": " + nameFor(x)) +
+      node.defaultValue.mapOrEmpty(x => s" = ${visit(x)}")
   }
 
   def visitChildren(
@@ -192,7 +186,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       case EirAccessibility.Public => ""
       case x                       => x.toString.toLowerCase + " "
     }
-    accessibility + overrides + addSemi(visit(node.member))
+    accessibility + overrides + visitStatement(node.member)
   }
 
   override def visitFunction(
@@ -204,15 +198,19 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
         "<" + node.templateArgs.map(visit(_)).mkString(", ") + ">"
       else ""
     val retType = nameFor(node.returnType)
-    s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)} " + node.body
-      .mapOrSemi(
-        visit(_)
-      )
+    s"def ${node.name}$templates($args): $retType${visitWhere(node.predicate)}${visitOptionalStatement(node.body)}"
   }
 
   override def visitAnnotation(node: EirAnnotation)(implicit
       ctx: UnparseContext
-  ): String = s"@${node.name} "
+  ): String = {
+    val opts = Option(node.opts)
+      .filterNot(_.isEmpty)
+      .mapOrEmpty(opts => {
+        s"(${opts.map { case (id, value) => s"$id=${visit(value)}" } mkString (",")})"
+      })
+    s"@${node.name}$opts "
+  }
 
   override def visitBinaryExpression(
       node: EirBinaryExpression
@@ -255,25 +253,55 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitSymbol[A <: EirNamedNode](
       value: EirSymbol[A]
   )(implicit ctx: UnparseContext): String = {
-    value.qualifiedName mkString "::"
+    (value.qualifiedName match {
+      case "::" :: rest => "" +: rest
+      case list         => list
+    }).mkString("::")
   }
 
   override def visitLiteral(x: EirLiteral[_])(implicit
       ctx: UnparseContext
-  ): String = x.value.toString
+  ): String = {
+    x match {
+      case EirStringLiteral(s) => "\"" + s + "\""
+      case _                   => x.value.toString
+    }
+  }
+
+  def visitStatement(x: EirNode)(implicit ctx: UnparseContext): String = {
+    x match {
+      case _: EirExpressionNode => visit(x) + ";"
+      case _                    => visit(x)
+    }
+  }
+
+  def visitOptionalStatement(
+      x: Option[EirNode],
+      alt: String = ";"
+  )(implicit ctx: UnparseContext): String = {
+    x.map(visitStatement).map(" " + _).getOrElse(alt)
+  }
 
   override def visitWhileLoop(
       loop: EirWhileLoop
-  )(implicit ctx: UnparseContext): String =
-    s"while (${visit(loop.condition)}) ${visit(loop.body)}"
+  )(implicit ctx: UnparseContext): String = {
+    s"while (${visit(loop.condition)})${visitOptionalStatement(loop.body)}"
+  }
+
+  override def visitDoWhileLoop(
+      loop: EirDoWhileLoop
+  )(implicit ctx: UnparseContext): String = {
+    s"do${visitOptionalStatement(loop.body)} while (${visit(loop.condition)});"
+  }
 
   override def visitForLoop(
       loop: EirForLoop
   )(implicit ctx: UnparseContext): String = {
     val header: String = loop.header match {
       case EirCStyleHeader(declaration, test, increment) =>
-        declaration.mapOrSemi(visit(_)) + " " +
-          test.mapOrEmpty(visit(_)) + "; " + increment.mapOrEmpty(visit(_))
+        declaration.mapOrSemi(visit(_)) + visitOptionalStatement(
+          test
+        ) + increment.mapOrEmpty(" " + visit(_))
       case hdr: EirForAllHeader =>
         val idents = hdr.identifiers
         (if (idents.length == 1) {
@@ -282,8 +310,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
            s"(${idents.mkString(",")})"
          }) + " <- " + visit(hdr.expression)
     }
-    val body = loop.body.map(visit).map(" " + _).getOrElse(";")
-    s"for ($header)$body"
+    s"for ($header)${visitOptionalStatement(loop.body)}"
   }
 
   override def visitFunctionCall(
@@ -388,11 +415,9 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitIfElse(
       x: EirIfElse
   )(implicit ctx: UnparseContext): String = {
-    val ifFalse = x.ifFalse match {
-      case Some(n: EirNode) => s"else ${visit(n)}"
-      case None             => ""
-    }
-    s"if (${visit(x.test)}) ${x.ifTrue.mapOrEmpty(visit(_))} $ifFalse"
+    val ifFalse =
+      x.ifFalse.mapOrEmpty(_ => s" else${visitOptionalStatement(x.ifFalse)}")
+    s"if (${visit(x.test)})${visitOptionalStatement(x.ifTrue)}$ifFalse "
   }
 
   override def visitNew(x: EirNew)(implicit ctx: UnparseContext): String = {
@@ -416,7 +441,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   )(implicit ctx: UnparseContext): String = {
     val ifCond = x.condition.map(y => s"if ${visit(y)} ").getOrElse("")
     val pattern = visit(x.patterns).init.tail
-    s"$n${ctx.t}case $pattern $ifCond=> ${visit(x.body)}"
+    s"$n${ctx.t}case $pattern $ifCond=>${visitOptionalStatement(x.body, alt = " ;")}"
   }
 
   override def visitPatternList(
@@ -477,7 +502,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       .map(p => s"${visit(p._1)}${visit(p._2)}")
       .mkString(", ") + {
       x.condition.map(visitExpression(_)).map(" if " + _).getOrElse("")
-    } + s" => ${visit(x.body)}"
+    } + s" =>${visitOptionalStatement(x.body, alt = " ;")}"
   }
 
   override def visitSlice(x: EirSlice)(implicit ctx: UnparseContext): String = {

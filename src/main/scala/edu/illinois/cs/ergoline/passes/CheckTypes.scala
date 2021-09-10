@@ -687,6 +687,8 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(candidate: A, outer: Option[EirSpecialization])(implicit
       ctx: TypeCheckContext
   ): (Boolean, Option[(A, EirType)]) = {
+    if (candidate.isInstanceOf[EirNamespace]) ???
+
     val ospec = outer.collect { case t: EirTemplatedType =>
       ctx.specialize(assertValid[EirSpecializable](t.base), t)
     }
@@ -1615,7 +1617,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     checkCondition(x.condition)
 
-    visit(x.body)
+    x.body.map(visit).getOrElse(globals.unitType)
   }
 
   override def visitSlice(slice: EirSlice)(implicit

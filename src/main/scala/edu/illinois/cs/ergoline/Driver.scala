@@ -1,19 +1,14 @@
 package edu.illinois.cs.ergoline
 
-import java.io.{File, PrintWriter}
-import java.nio.file.{Files, Paths}
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
-import edu.illinois.cs.ergoline.passes.{
-  CheckTypes,
-  FullyResolve,
-  Processes,
-  Registry
-}
+import edu.illinois.cs.ergoline.passes.Processes
 import edu.illinois.cs.ergoline.resolution.Find.withName
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find, Modules}
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
+import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.{Errors, LibUtils}
 
+import java.io.{File, PrintWriter}
+import java.nio.file.Paths
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
 
@@ -32,6 +27,8 @@ object Driver extends App {
 
   if (options.contains("-h") || files.isEmpty) helpMessage()
   else if (options.contains("--debug")) Errors.useDebugAction()
+
+  Modules.useFastParse = !options.contains("--antlr4")
 
   val skipCompilation = options.contains("--no-compile")
   globals.strict = options.contains("-Wall")

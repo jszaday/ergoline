@@ -191,6 +191,10 @@ package object util {
       .isDefined
   }
 
+  def isType[A: ClassTag]: Boolean = {
+    classOf[EirType].isAssignableFrom(classTag[A].runtimeClass)
+  }
+
   object EirUtilitySyntax {
 
     implicit class RichEirNode(node: EirNode) {

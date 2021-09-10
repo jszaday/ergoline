@@ -8,6 +8,7 @@ scalacOptions += "-deprecation"
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.8"
+libraryDependencies += "com.lihaoyi" %% "fastparse" % "2.2.2"
 
 Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 Test / testOptions += Tests.Argument("-oD")

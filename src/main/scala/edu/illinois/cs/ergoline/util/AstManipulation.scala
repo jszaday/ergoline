@@ -1,6 +1,8 @@
 package edu.illinois.cs.ergoline.util
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.CheckEnclose
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichEirNode
 
@@ -47,14 +49,21 @@ object AstManipulation {
     }
   }
 
-  def placeNodes(scope: EirScope, nodes: Iterable[EirNode]): Unit = {
-    for (node <- nodes) {
-      (scope, node) match {
-        case (EirGlobalNamespace, x: EirNamespace) =>
-          EirGlobalNamespace.put(x.name, x)
-        case (x: EirNamespace, _) => x.children +:= node
-        case _                    => throw new RuntimeException(s"cannot place $node into $scope")
-      }
+  def placeNode[A <: EirScope](
+      scope: A,
+      node: EirNode,
+      enclose: Boolean = false
+  ): Unit = {
+    (scope, node) match {
+      case (EirGlobalNamespace, x: EirNamespace) =>
+        EirGlobalNamespace.put(x.name, x)
+      case (x: EirNamespace, _) => x.children +:= node
+      case _                    => throw new RuntimeException(s"cannot place $node into $scope")
+    }
+
+    if (enclose) {
+      CheckEnclose.enclose(node, Some(scope))
+      if (globals.strict) CheckEnclose(node)
     }
   }
 

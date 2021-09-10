@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.ErgolineParser._
+import edu.illinois.cs.ergoline.Visitor.{InfixPart, isAssignOperator}
 import edu.illinois.cs.ergoline.ast.EirAccessibility.EirAccessibility
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals._
@@ -27,8 +28,145 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.{ClassTag, classTag}
 
+object Visitor {
+  type InfixPart = Either[EirExpressionNode, String]
+
+  val precedences: Seq[Seq[Char]] = Seq(
+    Seq('*', '/', '%'),
+    Seq('+', '-'),
+    //    Seq(':'),
+    Seq('=', '!'),
+    Seq('<', '>'),
+    Seq('&'),
+    Seq('^'),
+    Seq('|')
+  )
+
+  def kindFrom(
+      prefix: Option[String],
+      collective: Option[String]
+  ): Option[EirProxyKind] = {
+    prefix
+      .filter(_ => collective.nonEmpty)
+      .map({
+        case "[@]" => EirElementProxy
+        case "{@}" => EirSectionProxy
+        case "@"   => EirCollectiveProxy
+        case _     => ???
+      })
+  }
+
+  def isAssignOperator(op: String): Boolean = {
+    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
+      .isComparisonOperator(op))
+  }
+
+  def precedenceOf(op: String): Int = {
+    if (op.head.isLetter || isAssignOperator(op)) {
+      precedences.size + 2
+    } else {
+      precedences.indexWhere(_.contains(op.head)) + 1
+    }
+  }
+
+  def sortInfixes(
+      parts: Seq[InfixPart],
+      former: Seq[InfixPart] => EirExpressionNode
+  ): EirExpressionNode = {
+    var infixes = parts
+    var ops = infixes.zipWithIndex
+      .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
+      .sortBy(_._2)
+      .map(_._1)
+
+    while (ops.nonEmpty) {
+      val start = ops.head - 1
+      val slice = infixes.slice(start, start + 3)
+      val expr = former(slice)
+
+      infixes = infixes.patch(start, Seq(Left(expr)), 3)
+      ops = ops.tail.map(x => if (x > start) x - 2 else x)
+    }
+
+    infixes match {
+      case Left(x) :: Nil => x
+      case _              => ???
+    }
+  }
+
+  def dropSelf(scope: EirScope, fileOption: Option[File]): Unit = {
+    fileOption match {
+      case Some(file) => AstManipulation.dropNodes(
+          scope,
+          Find.child[EirFileSymbol](
+            scope,
+            f => Files.isSameFile(f.file.toPath, file.toPath)
+          )
+        )
+      case _ =>
+    }
+  }
+
+  def mkSpecialization[A <: EirNamedNode: ClassTag](
+      parent: Option[EirNode],
+      base: EirResolvable[A] = null,
+      tys: List[EirResolvable[EirType]] = null
+  ): EirResolvable[A] with EirSpecialization = {
+    (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
+       EirTemplatedType(
+         parent,
+         Option(base).to[EirResolvable[EirType]].orNull,
+         tys
+       )
+     } else {
+       EirSpecializedSymbol(
+         parent,
+         Option(base).to[EirResolvable[A with EirSpecializable]].orNull,
+         tys
+       )
+     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
+  }
+}
+
 class Visitor(global: EirScope = EirGlobalNamespace)
     extends ErgolineParserBaseVisitor[EirNode] {
+
+  import Visitor._
+
+  def flattenInfix[T <: ParseTree](ctx: T): Seq[InfixPart] = {
+    if (ctx.getChildCount == 3) {
+      val (lhs, rhs) = (ctx.getChild(0), ctx.getChild(2))
+      flattenInfix(lhs) ++ {
+        Option(ctx.getChild(1))
+          .map(_.getText)
+          .map(Right(_))
+      } ++ flattenInfix(rhs)
+    } else {
+      Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
+    }
+  }
+
+  def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
+    seq match {
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
+        enter(
+          EirAssignment(parent, lhs, op, rhs),
+          (expr: EirAssignment) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+
+      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil => enter(
+          EirBinaryExpression(parent, lhs, op, rhs),
+          (expr: EirBinaryExpression) => {
+            lhs.parent = Some(expr)
+            rhs.parent = Some(expr)
+          }
+        )
+      case _ => ???
+    }
+  }
 
   val parents: mutable.Stack[EirNode] = new mutable.Stack[EirNode]
   val defaultModuleName = "__default__"
@@ -49,7 +187,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           t.start.getTokenSource.getSourceName,
           t.start.getLine,
           t.start.getCharPositionInLine + 1,
-          t.getText
+          text = Some(t.getText)
         )
       }
     }
@@ -86,51 +224,13 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  private def loadPackage(
-      qualified: List[String],
-      fileOption: Option[File]
-  ): EirScope = {
-    fileOption match {
-      case None => Modules.retrieve(qualified, global)
-      case Some(file) =>
-        val absPath = file.getCanonicalFile.toPath
-        qualified.reverse
-          .foldRight((absPath, global))((name, pathScope) => {
-            val parent = pathScope._1.getParent
-            if (parent.getFileName.endsWith(name)) {
-              val loaded = Modules.provisional(parent.toFile, pathScope._2).get
-              (parent, util.assertValid[EirScope](loaded))
-            } else {
-              throw new RuntimeException(
-                s"could not locate $name within ${pathScope._1}"
-              )
-            }
-          })
-          ._2
-    }
-  }
-
-  def dropSelf(scope: EirScope, fileOption: Option[File]): Unit = {
-    fileOption match {
-      case Some(file) => AstManipulation.dropNodes(
-          scope,
-          Find.child[EirFileSymbol](
-            scope,
-            f => Files.isSameFile(f.file.toPath, file.toPath)
-          )
-        )
-      case _ =>
-    }
-  }
-
   def visitProgram(
       ctx: ProgramContext,
       file: Option[File]
   ): (EirNode, List[EirNode]) = {
-    val expectation = file.map(Modules.expectation)
     val topLevel: EirScope = Option(ctx.packageStatement())
       .map(_.fqn().identifier.toStringList)
-      .map(loadPackage(_, file))
+      .map(Modules.loadPackage(_, file, global))
       .getOrElse(global)
     // A provisional package sweep will include us, so we'll just drop that...
     dropSelf(topLevel, file)
@@ -139,24 +239,8 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       _.annotatedTopLevelStatement,
       visitAnnotatedTopLevelStatement
     )
-    // namespaces are automatically placed into the top-level, and should not be replicated
-    AstManipulation.placeNodes(
-      topLevel,
-      nodes.filterNot(_.isInstanceOf[EirNamespace])
-    )
     parents.pop()
-    expectation
-      .map(name => {
-        if (file.exists(Modules.isPackageFile) && topLevel.hasName(name))
-          (topLevel, nodes)
-        else nodes.partition(_.hasName(name)) match {
-          case (head :: Nil, x) => (head, x)
-          case _ => throw new RuntimeException(
-              s"could not locate $name in ${file.get.getName}"
-            )
-        }
-      })
-      .getOrElse((topLevel, Nil))
+    Modules.exportNodes(file, topLevel, nodes)
   }
 
   override def visitType(ctx: TypeContext): EirNode = {
@@ -176,9 +260,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  override def visitProgram(ctx: ProgramContext): EirScope = {
-    assertValid[EirScope](visitProgram(ctx, None)._1)
-  }
+  override def visitProgram(ctx: ProgramContext): EirNode = ???
 
   private def parent: Option[EirNode] =
     Option.when(parents.isEmpty)(global).orElse(parents.headOption)
@@ -429,7 +511,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         f.implicitArgs.foreach(_.isImplicit = true)
         f.returnType = Option(ctx.`type`())
           .map(visitAs[EirResolvable[EirType]](_))
-          .getOrElse(globals.unitSymbol)
+          .getOrElse({ globals.unitSymbol(parent) })
         f.predicate = Option(ctx.whereClause()).map(visitAs[EirExpressionNode])
         f.body = Option(ctx.block()).map(visitAs[EirBlock])
       }
@@ -710,20 +792,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     }
   }
 
-  def kindFrom(
-      prefix: Option[String],
-      collective: Option[String]
-  ): Option[EirProxyKind] = {
-    prefix
-      .filter(_ => collective.nonEmpty)
-      .map({
-        case "[@]" => EirElementProxy
-        case "{@}" => EirSectionProxy
-        case "@"   => EirCollectiveProxy
-        case _     => ???
-      })
-  }
-
   override def visitTemplateType(
       ctx: TemplateTypeContext
   ): EirResolvable[EirType] = {
@@ -935,95 +1003,12 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     )
   }
 
-  type InfixPart = Either[EirExpressionNode, String]
-
-  def flattenInfix[T <: ParseTree](ctx: T): Seq[InfixPart] = {
-    if (ctx.getChildCount == 3) {
-      val (lhs, rhs) = (ctx.getChild(0), ctx.getChild(2))
-      flattenInfix(lhs) ++ {
-        Option(ctx.getChild(1))
-          .map(_.getText)
-          .map(Right(_))
-      } ++ flattenInfix(rhs)
-    } else {
-      Seq(Left(visitAs[EirExpressionNode](ctx.getChild(0))))
-    }
-  }
-
   override def visitBody(ctx: BodyContext): EirNode = {
     Option(ctx.statement()).map(visit(_)).orNull
   }
 
   def bodyToOptional(ctx: BodyContext): Option[EirBlock] = {
     forceEnclosed(Option(visit(ctx)))
-  }
-
-  def formBinaryExpression(seq: Seq[InfixPart]): EirExpressionNode = {
-    seq match {
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil if isAssignOperator(op) =>
-        enter(
-          EirAssignment(parent, lhs, op, rhs),
-          (expr: EirAssignment) => {
-            lhs.parent = Some(expr)
-            rhs.parent = Some(expr)
-          }
-        )
-
-      case Left(lhs) :: Right(op) :: Left(rhs) :: Nil => enter(
-          EirBinaryExpression(parent, lhs, op, rhs),
-          (expr: EirBinaryExpression) => {
-            lhs.parent = Some(expr)
-            rhs.parent = Some(expr)
-          }
-        )
-      case _ => ???
-    }
-  }
-
-  val precedences: Seq[Seq[Char]] = Seq(
-    Seq('*', '/', '%'),
-    Seq('+', '-'),
-//    Seq(':'),
-    Seq('=', '!'),
-    Seq('<', '>'),
-    Seq('&'),
-    Seq('^'),
-    Seq('|')
-  )
-
-  def isAssignOperator(op: String): Boolean = {
-    op.endsWith("=") && !(globals.isIdentityComparator(op) || globals
-      .isComparisonOperator(op))
-  }
-
-  def precedenceOf(op: String): Int = {
-    if (op.head.isLetter || isAssignOperator(op)) {
-      precedences.size + 2
-    } else {
-      precedences.indexWhere(_.contains(op.head)) + 1
-    }
-  }
-
-  def sortInfixes(parts: Seq[InfixPart]): EirExpressionNode = {
-    var infixes = parts
-    var ops = infixes.zipWithIndex
-      .collect({ case (Right(op), i) => (i, precedenceOf(op)) })
-      .sortBy(_._2)
-      .map(_._1)
-
-    while (ops.nonEmpty) {
-      val start = ops.head - 1
-      val slice = infixes.slice(start, start + 3)
-      val expr = formBinaryExpression(slice)
-
-      infixes = infixes.patch(start, Seq(Left(expr)), 3)
-      ops = ops.tail.map(x => if (x > start) x - 2 else x)
-    }
-
-    infixes match {
-      case Left(x) :: Nil => x
-      case _              => ???
-    }
   }
 
   private def visitInfixLikeExpression[T <: ParseTree](
@@ -1033,7 +1018,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
 
     exprs match {
       case Left(x) :: Nil => x
-      case _              => sortInfixes(exprs)
+      case _              => sortInfixes(exprs, this.formBinaryExpression)
     }
   }
 
@@ -1248,15 +1233,6 @@ class Visitor(global: EirScope = EirGlobalNamespace)
     init.toList :+ last
   }
 
-  def mkSpecialization[A <: EirNamedNode: ClassTag]()
-      : EirResolvable[A] with EirSpecialization = {
-    (if (classTag[A].runtimeClass.isAssignableFrom(classOf[EirType])) {
-       EirTemplatedType(parent, null, null)
-     } else {
-       EirSpecializedSymbol(parent, null, null)
-     }).asInstanceOf[EirResolvable[A] with EirSpecialization]
-  }
-
   def parseIdentifier[A <: EirNamedNode: ClassTag](
       ctx: IdentifierExpressionContext
   ): EirResolvable[A] = {
@@ -1272,7 +1248,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
       Option(ctx.specialization).orElse(Option(ctx.qualEndSpecList())) match {
         case Some(spec) => conv2expr(
             enter(
-              mkSpecialization[A](),
+              mkSpecialization[A](parent),
               (s: EirSpecialization) => {
                 s.types = specializationToList(spec)
                 s.setBase(
@@ -1378,7 +1354,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
           )
         )
         n.condition = Option(ctx.condition).map(visitAs[EirExpressionNode])
-        n.body = bodyToOptional(ctx.body()).getOrElse(EirBlock(parent, Nil))
+        n.body = Option(ctx.body()).map(visitAs[EirNode])
       }
     )
   }
