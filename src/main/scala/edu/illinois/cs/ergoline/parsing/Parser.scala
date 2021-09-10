@@ -132,9 +132,7 @@ object Parser {
   def Qualified[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] = P(
     Index ~ Specialized[p, A].rep(min = 1, sep = "::")
   ).map { case (idx, seq) =>
-    val expr = scopeSymbols(seq, isStatic = true)
-    expr.location = PrettyIndex(idx)
-    expr
+    SetLocation(scopeSymbols(seq, isStatic = true), idx)
   }
 
   def Specialized[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] =
@@ -395,9 +393,7 @@ object Parser {
 
   def Identifier[_: P, A <: EirNamedNode: ClassTag]: P[EirSymbol[A]] =
     (Index ~ Id.rep(sep = "::", min = 1)).map { case (idx, ids) =>
-      val expr = EirSymbol[A](None, ids.toList)
-      expr.location = PrettyIndex(idx)
-      expr
+      SetLocation(EirSymbol[A](None, ids.toList), idx)
     }
 
   def Id[_: P]: P[String] = P(WL ~ Basics.Id)
@@ -623,9 +619,14 @@ object Parser {
     ConditionalExpr ~ (InfixOp ~ ConditionalExpr).rep(min)
   ).map { case (expr, pairs) => buildInfix(expr, pairs) }
 
+  def SetLocation[A <: EirNode](node: A, idx: Int)(implicit ctx: P[Any]): A = {
+    node.location = PrettyIndex(idx)
+    node
+  }
+
   def NewExpr[_: P](implicit static: Boolean): P[EirNew] =
-    P(`new` ~/ Type ~ ExprList.?).map { case (ty, tuple) =>
-      EirNew(None, ty, tuple.getOrElse(Nil))
+    P(Index ~ `new` ~/ Type ~ ExprList.?).map { case (idx, ty, tuple) =>
+      SetLocation(EirNew(None, ty, tuple.getOrElse(Nil)), idx)
     }
 
   def AwaitExpr[_: P](implicit static: Boolean): P[EirAwait] =
@@ -654,13 +655,14 @@ object Parser {
       sep = ","
     ) ~ `)` ~ "=>" ~/ (Block | Expression)
   ).map { case (idx, args, body) =>
-    val expr = EirLambdaExpression(
-      None,
-      args.toList,
-      forceEnclosed(body, addReturn = true)
+    SetLocation(
+      EirLambdaExpression(
+        None,
+        args.toList,
+        forceEnclosed(body, addReturn = true)
+      ),
+      idx
     )
-    expr.location = PrettyIndex(idx)
-    expr
   }
 
   def MatchExpr[_: P]: P[EirMatch] = P(

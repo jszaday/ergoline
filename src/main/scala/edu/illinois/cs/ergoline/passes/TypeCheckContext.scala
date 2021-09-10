@@ -140,10 +140,15 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def registerLambda(x: EirLambdaExpression): Unit = _userLambdas += x
 
   def makeLambda(
-      x: EirExpressionNode,
+      in: EirExpressionNode,
       m: EirMember,
       ty: EirType
   ): EirLambdaExpression = {
+    val x = in match {
+      case EirCallArgument(expr, _) => expr
+      case _                        => in
+    }
+
     _generatedLambdas.getOrElse(
       x, {
         val args = assertValid[EirFunction](m.member).functionArgs
