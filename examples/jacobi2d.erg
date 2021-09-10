@@ -1,0 +1,188 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+object globals {
+    val north: int = 1;
+    val east: int = 2;
+    val south: int = 3;
+    val west: int = 4;
+
+    var maxIters: int = 100;
+    var threshold: double = 0.004;
+    var mainProxy: main@;
+
+    var arrDimX: int;
+    var arrDimY: int;
+
+    var blockDimX: int;
+    var blockDimY: int;
+}
+
+@main class main {
+    @entry def self(args: array<string>) { self@setup(); }
+
+    @threaded @entry def setup() {
+        globals.mainProxy = self@;
+
+        globals.arrDimX = ck::numPes();
+        globals.arrDimY = globals.arrDimX;
+
+        ck::updateGlobal<globals>(ck::resumeThread());
+
+        val workers =
+            new jacobi2d@array2d(globals.arrDimX, globals.arrDimY);
+        
+        workers.run();
+    }
+
+    @entry def done(numIts: int) {
+
+    }
+}
+
+class jacobi2d {
+    val numNeighbors: int = 0;
+
+    val hasEast: bool;
+    val hasWest: bool;
+    val hasNorth: bool;
+    val hasSouth: bool;
+    var converged: bool = false;
+
+    val iStart: int = 1;
+    val jStart: int = 1;
+    val iFinish: int;
+    val jFinish: int;
+
+    var prevGrid: array<double, 2>;
+    var currGrid: array<double, 2>;
+
+    @entry def self() {
+        val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
+        prevGrid = array<double, 2>::fill(shape, 0.0);
+        currGrid = array<double, 2>::fill(shape, 0.0);
+
+        val (x, y) = self[@]index();
+        val inBounds = (num: int, max: int) => {
+            return (num != 0, num < max);
+        };
+
+        (hasEast, hasWest) = inBounds(x, globals.arrDimX);
+        (hasNorth, hasSouth) = inBounds(y, globals.arrDimY);
+
+        numNeighbors = hasEast.toInt() + hasWest.toInt() +
+                       hasNorth.toInt() + hasSouth.toInt();
+
+        iStart = (!hasEast).toInt() + 1;
+        jStart = (!hasNorth).toInt() + 1;
+
+        iFinish = globals.blockDimX + 1 - (!hasWest).toInt();
+        jFinish = globals.blockDimY + 1 - (!hasSouth).toInt();
+
+        enforce_boundaries();
+    }
+
+    private def enforce_boundaries() {
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val defaultValue = 1.0;
+
+        val setRow = (j: int) => {
+            for (var i = 0; i < (dimX + 2); i += 1) {
+                prevGrid[i, j] = defaultValue;
+                currGrid[i, j] = defaultValue;
+            }
+        };
+
+        val setColumn = (i: int) => {
+            for (var j = 0; j < (dimY + 2); j += 1) {
+                prevGrid[i, j] = defaultValue;
+                currGrid[i, j] = defaultValue;
+            }
+        };
+
+        if (!hasNorth) setColumn(1);
+
+        if (!hasEast) setRow(1);
+
+        if (!hasSouth) setColumn(dimX);
+
+        if (!hasWest) setRow(dimY);
+    }
+
+    private def process_ghost(dir: int, data: array<double>) {
+
+    }
+
+    private def check_and_compute(): double {
+        return 0.0;
+    }
+
+    @threaded @entry def run() {
+        var it: int = 0;
+
+        for (; (it < globals.maxIters) && !converged; it += 1) {
+            self.start_iteration(it);
+
+            for (var imsg = 0; imsg < numNeighbors; imsg += 1) {
+                when receive_ghost(_ == it, dir, data) => {
+                    process_ghost(dir, data);
+                }
+            }
+
+            converged = (check_and_compute() <= globals.threshold);
+            self[@]contribute(converged, bool::logical_and, self@receive_status);
+
+            when receive_status(g_converged) => {
+                converged = g_converged;
+            }
+        }
+
+        match (self[@]index()) {
+            case 0, 0 => globals.mainProxy.done(it);
+            case _, _ => ;
+        }
+    }
+
+    @entry def start_iteration(it: int) {
+        val (x, y) = self[@]index();
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+
+        val getColumn = (j: int) => {
+            val row = new array<double>(dimX);
+            for (var i = 0; i < dimX; i += 1) {
+                row[i] = currGrid[i + 1, j];
+            }
+            return row;
+        };
+
+        val getRow = (i: int) => {
+            val col = new array<double>(dimY);
+            for (var j = 0; j < dimY; j += 1) {
+                col[j] = currGrid[i, j + 1];
+            }
+            return col;
+        };
+
+        if (hasEast) {
+            self@[x - 1, y].receive_ghost(it, globals.west, getRow(1));
+        }
+
+        if (hasWest) {
+            self@[x + 1, y].receive_ghost(it, globals.east, getRow(dimY));
+        }
+
+        if (hasNorth) {
+            self@[x, y + 1].receive_ghost(it, globals.south, getColumn(1));
+        }
+
+        if (hasSouth) {
+            self@[x, y - 1].receive_ghost(it, globals.north, getColumn(dimX));
+        }
+    }
+
+    @mailbox def receive_ghost(it: int, dir: int, data: array<double>);
+    @mailbox def receive_status(g_converged: bool);
+
+}

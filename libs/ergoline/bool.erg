@@ -5,7 +5,13 @@ package ergoline;
 
     @system(operator) def ==(other: bool): bool;
 
+    @system(operator, alias="&&", reducer="CkReduction::logical_and_bool")
+    def logical_and(other: bool): bool;
+
     def toString(): string {
         return self ? "true" : "false";
     }
+
+    // 1 for true, 0 for false
+    @system(cast) def toInt(): int;
 }
