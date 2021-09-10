@@ -401,9 +401,6 @@ object Parser {
   def Constant[_: P]: P[EirLiteral[_]] =
     P(NumericLiteral | BooleanLiteral | StringLiteral)
 
-  def ConstantSymbol[_: P]: P[EirLiteralSymbol] =
-    Type.map(EirLiteralSymbol(_)(None))
-
   def NodeGroupKwd[_: P]: P[String] = P("node".!.? ~ "group".!).map {
     case (lhs, rhs) => lhs.map(_ + rhs).getOrElse(rhs)
   }
@@ -467,8 +464,12 @@ object Parser {
       EirSymbol[EirNamedNode](None, List(self))
     }
 
-  def ConstSymbol[_: P]: P[EirLiteralSymbol] =
-    P(Type).map(EirLiteralSymbol(_)(None))
+  def ConstSymbol[_: P]: P[EirExpressionNode] =
+    P(Type).map {
+      case x: EirExpressionNode => x
+      case x                    =>
+        EirLiteralSymbol(x)(None)
+    }
 
   def PrimaryExpr[p: P](implicit static: Boolean): P[EirExpressionNode] = {
     if (static) {
