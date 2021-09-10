@@ -1,6 +1,5 @@
 package edu.illinois.cs.ergoline.parsing
 
-import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.Visitor.{
   isAssignOperator,
   kindFrom,
@@ -15,6 +14,7 @@ import edu.illinois.cs.ergoline.parsing.syntax.Basics._
 import edu.illinois.cs.ergoline.parsing.syntax.Keywords._
 import edu.illinois.cs.ergoline.parsing.syntax.Literals._
 import edu.illinois.cs.ergoline.parsing.syntax.{Basics, Keywords}
+import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -25,21 +25,23 @@ import fastparse.JavaWhitespace._
 import fastparse._
 
 import scala.annotation.tailrec
-import scala.reflect.ClassTag
+import scala.reflect.{ClassTag, classTag}
 
 object Parser {
-  def scopeSymbols[A <: EirNamedNode: ClassTag](
-      s: Seq[EirResolvable[A]],
+  def scopeSymbols[Type <: EirNamedNode: ClassTag, Goal <: EirResolvable[
+    Type
+  ]: ClassTag](
+      s: Seq[Goal],
       isStatic: Boolean
-  ): EirResolvable[A] = {
-    def helper(seq: Seq[EirResolvable[A]]): EirResolvable[A] = {
+  ): Goal = {
+    def helper(seq: Seq[Goal]): Goal = {
       seq match {
         case Nil         => ???
         case head :: Nil => head
-        case (head: EirExpressionNode) :: tail =>
-          val s = EirScopedSymbol(head, helper(tail))(None)
+        case head :: tail =>
+          val s = EirScopedSymbol[Type](Symbolize(head), helper(tail))(None)
           s.isStatic = isStatic
-          s
+          s.asInstanceOf[Goal]
       }
     }
 
@@ -49,13 +51,13 @@ object Parser {
         case _               => false
       }.flatMap {
         case (true, seq) => Option.when(seq.length <= 1)(seq) getOrElse {
-            Seq(
-              EirSymbol[A](
+            Seq({
+              EirSymbol[Type](
                 None, {
-                  seq.map(_.asInstanceOf[EirSymbol[A]]).flatMap(_.qualifiedName)
+                  seq.map(_.asInstanceOf[EirSymbol[_]]).flatMap(_.qualifiedName)
                 }
-              )
-            )
+              ).asInstanceOf[Goal]
+            })
           }
         case (false, seq) => seq
       }
@@ -129,21 +131,24 @@ object Parser {
     EirTypeAlias(id, tArgs.getOrElse(Nil), expr)(None)
   }
 
-  def Qualified[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] = P(
-    Index ~ Specialized[p, A].rep(min = 1, sep = "::")
+  def Qualified[A <: EirNamedNode: ClassTag](implicit
+      ctx: P[Any]
+  ): P[EirResolvable[A]] = P(
+    Index ~ Specialized[A].rep(min = 1, sep = "::")
   ).map { case (idx, seq) =>
-    SetLocation(scopeSymbols(seq, isStatic = true), idx)
+    SetLocation(scopeSymbols[A, EirResolvable[A]](seq, isStatic = true), idx)
   }
 
-  def Specialized[p: P, A <: EirNamedNode: ClassTag]: P[EirResolvable[A]] =
-    P(Identifier[p, A] ~ Specialization.?).map {
-      case (id, Some(sp)) => mkSpecialization[A](
-          None,
-          id,
-          sp.toList
-        )
-      case (id, None) => id
-    }
+  def Specialized[A <: EirNamedNode: ClassTag](implicit
+      ctx: P[Any]
+  ): P[EirResolvable[A]] = P(Identifier[A] ~ Specialization.?).map {
+    case (id, Some(sp)) => mkSpecialization[A](
+        None,
+        id,
+        sp.toList
+      )
+    case (id, None) => id
+  }
 
   def Expression[_: P](implicit
       static: Boolean = false
@@ -216,9 +221,9 @@ object Parser {
     EirAwaitMany(anyOrAll == "all", body.toList)(None)
   }
 
-  def WhenFn[p: P]: P[(EirSymbolLike[EirNamedNode], Option[EirPatternList])] =
+  def WhenFn[_: P]: P[(EirSymbolLike[EirNamedNode], Option[EirPatternList])] =
     P(
-      Identifier[p, EirNamedNode] ~ `(` ~/ PatternList.? ~ `)`
+      Identifier[EirNamedNode] ~ `(` ~/ PatternList.? ~ `)`
     )
 
   def Block[_: P]: P[EirBlock] = P(`{` ~/ OptionalStatement.rep(0) ~ `}`)
@@ -391,10 +396,11 @@ object Parser {
       case _                                    => ???
     }
 
-  def Identifier[_: P, A <: EirNamedNode: ClassTag]: P[EirSymbol[A]] =
-    (Index ~ Id.rep(sep = "::", min = 1)).map { case (idx, ids) =>
-      SetLocation(EirSymbol[A](None, ids.toList), idx)
-    }
+  def Identifier[A <: EirNamedNode: ClassTag](implicit
+      ctx: P[Any]
+  ): P[EirSymbol[A]] = (Index ~ Id.rep(sep = "::", min = 1)).map {
+    case (idx, ids) => SetLocation(EirSymbol[A](None, ids.toList), idx)
+  }
 
   def Id[_: P]: P[String] = P(WL ~ Basics.Id)
 
@@ -410,35 +416,35 @@ object Parser {
 
   def CollectiveKwd[_: P]: P[String] = P(ArrayKwd | NodeGroupKwd)
 
-  def ProxyType[p: P]: P[EirResolvable[EirType]] =
-    P(Qualified[p, EirNamedType] ~ (ProxySuffix ~/ CollectiveKwd.?).?).map {
+  def ProxyType[_: P]: P[EirResolvable[EirType]] =
+    P(Qualified[EirNamedType] ~ (ProxySuffix ~/ CollectiveKwd.?).?).map {
       case (ty, None) => ty
       case (ty, Some((proxy, collective))) =>
         EirProxyType(None, ty, collective, kindFrom(Some(proxy), collective))
     }
 
-  def TupleType[p: P]: P[EirResolvable[EirType]] =
+  def TupleType[_: P]: P[EirResolvable[EirType]] =
     P(`(` ~ Type.rep(min = 1, sep = ",") ~ `)`).map {
       case ty :: Nil => ty
       case tys       => EirTupleType(None, tys.toList)
     }
 
-  def TupleMultiply[p: P]: P[EirResolvable[EirType]] =
+  def TupleMultiply[_: P]: P[EirResolvable[EirType]] =
     P(TupleType ~ (".*" ~/ ConstExpr).?).map {
       case (lhs, None)      => lhs
       case (lhs, Some(rhs)) => EirTupleMultiply(lhs, rhs)(None)
     }
 
-  def BasicType[p: P]: P[EirResolvable[EirType]] = P(ProxyType | TupleMultiply)
+  def BasicType[_: P]: P[EirResolvable[EirType]] = P(ProxyType | TupleMultiply)
 
-  def LambdaType[p: P]: P[EirResolvable[EirType]] =
+  def LambdaType[_: P]: P[EirResolvable[EirType]] =
     P(BasicType ~ ("=>" ~/ BasicType).?).map {
       case (lhs, Some(rhs)) =>
         EirLambdaType(None, extractTypes(lhs), rhs, Nil, None)
       case (lhs, None) => lhs
     }
 
-  def Type[p: P]: P[EirResolvable[EirType]] =
+  def Type[_: P]: P[EirResolvable[EirType]] =
     P(LambdaType ~ ("&".! | "...".!).?).map {
       case (ty, Some("...")) => EirPackExpansion(ty)(None)
       case (ty, Some("&"))   => EirReferenceType(None, ty)
@@ -464,20 +470,22 @@ object Parser {
       EirSymbol[EirNamedNode](None, List(self))
     }
 
-  def ConstSymbol[_: P]: P[EirExpressionNode] =
-    P(Type).map {
+  def Symbolize[A <: EirNode](res: EirResolvable[A]): EirExpressionNode = {
+    res match {
       case x: EirExpressionNode => x
-      case x                    =>
-        EirLiteralSymbol(x)(None)
+      // TODO systematically evaluate whether this is the best option?
+      case x => EirLiteralSymbol(res)(None)
     }
+  }
 
-  def PrimaryExpr[p: P](implicit static: Boolean): P[EirExpressionNode] = {
+  def ConstSymbol[_: P]: P[EirExpressionNode] = P(Type).map(Symbolize)
+
+  def PrimaryExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = {
     if (static) {
       P(Constant | ConstSymbol | TupleExpr)
     } else {
       P(
         Constant | SelfExpr | Qualified[
-          p,
           EirNamedNode
         ].map(
           _.asInstanceOf[EirSymbolLike[EirNamedNode]]
@@ -685,8 +693,8 @@ object Parser {
       EirIdentifierPattern(None, id, ty.getOrElse(EirPlaceholder(None)))
     }
 
-  def ExtractorPattern[p: P]: P[EirExtractorPattern] = P(
-    Identifier[p, EirNamedNode] ~ `(` ~/ PatternList ~ `)`
+  def ExtractorPattern[_: P]: P[EirExtractorPattern] = P(
+    Identifier[EirNamedNode] ~ `(` ~/ PatternList ~ `)`
   ).map { case (id, list) => EirExtractorPattern(None, id, list) }
 
   def ConstantPattern[_: P]: P[EirExpressionPattern] =
