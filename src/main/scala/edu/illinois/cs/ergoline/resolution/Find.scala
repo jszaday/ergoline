@@ -205,17 +205,20 @@ object Find {
   //      need to figure out a way around this?
   def anywhereAccessible(ctx: EirNode, name: String): View[EirNamedNode] = {
     val ancestors = Find.ancestors(ctx).filter(isTopLevel)
-    val matches = withName(name)
+    val include: EirNode => Boolean = {
+      case x: EirMember => !ancestors.contains(x.base)
+      case _            => true
+    }
+    val matches = withName(name).and(_.parent.forall(include))
     val predicate: EirNode => Option[Boolean] = {
       case _: EirBlock   => None
       case x: EirForLoop => Option.when(ancestors.contains(x))(false)
       // only allowed to consider members when within the class?
-      case x: EirMember =>
-        Option.when(matches(x) && ancestors.contains(x.base))(false)
+      case x: EirMember => Option.when(ancestors.contains(x.base))(matches(x))
       case x: EirNamespace =>
         Option.when(matches(x) || ancestors.contains(x))(matches(x))
       case x: EirClassLike =>
-        Option.when(!ancestors.contains(x) || matches(x))(matches(x))
+        Option.when(matches(x) || !ancestors.contains(x))(matches(x))
       case x: EirImport => Option.when(
           x.isPublic || Find
             .commonAncestor(ctx, x)

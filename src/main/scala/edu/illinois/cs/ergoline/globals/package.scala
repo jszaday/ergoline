@@ -22,6 +22,15 @@ package object globals {
   var verbose: Boolean = false
   var enableInPlace: Boolean = true
 
+  def isResumeThread(node: EirNode): Boolean = {
+    (node.parent == ckModule) && (
+      node match {
+        case f: EirFunction => f.name == "resumeThread"
+        case _              => false
+      }
+    )
+  }
+
   def clearGlobals(): Unit = {
     EirGlobalNamespace.clear()
     Modules.loadedFiles.clear()
