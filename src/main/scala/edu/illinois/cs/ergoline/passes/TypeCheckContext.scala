@@ -408,6 +408,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
 
   def ancestor[T: ClassTag]: Option[T] = stack.collectFirst { case t: T => t }
 
+  def ancestor[T: ClassTag](fn: T => Boolean): Option[T] =
+    stack.collectFirst { case t: T if fn(t) => t }
+
   def popUntil(node: EirNode): Unit = stack.popWhile(node != _)
 
   type ResolvableType = EirResolvable[EirType]

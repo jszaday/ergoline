@@ -123,7 +123,7 @@ class jacobi2d {
         var it: int = 0;
 
         for (; (it < globals.maxIters) && !converged; it += 1) {
-            self.start_iteration(it);
+            start_iteration(it);
 
             for (var imsg = 0; imsg < numNeighbors; imsg += 1) {
                 when receive_ghost(_ == it, dir, data) => {

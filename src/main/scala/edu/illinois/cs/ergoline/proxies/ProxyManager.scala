@@ -170,7 +170,7 @@ object ProxyManager {
   }
 
   def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
-    val baseTy = CheckTypes.visit(t.base)
+    val baseTy = Find.uniqueResolution[EirType](t.base)
     val baseCls = Find.asClassLike(baseTy)
     val templateArgs = baseTy match {
       // TODO the args map is probably not necessary here?

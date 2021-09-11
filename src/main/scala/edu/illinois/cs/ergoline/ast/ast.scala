@@ -912,7 +912,10 @@ case class EirSymbol[T <: EirNamedNode: ClassTag](
       _resolved = Find
         .fromSymbol(this)
         // TODO this is necessary to distinguish type v. non-type
-        .collect { case t: T => t }
+        .collect {
+          case t: T                  => t
+          case EirMember(_, t: T, _) => t
+        }
         .toSeq
     }
     _resolved

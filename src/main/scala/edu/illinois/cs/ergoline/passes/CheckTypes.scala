@@ -1087,7 +1087,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
               ctx.popUntil(node)
               ctx.rollbackTo(current)
               ctx.stop(subCtx)
-              return null
+              val base = member.map(_.base)
+              return ctx
+                .ancestor[EirFunction]((fn: EirFunction) => {
+                  (node != fn) && (base == asMember(fn.parent).map(_.base))
+                })
+                .map(_ => {
+                  throw e
+                })
+                .orNull
             } else {
               Errors.unableToResolve(e.symbol)
             }
