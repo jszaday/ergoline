@@ -1090,7 +1090,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
               val base = member.map(_.base)
               return ctx
                 .ancestor[EirFunction]((fn: EirFunction) => {
-                  (node != fn) && (base == asMember(fn.parent).map(_.base))
+                  (node != fn) && (base == ctx
+                    .immediateAncestor[EirMember](fn)
+                    .map(_.base))
                 })
                 .map(_ => {
                   throw e
