@@ -170,6 +170,10 @@ object ProxyManager {
   }
 
   def proxyFor(t: EirProxyType)(implicit ctx: TypeCheckContext): EirType = {
+    /* NOTE CheckTypes#visit is used here because otherwise specialized bases
+     *      will not be checked! That's probably an error, but unsure why!
+     *      (compared to Find.uniqueResolution, which is "old school" 8~P )
+     */
     val baseTy = CheckTypes.visit(t.base)
     val baseCls = Find.asClassLike(baseTy)
     val templateArgs = baseTy match {

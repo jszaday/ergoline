@@ -619,6 +619,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirSymbol(_, "exit" :: _)
           if (globals.ergolineModule == disambiguate(ctx, target).parent) =>
         ctx << "CkCallback(CkCallback::ckExit)"
+      case expr @ EirFunctionCall(_, symbol, Nil, _)
+          if globals.isResumeThread(disambiguate(ctx, symbol)) => ctx << expr
       case _ => Errors.expectedCallback(target)
     }
   }
