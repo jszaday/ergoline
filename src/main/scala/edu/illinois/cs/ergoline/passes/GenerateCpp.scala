@@ -24,6 +24,7 @@ import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, onLeftSide}
 import edu.illinois.cs.ergoline.util
+import edu.illinois.cs.ergoline.util.Errors.Limitation
 
 import java.io.File
 import java.nio.file.Paths
@@ -1537,6 +1538,26 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def pickSelf(
+      fn: EirFunction,
+      ancestor: Option[EirFunction]
+  )(implicit
+      ctx: CodeGenerationContext
+  ): Option[String] = {
+    val member = fn.parent.to[EirMember]
+    val parent = member.flatMap(_.parent).to[EirClassLike]
+    val systemParent = parent.exists(_.isSystem)
+    val proxyParent = parent.to[EirProxy]
+    val isStatic = member.exists(_.isStatic)
+    if (ancestor.nonEmpty || isStatic) {
+      None
+    } else if (systemParent) {
+      proxyParent.flatMap(_ => Errors.unreachable()).orElse(Some("self"))
+    } else {
+      proxyParent.map(_ => "this->impl_").orElse(Some("this"))
+    }
+  }
+
   def visitFunction(
       x: EirFunction,
       isMember: Boolean,
@@ -1559,12 +1580,22 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       return
     }
 
+    val ancestor = Find.ancestors(x).collectFirst { case fn: EirFunction => fn }
+    val isNested = ancestor.nonEmpty
     val isConstructor = member.exists(_.isConstructor)
     val systemParent = parent.exists(_.isSystem)
     val isStatic = member.exists(_.isStatic)
     val proxyParent = parent.to[EirProxy]
 
-    val annotatable = isMember && !(systemParent || langCi)
+    if (isNested && isTempl) {
+      Errors.unsupportedOperation(
+        x,
+        "generic nested functions",
+        Limitation.CppCodeGen
+      )
+    }
+
+    val annotatable = isMember && !(systemParent || isNested || langCi)
     val asyncCi =
       langCi && isMember && member.flatMap(_.annotation("async")).isDefined
     val overrides =
@@ -1575,10 +1606,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << entryKwd
     ctx << virtual
     // TODO add templates when !isMember
-    if (!isConstructor) generateReturnType(x, asyncCi)
+    if (!(isConstructor || isNested)) generateReturnType(x, asyncCi)
     val args = x.functionArgs ++ x.implicitArgs
 
     parent match {
+      case _ if isNested                                => ctx << "auto" << ctx.nameFor(x) << "=" << "[&]"
       case Some(p: EirProxy) if langCi && isConstructor => ctx << p.baseName
       case Some(classLike) if isConstructor =>
         ctx << Option.unless(isMember)(
@@ -1590,37 +1622,33 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ => ctx << ctx.nameFor(x)
     }
 
-    ctx << "("
-    val currSelf = {
-      if (isStatic) None
-      else if (systemParent) {
-        if (proxyParent.isDefined) {
-          Errors.unreachable()
+    val currSelf = pickSelf(x, ancestor)
+    currSelf.foreach(ctx.pushSelf)
+
+    val addSelf = systemParent && !isNested
+    val pointerParent = parent.exists(_.isPointer)
+    val parentType = parent
+      .filter(_ => addSelf)
+      .map(p => {
+        val name = qualifiedNameFor(ctx, x, includeTemplates = true)(p)
+
+        if (p.isPointer) {
+          s"std::shared_ptr<$name>"
         } else {
-          val pointerParent = parent.exists(_.isPointer)
-          val ty = parent.map(p => {
-            val name = qualifiedNameFor(ctx, x, includeTemplates = true)(p)
-
-            if (p.isPointer) {
-              s"std::shared_ptr<$name>"
-            } else {
-              name
-            }
-          })
-          val ourSelf = "self"
-
-          ctx << "const" << ty << "&" << ourSelf << {
-            Option.when(args.nonEmpty)(",")
-          }
-
-          Option.when(pointerParent)(ourSelf) orElse
-            ty.map(s => s"const_cast<$s*>(&$ourSelf)")
+          name
         }
-      } else {
-        proxyParent.map(_ => "this->impl_").orElse(Some("this"))
+      })
+
+    ctx << "("
+
+    parentType.zip(currSelf).foreach { case (ty, self) =>
+      ctx << "const" << ty << "&" << {
+        if (pointerParent) self else s"${self}_"
+      } << {
+        Option.when(args.nonEmpty)(",")
       }
     }
-    currSelf.foreach(ctx.pushSelf)
+
     if (proxyParent.isDefined && (args.nonEmpty || asyncCi)) {
       ctx << s"CkMessage* ${GenerateProxies.msgName}"
     } else {
@@ -1630,13 +1658,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     // TODO this is a temporary solution that may cause failures when
     //      function bodies are defined ahead of their used symbols
-    val nested = parent.flatMap(_.parent).to[EirMember].nonEmpty
+    val nestedParent = parent.flatMap(_.parent).to[EirMember].nonEmpty
     if (isMember) {
       if (virtual.nonEmpty && x.body.isEmpty) {
         ctx << " = 0;"
         return
       } else if (
-        langCi || (x.templateArgs.isEmpty && !hasDependentScope(x) && !nested)
+        langCi || (x.templateArgs.isEmpty && !hasDependentScope(
+          x
+        ) && !nestedParent)
       ) {
         ctx << ";"
         return
@@ -1645,9 +1675,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Errors.missingBody(x)
     }
 
-    assert(isStatic || currSelf.nonEmpty)
+    assert(isStatic || isNested || currSelf.nonEmpty)
+
+    parentType.zip(currSelf).filterNot(_ => pointerParent).foreach {
+      case (ty, self) =>
+        ctx << "{"
+        ctx << "auto*" << self << "=" << s"const_cast<$ty*>(&${self}_);"
+        ctx.ignoreNext("{")
+    }
 
     visitFunctionBody(x)
+    if (isNested) {
+      ctx.appendLast(";")
+    }
 
     currSelf.foreach(_ => ctx.popSelf())
   }

@@ -37,8 +37,14 @@ object globals {
         workers.run();
     }
 
-    @entry def done(numIts: int) {
+    @entry def done(numIters: int) {
+        if (numIters >= globals.maxIters) {
+            println(`main> did not converge, finished ${numIters} iterations.`);
+        } else {
+            println(`main> converged in ${numIters} iterations.`);
+        }
 
+        exit();
     }
 }
 
@@ -65,9 +71,9 @@ class jacobi2d {
         currGrid = array<double, 2>::fill(shape, 0.0);
 
         val (x, y) = self[@]index();
-        val inBounds = (num: int, max: int) => {
-            return (num != 0, num < max);
-        };
+        def inBounds(num: int, max: int): (bool, bool) {
+            return (num != 0, num != (max - 1));
+        }
 
         (hasEast, hasWest) = inBounds(x, globals.arrDimX);
         (hasNorth, hasSouth) = inBounds(y, globals.arrDimY);
@@ -82,41 +88,6 @@ class jacobi2d {
         jFinish = globals.blockDimY + 1 - (!hasSouth).toInt();
 
         enforce_boundaries();
-    }
-
-    private def enforce_boundaries() {
-        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
-        val defaultValue = 1.0;
-
-        val setRow = (j: int) => {
-            for (var i = 0; i < (dimX + 2); i += 1) {
-                prevGrid[i, j] = defaultValue;
-                currGrid[i, j] = defaultValue;
-            }
-        };
-
-        val setColumn = (i: int) => {
-            for (var j = 0; j < (dimY + 2); j += 1) {
-                prevGrid[i, j] = defaultValue;
-                currGrid[i, j] = defaultValue;
-            }
-        };
-
-        if (!hasNorth) setColumn(1);
-
-        if (!hasEast) setRow(1);
-
-        if (!hasSouth) setColumn(dimX);
-
-        if (!hasWest) setRow(dimY);
-    }
-
-    private def process_ghost(dir: int, data: array<double>) {
-
-    }
-
-    private def check_and_compute(): double {
-        return 0.0;
     }
 
     @threaded @entry def run() {
@@ -149,37 +120,102 @@ class jacobi2d {
         val (x, y) = self[@]index();
         val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
 
-        val getColumn = (j: int) => {
+        def getColumn(j: int): array<double> {
             val row = new array<double>(dimX);
             for (var i = 0; i < dimX; i += 1) {
                 row[i] = currGrid[i + 1, j];
             }
             return row;
-        };
+        }
 
-        val getRow = (i: int) => {
+        def getRow(i: int): array<double> {
             val col = new array<double>(dimY);
             for (var j = 0; j < dimY; j += 1) {
                 col[j] = currGrid[i, j + 1];
             }
             return col;
-        };
+        }
 
         if (hasEast) {
-            self@[x - 1, y].receive_ghost(it, globals.west, getRow(1));
+            self@[x - 1, y].receive_ghost(it, globals.west, getColumn(1));
         }
 
         if (hasWest) {
-            self@[x + 1, y].receive_ghost(it, globals.east, getRow(dimY));
+            self@[x + 1, y].receive_ghost(it, globals.east, getColumn(dimY));
         }
 
         if (hasNorth) {
-            self@[x, y + 1].receive_ghost(it, globals.south, getColumn(1));
+            self@[x, y - 1].receive_ghost(it, globals.south, getRow(1));
         }
 
         if (hasSouth) {
-            self@[x, y - 1].receive_ghost(it, globals.north, getColumn(dimX));
+            self@[x, y + 1].receive_ghost(it, globals.north, getRow(dimX));
         }
+    }
+
+    private def enforce_boundaries() {
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val defaultValue = 1.0;
+
+        // set the value of column j in all rows 
+        def setColumn(j: int) {
+            for (var i = 0; i < (dimX + 2); i += 1) {
+                prevGrid[i, j] = defaultValue;
+                currGrid[i, j] = defaultValue;
+            }
+        }
+
+        // set the value of all columns of row i
+        def setRow(i: int) {
+            for (var j = 0; j < (dimY + 2); j += 1) {
+                prevGrid[i, j] = defaultValue;
+                currGrid[i, j] = defaultValue;
+            }
+        }
+
+        if (!hasNorth) setRow(1);
+
+        if (!hasEast) setColumn(1);
+
+        if (!hasSouth) setRow(dimX);
+
+        if (!hasWest) setColumn(dimY);
+    }
+
+    private def process_ghost(dir: int, data: array<double>) {
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+
+        // set the value of column j in all rows 
+        def setColumn(j: int) {
+            assert(data.size() == dimX);
+            for (var i = 0; i < dimX; i += 1) {
+                prevGrid[i + 1, j] = data[i];
+            }
+        }
+
+        // set the value of all columns of row i
+        def setRow(i: int) {
+            assert(data.size() == dimY);
+            for (var j = 0; j < dimY; j += 1) {
+                prevGrid[i, j + 1] = data[j];
+            }
+        }
+
+        if (dir == globals.north && hasNorth) {
+            setRow(0);
+        } else if (dir == globals.south && hasSouth) {
+            setRow(dimX + 1);
+        } else if (dir == globals.east && hasEast) {
+            setColumn(0);
+        } else if (dir == globals.west && hasWest) {
+            setColumn(dimY + 1);
+        } else {
+            abort(`fatal> received unexpected ghost from ${dir}`);
+        }
+    }
+
+    private def check_and_compute(): double {
+        return 0.0;
     }
 
     @mailbox def receive_ghost(it: int, dir: int, data: array<double>);
