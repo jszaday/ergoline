@@ -2407,10 +2407,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val target = arrayRef.target
         val args = arrayRef.args
         ctx << "(*" << target << ")["
-        args.reverse.init.zipWithIndex.foreach { case (arg, idx) =>
-          ctx << arg << "*" << s"(" << target << s"->shape[$idx])" << "+"
+        args.init.zipWithIndex.foreach { case (arg, idx) =>
+          ctx << arg << "*" << s"(" << target << s"->shape[${args.length - (idx + 1)}])" << "+"
         }
-        ctx << args.head
+        ctx << args.last
         ctx << "]"
       case t =>
         if (isPlainArrayRef(arrayRef)) {

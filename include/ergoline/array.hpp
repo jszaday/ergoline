@@ -6,7 +6,8 @@
 namespace ergoline {
 
 template <typename T, std::size_t N>
-struct array { // : public hashable {
+struct array
+    : public std::enable_shared_from_this<array<T, N>> {  // : public hashable {
   static_assert(N >= 0, "dimensionality must be positive");
 
   using buffer_t = T*;
@@ -35,13 +36,15 @@ struct array { // : public hashable {
     buffer = reinterpret_cast<buffer_t>(source.get());
   }
 
-  inline T& operator[](std::size_t idx) { return buffer[idx]; }
+  inline T& operator[](const std::size_t& idx) { return buffer[idx]; }
 
   inline buffer_t begin() { return buffer; }
   inline buffer_t end() { return buffer + size(); }
 
   inline const T* begin() const { return const_cast<const buffer_t>(buffer); }
-  inline const T* end() const { return const_cast<const buffer_t>(buffer + size()); }
+  inline const T* end() const {
+    return const_cast<const buffer_t>(buffer + size());
+  }
 
   // TODO make constexpr
   inline std::size_t size() const {
@@ -52,7 +55,7 @@ struct array { // : public hashable {
     } else {
       auto tmp = shape[0];
       for (auto i = 1; i < N; i++) {
-        tmp *= shape[1];
+        tmp *= shape[i];
       }
       return tmp;
     }
@@ -67,24 +70,27 @@ struct array { // : public hashable {
   static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape,
                                            const T& value);
 
-  static std::shared_ptr<array<T, 1>> fill(const int& shape,
-                                           const T& value);
+  static std::shared_ptr<array<T, 1>> fill(const int& shape, const T& value);
 
  private:
-  static std::shared_ptr<T> allocate(const std::size_t& n, const bool init, bool shallow) {
+  static source_t allocate(const std::size_t& n, const bool init,
+                           bool shallow) {
     if (n == 0) {
-      return nullptr;
+      return source_t{};
     } else {
-      auto p = static_cast<T*>(malloc(sizeof(T) * n));
-      for (auto i = 0; init && i < n; i++) {
+      auto p = static_cast<T*>(aligned_alloc(alignof(T), sizeof(T) * n));
+      for (auto i = 0; (i < n) && init; i++) {
         if (shallow) {
           hypercomm::reconstruct(p + i);
         } else {
           new (p + i) T();
         }
       }
-      return std::shared_ptr<T>(p, [n](T* p) {
-        for (std::size_t i = 0; i < n; i++) { p[i].~T(); }
+      return source_t((void*)p, [=](void* p) {
+        auto* t = (T*)p;
+        for (std::size_t i = 0; i < n; i++) {
+          t[i].~T();
+        }
         free(p);
       });
     }
@@ -103,14 +109,14 @@ std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(
 }
 
 template <>
-std::shared_ptr<array<double, 1>> array<double, 1>::fill(
-    const int& shape, const double& value) {
-  std::array<std::size_t, 1> s = { (std::size_t) shape };
+std::shared_ptr<array<double, 1>> array<double, 1>::fill(const int& shape,
+                                                         const double& value) {
+  std::array<std::size_t, 1> s = {(std::size_t)shape};
   auto a = std::make_shared<array<double, 1>>(s, false);
   std::fill(a->begin(), a->end(), value);
   return a;
 }
-}
+}  // namespace ergoline
 
 namespace hypercomm {
 template <typename T, std::size_t N>
@@ -147,6 +153,6 @@ struct puper<ergoline::array<T, N>> {
     }
   }
 };
-}
+}  // namespace hypercomm
 
 #endif

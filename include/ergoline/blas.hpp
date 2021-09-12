@@ -21,15 +21,15 @@ namespace {
 template <typename T>
 inline gsl_matrix_view erg2gsl(const ergoline::array<T, 2>& a) {
   return gsl_matrix_view_array(const_cast<double*>(a.buffer),
-                               std::get<1>(a.shape), std::get<0>(a.shape));
+                               std::get<0>(a.shape), std::get<1>(a.shape));
 }
-}
+}  // namespace
 
 inline int dgemm(const double& alpha, const ergoline::array<double, 2>& a,
                  const ergoline::array<double, 2>& b, const double& beta,
                  ergoline::array<double, 2>& c) {
   auto A = erg2gsl(a), B = erg2gsl(b), C = erg2gsl(c);
-  return gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, alpha, &B.matrix, &A.matrix,
+  return gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, alpha, &A.matrix, &B.matrix,
                         beta, &C.matrix);
 }
 #else
@@ -51,13 +51,13 @@ inline int dgemm(const double& alpha, const ergoline::array<double, 2>& a,
   const double* __restrict B = b.buffer;
   double* __restrict C = c.buffer;
 
-  for (int j = 0; (j < n); j += 1) {
-    for (int i = 0; (i < m); i += 1) {
+  for (int i = 0; (i < m); i += 1) {
+    for (int j = 0; (j < n); j += 1) {
       auto sum = 0;
       for (int l = 0; (l < k); l += 1) {
-        sum += A[i + l * m] * B[j * k + l];
+        sum += A[i * k + l] * B[l * n + j];
       }
-      C[i + j * m] = alpha * sum + beta * C[i + j * m];
+      C[i * n + j] = alpha * sum + beta * C[i * n + j];
     }
   }
 
@@ -65,7 +65,7 @@ inline int dgemm(const double& alpha, const ergoline::array<double, 2>& a,
 }
 
 #endif
-}
-}
+}  // namespace blas
+}  // namespace ergoline
 
 #endif
