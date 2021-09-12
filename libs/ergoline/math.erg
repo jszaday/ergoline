@@ -1,0 +1,6 @@
+package ergoline;
+
+namespace math {
+    @system(fromHeader="cmath")
+    def abs(d: double): double;
+}
