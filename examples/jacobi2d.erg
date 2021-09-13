@@ -3,6 +3,7 @@ package examples;
 import ergoline::_;
 import ck;
 
+// singleton object with the run's global parameters
 object globals {
     val north: int = 1;
     val east: int = 2;
@@ -51,6 +52,8 @@ object globals {
         println(`Max Iterations: ${globals.maxIters}`);
         println(`Threshold: ${globals.threshold}`);
 
+        // update globals then call back to self@initialize when done
+        // (the constructor of jacobi2d uses their values.)
         ck::updateGlobal<globals>(self@initialize);
     }
 
@@ -103,18 +106,24 @@ class jacobi2d {
             return (num != 0, num != (max - 1));
         }
 
+        // decide which neighbors we have based on our
+        // position in the grid (of chares)
         (hasEast, hasWest) = inBounds(x, globals.numChareX);
         (hasNorth, hasSouth) = inBounds(y, globals.numChareY);
 
+        // sum up the booleans to generate our neighbor count
         numNeighbors = hasEast.toInt() + hasWest.toInt() +
                        hasNorth.toInt() + hasSouth.toInt();
 
+        // affect the range of computation based on whether
+        // we have a neighbor (or not!)
         iStart = (!hasEast).toInt() + 1;
         jStart = (!hasNorth).toInt() + 1;
 
         iFinish = globals.blockDimX + 1 - (!hasWest).toInt();
         jFinish = globals.blockDimY + 1 - (!hasSouth).toInt();
 
+        // enforce boundary conditions
         enforce_boundaries();
     }
 
@@ -123,25 +132,28 @@ class jacobi2d {
 
     @threaded @entry def run() {
         var it: int = 0;
-
-        for (; (it < globals.maxIters) && !converged; it += 1) {
+        // for maxIters iterations, unless we converge:
+        for (; !converged && (it < globals.maxIters); it += 1) {
+            // send our ghost values to our neighbors
             start_iteration(it);
-
+            // the process each of their messages
             for (var imsg = 0; imsg < numNeighbors; imsg += 1) {
                 when receive_ghost(_ == it, dir, data) => {
                     process_ghost(dir, data);
                 }
             }
-
+            // compute the max difference for this iteration
             var maxDiff = check_and_compute();
             converged = (maxDiff <= globals.threshold);
+            // then contribute to the reduction over members
+            // (self[@] is this element, self@ is the whole array's proxy)
             self[@]contribute(converged, bool::logical_and, self@receive_status);
-
+            // update our status accordingly
             when receive_status(g_converged) => {
                 converged = g_converged;
             }
         }
-
+        // if we're the leader, tell main we're done
         match (self[@]index()) {
             case 0, 0 => globals.mainProxy.done(it);
             case _, _ => ;
@@ -152,6 +164,8 @@ class jacobi2d {
         val (x, y) = self[@]index();
         val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
 
+        // helper functions to extract rows/columns of data
+        // (it would be nice to use slicing here eventually)
         def getColumn(j: int): array<double> {
             val row = new array<double>(dimX);
             for (var i = 0; i < dimX; i += 1) {
@@ -168,6 +182,7 @@ class jacobi2d {
             return col;
         }
 
+        // determine which neighbors get which rows/columns
         if (hasNorth) {
             self@[x, y - 1].receive_ghost(it, globals.south, getColumn(1));
         }
@@ -189,6 +204,9 @@ class jacobi2d {
         val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
         val defaultValue = 1.0;
 
+        // helper functions to init parts of grid and nextGrid
+        // (we initialize both because we swap between them.)
+        // (it would be nice to use slicing here eventually.)
         def setColumn(j: int) {
             for (var i = 0; i < (dimX + 2); i += 1) {
                 grid[i, j] = defaultValue;
@@ -203,6 +221,8 @@ class jacobi2d {
             }
         }
 
+        // initialize regions of the grids at the edges,
+        // that we don't have neighbors for
         if (!hasNorth) setColumn(1);
 
         if (!hasEast) setRow(1);
@@ -215,7 +235,8 @@ class jacobi2d {
     private def process_ghost(dir: int, data: array<double>) {
         val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
 
-        // set the value of column j in all rows 
+        // helper functions to place ghost data in the grid
+        // (it would be nice to use slicing here eventually)
         def setColumn(j: int) {
             assert(data.size() == dimX);
             for (var i = 0; i < dimX; i += 1) {
@@ -223,7 +244,6 @@ class jacobi2d {
             }
         }
 
-        // set the value of all columns of row i
         def setRow(i: int) {
             assert(data.size() == dimY);
             for (var j = 0; j < dimY; j += 1) {
@@ -262,6 +282,8 @@ class jacobi2d {
             }
         }
 
+        // swap grids for the next iteration
+        // (avoids reallocating/reinitializing a temporary)
         val temp = grid;
         grid = nextGrid;
         nextGrid = temp;
@@ -269,6 +291,7 @@ class jacobi2d {
         return maxDiff;
     }
 
+    // helper function to output the grid for debugging
     private def grid2str(): string {
         val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
         var s = "[ ";
