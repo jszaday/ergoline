@@ -35,7 +35,7 @@ object globals {
             globals.arrDimY = globals.arrDimX;
 
             globals.blockDimX = args[2].toInt();
-            globals.blockDimX = globals.blockDimX;
+            globals.blockDimY = globals.blockDimX;
 
             if (args.size() >= 4) {
                 globals.maxIters = args[3].toInt();
