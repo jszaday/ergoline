@@ -1,0 +1,287 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+object globals {
+    val north: int = 1;
+    val east: int = 2;
+    val south: int = 3;
+    val west: int = 4;
+
+    var maxIters: int = 250;
+    var threshold: double = 0.004;
+    var mainProxy: main@;
+
+    var arrDimX: int = 128;
+    var arrDimY: int = 128;
+
+    var blockDimX: int = 64;
+    var blockDimY: int = 64;
+
+    var numChareX: int;
+    var numChareY: int;
+}
+
+@main class main {
+    var startTime: double;
+
+    @entry def self(args: array<string>) {
+        globals.mainProxy = self@;
+
+        if (args.size() >= 3) {
+            globals.arrDimX = args[1].toInt();
+            globals.arrDimY = globals.arrDimX;
+
+            globals.blockDimX = args[2].toInt();
+            globals.blockDimX = globals.blockDimX;
+
+            if (args.size() >= 4) {
+                globals.maxIters = args[3].toInt();
+            }
+        }
+
+        globals.numChareX = globals.arrDimX / globals.blockDimX;
+        globals.numChareY = globals.arrDimY / globals.blockDimY;
+
+        println("\nSTENCIL COMPUTATION WITH NO BARRIERS");
+        println(`Running Jacobi on ${ck::numPes()} processors with (${globals.numChareX}, ${globals.numChareY}) chares`);
+        println(`Array Dimensions: [${globals.arrDimX}, ${globals.arrDimY}]`);
+        println(`Block Dimensions: [${globals.blockDimX}, ${globals.blockDimX}]`);
+        println(`Max Iterations: ${globals.maxIters}`);
+        println(`Threshold: ${globals.threshold}`);
+
+        ck::updateGlobal<globals>(self@initialize);
+    }
+
+    @entry def initialize() {
+        startTime = ck::wallTime();
+
+        val workers =
+            new jacobi2d@array2d(globals.numChareX, globals.numChareY);
+        
+        workers.run();
+    }
+
+    @entry def done(numIters: int) {
+        var time = ck::wallTime() - startTime;
+
+        if (numIters >= globals.maxIters) {
+            println(`main> did not converge, finished ${numIters} iterations in ${time} s.`);
+        } else {
+            println(`main> converged in ${numIters} iterations in ${time} s.`);
+        }
+
+        exit();
+    }
+}
+
+class jacobi2d {
+    val numNeighbors: int = 0;
+
+    val hasEast: bool;
+    val hasWest: bool;
+    val hasNorth: bool;
+    val hasSouth: bool;
+    var converged: bool = false;
+
+    val iStart: int = 1;
+    val jStart: int = 1;
+    val iFinish: int;
+    val jFinish: int;
+
+    var grid: array<double, 2>;
+    var nextGrid: array<double, 2>;
+
+    @entry def self() {
+        val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
+        nextGrid = new array<double, 2>(shape[0], shape[1]);
+        grid = array<double, 2>::fill(shape, 0.0);
+
+        val (x, y) = self[@]index();
+        def inBounds(num: int, max: int): (bool, bool) {
+            return (num != 0, num != (max - 1));
+        }
+
+        (hasEast, hasWest) = inBounds(x, globals.numChareX);
+        (hasNorth, hasSouth) = inBounds(y, globals.numChareY);
+
+        numNeighbors = hasEast.toInt() + hasWest.toInt() +
+                       hasNorth.toInt() + hasSouth.toInt();
+
+        iStart = (!hasEast).toInt() + 1;
+        jStart = (!hasNorth).toInt() + 1;
+
+        iFinish = globals.blockDimX + 1 - (!hasWest).toInt();
+        jFinish = globals.blockDimY + 1 - (!hasSouth).toInt();
+
+        enforce_boundaries();
+    }
+
+    @mailbox def receive_ghost(it: int, dir: int, data: array<double>);
+    @mailbox def receive_status(g_converged: bool);
+
+    @threaded @entry def run() {
+        var it: int = 0;
+
+        for (; (it < globals.maxIters) && !converged; it += 1) {
+            start_iteration(it);
+
+            for (var imsg = 0; imsg < numNeighbors; imsg += 1) {
+                when receive_ghost(_ == it, dir, data) => {
+                    process_ghost(dir, data);
+                }
+            }
+
+            var maxDiff = check_and_compute();
+            converged = (maxDiff <= globals.threshold);
+            self[@]contribute(converged, bool::logical_and, self@receive_status);
+
+            when receive_status(g_converged) => {
+                converged = g_converged;
+            }
+        }
+
+        match (self[@]index()) {
+            case 0, 0 => globals.mainProxy.done(it);
+            case _, _ => ;
+        }
+    }
+
+    @entry def start_iteration(it: int) {
+        val (x, y) = self[@]index();
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+
+        def getColumn(j: int): array<double> {
+            val row = new array<double>(dimX);
+            for (var i = 0; i < dimX; i += 1) {
+                row[i] = grid[i + 1, j];
+            }
+            return row;
+        }
+
+        def getRow(i: int): array<double> {
+            val col = new array<double>(dimY);
+            for (var j = 0; j < dimY; j += 1) {
+                col[j] = grid[i, j + 1];
+            }
+            return col;
+        }
+
+        if (hasNorth) {
+            self@[x, y - 1].receive_ghost(it, globals.south, getColumn(1));
+        }
+
+        if (hasEast) {
+            self@[x - 1, y].receive_ghost(it, globals.west, getRow(1));
+        }
+
+        if (hasSouth) {
+            self@[x, y + 1].receive_ghost(it, globals.north, getColumn(dimY));
+        }
+
+        if (hasWest) {
+            self@[x + 1, y].receive_ghost(it, globals.east, getRow(dimX));
+        }
+    }
+
+    private def enforce_boundaries() {
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val defaultValue = 1.0;
+
+        def setColumn(j: int) {
+            for (var i = 0; i < (dimX + 2); i += 1) {
+                grid[i, j] = defaultValue;
+                nextGrid[i, j] = defaultValue;
+            }
+        }
+
+        def setRow(i: int) {
+            for (var j = 0; j < (dimY + 2); j += 1) {
+                grid[i, j] = defaultValue;
+                nextGrid[i, j] = defaultValue;
+            }
+        }
+
+        if (!hasNorth) setColumn(1);
+
+        if (!hasEast) setRow(1);
+
+        if (!hasSouth) setColumn(dimY);
+
+        if (!hasWest) setRow(dimX);
+    }
+
+    private def process_ghost(dir: int, data: array<double>) {
+        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+
+        // set the value of column j in all rows 
+        def setColumn(j: int) {
+            assert(data.size() == dimX);
+            for (var i = 0; i < dimX; i += 1) {
+                grid[i + 1, j] = data[i];
+            }
+        }
+
+        // set the value of all columns of row i
+        def setRow(i: int) {
+            assert(data.size() == dimY);
+            for (var j = 0; j < dimY; j += 1) {
+                grid[i, j + 1] = data[j];
+            }
+        }
+
+        if (dir == globals.north && hasNorth) {
+            setColumn(0);
+        } else if (dir == globals.east && hasEast) {
+            setRow(0);
+        } else if (dir == globals.south && hasSouth) {
+            setColumn(dimY + 1);
+        } else if (dir == globals.west && hasWest) {
+            setRow(dimX + 1);
+        } else {
+            abort(`fatal> received unexpected ghost from ${dir}`);
+        }
+    }
+
+    private def check_and_compute(): double {
+        var maxDiff = 0.0;
+
+        for (var i = iStart; i < iFinish; i += 1) {
+            for (var j = jStart; j < jFinish; j += 1) {
+                nextGrid[i, j] =
+                    0.2 * (grid[i, j] +
+                       grid[i - 1, j] + grid[i + 1, j] +
+                       grid[i, j - 1] + grid[i, j + 1]
+                    );
+
+                var diff = math::abs(nextGrid[i, j] - grid[i, j]);
+                if (diff > maxDiff) {
+                    maxDiff = diff;
+                }
+            }
+        }
+
+        val temp = grid;
+        grid = nextGrid;
+        nextGrid = temp;
+
+        return maxDiff;
+    }
+
+    private def grid2str(): string {
+        val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
+        var s = "[ ";
+        for (var i = 0; i < shape[0]; i += 1) {
+            s += "[ ";
+            for (var j = 0; j < shape[1]; j += 1) {
+                s += `${grid[i, j]}, `;
+            }
+
+            s += "],\n";
+        }
+
+        s += "]";
+        return s;
+    }
+}

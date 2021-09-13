@@ -39,6 +39,12 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   private val _sentinels = new mutable.Stack[Sentinel]
   private val _inplace = mutable.Set[EirFunctionCall]()
 
+  def appendLast(str: String): Unit = {
+    lines.lastOption.foreach(last => {
+      lines = lines.dropRight(1) :+ (last + str)
+    })
+  }
+
   def pushSelf(self: String): Unit = _selves.push(self)
 
   def popSelf(): Unit = _selves.pop()
