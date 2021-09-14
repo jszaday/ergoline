@@ -303,12 +303,21 @@ object Find {
     case None    => Errors.incorrectType(ty, classOf[EirClassLike])
   }
 
-  @tailrec
-  def tryClassLike(ty: EirNode): Option[EirClassLike] = ty match {
+  def tryClassLike(ty: EirType): Option[EirClassLike] = ty match {
     case x: EirClassLike     => Some(x)
-    case x: EirTemplatedType => Some(asClassLike(x.base))
+    case x: EirTemplatedType => tryClassLike(x.base)
     case x: EirReferenceType => tryClassLike(x.base)
     case _                   => None
+  }
+
+  def tryClassLike(ty: EirResolvable[EirType]): Option[EirClassLike] = {
+    Find.resolutions[EirType](ty).headOption.flatMap(tryClassLike)
+  }
+
+  def tryClassLike(node: EirNode): Option[EirClassLike] = node match {
+    case t: EirType                => tryClassLike(t)
+    case t: EirResolvable[EirType] => tryClassLike(t)
+    case _                         => None
   }
 
   def resolveAccessor(

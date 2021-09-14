@@ -3,6 +3,7 @@ package edu.illinois.cs.ergoline.util
 import edu.illinois.cs.ergoline._
 import edu.illinois.cs.ergoline.ast.types.{EirTupleType, EirType}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.literals.EirLiteral
 import edu.illinois.cs.ergoline.resolution.EirResolvable
 import org.antlr.v4.runtime.tree.ParseTree
 
@@ -206,6 +207,23 @@ object Errors {
 
   def unknownOperator(a: EirNode, s: String): Nothing = {
     exit(format(a, "unrecognized operator %s", s))
+  }
+
+  def unknownOperator(
+      a: EirNode,
+      s: String,
+      lhsTy: EirType,
+      rhsType: EirType
+  ): Nothing = {
+    exit(
+      format(
+        a,
+        "unrecognized operator %s between types %s and %s",
+        s,
+        lhsTy,
+        rhsType
+      )
+    )
   }
 
   def expectedSync(a: EirAwait, t: EirExpressionNode): Nothing = {

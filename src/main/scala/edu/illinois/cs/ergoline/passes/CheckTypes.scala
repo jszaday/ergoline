@@ -1134,6 +1134,45 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): EirType =
     error(node, "annotations are type-less")
 
+  private def comparableTypes(
+      op: String,
+      lhsTy: EirTupleType,
+      rhsTy: EirTupleType
+  )(implicit ctx: TypeCheckContext): Boolean = {
+    globals.isEqualityComparator(
+      op
+    ) && lhsTy.children.length == rhsTy.children.length && lhsTy.children
+      .zip(rhsTy.children)
+      .forall { case (l: EirType, r: EirType) => comparableTypes(op, l, r) }
+  }
+
+  private def comparableTypes(op: String, lhsTy: EirType, rhsTy: EirType)(
+      implicit ctx: TypeCheckContext
+  ): Boolean = {
+    // TODO flesh this out somewhat!
+    //     (this is insufficient in many circumstances)
+    def resolvableCall(lhs: EirType, member: String, rhs: EirType): Boolean =
+      lhs == rhs
+
+    (lhsTy, rhsTy) match {
+      case (lhs: EirTupleType, rhs: EirTupleType) =>
+        comparableTypes(op, lhs, rhs)
+      case _ =>
+        val lhsClass = Find.tryClassLike(lhsTy)
+
+        {
+          val spaceship = globals.spaceshipOperator
+          globals.isComparisonOperator(op) && lhsClass.exists(
+            _.hasMember(spaceship)
+          ) && resolvableCall(lhsTy, spaceship, rhsTy)
+        } || {
+          globals.isEqualityComparator(op) && lhsClass
+            .flatMap(globals.hasEqualityComparator)
+            .exists(resolvableCall(lhsTy, _, rhsTy))
+        }
+    }
+  }
+
   override def visitBinaryExpression(
       node: EirBinaryExpression
   )(implicit ctx: TypeCheckContext): EirType = {
@@ -1155,14 +1194,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       boolTy
     } else {
       val spaceship = globals.spaceshipOperator
-      val lhsClass = Find.asClassLike(lhsTy)
+      val lhsClass = Find.tryClassLike(lhsTy)
 
-      if (lhsClass.hasMember(op)) {
+      if (lhsClass.exists(_.hasMember(op))) {
         val f = makeMemberCall(node.lhs, op, List(node.rhs))
         node.disambiguation = Some(f)
         visit(f)
       } else if (
-        globals.isComparisonOperator(op) && lhsClass.hasMember(spaceship)
+        globals
+          .isComparisonOperator(op) && lhsClass.exists(_.hasMember(spaceship))
       ) {
         val f = makeMemberCall(node.lhs, spaceship, List(node.rhs))
         val g = EirBinaryExpression(
@@ -1174,10 +1214,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         node.disambiguation = Some(g)
         visit(f)
         boolTy
-      } else if (globals.isEqualityComparator(op)) {
-        val other = globals.hasEqualityComparator(lhsClass)
-        other match {
-          case Some(invOp) =>
+      } else {
+        val other = lhsClass
+          .filter(_ => globals.isEqualityComparator(op))
+          .flatMap(globals.hasEqualityComparator)
+        val asTuple =
+          Option(lhsTy).to[EirTupleType].zip(Option(rhsTy).to[EirTupleType])
+        (other, asTuple) match {
+          case (Some(invOp), _) =>
             val f = makeMemberCall(node.lhs, invOp, List(node.rhs))
             val g = EirUnaryExpression(
               None,
@@ -1191,10 +1235,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
             } else {
               Errors.unableToUnify(node, retTy, boolTy)
             }
-          case _ => Errors.unknownOperator(node, op)
+          case (_, Some((lhsTy, rhsTy))) if comparableTypes(op, lhsTy, rhsTy) =>
+            boolTy
+          case _ => Errors.unknownOperator(node, op, lhsTy, rhsTy)
         }
-      } else {
-        Errors.unknownOperator(node, op)
       }
     }
   }
