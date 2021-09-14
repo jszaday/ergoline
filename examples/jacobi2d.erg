@@ -154,9 +154,8 @@ class jacobi2d {
             }
         }
         // if we're the leader, tell main we're done
-        match (self[@]index()) {
-            case 0, 0 => globals.mainProxy.done(it);
-            case _, _ => ;
+        if (self[@]index() == (0, 0)) {
+            globals.mainProxy.done(it);
         }
     }
 

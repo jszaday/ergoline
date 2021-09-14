@@ -13,6 +13,8 @@ case class EirPlaceholder[T <: EirNode](
 ) extends EirExpressionNode
     with EirResolvable[T]
     with EirEncloseExempt {
+  var isStatic = true
+
   override def disambiguation: Option[EirNode] = expectation
   override def disambiguation_=(x: Option[EirNode]): Unit = ???
 
