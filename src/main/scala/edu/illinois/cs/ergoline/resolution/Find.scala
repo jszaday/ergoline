@@ -310,14 +310,14 @@ object Find {
     case _                   => None
   }
 
-  def tryClassLike(ty: EirResolvable[EirType]): Option[EirClassLike] = {
-    Find.resolutions[EirType](ty).headOption.flatMap(tryClassLike)
+  def tryClassLike(ty: EirResolvable[_]): Option[EirClassLike] = {
+    Find.resolutions[EirNode](ty).headOption.flatMap(tryClassLike)
   }
 
   def tryClassLike(node: EirNode): Option[EirClassLike] = node match {
-    case t: EirType                => tryClassLike(t)
-    case t: EirResolvable[EirType] => tryClassLike(t)
-    case _                         => None
+    case t: EirType          => tryClassLike(t)
+    case t: EirResolvable[_] => tryClassLike(t)
+    case _                   => None
   }
 
   def resolveAccessor(

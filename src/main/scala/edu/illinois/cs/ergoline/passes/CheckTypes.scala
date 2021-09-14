@@ -140,7 +140,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           case _                     => false
         }
       case x: EirPlaceholder[_] => x.expectation match {
-          case Some(_: EirType)           => true
+          case Some(_: EirType)           => x.isStatic
           case Some(x: EirExpressionNode) => isStatic(x)
           case _                          => false
         }
@@ -1146,14 +1146,29 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       .forall { case (l: EirType, r: EirType) => comparableTypes(op, l, r) }
   }
 
+  def canResolveComparison(lhsTy: EirType, member: String, rhsTy: EirType)(
+      implicit ctx: TypeCheckContext
+  ): Boolean = {
+    def wrap(ty: EirType): EirExpressionNode = {
+      val expr = EirPlaceholder(None, Some(ty))
+      expr.isStatic = false
+      expr
+    }
+
+    val (lhs, rhs) = (wrap(lhsTy), wrap(rhsTy))
+    val op = makeMemberCall(lhs, member, List(rhs))
+    val ty = visit(op)
+    if (member == globals.spaceshipOperator) {
+      // TODO add more checks for other signed types!
+      true
+    } else {
+      lhsTy.canAssignTo(globals.boolType)
+    }
+  }
+
   private def comparableTypes(op: String, lhsTy: EirType, rhsTy: EirType)(
       implicit ctx: TypeCheckContext
   ): Boolean = {
-    // TODO flesh this out somewhat!
-    //     (this is insufficient in many circumstances)
-    def resolvableCall(lhs: EirType, member: String, rhs: EirType): Boolean =
-      lhs == rhs
-
     (lhsTy, rhsTy) match {
       case (lhs: EirTupleType, rhs: EirTupleType) =>
         comparableTypes(op, lhs, rhs)
@@ -1164,11 +1179,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
           val spaceship = globals.spaceshipOperator
           globals.isComparisonOperator(op) && lhsClass.exists(
             _.hasMember(spaceship)
-          ) && resolvableCall(lhsTy, spaceship, rhsTy)
+          ) && canResolveComparison(lhsTy, spaceship, rhsTy)
         } || {
           globals.isEqualityComparator(op) && lhsClass
             .flatMap(globals.hasEqualityComparator)
-            .exists(resolvableCall(lhsTy, _, rhsTy))
+            .exists(canResolveComparison(lhsTy, _, rhsTy))
         }
     }
   }
