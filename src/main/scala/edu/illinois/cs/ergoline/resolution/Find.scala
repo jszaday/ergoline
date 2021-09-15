@@ -131,29 +131,29 @@ object Find {
   ): Option[EirType] = {
     val oY =
       Option.when(!rY.isInstanceOf[EirPlaceholder[_]])(CheckTypes.visit(rY))
-    oY.map(unionType(x, _)) match {
+    oY.map(unifyTypes(x, _)) match {
       case Some(x) => x
       case None    => Some(x)
     }
   }
 
-  def unionType(types: EirType*)(implicit
+  def unifyTypes(types: EirType*)(implicit
       ctx: TypeCheckContext
-  ): Option[EirType] = unionType(types)
+  ): Option[EirType] = unifyTypes(types)
 
-  def unionType(
+  def unifyTypes(
       types: Iterable[EirType]
   )(implicit ctx: TypeCheckContext): Option[EirType] = {
     val distinct = types.toList.distinct
     distinct.tail.foldRight(distinct.headOption)((x, oY) =>
       oY match {
-        case Some(y) => unionType(x, y)
+        case Some(y) => unifyTypes(x, y)
         case None    => None
       }
     )
   }
 
-  def unionType(x: EirType, y: EirType)(implicit
+  def unifyTypes(x: EirType, y: EirType)(implicit
       ctx: TypeCheckContext
   ): Option[EirType] = {
     if (x == y) Some(x)

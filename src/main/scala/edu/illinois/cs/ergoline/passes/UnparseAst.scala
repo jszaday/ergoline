@@ -129,7 +129,11 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitTemplateArgument(
       node: EirTemplateArgument
   )(implicit ctx: UnparseContext): String = {
-    node.name +
+    (node.variance match {
+      case EirInvariant     => ""
+      case EirCovariant     => "+"
+      case EirContravariant => "-"
+    }) + node.name +
       node.upperBound.mapOrEmpty(x => " <: " + nameFor(x)) +
       node.lowerBound.mapOrEmpty(x => " >: " + nameFor(x)) +
       node.argumentType.mapOrEmpty(x => ": " + nameFor(x)) +

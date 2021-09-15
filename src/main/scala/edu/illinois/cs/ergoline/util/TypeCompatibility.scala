@@ -1,20 +1,7 @@
 package edu.illinois.cs.ergoline.util
 
-import edu.illinois.cs.ergoline.ast.types.{
-  EirLambdaType,
-  EirReferenceType,
-  EirTemplatedType,
-  EirTupleType,
-  EirType
-}
-import edu.illinois.cs.ergoline.ast.{
-  EirClass,
-  EirClassLike,
-  EirConstantFacade,
-  EirFunction,
-  EirMember,
-  EirTrait
-}
+import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
@@ -65,14 +52,49 @@ object TypeCompatibility {
     }
   }
 
+  implicit class RichEirTemplateArgumentList(args: List[EirTemplateArgument]) {
+    def zipTypes(
+        tys: List[EirResolvable[EirType]]
+    ): List[(EirTemplateArgument, EirResolvable[EirType])] = {
+      (args ++ List.fill(args.length - tys.length)({ args.last })).zip(tys)
+    }
+  }
+
   private def canAssignHelper(ours: EirTemplatedType, theirs: EirTemplatedType)(
       implicit ctx: TypeCheckContext
   ): Boolean = {
     val (ourBase, theirBase) =
       (Find.uniqueResolution[EirType](ours.base), theirs.base)
     if (ourBase == theirBase) {
-      ours.args.zip(theirs.args) forall { case (a, b) =>
-        a == b // TODO add support for contravariance
+      val templates = ourBase match {
+        case sp: EirSpecializable => sp.templateArgs
+        case _                    => Errors.incorrectType(ourBase, classOf[EirSpecializable])
+      }
+
+      def checkRelationship(
+          variance: EirVariance,
+          a: EirType,
+          b: EirType
+      ): Boolean = {
+        variance match {
+          case EirInvariant     => a == b
+          case EirCovariant     => TypeCheckContext.upperBound(a, b)
+          case EirContravariant => TypeCheckContext.lowerBound(a, b)
+        }
+      }
+
+      templates.zipTypes(ours.args).zip(theirs.args) forall {
+        case ((t, a: EirType), b: EirType) =>
+          checkRelationship(t.variance, a, b)
+        case ((t, a), b: EirType) =>
+          checkRelationship(t.variance, CheckTypes.visit(a), b)
+        case ((t, a: EirType), b) =>
+          checkRelationship(t.variance, a, CheckTypes.visit(b))
+        case ((t, a), b) => checkRelationship(
+            t.variance,
+            CheckTypes.visit(a),
+            CheckTypes.visit(b)
+          )
       }
     } else {
       (ourBase, theirBase) match {
