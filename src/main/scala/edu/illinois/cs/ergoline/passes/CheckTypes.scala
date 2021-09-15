@@ -189,7 +189,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     checkCondition(x.test)
     val tty = visit(x.ifTrue)
     val fty = visit(x.ifFalse)
-    Find.unionType(tty, fty) match {
+    Find.unifyTypes(tty, fty) match {
       case Some(found) => found
       case None        => Errors.unableToUnify(x, tty, fty)
     }
@@ -479,7 +479,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       arg -> {
         tys.reduce((a, b) =>
           Option
-            .when(a != null && b != null)(Find.unionType(a, b).orNull)
+            .when(a != null && b != null)(Find.unifyTypes(a, b).orNull)
             .orNull
         )
       }
@@ -908,7 +908,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (types.isEmpty) {
       globals.unitType
     } else {
-      Find.unionType(types) match {
+      Find.unifyTypes(types) match {
         case Some(x) => x
         case None    => Errors.unableToUnify(node, types)
       }
@@ -1468,7 +1468,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit ctx: TypeCheckContext): EirType = {
     visit(x.expression)
     val cases = x.cases.map(visit(_))
-    Find.unionType(cases).getOrElse(Errors.unableToUnify(x, cases))
+    Find.unifyTypes(cases).getOrElse(Errors.unableToUnify(x, cases))
   }
 
   override def visitMatchCase(
@@ -1764,7 +1764,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     val args = List(start, step, end)
     val types = args.map(visit(_))
     val union =
-      Find.unionType(types).getOrElse(Errors.unableToUnify(slice, types))
+      Find.unifyTypes(types).getOrElse(Errors.unableToUnify(slice, types))
     val range =
       EirNew(None, EirTemplatedType(None, globals.rangeType, List(union)), args)
     slice.disambiguation = Some(range)

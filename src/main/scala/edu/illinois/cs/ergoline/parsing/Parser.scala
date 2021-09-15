@@ -381,10 +381,23 @@ object Parser {
   def TDeclaration[_: P]: P[List[EirTemplateArgument]] =
     P("<" ~ TDeclarationArg.rep(min = 0, sep = ",") ~ ">").map(_.toList)
 
+  def Variance[_: P]: P[EirVariance] = P("+".! | "-".!).map {
+    case "+" => EirCovariant
+    case "-" => EirContravariant
+    case _   => Errors.unreachable()
+  }
+
   def TDeclarationArg[_: P]: P[EirTemplateArgument] = P(
-    Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr).?
-  ).map { case (id, ellipses, bounds, declTy, defaultVal) =>
-    EirTemplateArgument(id, ellipses.nonEmpty, bounds, declTy, defaultVal)
+    Variance.? ~ Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr).?
+  ).map { case (variance, id, ellipses, bounds, declTy, defaultVal) =>
+    EirTemplateArgument(
+      id,
+      ellipses.nonEmpty,
+      bounds,
+      declTy,
+      defaultVal,
+      variance
+    )
   }
 
   def Bounds[_: P]

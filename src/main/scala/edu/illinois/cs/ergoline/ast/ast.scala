@@ -413,6 +413,11 @@ trait EirClassLike
   }
 }
 
+sealed trait EirVariance
+case object EirCovariant extends EirVariance
+case object EirContravariant extends EirVariance
+case object EirInvariant extends EirVariance
+
 // TODO this should NOT be an EirType!
 case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
     extends EirType
@@ -421,6 +426,7 @@ case class EirTemplateArgument(var parent: Option[EirNode], var name: String)
   var upperBound: Option[EirResolvable[EirType]] = None
   var defaultValue: Option[EirResolvable[EirType]] = None
   var argumentType: Option[EirResolvable[EirType]] = None
+  var variance: EirVariance = EirInvariant
   var isPack: Boolean = false
 
   def hasDefaultValue: Boolean = defaultValue.nonEmpty
@@ -440,9 +446,11 @@ object EirTemplateArgument {
         (Option[EirResolvable[EirType]], Option[EirResolvable[EirType]])
       ],
       declType: Option[EirResolvable[EirType]],
-      defaultValue: Option[EirExpressionNode]
+      defaultValue: Option[EirExpressionNode],
+      variance: Option[EirVariance]
   ): EirTemplateArgument = {
     val arg = EirTemplateArgument(None, name)
+    variance.foreach(arg.variance = _)
     arg.isPack = isPack
     bounds match {
       case Some((lowerBound, upperBound)) =>

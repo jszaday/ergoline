@@ -1,6 +1,6 @@
 package ergoline;
 
-@system class option<A> {
+@system class option<+A> {
     @system static def apply(): option<A>;
     @system static def apply(t : A): option<A>;
 

@@ -94,6 +94,45 @@ class EirImportTests extends AnyFunSuite {
     Processes.onLoad(module)
   }
 
+  test("covariant relationships work") {
+    setupEnv()
+    val module = Modules.load("""
+        |package tests;
+        |import ergoline::_;
+        |abstract class bird { }
+        |class duck extends bird { }
+        |def test_covariant(): unit {
+        |  val x = option<duck>();
+        |  val y: option<bird> = x;
+        |}
+        |""".stripMargin)
+    Processes.onLoad(module)
+  }
+
+  test("contravariant relationships work") {
+    setupEnv()
+    val module = Modules.load("""
+        |package tests;
+        |import ergoline::_;
+        |abstract class bird { }
+        |class duck extends bird { }
+        |class petter<-A> {
+        |  def pet(a: A) { }
+        |}
+        |def pet_duck(p: petter<duck>, d: duck) { p.pet(d); }
+        |def test_contravariant(): unit {
+        |  val d = new duck;
+        |  val p = new petter<bird>;
+        |  pet_duck(p, d);
+        |}
+        |""".stripMargin)
+    Processes.onLoad(module)
+    Find.namedChild[EirClass](Some(module), "petter")
+      .templateArgs
+      .headOption
+      .map(_.toString) shouldEqual Some("-A")
+  }
+
   test("can access parent field") {
     setupEnv()
     val module = Modules.load("""
