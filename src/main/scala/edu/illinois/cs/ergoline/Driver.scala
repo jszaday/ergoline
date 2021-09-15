@@ -12,7 +12,18 @@ import java.nio.file.Paths
 import scala.util.Properties
 import scala.util.Properties.{lineSeparator => n}
 
+import fastparse._
+import edu.illinois.cs.ergoline.parsing.Parser
+
 object Driver extends App {
+  {
+    val txt = "static def apply<A: int = 13>(): option<A>;"
+    parse(txt, Parser.TestRule(Parser.ClassMember(_))(_)) match {
+      case Parsed.Success(value, _) => println(s"success with: ${value}")
+      case f: Parsed.Failure => throw new RuntimeException(f.trace().longAggregateMsg)
+    }
+  }
+
   private def helpMessage(): Unit = {
     print("""| ergoline compiler, pre-alpha version
              | --debug    print additional (compilation) error information

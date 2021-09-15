@@ -34,7 +34,7 @@ object CheckEnclose {
         node match {
           case EirPatternList(_, list)           => list
           case EirExpressionPattern(_, expr)     => List(expr)
-          case EirExtractorPattern(_, id, list)  => List(id, list)
+          case EirExtractorPattern(_, id, list)  => List(id) ++ list
           case EirMatchCase(_, list, cond, body) => List(list) ++ cond ++ body
           case EirMember(_, member, _)           => List(member)
           case when: EirSdagWhen                 => when.children ++ when.patterns.map(_._2)

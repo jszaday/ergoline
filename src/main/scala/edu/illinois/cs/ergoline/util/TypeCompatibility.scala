@@ -39,8 +39,12 @@ object TypeCompatibility {
         case (a: EirProxy, b: EirProxy) => (a.isElement == b.isElement) &&
             (a.collective == b.collective) &&
             a.base.isDescendantOf(b.base)
-        case _ => checkSubclass(self, other)
+        case _ => other.isNothing || checkSubclass(self, other)
       }
+    }
+
+    def isNothing: Boolean = {
+      self == globals.nothingType
     }
 
     def isValueType: Boolean = {
@@ -60,6 +64,15 @@ object TypeCompatibility {
     }
   }
 
+  private def safeClassLike(ty: EirType)(
+    implicit ctx: TypeCheckContext
+  ): EirClassLike = {
+   Find.asClassLike(ty match {
+     case t: EirConstantFacade => CheckTypes.visit(t.value)
+     case _                    => ty
+   })
+  }
+
   private def canAssignHelper(ours: EirTemplatedType, theirs: EirTemplatedType)(
       implicit ctx: TypeCheckContext
   ): Boolean = {
@@ -72,29 +85,21 @@ object TypeCompatibility {
       }
 
       def checkRelationship(
-          variance: EirVariance,
-          a: EirType,
-          b: EirType
-      ): Boolean = {
+       variance: EirVariance,
+       a: EirResolvable[EirType],
+       b: EirResolvable[EirType]
+     ): Boolean = {
+        val (ta, tb) = (() => CheckTypes.visit(a), () => CheckTypes.visit(b))
+
         variance match {
-          case EirInvariant     => a == b
-          case EirCovariant     => TypeCheckContext.upperBound(a, b)
-          case EirContravariant => TypeCheckContext.lowerBound(a, b)
+          case EirInvariant     => a == b || (ta() == tb())
+          case EirCovariant     => TypeCheckContext.upperBound(safeClassLike(ta()), safeClassLike(tb()))
+          case EirContravariant => TypeCheckContext.lowerBound(safeClassLike(ta()), safeClassLike(tb()))
         }
       }
 
       templates.zipTypes(ours.args).zip(theirs.args) forall {
-        case ((t, a: EirType), b: EirType) =>
-          checkRelationship(t.variance, a, b)
-        case ((t, a), b: EirType) =>
-          checkRelationship(t.variance, CheckTypes.visit(a), b)
-        case ((t, a: EirType), b) =>
-          checkRelationship(t.variance, a, CheckTypes.visit(b))
-        case ((t, a), b) => checkRelationship(
-            t.variance,
-            CheckTypes.visit(a),
-            CheckTypes.visit(b)
-          )
+        case ((t, a), b) => checkRelationship(t.variance, a, b)
       }
     } else {
       (ourBase, theirBase) match {

@@ -849,7 +849,7 @@ class Visitor(global: EirScope = EirGlobalNamespace)
         EirExtractorPattern(parent, null, null),
         (x: EirExtractorPattern) => {
           x.identifier = visitAs[EirExpressionNode](ctx.fn)
-          x.list = visitAs[EirPatternList](ctx.patternList())
+          x.list = Option(ctx.patternList()).map(visitAs[EirPatternList])
         }
       )
     } else {

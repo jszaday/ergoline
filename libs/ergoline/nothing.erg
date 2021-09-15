@@ -1,0 +1,3 @@
+package ergoline;
+
+@unconstructable struct nothing {}

@@ -26,6 +26,8 @@ class foo {
         check(o4);
         check(o5);
 
+        checkMatch(o1);
+
         checkEither();
     }
 
@@ -34,6 +36,12 @@ class foo {
             println(`optional has value ${o.get()}`);
         } else {
             println("optional does not have a value");
+        }
+    }
+
+    def checkMatch<A>(o: option<A>) {
+        match (o) {
+            case none() => println("no value!");
         }
     }
 

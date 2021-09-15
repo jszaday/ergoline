@@ -136,6 +136,7 @@ package object globals {
   }
 
   def unitType: EirType = typeFor(unitName)
+  def nothingType: EirType = typeFor("nothing")
 
   def stringType: EirType = typeFor("string")
 

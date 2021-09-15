@@ -36,7 +36,7 @@ object CheckConstructors {
     if (constructors.isEmpty) {
       if (needsInitialization.nonEmpty) {
         Errors.missingConstructor(cls)
-      } else {
+      } else if (cls.annotation("unconstructable").isEmpty) {
         cls.members +:= mkDefaultConstructor(cls)
       }
     }
