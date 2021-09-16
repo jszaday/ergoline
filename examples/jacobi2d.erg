@@ -282,10 +282,7 @@ class jacobi2d {
         }
 
         // swap grids for the next iteration
-        // (avoids reallocating/reinitializing a temporary)
-        val temp = grid;
-        grid = nextGrid;
-        nextGrid = temp;
+        (grid, nextGrid) = (nextGrid, grid);
 
         return maxDiff;
     }
