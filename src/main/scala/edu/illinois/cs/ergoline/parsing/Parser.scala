@@ -126,7 +126,7 @@ object Parser {
     }
 
   def UsingStatement[_: P]: P[EirTypeAlias] = P(
-    `using` ~/ Id ~ TDeclaration.? ~ "=" ~ ConstExpr ~ Semi
+    `using` ~/ Id ~ TDeclaration.? ~ "=" ~ ConstExpr(guarded = false) ~ Semi
   ).map { case (id, tArgs, expr) =>
     EirTypeAlias(id, tArgs.getOrElse(Nil), expr)(None)
   }
@@ -388,7 +388,9 @@ object Parser {
   }
 
   def TDeclarationArg[_: P]: P[EirTemplateArgument] = P(
-    Variance.? ~ Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr).?
+    Variance.? ~ Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr(
+      guarded = true
+    )).?
   ).map { case (variance, id, ellipses, bounds, declTy, defaultVal) =>
     EirTemplateArgument(
       id,
@@ -443,7 +445,7 @@ object Parser {
     }
 
   def TupleMultiply[_: P]: P[EirResolvable[EirType]] =
-    P(TupleType ~ (".*" ~/ ConstExpr).?).map {
+    P(TupleType ~ (".*" ~/ ConstExpr(guarded = true)).?).map {
       case (lhs, None)      => lhs
       case (lhs, Some(rhs)) => EirTupleMultiply(lhs, rhs)(None)
     }
@@ -465,10 +467,14 @@ object Parser {
       case (ty, Some(_))     => ???
     }
 
-  def ConstExpr[_: P]: P[EirExpressionNode] = {
+  def ConstExpr[_: P](guarded: Boolean): P[EirExpressionNode] = {
     implicit val static: Boolean = true
 
-    P(Expression)
+    if (guarded) {
+      P(PrimaryExpr)
+    } else {
+      P(Expression)
+    }
   }
 
   def ProxySuffix[_: P]: P[String] = P(`@` | `[@]` | `{@}`)
@@ -528,7 +534,7 @@ object Parser {
       extends ExprSuffixTuple
 
   def CallSuffix[_: P]: P[ExprSuffixTuple] = P(
-    Specialization.? ~ `(` ~/ FnCallArg.rep(min = 0, sep = ",") ~ `)`
+    Specialization.? ~ `(` ~ FnCallArg.rep(min = 0, sep = ",") ~ `)`
   ).map { case (sp, args) =>
     CallSuffixTuple(sp.map(_.toList).getOrElse(Nil), args.toList)
   }
@@ -707,7 +713,7 @@ object Parser {
     }
 
   def ExtractorPattern[_: P]: P[EirExtractorPattern] = P(
-    Identifier[EirNamedNode] ~ `(` ~/ PatternList ~ `)`
+    Identifier[EirNamedNode] ~ `(` ~/ PatternList.? ~ `)`
   ).map { case (id, list) => EirExtractorPattern(None, id, list) }
 
   def ConstantPattern[_: P]: P[EirExpressionPattern] =
@@ -773,7 +779,8 @@ object Parser {
     )
   }
 
-  def WhereClause[_: P]: P[EirExpressionNode] = P(where ~/ ConstExpr)
+  def WhereClause[_: P]: P[EirExpressionNode] =
+    P(where ~/ ConstExpr(guarded = false))
 
   def AccessModifier[_: P]: P[EirAccessibility.Value] = P(
     `public` | `private` | `protected`

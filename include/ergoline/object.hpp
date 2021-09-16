@@ -7,6 +7,14 @@
 
 namespace ergoline {
 
+namespace matchers {
+  // NOTE this is a temporary workaround
+  std::shared_ptr<void> some__s_apply(void) {
+    constexpr auto max = std::numeric_limits<std::intptr_t>::max();
+    return std::shared_ptr<void>((void*)max, [](void*){});
+  }
+}
+
 template <typename T>
 using element_t = typename T::element_t;
 

@@ -1157,11 +1157,13 @@ trait EirPattern extends EirNode {
 case class EirExtractorPattern(
     var parent: Option[EirNode],
     var identifier: EirExpressionNode,
-    var list: EirPatternList
+    var list: Option[EirPatternList]
 ) extends EirPattern {
   var disambiguation: Option[EirFunctionCall] = None
-  override def declarations: List[EirDeclaration] = list.declarations
-  override def conditions: List[EirExpressionNode] = list.conditions
+  override def declarations: List[EirDeclaration] =
+    list.toList.flatMap(_.declarations)
+  override def conditions: List[EirExpressionNode] =
+    list.toList.flatMap(_.conditions)
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 

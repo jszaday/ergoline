@@ -6,58 +6,123 @@
 namespace ergoline {
 
 template <typename L, typename R>
-class either {
+class either;
+
+template <typename L>
+class either<L, void> {
+  std::unique_ptr<L> data_;
+
+ public:
+  template <typename T1, typename T2>
+  friend class either;
+  friend class hypercomm::puper<either<L, void>>;
+
+  either(void) : data_(nullptr) {}
+  either(const L& l) : data_(new L(l)) {}
+  either(either<void, L>&& other) : data_(std::move(other.data_)) {}
+
+  template <typename R>
+  either(const either<L, R>& other)
+      : data_(other.isLeft() ? new L(other.left()) : nullptr) {}
+
+  inline L& left(void) {
+    CkAssert(this->isLeft());
+    return *(this->data_);
+  }
+
+  inline bool isLeft(void) { return (bool)this->data_; }
+  inline bool isRight(void) { return !this->isLeft(); }
+
+ private:
+  inline void reallocate(void) { this->data_.reset(::new (sizeof(L)) L); }
+};
+
+template <typename R>
+class either<void, R> {
+  std::unique_ptr<R> data_;
+
+ public:
+  template <typename T1, typename T2>
+  friend class either;
+  friend class hypercomm::puper<either<void, R>>;
+
+  either(void) : data_(nullptr) {}
+  either(const R& r) : data_(new R(r)) {}
+  either(either<void, R>&& other) : data_(std::move(other.data_)) {}
+
+  template <typename L>
+  either(const either<L, R>& other)
+      : data_(other.isLeft() ? nullptr : new R(other.right())) {}
+
+  inline R& right(void) {
+    CkAssert(this->isRight());
+    return *(this->data_);
+  }
+
+  inline bool isLeft(void) { return !this->isRight(); }
+  inline bool isRight(void) { return (bool)this->data_; }
+
+ private:
+  inline void reallocate(void) { this->data_.reset(::new (sizeof(R)) R); }
+};
+
+template <typename L, typename R>
+class either : public either<L, void>, public either<void, R> {
   bool left_;
-
-  union s_data_ {
-    L left_;
-    R right_;
-
-    ~s_data_() {}
-    s_data_(void) = delete;
-    s_data_(PUP::reconstruct) {}
-    s_data_(const L& l) : left_(l) {}
-    s_data_(const R& r) : right_(r) {}
-  } data_;
 
   friend class hypercomm::puper<either<L, R>>;
 
  public:
-  either(const L& l) : left_(true), data_(l) {}
-  either(const R& r) : left_(false), data_(r) {}
+  either(const L& l) : left_(true), either<L, void>(l) {}
+  either(const R& r) : left_(false), either<void, R>(r) {}
 
-  either(const either<L, R>& other)
-      : left_(other.left_), data_(PUP::reconstruct{}) {
+  either(const either<L, void>& other);
+  either(const either<void, R>& other);
+
+  either(const either<L, R>& other) : left_(other.isLeft()) {
     if (this->left_) {
-      new (&data_) s_data_(other.left());
+      either<L, void>::data_.reset(new L(other.left()));
     } else {
-      new (&data_) s_data_(other.right());
+      either<void, R>::data_.reset(new R(other.right()));
     }
   }
 
-  either(PUP::reconstruct tag) : data_(tag) {}
-
-  ~either() {
-    if (this->left_) {
-      this->data_.left_.~L();
-    } else {
-      this->data_.right_.~R();
-    }
-  }
-
-  inline L& left(void) {
-    CkAssert(this->isLeft());
-    return this->data_.left_;
-  }
-
-  inline R& right(void) {
-    CkAssert(this->isRight());
-    return this->data_.right_;
-  }
+  either(PUP::reconstruct) {}
 
   inline bool isLeft(void) { return this->left_; }
   inline bool isRight(void) { return !this->isLeft(); }
+
+ private:
+  inline void reallocate(void) {
+    if (this->isLeft()) {
+      either<L, void>::reallocate();
+    } else {
+      either<void, R>::reallocate();
+    }
+  }
 };
+
+template <typename L, typename R>
+either<L, R>::either(const either<L, void>& other)
+    : left_(other.isLeft()) {
+  if (this->left_) {
+    either<L, void>::data_.reset(new L(other.left()));
+  } else {
+    throw std::invalid_argument("cannot cast void to " +
+                                std::string(typeid(R).name()) + "!");
+  }
+}
+
+template <typename L, typename R>
+either<L, R>::either(const either<void, R>& other)
+    : left_(other.isLeft()) {
+  if (this->left_) {
+    either<void, R>::data_.reset(new R(other.right()));
+  } else {
+    throw std::invalid_argument("cannot cast void to " +
+                                std::string(typeid(L).name()) + "!");
+  }
+}
 
 }  // namespace ergoline
 
@@ -70,6 +135,10 @@ struct puper<ergoline::either<L, R>> {
     }
 
     s | t.left_;
+
+    if (s.unpacking()) {
+      t.reallocate();
+    }
 
     if (t.isLeft()) {
       s | t.left();

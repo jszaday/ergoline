@@ -2,6 +2,10 @@ package ergoline;
 
 namespace matchers {
 @system class left {
+    static def apply<L>(l: L): either<L, nothing> {
+        return new either<L, nothing>(l);
+    }
+
     static def unapply<L, R>(x: either<L, R>): option<L& > {
         if (x.isLeft()) {
             return option<L& >(x.left());
@@ -12,12 +16,40 @@ namespace matchers {
 }
 
 @system class right {
+    static def apply<R>(r: R): either<nothing, R> {
+        return new either<nothing, R>(r);
+    }
+
     static def unapply<L, R>(x: either<L, R>): option<R& > {
         if (x.isLeft()) {
             return option<R& >();
         } else {
             return option<R& >(x.right());
         }
+    }
+}
+
+@system class none {
+    static def apply<A = nothing>(): option<A> {
+        return option<A>();
+    }
+
+    static def unapply<A>(x: option<A>): option<unit> {
+        if (x.isEmpty()) {
+            return some(());
+        } else {
+            return none();
+        }
+    }
+}
+
+@system class some {
+    static def apply<A>(a: A): option<A> {
+        return option<A>(a);
+    }
+
+    static def unapply<A>(x: option<A>): option<A> {
+        return x;
     }
 }
 }

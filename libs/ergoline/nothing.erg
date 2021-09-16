@@ -1,0 +1,5 @@
+package ergoline;
+
+@unconstructable
+@system(alias="void")
+struct nothing {}

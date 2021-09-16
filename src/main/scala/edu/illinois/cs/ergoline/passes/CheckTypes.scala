@@ -560,7 +560,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     val insights = knownArgs ++ {
       unknowns
-        .filter(_.length == args.length)
+        .filter(_.length == args.length && args.nonEmpty)
         .map(_.zip(args).map(learn(_)))
         .map(_.reduce(merge))
         .getOrElse(Map())
@@ -658,6 +658,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (t: EirSpecializedSymbol[_], _) => resolve(t)
       case (t: EirType, None)              => Some(t)
       case (t: EirSymbol[_], Some(args))   => resolve(t, args)
+      case (t: EirSymbol[_], None)         => Find.resolutions[EirType](t).headOption
       case _                               => ???
     }
   }
@@ -1819,8 +1820,15 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         }
       case _ => Errors.cannotCast(x, ty, option)
     }
-    val patterns = x.list.patterns
-    if (goals.length != patterns.length) {
+    val patterns = x.list.toList.flatMap(_.patterns)
+    if (
+      patterns.isEmpty && goals.lastOption
+        .filter(_ => goals.length == 1)
+        .map(visit)
+        .contains(globals.unitType)
+    ) {
+      // this is OK, do nothing for now!
+    } else if (goals.length != patterns.length) {
       Errors.wrongNbrOfArgs(x, goals.length, patterns.length)
     }
     patterns.zip(goals).foreach { case (pattern, goal: EirType) =>
