@@ -35,11 +35,13 @@ object TypeCompatibility {
 
   implicit class RichEirClassLike(self: EirClassLike) {
     def isDescendantOf(other: EirClassLike): Boolean = {
-      (self, other) match {
-        case (a: EirProxy, b: EirProxy) => (a.isElement == b.isElement) &&
+      self.isNothing || {
+        (self, other) match {
+          case (a: EirProxy, b: EirProxy) => (a.isElement == b.isElement) &&
             (a.collective == b.collective) &&
             a.base.isDescendantOf(b.base)
-        case _ => other.isNothing || checkSubclass(self, other)
+          case _ => checkSubclass(self, other)
+        }
       }
     }
 

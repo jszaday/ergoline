@@ -1231,6 +1231,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitTemplateArgument(
       x: EirTemplateArgument
   )(implicit ctx: CodeGenerationContext): Unit = {
+    val defaultValue = x.defaultValue.filter(_ =>
+      x.parent.to[EirFunction].exists(_.functionArgs.isEmpty)
+    )
+
     ctx << {
       x.argumentType
         .map(y => {
@@ -1245,6 +1249,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _ if x.isPack => s"... ${x.name}"
       case _             => x.name
     })
+
+    defaultValue.foreach(ctx << "=" << _)
   }
 
   def visitInherits(
@@ -2243,8 +2249,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   private def pickName(current: String, ctx: CodeGenerationContext)(
       x: EirExtractorPattern
-  ): Option[String] = {
-    x.list.map(_.patterns).collect {
+  ): String = {
+    val patterns = x.list.map(_.patterns).getOrElse(Nil)
+    patterns match {
       case EirIdentifierPattern(_, name, _) :: Nil => name
       case _                                       => current + ctx.temporary
     }
@@ -2263,10 +2270,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           val node = CppNode(current)
           node.foundType = f.args.lastOption.flatMap(_.foundType)
           f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
-          tmp.foreach(tmp => {
-            ctx << "auto" << tmp << "=" << f << ";"
-          })
-          x.list.map(_.patterns).filterNot(_.isEmpty) match {
+          ctx << "auto" << tmp << "=" << f << ";"
+          x.list.map(_.patterns).filterNot(_.length <= 1) match {
             case Some(patterns) =>
               patterns.zipWithIndex.foreach { case (p, i) =>
                 val nextTmp = s"((bool)$tmp ? &std::get<$i>(*$tmp) : nullptr)"
@@ -2324,8 +2329,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         List("(bool)" + nextTemp) ++ x.list.toList.flatMap(list =>
           visitPatternCond(
           parent,
-            list,
-          nextTemp.get,
+          list,
+          nextTemp,
           ty
         ))
       case EirPatternList(_, ps) => ps match {
@@ -2372,10 +2377,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def findPointers(x: EirPattern): List[EirNode] = {
+  def findPointers(x: EirPattern)(implicit ctx: CodeGenerationContext): List[EirNode] = {
     x match {
       case x: EirPatternList      => x.patterns.flatMap(findPointers)
-      case x: EirExtractorPattern => x.list.toList.flatMap(_.patterns).flatMap(_.declarations)
+      case x: EirExtractorPattern => x.list.toList.flatMap(_.patterns).flatMap(_.declarations).filterNot(ctx.typeOf(_).isPointer)
       case _                      => Nil
     }
   }
@@ -2385,6 +2390,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): Unit = {
     val parent = x.parent.to[EirMatch]
     val exprType = parent.map(_.expression).map(ctx.exprType)
+    val hasBlock = x.body.to[EirBlock].nonEmpty
     val isUnit = parent
       .map(ctx.exprType)
       .contains(globals.unitType)
@@ -2397,7 +2403,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
     val (primary, secondary) =
-      (Option.unless(isUnit)("return"), Option.when(isUnit)("return;"))
+      (Option.unless(isUnit || hasBlock)("return"), Option.when(isUnit)("return;"))
     ptrs.foreach(ctx.makePointer)
     ctx << primary << visitOptionalStatement(x.body) << secondary << Option
       .when(needsIf)(
@@ -2514,23 +2520,35 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   override def visitBlock(
       x: EirBlock
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val topLevel = x.parent exists {
-      case _: EirLambdaExpression => true
-      case _: EirFunction         => true
-      case _                      => false
-    }
-
-    val singleStatement = x.children.length == 1 && !x.children.exists(
-      _.isInstanceOf[EirDeclaration]
-    )
-
-    ctx << Option.unless(!topLevel && singleStatement)("{")
-    x.children.foreach {
+    val visitChild: EirNode => Unit = {
       case x: EirExpressionNode =>
         ctx << x << Option.unless(x.isInstanceOf[CppNode])(";")
       case x => ctx << x
     }
-    ctx << Option.unless(!topLevel && singleStatement)("}")
+
+    val matchCase = x.parent.to[EirMatchCase]
+    if (matchCase.nonEmpty) {
+      val foundType = matchCase.flatMap(_.parent).to[EirMatch].map(ctx.exprType)
+      x.children.init.foreach(visitChild)
+      x.children.lastOption.foreach {
+        case x: EirExpressionNode => ctx << Option.unless(foundType.contains(globals.unitType))("return") << x << ";"
+        case x                    => ctx << x
+      }
+    } else {
+      val topLevel = x.parent exists {
+        case _: EirLambdaExpression => true
+        case _: EirFunction => true
+        case _ => false
+      }
+
+      val singleStatement = x.children.length == 1 && !x.children.exists(
+        _.isInstanceOf[EirDeclaration]
+      )
+
+      ctx << Option.unless(!topLevel && singleStatement)("{")
+      x.children.foreach(visitChild)
+      ctx << Option.unless(!topLevel && singleStatement)("}")
+    }
   }
 
   def visitStatement(

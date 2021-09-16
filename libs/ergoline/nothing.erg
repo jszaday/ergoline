@@ -1,3 +1,5 @@
 package ergoline;
 
-@unconstructable struct nothing {}
+@unconstructable
+@system(alias="void")
+struct nothing {}

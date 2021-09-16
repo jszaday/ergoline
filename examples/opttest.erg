@@ -16,8 +16,8 @@ class foo {
         val o4 = option<int>();
         val o5 = o1.flatMap((_: foo) => o4);
 
-        assert(o1.nonEmpty() && o2.isEmpty());
-        println(`gotta' get my ${o1.get()}`);
+        val chk = checkMatch(o1) && !checkMatch(o2);
+        assert(chk);
 
         assert(o3.getOrElse(36) == 42);
         assert(o4.getOrElse(36) == 36);
@@ -26,8 +26,6 @@ class foo {
         check(o4);
         check(o5);
 
-        checkMatch(o1);
-
         checkEither();
     }
 
@@ -35,13 +33,9 @@ class foo {
         if (o.nonEmpty()) {
             println(`optional has value ${o.get()}`);
         } else {
-            println("optional does not have a value");
-        }
-    }
+            assert(o.isEmpty());
 
-    def checkMatch<A>(o: option<A>) {
-        match (o) {
-            case none() => println("no value!");
+            println("optional does not have a value");
         }
     }
 
@@ -61,4 +55,17 @@ class foo {
 
         exit();
     }
+}
+
+def checkMatch<A>(o: option<A>): bool {
+    return match (o) {
+        case some(a) => {
+            println(`got sum ${a}!`);
+            true;
+        }
+        case none() => {
+            println("got nuthin'!");
+            false;
+        }
+    };
 }
