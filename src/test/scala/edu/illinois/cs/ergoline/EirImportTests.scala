@@ -99,11 +99,14 @@ class EirImportTests extends AnyFunSuite {
     val module = Modules.load("""
         |package tests;
         |import ergoline::_;
-        |abstract class bird { }
-        |class duck extends bird { }
+        |def test_either<L, R>(l: either<L, R>, r: either<L, R>) {
+        |  assert(l.isLeft() && r.isRight());
+        |}
+        |
         |def test_covariant(): unit {
-        |  val x = option<duck>();
-        |  val y: option<bird> = x;
+        |  val x = left(42);
+        |  val y = right(false);
+        |  test_either(x, y); // => will resolve to <int, bool>
         |}
         |""".stripMargin)
     Processes.onLoad(module)

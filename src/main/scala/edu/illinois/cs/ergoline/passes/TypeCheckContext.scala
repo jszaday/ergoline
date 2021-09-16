@@ -30,13 +30,12 @@ object TypeCheckContext {
 
   // B >: A refers to B is a supertype of A
   def lowerBound(x: EirType, y: EirType): Boolean = {
-    Find.asClassLike(y).isDescendantOf(Find.asClassLike(x))
+    val (clx, cly) = (Find.asClassLike(x), Find.asClassLike(y))
+    clx == cly || cly.isDescendantOf(clx)
   }
 
   // B <: A refers to B is a subtype of A
-  def upperBound(x: EirType, y: EirType): Boolean = {
-    Find.asClassLike(x).isDescendantOf(Find.asClassLike(y))
-  }
+  def upperBound(x: EirType, y: EirType): Boolean = lowerBound(y, x)
 
   case class ExpressionScope(
       args: Option[EirExpressionNode],
