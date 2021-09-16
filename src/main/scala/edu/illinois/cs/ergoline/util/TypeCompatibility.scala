@@ -38,8 +38,8 @@ object TypeCompatibility {
       self.isNothing || {
         (self, other) match {
           case (a: EirProxy, b: EirProxy) => (a.isElement == b.isElement) &&
-            (a.collective == b.collective) &&
-            a.base.isDescendantOf(b.base)
+              (a.collective == b.collective) &&
+              a.base.isDescendantOf(b.base)
           case _ => checkSubclass(self, other)
         }
       }
@@ -66,13 +66,13 @@ object TypeCompatibility {
     }
   }
 
-  private def safeClassLike(ty: EirType)(
-    implicit ctx: TypeCheckContext
+  private def safeClassLike(ty: EirType)(implicit
+      ctx: TypeCheckContext
   ): EirClassLike = {
-   Find.asClassLike(ty match {
-     case t: EirConstantFacade => CheckTypes.visit(t.value)
-     case _                    => ty
-   })
+    Find.asClassLike(ty match {
+      case t: EirConstantFacade => CheckTypes.visit(t.value)
+      case _                    => ty
+    })
   }
 
   private def canAssignHelper(ours: EirTemplatedType, theirs: EirTemplatedType)(
@@ -87,16 +87,22 @@ object TypeCompatibility {
       }
 
       def checkRelationship(
-       variance: EirVariance,
-       a: EirResolvable[EirType],
-       b: EirResolvable[EirType]
-     ): Boolean = {
+          variance: EirVariance,
+          a: EirResolvable[EirType],
+          b: EirResolvable[EirType]
+      ): Boolean = {
         val (ta, tb) = (() => CheckTypes.visit(a), () => CheckTypes.visit(b))
 
         variance match {
-          case EirInvariant     => a == b || (ta() == tb())
-          case EirCovariant     => TypeCheckContext.upperBound(safeClassLike(ta()), safeClassLike(tb()))
-          case EirContravariant => TypeCheckContext.lowerBound(safeClassLike(ta()), safeClassLike(tb()))
+          case EirInvariant => a == b || (ta() == tb())
+          case EirCovariant => TypeCheckContext.upperBound(
+              safeClassLike(ta()),
+              safeClassLike(tb())
+            )
+          case EirContravariant => TypeCheckContext.lowerBound(
+              safeClassLike(ta()),
+              safeClassLike(tb())
+            )
         }
       }
 

@@ -388,7 +388,9 @@ object Parser {
   }
 
   def TDeclarationArg[_: P]: P[EirTemplateArgument] = P(
-    Variance.? ~ Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr(guarded = true)).?
+    Variance.? ~ Id ~ `...`.!.? ~ Bounds.? ~ (":" ~/ Type).? ~ ("=" ~/ ConstExpr(
+      guarded = true
+    )).?
   ).map { case (variance, id, ellipses, bounds, declTy, defaultVal) =>
     EirTemplateArgument(
       id,
@@ -777,7 +779,8 @@ object Parser {
     )
   }
 
-  def WhereClause[_: P]: P[EirExpressionNode] = P(where ~/ ConstExpr(guarded = false))
+  def WhereClause[_: P]: P[EirExpressionNode] =
+    P(where ~/ ConstExpr(guarded = false))
 
   def AccessModifier[_: P]: P[EirAccessibility.Value] = P(
     `public` | `private` | `protected`

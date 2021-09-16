@@ -2328,11 +2328,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val ty = x.disambiguation.flatMap(_.foundType)
         List("(bool)" + nextTemp) ++ x.list.toList.flatMap(list =>
           visitPatternCond(
-          parent,
-          list,
-          nextTemp,
-          ty
-        ))
+            parent,
+            list,
+            nextTemp,
+            ty
+          )
+        )
       case EirPatternList(_, ps) => ps match {
           case p :: Nil => parentType match {
               case Some(t: EirTupleType) => visitPatternCond(
@@ -2377,11 +2378,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def findPointers(x: EirPattern)(implicit ctx: CodeGenerationContext): List[EirNode] = {
+  def findPointers(
+      x: EirPattern
+  )(implicit ctx: CodeGenerationContext): List[EirNode] = {
     x match {
-      case x: EirPatternList      => x.patterns.flatMap(findPointers)
-      case x: EirExtractorPattern => x.list.toList.flatMap(_.patterns).flatMap(_.declarations).filterNot(ctx.typeOf(_).isPointer)
-      case _                      => Nil
+      case x: EirPatternList => x.patterns.flatMap(findPointers)
+      case x: EirExtractorPattern => x.list.toList
+          .flatMap(_.patterns)
+          .flatMap(_.declarations)
+          .filterNot(ctx.typeOf(_).isPointer)
+      case _ => Nil
     }
   }
 
@@ -2402,8 +2408,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (needsIf) ctx << "if(" << x.condition << {
       Option.when(x.condition.isDefined && conditions.nonEmpty)(" && ")
     } << conditions << ")" << "{"
-    val (primary, secondary) =
-      (Option.unless(isUnit || hasBlock)("return"), Option.when(isUnit)("return;"))
+    val (primary, secondary) = (
+      Option.unless(isUnit || hasBlock)("return"),
+      Option.when(isUnit)("return;")
+    )
     ptrs.foreach(ctx.makePointer)
     ctx << primary << visitOptionalStatement(x.body) << secondary << Option
       .when(needsIf)(
@@ -2531,14 +2539,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val foundType = matchCase.flatMap(_.parent).to[EirMatch].map(ctx.exprType)
       x.children.init.foreach(visitChild)
       x.children.lastOption.foreach {
-        case x: EirExpressionNode => ctx << Option.unless(foundType.contains(globals.unitType))("return") << x << ";"
-        case x                    => ctx << x
+        case x: EirExpressionNode => ctx << Option.unless(
+            foundType.contains(globals.unitType)
+          )("return") << x << ";"
+        case x => ctx << x
       }
     } else {
       val topLevel = x.parent exists {
         case _: EirLambdaExpression => true
-        case _: EirFunction => true
-        case _ => false
+        case _: EirFunction         => true
+        case _                      => false
       }
 
       val singleStatement = x.children.length == 1 && !x.children.exists(

@@ -1821,7 +1821,12 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _ => Errors.cannotCast(x, ty, option)
     }
     val patterns = x.list.toList.flatMap(_.patterns)
-    if (patterns.isEmpty && goals.lastOption.filter(_ => goals.length == 1).map(visit).contains(globals.unitType)) {
+    if (
+      patterns.isEmpty && goals.lastOption
+        .filter(_ => goals.length == 1)
+        .map(visit)
+        .contains(globals.unitType)
+    ) {
       // this is OK, do nothing for now!
     } else if (goals.length != patterns.length) {
       Errors.wrongNbrOfArgs(x, goals.length, patterns.length)
