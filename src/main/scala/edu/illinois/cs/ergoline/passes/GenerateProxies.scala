@@ -13,6 +13,25 @@ object GenerateProxies {
 
   val msgName = "__ckMsgPtr__"
 
+  def indicesName(proxy: EirProxy): String = s"__${proxy.baseName}indices__"
+  def makeIndices(ctx: CodeGenerationContext, proxy: EirProxy): Unit = {
+    val mbs = proxy.mailboxes.map(mailboxName(ctx, _)._1).toList
+    if (mbs.nonEmpty) {
+      val idxName = indicesName(proxy)
+      val ns = proxy.namespaces.toList
+      ns.foreach(ctx << "namespace" << ctx.nameFor(_) << "{")
+      ctx << "struct" << idxName << "{"
+      mbs.foreach(name => {
+        ctx << "static" << "int" << s"${name}idx__" << ";"
+      })
+      ctx << "};"
+      mbs.foreach(name => {
+        ctx << "int" << s"$idxName::${name}idx__" << ";"
+      })
+      ns.foreach(_ => ctx << "}")
+    }
+  }
+
   implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
     (ctx, x) => GenerateCpp.visit(x)(ctx)
 
@@ -101,7 +120,9 @@ object GenerateProxies {
       .flatten
       .foreach { case (f, n) =>
         ctx << (ctx
-          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, n)(ctx) << ";"
+          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, n, Some(base))(
+          ctx
+        ) << ";"
       }
 //    ctx << "__id__" << "=" << tmp << "." << "ckGetChareID()" << ";"
 //    ctx << "__msgType__" << "=" << {
@@ -165,14 +186,11 @@ object GenerateProxies {
       x
     ) << ">" << "{"
 
-    mailboxes.foreach(mboxName => {
-      ctx << "static" << "int" << s"${mboxName}idx__" << ";"
-    })
-
+    val idxName = indicesName(x)
     val registerFn = "hypercomm::CkIndex_locality_base_::register_value_handler"
     ctx << s"static inline void $registerMailboxes(void)" << "{"
     mailboxes.foreach(mboxName => {
-      ctx << s"${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
+      ctx << s"$idxName::${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
     })
     ctx << "}"
 
@@ -201,10 +219,6 @@ object GenerateProxies {
       x.base,
       includeTemplates = true
     ) << ">" << s" impl_;" << s"};"
-
-    mailboxes.foreach(mboxName => {
-      ctx << "int" << s"$name::${mboxName}idx__" << ";"
-    })
   }
 
   def makeArgsVector(

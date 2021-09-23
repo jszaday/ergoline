@@ -169,6 +169,7 @@ object Processes {
     ctx << priorityIncludes
     // NOTE do we ever need to topo sort these?
     a.foreach(GenerateCpp.forwardDecl(ctx, _))
+    c.foreach(GenerateProxies.makeIndices(ctx, _))
 
     toDecl foreach { case (namespace, classes) =>
       ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
