@@ -92,6 +92,8 @@ object GenerateCi {
     }
   }
 
+  val registerMailboxes = "__register_mailboxes__"
+
   def visitNamespaces(
       ctx: CiUnparseContext,
       namespaces: List[EirNamespace],
@@ -107,6 +109,10 @@ object GenerateCi {
       .map(p => ProxyManager.elementFor(p).getOrElse(p))
       .foreach(p => {
         visit(ctx, p)
+
+        if (p.mailboxes.nonEmpty) {
+          ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
+        }
 
         if (p.templateArgs.nonEmpty) {
           makeChareSpecializations(ctx, p)
@@ -152,12 +158,14 @@ object GenerateCi {
 //    if (p.isMain && f.isConstructor) {
 //      ctx << s"entry [nokeep] " << p.baseName << "(CkArgMsg* msg);"
 //    } else {
-    val entry = "entry" + attributesFor(p, f)
-    GenerateCpp.visitFunction(
-      assertValid[EirFunction](f.member),
-      isMember = true,
-      Some(entry)
-    )(ctx)
+    if (!f.isMailbox) {
+      val entry = "entry" + attributesFor(p, f)
+      GenerateCpp.visitFunction(
+        assertValid[EirFunction](f.member),
+        isMember = true,
+        Some(entry)
+      )(ctx)
+    }
 //    }
   }
 

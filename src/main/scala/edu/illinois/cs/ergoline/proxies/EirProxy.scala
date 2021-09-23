@@ -21,6 +21,8 @@ case class EirProxy(
 
   override def classKind: EirClassKind = EirValueKind
 
+  def mailboxes: Iterable[EirMember] = this.members.view.filter(_.isMailbox)
+
   def isElement: Boolean = kind.contains(EirElementProxy)
   def isSection: Boolean = kind.contains(EirSectionProxy)
   def isCollective: Boolean = kind.contains(EirCollectiveProxy)

@@ -1,6 +1,7 @@
-#ifndef __ERGOLINE_REDUCER_HPP__
-#define __ERGOLINE_REDUCER_HPP__
+#ifndef __ERGOLINE_COLLECTIVES_HPP__
+#define __ERGOLINE_COLLECTIVES_HPP__
 
+#include <hypercomm/messaging/delivery.hpp>
 #include <hypercomm/serialization/traits.hpp>
 
 namespace ergoline {
@@ -38,6 +39,19 @@ void contribute(T* t, const Value& value, CkReduction::reducerType ty, const CkC
 template <typename T>
 void contribute(T* t, const CkCallback& cb) {
   t->contribute(cb);
+}
+
+template <typename T>
+inline hypercomm::is_valid_endpoint_t<T> broadcast_value(
+    const CkArrayID &aid, const T &ep, hypercomm::value_ptr &&value) {
+  CProxy_ArrayBase proxy(aid);
+  auto payload = hypercomm::detail::make_payload(ep, std::move(value));
+  auto *msg = payload->release();
+  auto *amsg = (CkArrayMessage *)msg;
+  auto *env = UsrToEnv(msg);
+  env->setMsgtype(ForArrayEltMsg);
+  amsg->array_setIfNotThere(CkArray_IfNotThere_buffer);
+  proxy.ckBroadcast(amsg, env->getEpIdx());
 }
 }
 

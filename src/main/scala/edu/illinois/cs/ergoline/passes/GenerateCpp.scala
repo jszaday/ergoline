@@ -11,6 +11,8 @@ import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   getMailboxType,
+  indicesName,
+  mailboxName,
   updateLocalityContext
 }
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -552,11 +554,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
     val member: Option[EirMember] = asMember(disambiguation)
     val isAsync = disambiguation.flatMap(_.annotation("async")).isDefined
-    val shouldPack = member.exists {
+    val shouldPack = member.flatMap {
+      case m @ EirMember(Some(_: EirProxy), _, _) if m.isMailbox =>
+        Some((true, mailboxName(ctx, m)._2))
       case m @ EirMember(Some(_: EirProxy), _, _) =>
-        (args.nonEmpty || isAsync) && (m.isEntry || m.isMailbox)
+        Option.when((args.nonEmpty || isAsync) && m.isEntry)((false, Nil))
       // TODO this should be a local call (that does not involve packing!)
-      case m: EirMember => args.nonEmpty && m.isEntryOnly
+      case m: EirMember =>
+        Option.when(args.nonEmpty && m.isEntryOnly)((false, Nil))
     }
 
     // TODO add support for expansions
@@ -569,9 +574,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case _                    => Nil
       }
 
-    if (shouldPack) {
-      if (fc.exists(ctx.shouldRepack)) ctx << "ergoline::repack("
-      else ctx << "hypercomm::pack("
+    shouldPack match {
+      case Some((false, Nil)) =>
+        if (fc.exists(ctx.shouldRepack)) ctx << "ergoline::repack("
+        else ctx << "hypercomm::pack("
+      case Some((true, tys)) =>
+        ctx << "hypercomm::make_typed_value<std::tuple<" << (tys, ",") << ">>("
+      case _ =>
     }
 
     if (isAsync) {
@@ -596,7 +605,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << (args, ",")
     }
 
-    ctx << Option.when(shouldPack)(")")
+    ctx << shouldPack.map(_ => ")")
   }
 
   def visitCallback(target: EirExpressionNode, isReduction: Boolean)(implicit
@@ -608,11 +617,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val found = asMember(disambiguate(ctx, target))
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
-          ctx << GenerateProxies.indexFor(
-            ctx,
-            proxy.get,
-            found.map(_.member).to[EirFunction].get
-          )
+          ctx << epIndexFor(proxy.get, found.get, Some(target))
           ctx << "," << _proxy << ")"
         } else {
           Errors.expectedCallback(target)
@@ -828,12 +833,44 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def epIndexFor(proxy: EirProxy, member: EirMember, hasArgs: Boolean)(implicit
+  def epIndexFor(proxy: EirProxy, member: EirMember, usage: Option[EirNode])(
+      implicit ctx: CodeGenerationContext
+  ): String = {
+    epIndexFor(
+      proxy,
+      member,
+      usage,
+      hasArgs = member.member match {
+        case f: EirFunction => f.functionArgs.nonEmpty
+        case _              => false
+      }
+    )
+  }
+
+  def epIndexFor(
+      proxy: EirProxy,
+      member: EirMember,
+      usage: Option[EirNode],
+      hasArgs: Boolean
+  )(implicit
       ctx: CodeGenerationContext
   ): String = {
-    "CkIndex_" + proxy.baseName + "::" + ctx.nameFor(member) + "(" + {
-      Option.when(hasArgs)("nullptr").getOrElse("")
-    } + ")"
+    val qualifications = usage.map(qualificationsFor(proxy, _)).getOrElse(Nil)
+    (qualifications ++ {
+      if (member.isMailbox) {
+        Seq(
+          indicesName(proxy),
+          s"${mailboxName(ctx, member)._1}idx__"
+        )
+      } else {
+        Seq(
+          s"CkIndex_${proxy.baseName}",
+          ctx.nameFor(member) + "(" + {
+            Option.when(hasArgs)("nullptr").getOrElse("")
+          } + ")"
+        )
+      }
+    }).mkString("::")
   }
 
   def visitMulticast(
@@ -855,7 +892,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << "ergoline::conv2section(" << stripSection(
       target
     ) << ")" << "," << {
-      epIndexFor(proxy, member, hasArgs)
+      epIndexFor(proxy, member, Some(fc), hasArgs)
     } << ", hypercomm::pack_to_port({}" << Option.when(hasArgs)(",") << {
       visitArguments(Some(fc), Some(member), args)
     } << ")" << ")"
@@ -1049,6 +1086,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
       .getOrElse(x)
     val isAsync = disambiguated.annotation("async").isDefined
+    val isMailbox = member.exists(_.isMailbox)
     if (disambiguated.isSystem) {
       ctx << visitSystemCall(
         ctx,
@@ -1098,6 +1136,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
             ctx.nameFor(disambiguated)
           }
+        } else if (isMailbox) {
+          val target = x.target match {
+            case s: EirScopedSymbol[_] => s.target
+            case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
+          }
+          val targetType = ctx.exprType(target)
+          ctx << (Find.tryClassLike(targetType) match {
+            case Some(p: EirProxy) if p.isCollective || p.isSection =>
+              "ergoline::broadcast_value"
+            case Some(p: EirProxy) => "hypercomm::interceptor::send_async"
+            case n                 => Errors.incorrectType(n.orNull, classOf[EirProxy])
+          })
+          ctx << "(" << target << ","
+          // TODO ( make this a FQN! )
+          val proxy = member.flatMap(_.parent).to[EirProxy]
+          ctx << member
+            .zip(proxy)
+            .map({ case (m, p) => epIndexFor(p, m, Some(x)) }) << ","
+          ctx.ignoreNext("(")
         } else {
           if (isPointer) ctx << "(*"
           ctx << x.target
