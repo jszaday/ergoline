@@ -2,6 +2,7 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCi.registerMailboxes
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp._
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
@@ -74,17 +75,6 @@ object GenerateProxies {
     ctx << "}"
   }
 
-  def indexFor(
-      ctx: CodeGenerationContext,
-      proxy: EirProxy,
-      function: EirFunction
-  ): String = {
-    /* TODO FQN */
-    "CkIndex_" + proxy.baseName + "::idx_" + ctx.nameFor(function) + "_" + {
-      if (function.functionArgs.nonEmpty) "CkMessage" else "void"
-    } + "()"
-  }
-
   def visitAbstractCons(
       ctx: CodeGenerationContext,
       base: EirProxy,
@@ -105,13 +95,13 @@ object GenerateProxies {
                   ctx.typeContext,
                   f,
                   g
-                ) => (f, g)
+                ) => (f, m)
           }
       }
       .flatten
-      .foreach { case (f, g) =>
+      .foreach { case (f, m) =>
         ctx << (ctx
-          .nameFor(f) + "_idx__") << "=" << indexFor(ctx, derived, g) << ";"
+          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, m)(ctx) << ";"
       }
 //    ctx << "__id__" << "=" << tmp << "." << "ckGetChareID()" << ";"
 //    ctx << "__msgType__" << "=" << {
@@ -156,8 +146,10 @@ object GenerateProxies {
   }
 
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
+    val mailboxes = x.mailboxes.map(mailboxName(ctx, _)._1).toList
     val base = ctx.nameFor(x.base)
-    val name = s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}"
+    val name = x.baseName
+    assert(name == s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}")
     GenerateCpp.visitTemplateArgs(x.templateArgs)(ctx)
     val args =
       if (x.templateArgs.nonEmpty) GenerateCpp.templateArgumentsToString(
@@ -167,12 +159,22 @@ object GenerateProxies {
         Some(x)
       )
       else ""
-    val mailboxes = x.members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
 
     ctx << s"struct $name: public hypercomm::vil<CBase_$name$args" << "," << indexForProxy(
       ctx,
       x
     ) << ">" << "{"
+
+    mailboxes.foreach(mboxName => {
+      ctx << "static" << "int" << s"${mboxName}idx__" << ";"
+    })
+
+    val registerFn = "hypercomm::CkIndex_locality_base_::register_value_handler"
+    ctx << s"static inline void $registerMailboxes(void)" << "{"
+    mailboxes.foreach(mboxName => {
+      ctx << s"${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
+    })
+    ctx << "}"
 
     // TODO call superclasses' PUP::er and Maiblox initer
     ctx << "inline void __init_mailboxes__(void) {"
@@ -189,7 +191,11 @@ object GenerateProxies {
 
     ctx << {
       x.membersToGen
-        .foreach(x => visitProxyMember(ctx, x))
+        .foreach {
+          case m @ EirMember(_, f: EirFunction, _) if m.isMailbox =>
+            visitMailbox(m, f)(ctx)
+          case x => visitProxyMember(ctx, x)
+        }
     } << "std::shared_ptr<" << nameFor(
       ctx,
       x.base,
@@ -236,13 +242,30 @@ object GenerateProxies {
     }
   }
 
+  def visitMailbox(m: EirMember, f: EirFunction)(
+      ctx: CodeGenerationContext
+  ): Unit = {
+    val (mboxName, tys) = mailboxName(ctx, m)
+    val value = "val_"
+    val implSelf = "impl_self_"
+    val baseName = m.base.asInstanceOf[EirProxy].baseName
+    ctx << "static" << "void" << s"${mboxName}fn__" << s"(hypercomm::generic_locality_* $implSelf, const hypercomm::entry_port_ptr&, hypercomm::value_ptr&& $value)" << "{"
+    ctx << "auto*" << "self" << "=(" << baseName << s"*)$implSelf;"
+    ctx << "self->" << mboxName << s"->receive_value(0, std::move($value));"
+    ctx << "}"
+
+    visitTemplateArgs(f)(ctx)
+    makeMailboxDecl(ctx, m)
+  }
+
   def mailboxName(
       ctx: CodeGenerationContext,
       node: EirNode,
       types: List[String]
   ): String = {
     // TODO impl this
-    ctx.nameFor(asMember(node).getOrElse(node)) + "_mailbox_"
+    val prefix = ctx.nameFor(asMember(node).getOrElse(node))
+    s"$prefix${if (prefix.endsWith("_")) "" else "_"}mailbox__"
   }
 
   def mailboxName(
@@ -305,10 +328,6 @@ object GenerateProxies {
     val isAsync = x.annotation("async").isDefined
     val isMailbox = x.isMailbox
     val args = f.functionArgs
-    if (isMailbox) {
-      visitTemplateArgs(f)(ctx)
-      makeMailboxDecl(ctx, x)
-    }
     visitTemplateArgs(f)(ctx)
     if (isAsync) ctx << "void"
     else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
