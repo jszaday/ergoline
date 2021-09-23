@@ -849,7 +849,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): String = {
     if (member.isMailbox) {
-      s"${proxy.baseName}::${mailboxName(ctx, member)._1}idx_"
+      s"${proxy.baseName}::${mailboxName(ctx, member)._1}idx__"
     } else {
       "CkIndex_" + proxy.baseName + "::" + ctx.nameFor(member) + "(" + {
         Option.when(hasArgs)("nullptr").getOrElse("")

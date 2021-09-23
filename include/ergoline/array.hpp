@@ -130,8 +130,8 @@ struct puper<ergoline::array<T, N>> {
 
     if (s.unpacking()) {
       if (PUP::as_bytes<T>::value) {
-        if (!is_uninitialized(s.source)) {
-          t.source = std::move(s.source.lock());
+        t.source = s.observe_source();
+        if ((bool)t.source) {
           t.buffer = reinterpret_cast<T*>(s.current);
           s.advance<T>(t.size());
         } else {

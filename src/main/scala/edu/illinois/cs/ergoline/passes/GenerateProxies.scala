@@ -201,6 +201,10 @@ object GenerateProxies {
       x.base,
       includeTemplates = true
     ) << ">" << s" impl_;" << s"};"
+
+    mailboxes.foreach(mboxName => {
+      ctx << "int" << s"$name::${mboxName}idx__" << ";"
+    })
   }
 
   def makeArgsVector(
