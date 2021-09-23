@@ -1137,11 +1137,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             ctx.nameFor(disambiguated)
           }
         } else if (isMailbox) {
-          ctx << "hypercomm::interceptor::send_async("
-          x.target match {
-            case s: EirScopedSymbol[_] => ctx << s.target << ","
+          val target = x.target match {
+            case s: EirScopedSymbol[_] => s
             case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
           }
+          val targetType = ctx.exprType(target.target)
+          ctx << (Find.tryClassLike(targetType) match {
+            case Some(p: EirProxy) if p.isCollective || p.isSection =>
+              "ergoline::broadcast_value"
+            case Some(p: EirProxy) if p.isElement =>
+              "hypercomm::interceptor::send_async"
+            case n => Errors.incorrectType(n.orNull, classOf[EirProxy])
+          })
+          ctx << "(" << target << ","
           // TODO ( make this a FQN! )
           val proxy = member.flatMap(_.parent).to[EirProxy]
           ctx << member

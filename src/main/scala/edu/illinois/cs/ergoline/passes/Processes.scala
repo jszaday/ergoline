@@ -104,7 +104,7 @@ object Processes {
     "#include <ergoline/callback.hpp> // ;",
     "#include <ergoline/function.hpp> // ;",
     "#include <ergoline/mailbox.hpp> // ;",
-    "#include <ergoline/reducer.hpp> // ;",
+    "#include <ergoline/collectives.hpp> // ;",
     "#include <ergoline/object.hpp> // ;",
     "#include <ergoline/array.hpp> // ;"
   )
@@ -169,7 +169,7 @@ object Processes {
     ctx << priorityIncludes
     // NOTE do we ever need to topo sort these?
     a.foreach(GenerateCpp.forwardDecl(ctx, _))
-    c.foreach(GenerateProxies.makeIndices(ctx, _))
+    c.filter(_.isCollective).foreach(GenerateProxies.makeIndices(ctx, _))
 
     toDecl foreach { case (namespace, classes) =>
       ctx << s"namespace ${namespace.fullyQualifiedName.mkString("::")}" << "{" << {
