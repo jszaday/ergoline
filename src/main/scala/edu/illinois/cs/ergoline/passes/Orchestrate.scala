@@ -209,10 +209,10 @@ object Orchestrate {
                     cgen << "hypercomm::send2port(this->thisProxy[hypercomm::conv2idx<CkArrayIndex>(" << arg << ")]," << name
                       .map(
                         _ + "_port"
-                      ) << ",hypercomm::make_value<hypercomm::typed_value<" << argTy
+                      ) << ",hypercomm::make_typed_value<" << argTy
                       .map(
                         cgen.typeFor(_)
-                      ) << ">>(" << assign.rval << "));"
+                      ) << ">(" << assign.rval << "));"
                     GenerateCpp.CppNode(cgen.toString())
                   }
                 )

@@ -95,13 +95,13 @@ object GenerateProxies {
                   ctx.typeContext,
                   f,
                   g
-                ) => (f, m)
+                ) => (f, n)
           }
       }
       .flatten
-      .foreach { case (f, m) =>
+      .foreach { case (f, n) =>
         ctx << (ctx
-          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, m)(ctx) << ";"
+          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, n)(ctx) << ";"
       }
 //    ctx << "__id__" << "=" << tmp << "." << "ckGetChareID()" << ";"
 //    ctx << "__msgType__" << "=" << {
