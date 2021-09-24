@@ -1,158 +1,176 @@
 #ifndef __ERGOLINE_ARRAY_HPP__
 #define __ERGOLINE_ARRAY_HPP__
 
+#include <cstdlib>
 #include <hypercomm/serialization/pup.hpp>
 
 namespace ergoline {
 
-template <typename T, std::size_t N>
-struct array
-    : public std::enable_shared_from_this<array<T, N>> {  // : public hashable {
+namespace detail {
+template <std::size_t N>
+inline std::size_t reduce(const std::array<std::size_t, N> &shape) {
+  if (N == 0) {
+    return 0;
+  } else if (N == 1) {
+    return shape[0];
+  } else {
+    auto tmp = shape[0];
+    for (auto i = 1; i < N; i++) {
+      tmp *= shape[i];
+    }
+    return tmp;
+  }
+}
+} // namespace detail
+
+template <typename T, std::size_t N> struct nd_span {
   static_assert(N >= 0, "dimensionality must be positive");
 
-  using buffer_t = T*;
-  using source_t = std::shared_ptr<void>;
-  using shape_t = std::array<std::size_t, N>;
+  using shape_type = std::array<std::size_t, N>;
+  static constexpr auto shape_size = sizeof(shape_type);
 
-  source_t source;
-  buffer_t buffer;
-  shape_t shape;
+  shape_type shape;
 
-  array(void) = default;
+  static constexpr auto offset = shape_size + CK_ALIGN(shape_size, 16);
 
-  array(const shape_t& shape_, bool init = true) : shape(shape_) {
-    this->alloc(init, false);
-  }
-
-  template <class... Args>
-  array(const source_t& src_, buffer_t buffer_, Args... args)
-      : source(src_), buffer(buffer_), shape{args...} {}
-
-  array(const std::shared_ptr<T>& buffer_, const shape_t& shape_)
-      : source(buffer_), buffer(buffer_.get()), shape(shape_) {}
-
-  inline void alloc(bool init, bool shallow) {
-    source = allocate(size(), init, shallow);
-    buffer = reinterpret_cast<buffer_t>(source.get());
-  }
-
-  inline T& operator[](const std::size_t& idx) { return buffer[idx]; }
-
-  inline buffer_t begin() { return buffer; }
-  inline buffer_t end() { return buffer + size(); }
-
-  inline const T* begin() const { return const_cast<const buffer_t>(buffer); }
-  inline const T* end() const {
-    return const_cast<const buffer_t>(buffer + size());
-  }
-
-  // TODO make constexpr
-  inline std::size_t size() const {
-    if (N == 0) {
-      return 0;
-    } else if (N == 1) {
-      return shape[0];
-    } else {
-      auto tmp = shape[0];
-      for (auto i = 1; i < N; i++) {
-        tmp *= shape[i];
-      }
-      return tmp;
+  ~nd_span() {
+    for (auto i = 0; i < this->size(); i += 1) {
+      (*this)[i].~T();
     }
   }
 
-  // std::size_t hash() override {
-  //   return hash_utils::hash_iterable(*this);
-  // }
-
-  // TODO implement this? idk...
-  template <class... Args>
-  static std::shared_ptr<array<T, N>> fill(const std::tuple<Args...>& shape,
-                                           const T& value);
-
-  static std::shared_ptr<array<T, 1>> fill(const int& shape, const T& value);
-
- private:
-  static source_t allocate(const std::size_t& n, const bool init,
-                           bool shallow) {
-    if (n == 0) {
-      return source_t{};
-    } else {
-      auto p = static_cast<T*>(aligned_alloc(alignof(T), sizeof(T) * n));
-      for (auto i = 0; (i < n) && init; i++) {
-        if (shallow) {
-          hypercomm::reconstruct(p + i);
-        } else {
-          new (p + i) T();
-        }
-      }
-      return source_t((void*)p, [=](void* p) {
-        auto* t = (T*)p;
-        for (std::size_t i = 0; i < n; i++) {
-          t[i].~T();
-        }
-        free(p);
-      });
-    }
+  inline T *begin(void) {
+    return reinterpret_cast<T *>(reinterpret_cast<char *>(this) + offset);
   }
+
+  inline T *end(void) { return this->begin() + this->size(); }
+
+  inline std::size_t size() const { return detail::reduce(this->shape); }
+
+  inline T &operator[](const std::size_t &idx) {
+    return *(this->begin() + idx);
+  }
+
+  inline static std::size_t
+  total_size(const std::array<std::size_t, N> &shape) {
+    return offset + detail::reduce(shape) * sizeof(T);
+  }
+
+  static void *operator new(std::size_t count,
+                            const std::array<std::size_t, N> &shape) {
+    return aligned_alloc(alignof(nd_span<T, N>), total_size(shape) * count);
+  }
+
+  static void operator delete(void *ptr) { std::free(ptr); }
+
+private:
+  nd_span(const std::array<std::size_t, N> &_) : shape(_) {}
+
+public:
+  static std::shared_ptr<nd_span<T, N>>
+  instantiate(const std::array<std::size_t, N> &shape) {
+    return std::shared_ptr<nd_span<T, N>>(new (shape) nd_span<T, N>(shape));
+  }
+
+  template <class... Args>
+  static std::shared_ptr<nd_span<T, N>> fill(const std::tuple<Args...> &shape,
+                                             const T &value);
+
+  static std::shared_ptr<nd_span<T, 1>> fill(const int &shape, const T &value);
 };
 
 template <>
 template <>
-std::shared_ptr<array<double, 2>> array<double, 2>::fill<int, int>(
-    const std::tuple<int, int>& shape, const double& value) {
-  std::array<std::size_t, 2> s = {(std::size_t)std::get<0>(shape),
-                                  (std::size_t)std::get<1>(shape)};
-  auto a = std::make_shared<array<double, 2>>(s, false);
-  std::fill(a->begin(), a->end(), value);
-  return a;
+std::shared_ptr<nd_span<double, 2>>
+nd_span<double, 2>::fill<int, int>(const std::tuple<int, int> &tup,
+                                   const double &value) {
+  auto span = instantiate(
+      {(std::size_t)std::get<0>(tup), (std::size_t)std::get<1>(tup)});
+  std::fill(span->begin(), span->end(), value);
+  return span;
 }
 
 template <>
-std::shared_ptr<array<double, 1>> array<double, 1>::fill(const int& shape,
-                                                         const double& value) {
-  std::array<std::size_t, 1> s = {(std::size_t)shape};
-  auto a = std::make_shared<array<double, 1>>(s, false);
-  std::fill(a->begin(), a->end(), value);
-  return a;
+std::shared_ptr<nd_span<double, 1>>
+nd_span<double, 1>::fill(const int &size, const double &value) {
+  auto span = instantiate({(std::size_t)size});
+  std::fill(span->begin(), span->end(), value);
+  return span;
 }
-}  // namespace ergoline
+
+template <typename T, std::size_t N> using array = nd_span<T, N>;
+} // namespace ergoline
 
 namespace hypercomm {
+
 template <typename T, std::size_t N>
-struct puper<ergoline::array<T, N>> {
-  inline static void impl(serdes& s, ergoline::array<T, N>& t) {
-    if (s.unpacking()) {
-      reconstruct(&t);
-    }
+struct is_zero_copyable<ergoline::nd_span<T, N>> {
+  static constexpr auto value = is_bytes<T>();
+};
 
-    pup(s, t.shape);
-
-    if (s.unpacking()) {
-      if (PUP::as_bytes<T>::value) {
-        t.source = s.observe_source();
-        if ((bool)t.source) {
-          t.buffer = reinterpret_cast<T*>(s.current);
-          s.advance<T>(t.size());
-        } else {
-          t.alloc(false, false);
-          s.copy(t.buffer, t.size());
-        }
-      } else {
-        t.alloc(true, true);
-        for (auto& i : t) {
-          pup(s, i);
-        }
-      }
-    } else if (PUP::as_bytes<T>::value) {
-      s.copy(t.buffer, t.size());
-    } else {
-      for (auto& i : t) {
-        pup(s, i);
-      }
-    }
+template <typename T, std::size_t N>
+struct quick_sizer<ergoline::nd_span<T, N>,
+                   typename std::enable_if<is_bytes<T>()>::type> {
+  inline static std::size_t impl(const ergoline::nd_span<T, N> &t) {
+    return ergoline::nd_span<T, N>::total_size(t.shape);
   }
 };
-}  // namespace hypercomm
+
+template <typename T, std::size_t N>
+struct zero_copy_fallback<ergoline::nd_span<T, N>,
+                          typename std::enable_if<is_bytes<T>()>::type> {
+  using type = std::shared_ptr<ergoline::nd_span<T, N>>;
+  using shape_type = typename ergoline::nd_span<T, N>::shape_type;
+
+  inline static void unpack(serdes &s, type &t) {
+    auto *shape = reinterpret_cast<shape_type *>(s.current);
+    auto totalSize = ergoline::nd_span<T, N>::total_size(*shape);
+    new (&t) type(s.observe_source(),
+                  reinterpret_cast<ergoline::nd_span<T, N> *>(s.current));
+    s.advanceBytes(totalSize);
+  }
+
+  inline static void pack(serdes &s, type &t) {
+    auto totalSize = ergoline::nd_span<T, N>::total_size(t->shape);
+    auto *raw = reinterpret_cast<char *>(t.get());
+    s.copy(raw, totalSize);
+  }
+};
+
+template <typename T, std::size_t N> struct puper<ergoline::nd_span<T, N>> {
+  inline static void impl(serdes &s, ergoline::nd_span<T, N> &t) {
+    CkAbort("not implemented!");
+    // if (s.unpacking()) {
+    //   reconstruct(&t);
+    // }
+
+    // pup(s, t.shape);
+
+    // if (s.unpacking()) {
+    //   if (PUP::as_bytes<T>::value) {
+    //     t.source = s.observe_source();
+    //     if ((bool)t.source) {
+    //       t.buffer = reinterpret_cast<T*>(s.current);
+    //       s.advance<T>(t.size());
+    //     } else {
+    //       t.alloc(false, false);
+    //       s.copy(t.buffer, t.size());
+    //     }
+    //   } else {
+    //     t.alloc(true, true);
+    //     for (auto& i : t) {
+    //       pup(s, i);
+    //     }
+    //   }
+    // } else if (PUP::as_bytes<T>::value) {
+    //   s.copy(t.buffer, t.size());
+    // } else {
+    //   for (auto& i : t) {
+    //     pup(s, i);
+    //   }
+    // }
+  }
+};
+} // namespace hypercomm
 
 #endif
