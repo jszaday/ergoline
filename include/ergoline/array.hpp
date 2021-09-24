@@ -29,19 +29,22 @@ struct nd_span {
 
   using shape_type = std::array<std::size_t, N>;
   static constexpr auto shape_size = sizeof(shape_type);
+  static constexpr auto non_trivial = !hypercomm::is_bytes<T>();
 
   shape_type shape;
 
   static constexpr auto offset = shape_size + CK_ALIGN(shape_size, 16);
 
   ~nd_span() {
-    for (auto i = 0; i < this->size(); i += 1) {
-      (*this)[i].~T();
+    if (non_trivial) {
+      for (auto &elt : *this) {
+        elt.~T();
+      }
     }
   }
 
   inline T *data(void) const {
-    return const_cast<nd_span<T, N>*>(this)->begin();
+    return const_cast<nd_span<T, N> *>(this)->begin();
   }
 
   inline T *begin(void) {
@@ -69,12 +72,19 @@ struct nd_span {
   static void operator delete(void *ptr) { std::free(ptr); }
 
  private:
-  nd_span(const std::array<std::size_t, N> &_) : shape(_) {}
+  nd_span(const std::array<std::size_t, N> &_, const bool &init) : shape(_) {
+    if (non_trivial && init) {
+      for (auto &elt : *this) {
+        hypercomm::reconstruct(&elt);
+      }
+    }
+  }
 
  public:
   static std::shared_ptr<nd_span<T, N>> instantiate(
-      const std::array<std::size_t, N> &shape) {
-    return std::shared_ptr<nd_span<T, N>>(new (shape) nd_span<T, N>(shape));
+      const std::array<std::size_t, N> &shape, const bool &init = true) {
+    return std::shared_ptr<nd_span<T, N>>(new (shape)
+                                              nd_span<T, N>(shape, init));
   }
 
   template <class... Args>
@@ -157,7 +167,7 @@ struct puper<std::shared_ptr<ergoline::nd_span<T, N>>,
       auto *shape = reinterpret_cast<shape_type *>(s.current);
       s.advanceBytes(sizeof(shape_type));
       new (&t) std::shared_ptr<ergoline::nd_span<T, N>>(
-          ergoline::nd_span<T, N>::instantiate(*shape));
+          ergoline::nd_span<T, N>::instantiate(*shape, false));
     } else {
       s | t->shape;
     }
