@@ -40,6 +40,10 @@ struct nd_span {
     }
   }
 
+  inline T *data(void) const {
+    return const_cast<nd_span<T, N>*>(this)->begin();
+  }
+
   inline T *begin(void) {
     return reinterpret_cast<T *>(reinterpret_cast<char *>(this) + offset);
   }

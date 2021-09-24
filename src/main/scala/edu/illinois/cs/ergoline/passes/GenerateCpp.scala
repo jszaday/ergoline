@@ -2268,18 +2268,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << ")" << ")" << ")"
       case (t: EirType, None) if t.isPointer =>
-        ctx << "std::make_shared<ergoline::extricate_t<" << ctx.nameFor(
-          t,
-          Some(x)
-        ) << ">>(" << {
-          arrayDim(ctx, t) match {
-            case Some(n) =>
-              ctx << "std::array<std::size_t," << n << ">" << makeIndex(
-                ctx,
-                args
-              )
-            case None => visitArguments(None, x.disambiguation, args) << ")"
-          }
+        val name = ctx.nameFor(t, Some(x))
+        arrayDim(ctx, t) match {
+          case Some(n) =>
+            ctx << name << "::instantiate(std::array<std::size_t," << n << ">" << makeIndex(
+              ctx,
+              args
+            )
+          case None =>
+            ctx << "std::make_shared<ergoline::extricate_t<" << name << ">>(" << visitArguments(
+              None,
+              x.disambiguation,
+              args
+            ) << ")"
         }
       case _ => ctx << Option.when(objTy.isPointer)("new") << ctx.typeFor(
           objTy,
