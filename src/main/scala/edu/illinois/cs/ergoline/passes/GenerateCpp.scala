@@ -898,6 +898,34 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } << ")" << ")"
   }
 
+  def formatSystemArgs(
+      fmt: String,
+      base: EirExpressionNode,
+      args: ArgumentList,
+      pairs: Map[EirTemplateArgument, EirResolvable[EirType]]
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val placeholderPtn = "\\{([_a-zA-Z\\d]+)}".r
+    val matches = placeholderPtn.findAllMatchIn(fmt).toList
+    val startPos =
+      (i: Int) => if (i >= matches.length) fmt.length else matches(i).start
+    val baseArg = EirCallArgument(base, isRef = false)(None)
+    val gathered = (baseArg +: args._1) ++ args._2
+    ctx << fmt.substring(0, startPos(0))
+    matches.zipWithIndex.foreach { case (matches, i) =>
+      val (m, end) = (matches.group(1), matches.end)
+      if (m.forall(_.isDigit)) {
+        // TODO use visit call argument here?
+        ctx << gathered(m.toInt)
+      } else {
+        pairs.keys.find(m == _.name).map(pairs(_)) match {
+          case Some(ty) => ctx << ctx.typeFor(ty, Some(base))
+          case None     => Errors.unableToResolve(m)
+        }
+      }
+      ctx << fmt.substring(end, startPos(i + 1))
+    }
+  }
+
   def visitSystemCall(implicit
       ctx: CodeGenerationContext,
       fc: EirFunctionCall,
@@ -922,20 +950,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << resWrapper
     disambiguated match {
       case _ if format.nonEmpty =>
-        format.foreach(fmt => {
-          val placeholderPtn = "\\{(\\d+)}".r
-          val matches = placeholderPtn.findAllMatchIn(fmt).toList
-          val startPos = (i: Int) =>
-            if (i >= matches.length) fmt.length else matches(i).start
-          val baseArg = EirCallArgument(base, isRef = false)(None)
-          val gathered = (baseArg +: args._1) ++ args._2
-          ctx << fmt.substring(0, startPos(0))
-          matches.zipWithIndex.map { case (m, i) =>
-            // TODO use visit call argument here?
-            val which = m.group(1).toInt
-            ctx << gathered(which) << fmt.substring(m.end, startPos(i + 1))
-          }
-        })
+        val types = Option(fc.types)
+          .filterNot(_.isEmpty)
+          .orElse(
+            Option(target).to[EirSpecializedSymbol[_]].map(_.types)
+          )
+        val pairs = types
+          .map(tys => {
+            disambiguated match {
+              case sp: EirSpecializable => sp.templateArgs.zip(tys)
+              case _                    => Nil
+            }
+          })
+          .map(_.toMap)
+          .getOrElse(Map())
+        format.foreach(formatSystemArgs(_, base, args, pairs))
       case _ if operator =>
         val flattened = flattenArgs(args)
         if (flattened.isEmpty) {
@@ -2249,15 +2278,23 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             } << "," << {
               indexForSingleton(p, types)
             } << Option.when(args.nonEmpty)(",")
-            0
+            Option
+              .when(disambiguate(ctx, x) match {
+                case x: EirMember => x.isSystem
+                case _            => false
+              })(-1)
+              .getOrElse(0)
           case _ => ???
         }
-        val postDrop = args.drop(numTake)
+        val postDrop =
+          if (numTake < 0) args.dropRight(numTake.abs) else args.drop(numTake)
         if (postDrop.nonEmpty) {
           ctx << visitArguments(None, x.disambiguation, postDrop) << Option
             .unless(numTake == 0)(",")
         }
-        if (numTake > 0) {
+        if (numTake < 0) {
+          ctx << (args.slice(args.length + numTake, args.length), ",")
+        } else if (numTake > 0) {
           ctx << "CkArrayOptions("
           if (numTake == 1) {
             ctx << args.head

@@ -168,7 +168,11 @@ case class EirProxy(
 
   // replace "self" with "selfProxy"?
   // TODO use clone
-  private def updateMember(m: EirMember): EirMember = {
+  private def updateMember(
+      m: EirMember,
+      extra: Option[EirFunctionArgument] = None,
+      special: Boolean = false
+  ): EirMember = {
     val theirs = m.member.asInstanceOf[EirFunction]
     val isAsync = m.annotation("async").isDefined
     val newMember = EirMember(Some(this), null, m.accessibility)
@@ -192,10 +196,13 @@ case class EirProxy(
       } else theirs.returnType
 //    val declType = ProxyManager.elementFor(this).getOrElse(this)
     newMember.counterpart = Some(m)
-    newMember.annotations =
-      m.annotations ++ Option.when(isSection)(EirAnnotation("system", Map()))
+    newMember.annotations = m.annotations ++ Option.when(isSection || special)(
+      EirAnnotation("system", Map())
+    )
     newMember.member = ours
-    ours.functionArgs = theirs.functionArgs.map(_.cloneWith(Some(ours)))
+    ours.functionArgs =
+      theirs.functionArgs.map(_.cloneWith(Some(ours))) ++ extra
+    extra.foreach(_.parent = Some(ours))
     ours.implicitArgs = theirs.implicitArgs.map(_.cloneWith(Some(ours)))
     newMember
   }
@@ -321,8 +328,27 @@ case class EirProxy(
     baseConstructors() ++ {
       base.members
         .filter(x => validMember(x) && !x.isConstructor)
-        .map(updateMember)
+        .map(updateMember(_))
     }
+  }
+
+  def genSingletonMembers(): List[EirMember] = {
+    base.members
+      .filter(x => validMember(x) && x.isConstructor)
+      .map(
+        updateMember(
+          _,
+          Option({
+            EirFunctionArgument(
+              None,
+              "__pe__",
+              globals.integerType,
+              isExpansion = false
+            )
+          }),
+          special = true
+        )
+      )
   }
 
   override def members: List[EirMember] = {
@@ -331,6 +357,7 @@ case class EirProxy(
         case (Some(EirElementProxy), _) => genElementMembers()
         case (Some(EirSectionProxy), _) => genSectionMembers()
         case (_, Some(_))               => genCollectiveMembers()
+        case (_, None)                  => genSingletonMembers()
         case _                          => Nil
       }
 
@@ -351,7 +378,7 @@ case class EirProxy(
         base.members
           .filter(validMember)
           .filter(_.isConstructor)
-          .map(updateMember)
+          .map(updateMember(_))
       })
       .getOrElse(Nil)
   }

@@ -12,5 +12,8 @@ public import ergoline::matchers::_;
 @system(alias="ergoline::hash")
 def hash<A>(a: A): hashcode;
 
+@system(format="sizeof({A})", applyResult="int")
+def sizeof<A>(): int;
+
 @system(alias="ergoline::timestamp")
 def timestamp(): long;
