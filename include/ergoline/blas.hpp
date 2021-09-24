@@ -20,8 +20,7 @@ inline int dgemm(const double& alpha, const ergoline::array<double, 2>& a,
 namespace {
 template <typename T>
 inline gsl_matrix_view erg2gsl(const ergoline::array<T, 2>& a) {
-  return gsl_matrix_view_array(const_cast<double*>(a.buffer),
-                               std::get<0>(a.shape), std::get<1>(a.shape));
+  return gsl_matrix_view_array(a.data(), std::get<0>(a.shape), std::get<1>(a.shape));
 }
 }  // namespace
 
@@ -47,9 +46,9 @@ inline int dgemm(const double& alpha, const ergoline::array<double, 2>& a,
   CkAssert(m == std::get<0>(c.shape) && n == std::get<1>(c.shape) &&
            "matrix dims must match");
 
-  const double* __restrict A = a.buffer;
-  const double* __restrict B = b.buffer;
-  double* __restrict C = c.buffer;
+  const double* __restrict A = a.data();
+  const double* __restrict B = b.data();
+  double* __restrict C = c.data();
 
   for (int i = 0; (i < m); i += 1) {
     for (int j = 0; (j < n); j += 1) {
