@@ -4,31 +4,43 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    @entry def self() { self@test(100); }
+    val tst: tester@;
 
-    @threaded @entry def test(n: int) {
-        val sz = n * 1000;
-        val nReps = n / 10 + 1;
+    @entry def self(args: array<string>) {
+        val nIters = (args.size() > 1) ? args[1].toInt() : 256;
+        val nElts = (args.size() > 2) ? args[2].toInt() : 128;
+        val whichNode = ck::numNodes() - 1;
+        val whichPe =
+          (whichNode == ck::myNode()) ? ((ck::myPe() + 1) % ck::numPes())
+                                      : ck::nodeFirst(whichNode);
+        tst = new tester@(self@, (nIters, nElts), whichPe);
+    }
+
+    @threaded @entry def test(args: (int, int)) {
+        val (nIters, nElts) = args;
+        val nReps = nIters / 10 + 1;
+        val sz = nElts * 1024;
         val arr = array<double, 1>::fill(sz, 2.0);
+        val totalSz = (arr.size() * sizeof<double>()).toDouble() / (1024.0 * 1024.0);
 
-        val tst = new tester@();
+        println(`messages will be at least ${totalSz} MB`);
 
         var avgMlbx = 0.0;
         var avgInpt = 0.0;
 
-        for (var it = 0; it < nReps; it += 1) {
-            tst.run(n);
+        for (var rep = 0; rep < nReps; rep += 1) {
+            tst.run(nIters);
 
             val start = ck::wallTime();
-            for (var i = 0; i < n; i += 1) {
-                tst.mailbox1(i, arr);
-                tst.mailbox2(i, arr);
+            for (var it = 0; it < nIters; it += 1) {
+                tst.mailbox1(it, arr);
+                tst.mailbox2(it, arr);
             }
             ck::awaitQuiescence();
             
             val mid = ck::wallTime();
-            for (var i = 0; i < (n * 2); i += 1) {
-                tst.input(i, arr);
+            for (var it = 0; it < (nIters * 2); it += 1) {
+                tst.input(it, arr);
             }
             ck::awaitQuiescence();
             
@@ -36,18 +48,21 @@ import ck;
             avgMlbx += mid - start;
             avgInpt += end - mid;
 
-            println(`done with iteration ${it + 1} out of ${nReps}`);
+            println(`done with repetition ${rep + 1} out of ${nReps}`);
         }
 
-        println(`time for mailboxes ${avgMlbx / n}`);
-        println(`time for plain ol' inputs ${avgInpt / n}`);
+        println(`time for mailboxes ${avgMlbx / nReps}`);
+        println(`time for plain ol' inputs ${avgInpt / nReps}`);
 
         exit();
     }
 }
 
 class tester {
-    @entry def self() {}
+    @entry def self(main: main@, args: (int, int)) {
+        println(`tester was created on PE ${ck::myPe()}`);
+        main.test(args);
+    }
 
     @threaded @entry def run(n: int) {
         @overlap for (var i = 0; i < n; i += 1) {
