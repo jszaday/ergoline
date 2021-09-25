@@ -6,6 +6,7 @@ package ergoline;
 
     @system(operator) def -(other: double): double;
     @system(operator) def *(other: double): double;
+    @system(operator) def *(other: int): double;
 
     @system(operator) def /(other: int): double;
     @system(operator) def /(other: double): double;

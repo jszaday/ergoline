@@ -1,0 +1,87 @@
+package benchmarks;
+
+import ergoline::_;
+import ck;
+
+@main class main {
+    val tst: bandwidth@;
+
+    val nIters: int;
+    val nReps: int;
+    val nSkip: int;
+    val arr: array<double, 1>;
+
+    @entry def self(args: array<string>) {
+        nIters = (args.size() > 1) ? args[1].toInt() : 256;
+        val nElts = (args.size() > 2) ? args[2].toInt() : 128;
+
+        nReps = nIters / 10 + 1;
+        nSkip = nReps;
+
+        arr = array<double, 1>::fill(nElts * 1024, 0.5);
+
+        // pick the most distant PE
+        val whichNode = ck::numNodes() - 1;
+        val whichPe =
+          (whichNode == ck::myNode()) ? ((ck::myPe() + 1) % ck::numPes())
+                                      : ck::nodeFirst(whichNode);
+
+        tst = new bandwidth@(self@, whichPe);
+    }
+
+    @mailbox def continue();
+
+    @threaded @entry def run() {
+        var totalTime = 0.0;
+        val totalSz = (arr.size() * sizeof<double>()).toDouble() / (1024.0 * 1024.0);
+
+        println(`messages are roughly ${totalSz} MB`);
+
+        for (var rep = 0; rep < nReps; rep += 1) {
+            var start = 0.0;
+            // inform chare that it will receive n messages
+            tst.run(nIters + nSkip);
+            // then send the messages
+            for (var it = 0; it < (nIters + nSkip); it += 1) {
+                // start timing after skipping some iters
+                if (it == nSkip) {
+                    start = ck::wallTime();
+                }
+                tst.arrival(arr);
+            }
+            // receive confirmation from the other chare
+            when continue() => ;
+            // then stop timing (and accumulate the results)
+            val end = ck::wallTime();
+            totalTime += end - start;
+            println(`done with repetition ${rep + 1} out of ${nReps}`);
+        }
+
+        val avgTime = totalTime / nReps;
+        val bw = (totalSz * nIters) / avgTime;
+
+        println(`avg time per iter was ${avgTime * 1000} ms`);
+        println(`avg bandwidth was ${bw} MB/s`);
+
+        exit();
+    }
+}
+
+class bandwidth {
+    val mainProxy: main@;
+
+    @entry def self(=mainProxy: main@) {
+        mainProxy.run();
+    }
+
+    @threaded @entry def run(nMsgs: int) {
+        // wait to receive n messages (in any order)
+        @overlap for (var i = 0; i < nMsgs; i += 1) {
+            when arrival(_) => ;
+        }
+        // then send the confirmation of receipt
+        mainProxy.continue();
+    }
+
+    @mailbox def arrival(arr: array<double, 1>);
+}
