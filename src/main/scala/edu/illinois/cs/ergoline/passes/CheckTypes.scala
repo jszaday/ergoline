@@ -1583,7 +1583,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
       Errors.expectedSync(x, f)
     }
-    if (x.target.foundType.exists(hasField(_, "release"))) {
+    if (x.target.foundType.map(CheckTypes.stripReference).exists(hasField(_, "release"))) {
       val f = makeMemberCall(x.target, "release")
       x.release = Some(f)
       visit(f)
