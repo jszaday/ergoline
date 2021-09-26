@@ -1,0 +1,11 @@
+package ck;
+
+import ergoline::bool;
+import ergoline::char;
+import ergoline::array;
+
+@system struct mailbox<Ts...> {
+    @system def apply(ts: *(Ts...));
+    @system def post(buffer: array<char, 1>);
+    @system def requirePost(b: bool);
+}
