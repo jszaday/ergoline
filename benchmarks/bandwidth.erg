@@ -85,7 +85,7 @@ class bandwidth {
             when arrival(_) => ;
         }
         // then send the confirmation of receipt
-        mainProxy.continue(());
+        mainProxy.continue();
     }
 
     @mailbox def arrival(arr: array<double, 1>);
