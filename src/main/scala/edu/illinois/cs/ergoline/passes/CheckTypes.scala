@@ -9,7 +9,8 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
   EirLiteralSymbol,
-  EirLiteralType
+  EirLiteralType,
+  EirUnitLiteral
 }
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -42,6 +43,7 @@ import edu.illinois.cs.ergoline.util.{
 }
 
 import scala.annotation.tailrec
+import scala.collection.SeqOps
 import scala.reflect.ClassTag
 
 class CheckTypes extends Pass {
@@ -329,14 +331,6 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
-  def argumentsMatch(
-      x: Iterable[EirType],
-      y: Iterable[EirType],
-      exact: Boolean
-  )(implicit
-      ctx: TypeCheckContext
-  ): Boolean = argumentsMatch(x.toList, y.toList, exact)
-
   def tryCast(expr: EirCallArgument, to: EirType)(implicit
       ctx: TypeCheckContext
   ): Boolean = {
@@ -377,14 +371,39 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  def bothUnit(
+      x: SeqOps[EirType, Iterable, Iterable[EirType]],
+      y: List[EirType]
+  ): Boolean = {
+    def isUnit(list: SeqOps[EirType, Iterable, Iterable[EirType]]): Boolean = {
+      list.isEmpty || list.headOption
+        .filter(_ => list.length == 1)
+        .contains(globals.unitType)
+    }
+
+    isUnit(x) && isUnit(y)
+  }
+
+  def argumentsMatch(
+      x: Iterable[EirType],
+      y: Iterable[EirType],
+      exact: Boolean
+  )(implicit
+      ctx: TypeCheckContext
+  ): Boolean = argumentsMatch(x.toList, y.toList, exact)
+
   def argumentsMatch(
       x: List[EirCallArgument],
       y: List[EirType]
   )(implicit
       ctx: TypeCheckContext
   ): Boolean = {
-    (x.length == y.length) && {
-      x.zip(y) forall { case (a, b) => tryCast(a, b) }
+    {
+      (x.length == y.length) && {
+        x.zip(y) forall { case (a, b) => tryCast(a, b) }
+      }
+    } || {
+      bothUnit(x.view.map(visit), y)
     }
   }
 
@@ -395,12 +414,16 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   )(implicit
       ctx: TypeCheckContext
   ): Boolean = {
-    (x.length == y.length) &&
-    x.zip(y)
-      .forall({
-        case (x, y) if exact => x == y
-        case (x, y)          => x.canAssignTo(y)
-      })
+    {
+      (x.length == y.length) &&
+      x.zip(y)
+        .forall({
+          case (x, y) if exact => x == y
+          case (x, y)          => x.canAssignTo(y)
+        })
+    } || {
+      bothUnit(x, y)
+    }
   }
 
   def resolveIterator(
@@ -1359,7 +1382,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       args: List[EirFunctionArgument]
   )(implicit ctx: TypeCheckContext): List[EirType] = {
     args.flatMap(arg => {
-      visit(arg.declaredType) match {
+      (arg.declaredType match {
+        case t: EirPackExpansion if arg.isExpansion => visit(t.base)
+        case t                                      => visit(t)
+      }) match {
         case t: EirTupleType if arg.isExpansion => t.children.map(visit(_))
         case t                                  => List(t)
       }
@@ -1583,7 +1609,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
       Errors.expectedSync(x, f)
     }
-    if (x.target.foundType.map(CheckTypes.stripReference).exists(hasField(_, "release"))) {
+    if (
+      x.target.foundType
+        .map(CheckTypes.stripReference)
+        .exists(hasField(_, "release"))
+    ) {
       val f = makeMemberCall(x.target, "release")
       x.release = Some(f)
       visit(f)
