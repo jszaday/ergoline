@@ -114,6 +114,11 @@ std::shared_ptr<nd_span<double, 1>> nd_span<double, 1>::fill(
 
 template <typename T, std::size_t N>
 using array = nd_span<T, N>;
+
+template <typename T, std::size_t N>
+std::size_t total_size(const std::shared_ptr<nd_span<T, N>>& span) {
+  return nd_span<T, N>::total_size(span->shape);
+}
 }  // namespace ergoline
 
 namespace hypercomm {

@@ -21,7 +21,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
+import edu.illinois.cs.ergoline.resolution.Find.{resolveAccessor, tryClassLike}
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
@@ -659,7 +659,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case (t: EirType, None)              => Some(t)
       case (t: EirSymbol[_], Some(args))   => resolve(t, args)
       case (t: EirSymbol[_], None)         => Find.resolutions[EirType](t).headOption
-      case _                               => ???
+      case (t: EirScopedSymbol[_], _) =>
+        val resolved = Find
+          .resolveAccessor(t)(Find.tryClassLike(t.target), Some(t.isStatic))
+          .headOption
+          .map(_._1)
+        Option(t.pending)
+          .to[EirExpressionNode]
+          .foreach(_.disambiguation = resolved)
+        t.foundType = resolved.map(visit)
+        t.foundType
+      case _ => ???
     }
   }
 
@@ -1057,7 +1067,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
   override def visitFunction(
       node: EirFunction
-  )(implicit ctx: TypeCheckContext): EirLambdaType = {
+  )(implicit ctx: TypeCheckContext): EirType = {
     val (isDefined, member, opt) = handleSpecializable(ctx, node)
     val proxy = member.flatMap(_.parent).to[EirProxy]
 
@@ -1106,7 +1116,17 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       })
 
     if (isDefined) {
-      ctx.lambdaWith(expand(node.functionArgs), visit(node.returnType))
+      if (member.exists(_.isMailbox)) {
+        val mailboxType =
+          Find.namedChild[EirClassLike](globals.ckModule, "mailbox")
+        val args = expand(node.functionArgs)
+        ctx.getTemplatedType(
+          mailboxType,
+          if (args.isEmpty) List(globals.unitType) else args
+        )
+      } else {
+        ctx.lambdaWith(expand(node.functionArgs), visit(node.returnType))
+      }
     } else {
       // NOTE expansions are explicitly not known here...
       //      what should this actually return? a placeholder?
@@ -1583,7 +1603,11 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     if (f.target.disambiguation.flatMap(_.annotation("sync")).isEmpty) {
       Errors.expectedSync(x, f)
     }
-    if (x.target.foundType.map(CheckTypes.stripReference).exists(hasField(_, "release"))) {
+    if (
+      x.target.foundType
+        .map(CheckTypes.stripReference)
+        .exists(hasField(_, "release"))
+    ) {
       val f = makeMemberCall(x.target, "release")
       x.release = Some(f)
       visit(f)
@@ -1677,9 +1701,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       // TODO ensure that target is mailbox
       ctx.goal.push({
         visit(i) match {
-          case x: EirLambdaType =>
-            visit(x.from.toTupleType(allowUnit = true)(None))
-          case _ => Errors.missingType(i)
+          case x: EirTemplatedType =>
+            visit(x.types.toTupleType(allowUnit = true)(None))
+          case x => Errors.incorrectType(x, classOf[EirTemplatedType])
         }
       })
       visit(p)

@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast.literals.{
+  EirBooleanLiteral,
   EirIntegerLiteral,
   EirLiteral,
   EirStringLiteral,
@@ -781,6 +782,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def isFuture(t: Option[EirNode]): Boolean = t.to[EirType].exists(isFuture)
 
+  def isMailbox(t: EirType): Boolean = t match {
+    case t: EirClass => (t.name == "mailbox") && (t.parent == globals.ckModule)
+    case _           => false
+  }
+
+  def isMailbox(t: Option[EirNode]): Boolean = t.to[EirType].exists(isMailbox)
+
   type ArgumentList =
     (List[EirCallArgument], List[EirSymbol[EirImplicitDeclaration]])
 
@@ -926,6 +934,55 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def handleMailboxMember(implicit
+      ctx: CodeGenerationContext,
+      m: EirMember,
+      fc: EirFunctionCall,
+      disambiguated: EirNode
+  ): Unit = {
+    val isApply = m.name == "apply"
+    val first = Option(fc.target).to[EirScopedSymbol[EirNamedNode]]
+    val target = first
+      .filter(_ => isApply)
+      .orElse(first.map(_.target).to[EirScopedSymbol[EirNamedNode]])
+    val proxy =
+      target.flatMap(_.target.foundType).flatMap(Find.tryClassLike).to[EirProxy]
+    val member = asMember(
+      if (isApply)
+        target.map(_.pending).to[EirExpressionNode].flatMap(_.disambiguation)
+      else target.flatMap(_.disambiguation)
+    )
+    if (proxy.isEmpty || member.isEmpty) Errors.invalidAccess(fc, m)
+    val idx =
+      proxy.zip(member).map { case (p, m) => epIndexFor(p, m, Some(fc)) }
+    m.name match {
+      case "apply" =>
+        ctx << (proxy match {
+          case Some(p: EirProxy) if p.isCollective || p.isSection =>
+            "ergoline::broadcast_value"
+          case Some(p: EirProxy) => "hypercomm::interceptor::send_async"
+          case n                 => Errors.incorrectType(n.orNull, classOf[EirProxy])
+        })
+        ctx << "(" << target.map(
+          _.target
+        ) << "," << idx << "," << visitArguments(
+          Some(fc),
+          member,
+          (fc.args, Nil)
+        ) << ")"
+      case "requirePost" =>
+        ctx << "(([&](void) { CkAssert(" << fc.args.map(_.expr) << ");"
+        ctx << "this->manual_mode(" << idx << ");" << "})())"
+      case "post" =>
+        val bufName = "__buffer__"
+        ctx << "(([&](void) { auto" << bufName << " = " << fc.args.map(_.expr) << ";"
+        ctx << "this->post_buffer(" << idx << ","
+        ctx << "std::shared_ptr<void>(" << bufName << "," << bufName << "->data())"
+        ctx << "," << bufName << "->size());" << "})())"
+      case _      => Errors.unreachable()
+    }
+  }
+
   def visitSystemCall(implicit
       ctx: CodeGenerationContext,
       fc: EirFunctionCall,
@@ -1007,6 +1064,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             }
           case _ => ???
         }
+      case m: EirMember if isMailbox(disambiguated.parent) =>
+        handleMailboxMember(ctx, m, fc, disambiguated)
       case m: EirMember if isOption(disambiguated.parent) =>
         handleOptionMember(ctx, m, fc, flattenArgs(args))
       case m: EirMember if isFuture(disambiguated.parent) =>
