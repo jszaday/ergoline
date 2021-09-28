@@ -613,9 +613,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): Unit = {
     target match {
-      case EirScopedSymbol(_proxy, _) =>
+      case s @ EirScopedSymbol(_proxy, _) =>
         val proxy = _proxy.foundType.to[EirProxy]
-        val found = asMember(disambiguate(ctx, target))
+        val found = asMember(disambiguate(ctx, target) match {
+          case x: EirLambdaExpression if ctx.isMailbox(x) =>
+            Option(s.pending).to[EirExpressionNode].flatMap(_.disambiguation)
+          case x => Some(x)
+        })
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
           ctx << epIndexFor(proxy.get, found.get, Some(target))
@@ -975,11 +979,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ctx << "this->manual_mode(" << idx << ");" << "})())"
       case "post" =>
         val bufName = "__buffer__"
-        ctx << "(([&](void) { auto" << bufName << " = " << fc.args.map(_.expr) << ";"
+        ctx << "(([&](void) { auto" << bufName << " = " << fc.args.map(
+          _.expr
+        ) << ";"
         ctx << "this->post_buffer(" << idx << ","
         ctx << "std::shared_ptr<void>(" << bufName << "," << bufName << "->data())"
         ctx << "," << bufName << "->size());" << "})())"
-      case _      => Errors.unreachable()
+      case _ => Errors.unreachable()
     }
   }
 

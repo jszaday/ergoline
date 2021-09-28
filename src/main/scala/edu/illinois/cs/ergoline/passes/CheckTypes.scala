@@ -331,6 +331,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     }
   }
 
+  @tailrec def pushDisambiguation(x: EirExpressionNode, dis: EirNode): Unit = {
+    x match {
+      case x: EirExpressionFacade => pushDisambiguation(x.expr, dis)
+      case x: EirScopedSymbol[_] =>
+        Option(x.pending)
+          .to[EirExpressionNode]
+          .foreach(_.disambiguation = x.disambiguation)
+        x.disambiguation = dis
+      case _ => x.disambiguation = dis
+    }
+  }
+
   def tryCast(expr: EirCallArgument, to: EirType)(implicit
       ctx: TypeCheckContext
   ): Boolean = {
@@ -359,10 +371,14 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
               ExpressionScope(None, Some(expr)),
               from,
               Some(from)
-            ) exists { case (m, ty) =>
-            val valid = ty.canAssignTo(to)
-            if (valid) { expr.disambiguation = ctx.makeLambda(expr, m, ty) }
-            valid
+            ) exists {
+            case (m, ty: EirLambdaType) =>
+              val valid = ty.canAssignTo(to)
+              if (valid) {
+                pushDisambiguation(expr, ctx.makeLambda(expr, m, ty))
+              }
+              valid
+            case (_, ty) => Errors.incorrectType(ty, classOf[EirLambdaType])
           }
         case _ => true
       }
@@ -712,7 +728,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     screenCandidates(
       scope,
-      candidates.view.collect { case (a: A, opt) => (a, opt) }
+      candidates.collect { case (a: A, opt) => (a, opt) }
     )
   }
 
