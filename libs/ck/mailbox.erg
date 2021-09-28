@@ -1,0 +1,17 @@
+package ck;
+
+import ergoline::bool;
+import ergoline::char;
+import ergoline::array;
+
+@system struct mailbox<Ts...> {
+    // sends a value to the mailbox
+    @system def apply(ts: *(Ts...));
+
+    // posts a buffer for receiving a zc transfer
+    @system def post(buffer: array<char, 1>);
+
+    // requires all zc transfers to have manually
+    // posted receive buffers (no implicit alloc)
+    @system def requirePost(b: bool);
+}

@@ -4,6 +4,9 @@ import ergoline::int;
 import ergoline::double;
 import ergoline::unit;
 
+@system(format="(int)hypercomm::kZeroCopySize")
+def zcThreshold(): int;
+
 /* Returns the elapsed wall time since the start of execution. */
 @system(alias="CkWallTimer") def wallTime(): double;
 

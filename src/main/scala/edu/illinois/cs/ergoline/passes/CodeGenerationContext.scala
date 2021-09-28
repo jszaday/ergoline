@@ -9,7 +9,7 @@ import edu.illinois.cs.ergoline.ast.types.{
 }
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.isOption
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{asMember, isOption}
 import edu.illinois.cs.ergoline.passes.Processes.ctx
 import edu.illinois.cs.ergoline.passes.UnparseAst.tab
 import edu.illinois.cs.ergoline.proxies.EirProxy
@@ -55,8 +55,14 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def hasChecked(x: EirSpecializable): Boolean = checked.contains(x)
 
-  def lambdas: Map[EirNamespace, List[EirLambdaExpression]] =
-    tyCtx.lambdas.groupBy(x =>
+  def isMailbox(x: EirLambdaExpression): Boolean = asMember(x.disambiguation)
+    .flatMap(_.parent)
+    .flatMap(Find.tryClassLike)
+    .exists(GenerateCpp.isMailbox)
+
+  def lambdas: Map[EirNamespace, List[EirLambdaExpression]] = tyCtx.lambdas
+    .filterNot(isMailbox)
+    .groupBy(x =>
       Find.parentOf[EirNamespace](x).getOrElse(Errors.missingNamespace(x))
     )
 

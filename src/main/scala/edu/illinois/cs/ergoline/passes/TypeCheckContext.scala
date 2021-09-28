@@ -141,8 +141,9 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   def makeLambda(
       in: EirExpressionNode,
       m: EirMember,
-      ty: EirType
+      ty: EirLambdaType
   ): EirLambdaExpression = {
+    var from: List[EirResolvable[EirType]] = ty.from
     val x = in match {
       case EirCallArgument(expr, _) => expr
       case _                        => in
@@ -153,6 +154,7 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
         val args = assertValid[EirFunction](m.member).functionArgs
         val lambda = EirLambdaExpression(Some(x), args, null)
         _generatedLambdas += (x -> lambda)
+        lambda.disambiguation = Some(m)
         lambda.foundType = Some(ty)
         lambda.body = EirBlock(Some(lambda), Nil)
         val ret = EirReturn(Some(lambda.body), null)
@@ -170,7 +172,16 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
             EirCallArgument(
               {
                 val p = EirPlaceholder(None, Some(x))
-                p.foundType = Some(CheckTypes.visit(x)(this))
+                p.foundType = Some(x.declaredType match {
+                  case t: EirPackExpansion if x.isExpansion =>
+                    val next = from.toTupleType(allowUnit = true)(None)
+                    from = Nil
+                    next
+                  case _ =>
+                    val next = from.head
+                    from = from.tail
+                    next
+                }).map(CheckTypes.visit(_)(this))
                 p
               },
               isRef = false

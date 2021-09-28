@@ -18,22 +18,24 @@ import ck;
         nSkip = nReps;
         // create an array filled with the value "0.5"
         arr = array<double, 1>::fill(nElts * 1024, 0.5);
+        // ensure it will be auto-xfer'd via zero-copy
+        assert(arr.totalSize() >= ck::zcThreshold());
         // pick the most distant PE
         val whichNode = ck::numNodes() - 1;
         val whichPe =
           (whichNode == ck::myNode()) ? ((ck::myPe() + 1) % ck::numPes())
                                       : ck::nodeFirst(whichNode);
         // and create the other chare on it
-        bwProxy = new bandwidth@(self@, whichPe);
+        bwProxy = new bandwidth@(self@, arr.totalSize(), whichPe);
     }
 
     @mailbox def continue();
 
     @threaded @entry def run() {
         var totalTime = 0.0;
-        val totalSz = (arr.size() * sizeof<double>()).toDouble() / (1024.0 * 1024.0);
+        val totalSize = arr.totalSize() / (1024.0 * 1024.0);
 
-        println(`messages are roughly ${totalSz} MB`);
+        println(`messages are roughly ${totalSize} MB`);
 
         for (var rep = 0; rep < nReps; rep += 1) {
             var start = 0.0;
@@ -47,7 +49,7 @@ import ck;
                 }
                 bwProxy.arrival(arr);
             }
-            // receive confirmation from the other chare
+            // wait for confirmation from the other chare
             when continue() => ;
             // then stop timing (and accumulate the results)
             val end = ck::wallTime();
@@ -56,7 +58,7 @@ import ck;
         }
 
         val avgTime = totalTime / nReps;
-        val bw = (totalSz * nIters) / avgTime;
+        val bw = (totalSize * nIters) / avgTime;
 
         println(`avg time per iter was ${avgTime * 1000} ms`);
         println(`avg bandwidth was ${bw} MB/s`);
@@ -67,17 +69,25 @@ import ck;
 
 class bandwidth {
     val mainProxy: main@;
+    val buffer: array<char, 1>;
 
-    @entry def self(=mainProxy: main@) {
+    @entry def self(=mainProxy: main@, size: int) {
+        // requires all zc transfers to have manually
+        // posted receive buffers (no implicit alloc)
+        (self@arrival).requirePost(true);
+        buffer = new array<char, 1>(size);
         mainProxy.run();
     }
 
     @threaded @entry def run(nMsgs: int) {
-        // wait to receive n messages (in any order)
+        // for all n messages (in any order):
         @overlap for (var i = 0; i < nMsgs; i += 1) {
+            // manually post a receive buffer
+            (self@arrival).post(buffer);
+            // then await the message's arrival
             when arrival(_) => ;
         }
-        // then send the confirmation of receipt
+        // afterwards, send confirmation to main
         mainProxy.continue();
     }
 
