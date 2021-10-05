@@ -15,7 +15,7 @@ import ck;
         val nElts = (args.size() > 2) ? args[2].toInt() : 128;
         nIters = (args.size() > 1) ? args[1].toInt() : 256;
         nReps = nIters / 10 + 1;
-        nSkip = nReps;
+        nSkip = nReps / 2;
         // create an array filled with the value "0.5"
         arr = array<double, 1>::fill(nElts * 1024, 0.5);
         // ensure it will be auto-xfer'd via zero-copy
@@ -37,24 +37,24 @@ import ck;
 
         println(`messages are roughly ${totalSize} MB`);
 
-        for (var rep = 0; rep < nReps; rep += 1) {
-            var start = 0.0;
+        for (var rep = 0; rep < (nReps + nSkip); rep += 1) {
+            val start = ck::wallTime();
             // inform chare that it will receive n messages
-            bwProxy.run(nIters + nSkip);
+            bwProxy.run(nIters);
             // then send the messages
-            for (var it = 0; it < (nIters + nSkip); it += 1) {
+            for (var it = 0; it < nIters; it += 1) {
                 // start timing after skipping some iters
-                if (it == nSkip) {
-                    start = ck::wallTime();
-                }
                 bwProxy.arrival(arr);
             }
             // wait for confirmation from the other chare
             when continue() => ;
             // then stop timing (and accumulate the results)
             val end = ck::wallTime();
-            totalTime += end - start;
-            println(`done with repetition ${rep + 1} out of ${nReps}`);
+            val time = end - start;
+            if (rep >= nSkip) {
+                totalTime += time;
+            }
+            println(`info> rep ${rep + 1} out of ${nReps + nSkip} took ${time} s`);
         }
 
         val avgTime = totalTime / nReps;
