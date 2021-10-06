@@ -9,38 +9,50 @@ import ck;
     val nIters: int;
     val nReps: int;
     val nSkip: int;
-    val arr: array<double, 1>;
+
+    val verbose: bool = false;
+    val sizes: queue<int>;
 
     @entry def self(args: array<string>) {
-        val nElts = (args.size() > 2) ? args[2].toInt() : 128;
+        // read the command line args
         nIters = (args.size() > 1) ? args[1].toInt() : 256;
-        nReps = nIters / 10 + 1;
+        nReps = (args.size() > 2) ? args[2].toInt() : (nIters / 10 + 1);
         nSkip = nReps / 2;
-        // create an array filled with the value "0.5"
-        arr = array<double, 1>::fill(nElts * 1024, 0.5);
-        // ensure it will be auto-xfer'd via zero-copy
-        assert(arr.totalSize() >= ck::zcThreshold());
         // pick the most distant PE
         val whichNode = ck::numNodes() - 1;
         val whichPe =
           (whichNode == ck::myNode()) ? ((ck::myPe() + 1) % ck::numPes())
                                       : ck::nodeFirst(whichNode);
+        // set up all the sizes
+        sizes = new queue<int>();
+        val maxSize = 512 * 1024;
+        for (var size = 1; size <= maxSize; size *= 2) {
+            sizes.append(size);
+        }
         // and create the other chare on it
-        bwProxy = new bandwidth@(self@, arr.totalSize(), whichPe);
+        bwProxy = new bandwidth@(self@, maxSize, whichPe);
+        println("Size\t\tMB/s");
     }
 
-    @mailbox def continue();
+    @entry def next() {
+        if (sizes.isEmpty()) {
+            exit();
+        } else {
+            val size = sizes.head();
+            self@run(size);
+            sizes.removeHead();
+        }
+    }
 
-    @threaded @entry def run() {
+    @threaded @entry def run(size: int) {
+        // create an array filled with the value "0.5"
+        val arr = array<double, 1>::fill(size, 0.5);
         var totalTime = 0.0;
-        val totalSize = arr.totalSize() / (1024.0 * 1024.0);
-
-        println(`messages are roughly ${totalSize} MB`);
 
         for (var rep = 0; rep < (nReps + nSkip); rep += 1) {
             val start = ck::wallTime();
             // inform chare that it will receive n messages
-            bwProxy.run(nIters);
+            bwProxy.run(nIters, arr.totalSize());
             // then send the messages
             for (var it = 0; it < nIters; it += 1) {
                 // start timing after skipping some iters
@@ -54,38 +66,61 @@ import ck;
             if (rep >= nSkip) {
                 totalTime += time;
             }
-            println(`info> rep ${rep + 1} out of ${nReps + nSkip} took ${time} s`);
+            if (verbose) {
+                println(`info> rep ${rep + 1} out of ${nReps + nSkip} took ${time} s`);
+            }
         }
 
+        val totalSize = arr.totalSize() / 1024.0;
         val avgTime = totalTime / nReps;
-        val bw = (totalSize * nIters) / avgTime;
+        val bw = (totalSize * nIters) / (avgTime * 1024.0);
 
-        println(`avg time per iter was ${avgTime * 1000} ms`);
-        println(`avg bandwidth was ${bw} MB/s`);
+        println(`${size * sizeof<double>()}\t\t${bw}`);
 
-        exit();
+        self@next();
     }
+
+    @mailbox def continue();
 }
 
 class bandwidth {
+    val buffers: map<int, array<char, 1>>;
     val mainProxy: main@;
-    val buffer: array<char, 1>;
 
-    @entry def self(=mainProxy: main@, size: int) {
+    @entry def self(=mainProxy: main@, maxSize: int) {
+        // this is a property of the machine
+        val overhead = 24;
+        // allocate all the receive buffers
+        buffers = new map<int, array<char, 1>>();
+        for (var size = ck::zcThreshold(); size <= (maxSize * sizeof<double>()); size *= 2) {
+            val total = size + overhead;
+            buffers[total] = new array<char, 1>(total);
+        }
         // requires all zc transfers to have manually
         // posted receive buffers (no implicit alloc)
         (self@arrival).requirePost(true);
-        buffer = new array<char, 1>(size);
-        mainProxy.run();
+        // tell main we're ready
+        mainProxy.next();
     }
 
-    @threaded @entry def run(nMsgs: int) {
-        // for all n messages (in any order):
-        @overlap for (var i = 0; i < nMsgs; i += 1) {
-            // manually post a receive buffer
-            (self@arrival).post(buffer);
-            // then await the message's arrival
-            when arrival(_) => ;
+    @threaded @entry def run(nMsgs: int, size: int) {
+        // if we have a zc receive buffer
+        if (buffers.contains(size)) {
+            // get the pre-alloc'd buffer
+            val buffer = buffers[size];
+            // for all n messages (in any order):
+            @overlap for (var i = 0; i < nMsgs; i += 1) {
+                // manually post a receive buffer
+                (self@arrival).post(buffer);
+                // then await the message's arrival
+                when arrival(_) => ;
+            }
+        } else {
+            // for all n messages (in any order):
+            @overlap for (var i = 0; i < nMsgs; i += 1) {
+                // await the message's arrival
+                when arrival(_) => ;
+            }
         }
         // afterwards, send confirmation to main
         mainProxy.continue();
