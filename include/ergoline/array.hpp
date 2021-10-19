@@ -120,6 +120,11 @@ template <typename T, std::size_t N>
 std::size_t total_size(const std::shared_ptr<nd_span<T, N>>& span) {
   return nd_span<T, N>::total_size(span->shape);
 }
+
+template <typename T>
+constexpr std::size_t offset_for(void) {
+  return T::offset;
+}
 }  // namespace ergoline
 
 namespace hypercomm {

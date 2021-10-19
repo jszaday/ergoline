@@ -18,6 +18,9 @@ class array<A, N: int = 1> extends iterable<A> {
     @system(static, alias="ergoline::total_size", applyResult="int")
     def totalSize(): int;
 
+    @system(static, format="ergoline::offset_for<{0}>()", applyResult="int")
+    static def offset(): int;
+
     @transient private class iterator_  with iterator<A> where N == 1 {
         var current: int = 0;
         val base: array<A, N>;
