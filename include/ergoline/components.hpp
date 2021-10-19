@@ -5,35 +5,33 @@
 
 namespace ergoline {
 
-using action_type = std::function<void(hypercomm::component::value_set&&)>;
-
-class component : public hypercomm::component {
-  action_type action_;
-  std::size_t n_inputs_;
-
+template<typename T>
+class component : public hypercomm::component<T, std::tuple<>> {
+  using parent_t = hypercomm::component<T, std::tuple<>>;
  public:
-  component(const std::size_t& _1, const std::size_t& _2, const action_type& _3)
-      : hypercomm::component(_1), n_inputs_(_2), action_(_3) {}
-
-  // the component's number of input ports
-  virtual std::size_t n_inputs(void) const override { return this->n_inputs_; }
-
-  // the component's number of output ports
-  virtual std::size_t n_outputs(void) const override { return 0; }
+  using in_set_t = typename parent_t::in_set;
+  using action_t = std::function<void(in_set_t&)>;
+ private:
+  action_t action_;
+ public:
+  component(const std::size_t& id_, const std::size_t& n_inputs_, const action_t& act_)
+      : parent_t(id_), action_(act_) {
+        CkAssert(n_inputs_ == std::tuple_size<in_set_t>::value);
+      }
 
   // action called when a value set is ready
-  virtual value_set action(value_set&& values) override {
-    this->action_(std::move(values));
+  virtual std::tuple<> action(in_set_t& set) override {
+    this->action_(set);
 
     return {};
   }
 };
 
-template <typename BaseIndex, typename Index, typename Fn>
-inline hypercomm::comproxy<ergoline::component> make_component(
+template <typename T, typename BaseIndex, typename Index, typename Fn>
+inline hypercomm::comproxy<ergoline::component<T>> make_component(
     hypercomm::vil<BaseIndex, Index>& self, const std::size_t& n_inputs,
     const Fn& fn) {
-  return self.template emplace_component<ergoline::component>(n_inputs, fn);
+  return self.template emplace_component<ergoline::component<T>>(n_inputs, fn);
 }
 }
 

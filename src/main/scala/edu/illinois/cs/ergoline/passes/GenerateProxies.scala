@@ -244,7 +244,7 @@ object GenerateProxies {
       member: EirMember
   ): Unit = {
     member.counterpart match {
-      case Some(m: EirMember) if m.isMailbox => makeMailboxBody(ctx, member)
+      case Some(m: EirMember) if m.isMailbox => Errors.unreachable()
       case Some(m @ EirMember(_, f: EirFunction, _)) =>
         if (m.isEntryOnly) {
           ctx.pushSelf("this->impl_")
@@ -264,14 +264,13 @@ object GenerateProxies {
       ctx: CodeGenerationContext
   ): Unit = {
     val (mboxName, tys) = mailboxName(ctx, m)
-    val value = "val_"
+    val value = "dev_"
     val implSelf = "impl_self_"
     val baseName = m.base.asInstanceOf[EirProxy].baseName
-    ctx << "static" << "void" << s"${mboxName}fn__" << s"(hypercomm::generic_locality_* $implSelf, const hypercomm::entry_port_ptr&, hypercomm::value_ptr&& $value)" << "{"
+    ctx << "static" << "void" << s"${mboxName}fn__" << s"(hypercomm::generic_locality_* $implSelf, hypercomm::deliverable&& $value)" << "{"
     ctx << "auto*" << "self" << "=(" << baseName << s"*)$implSelf;"
-    ctx << "self->" << mboxName << s"->receive_value(0, std::move($value));"
+    ctx << "self->passthru(std::make_pair((hypercomm::component_id_t)self->" << mboxName << ", 0), std::move(" << value << "));"
     ctx << "}"
-
     visitTemplateArgs(f)(ctx)
     makeMailboxDecl(ctx, m)
   }
@@ -297,28 +296,8 @@ object GenerateProxies {
 
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val (name, tys) = mailboxName(ctx, x)
-    ctx << s"hypercomm::comproxy<ergoline::mailbox<${tys mkString ", "}>> $name;"
-  }
-
-  def getMailboxType(name: String): String =
-    s"typename decltype($name)::type::type"
-
-  def makeMailboxBody(ctx: CodeGenerationContext, x: EirMember): Unit = {
-    val mboxName = "this->" + mailboxName(ctx, x)._1
-    val name = "__value__"
-    val f = assertValid[EirFunction](x.member)
-    val ty = name.init + "_type__"
-
-    ctx << "using" << ty << "=" << getMailboxType(mboxName) << ";"
-    ctx << "auto" << name << "="
-
-    if (f.functionArgs.isEmpty) {
-      ctx << "hypercomm::make_unit_value();"
-    } else {
-      ctx << "hypercomm::typed_value<" << ty << ">::from_message(" << msgName << ");"
-    }
-
-    ctx << mboxName << "->receive_value(0,std::move(" << name << "));"
+    ctx << s"using ${name}type__ = ergoline::mailbox<${tys mkString ", "}>;"
+    ctx << s"hypercomm::comproxy<${name}type__> $name;"
   }
 
   def makeParameter(

@@ -11,7 +11,6 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
-  getMailboxType,
   indicesName,
   mailboxName,
   updateLocalityContext
@@ -2983,11 +2982,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (sentinel._3.isEmpty) ctx << "{"
 
-    val set = "__vals__"
-
-    ctx << "auto" << com << "=" << "ergoline::make_component(*this," << nPorts.toString << ","
-    ctx << "[=](hypercomm::component::value_set&&" << set << ")" << "{"
-
     val quadruplets = x.patterns.map({ case (symbol, _) =>
       val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
         ctx.proxy,
@@ -3006,13 +3000,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       (m, mboxName, resolved, arrayArgs)
     })
 
+    val set = s"${com}vals__"
+    val setType = "std::tuple<" + quadruplets
+      .map { case (_, mboxName, _, _) =>
+        s"typename decltype($mboxName)::type::type"
+      }
+      .mkString(", ") + ">"
+
+    ctx << "using" << (set + "type__") << "=" << setType << ";"
+
+    ctx << "auto" << com << "=" << "ergoline::make_component<" << (set + "type__") << ">(*this," << nPorts.toString << ","
+    ctx << "[=](" << (set + "type__") << "&" << set << ")" << "{"
+
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
       val (m, mboxName, _, arrayArgs) = quadruplets(i)
       val name = s"__value${i}__"
       val ty = name.init + "type__"
 
-      ctx << s"using" << ty << "=" << getMailboxType(mboxName) << ";"
-      ctx << "auto" << name << "=" << s"hypercomm::value2typed<$ty>(std::move(" << set << "[" << i.toString << "]));"
+      ctx << "auto" << name << "=" << s"std::move(std::get<$i>($set));"
       ctx << visitPatternDecl(
         ctx,
         patterns,
@@ -3040,7 +3045,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val ty = name.init + "arg_type__"
         val constRef = s"const $ty&"
         ctx << "{"
-        ctx << s"using" << ty << "=" << getMailboxType(mboxName) << ";"
         ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
         ctx << declarations
         ctx << "return" << conditions

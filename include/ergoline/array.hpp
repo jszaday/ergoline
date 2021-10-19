@@ -70,6 +70,7 @@ struct nd_span {
   }
 
   static void operator delete(void *ptr) { std::free(ptr); }
+  static void operator delete(void *ptr, const std::array<std::size_t, N> &) { std::free(ptr); }
 
  private:
   nd_span(const std::array<std::size_t, N> &_, const bool &init) : shape(_) {
