@@ -44,7 +44,7 @@ void contribute(T* t, const CkCallback& cb) {
 template <typename T>
 inline hypercomm::is_valid_endpoint_t<T> broadcast_value(
     const CkArrayID &aid, const T &ep_, hypercomm::value_ptr &&value) {
-  hypercomm::deliverable dev(std::move(value), ep);
+  hypercomm::deliverable dev(std::move(value), ep_);
   CkEnforce((bool)dev && (bool)dev.endpoint());
 
   auto *msg = hypercomm::deliverable::to_message(std::move(dev));
@@ -57,7 +57,7 @@ inline hypercomm::is_valid_endpoint_t<T> broadcast_value(
   amsg->array_setIfNotThere(CkArray_IfNotThere_buffer);
 
   CProxy_ArrayBase proxy(aid);
-  proxy.ckBroadcast(msg, env->getEpIdx());
+  proxy.ckBroadcast(amsg, env->getEpIdx());
 }
 }
 
