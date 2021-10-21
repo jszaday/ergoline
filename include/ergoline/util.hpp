@@ -47,6 +47,11 @@ struct extractor_<std::shared_ptr<T>> {
 };
 
 template<typename T>
+struct extractor_<hypercomm::typed_value_ptr<T>> {
+  using type = T;
+};
+
+template<typename T>
 using extricate_t = typename extractor_<T>::type;
 
 inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {

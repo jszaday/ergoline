@@ -3035,16 +3035,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
       val (m, mboxName, resolved, arrayArgs) = quadruplets(i)
       val temp = ctx.temporary
+      val tempVal = s"$temp->value()"
       val declarations =
-        visitPatternDecl(ctx, patterns, temp, forceTuple = true).split(n)
+        visitPatternDecl(ctx, patterns, tempVal, forceTuple = true).split(n)
       val conditions =
-        visitPatternCond(ctx, patterns, temp, Some(resolved)).mkString(" && ")
+        visitPatternCond(ctx, patterns, tempVal, Some(resolved)).mkString(" && ")
 
       val pred: Option[String] = Option.when(conditions.nonEmpty)({
         val name = s"__pred${i}__"
         val ty = name.init + "arg_type__"
         val constRef = s"const $ty&"
         ctx << "{"
+        ctx << "using" << ty << "=" << "typename" << "decltype(" << mboxName << ")::type::type;"
         ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
         ctx << declarations
         ctx << "return" << conditions
