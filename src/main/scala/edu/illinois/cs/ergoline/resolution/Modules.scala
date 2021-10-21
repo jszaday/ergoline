@@ -29,7 +29,7 @@ object Modules {
 
   val hypercommHome = ergolineHome
     .map(_.resolve("hypercomm"))
-    .filter(dir => Files.isDirectory(dir) && !Files.list(dir).toList.isEmpty)
+    .filter(Files.isDirectory(_))
     .orElse({
       Properties.envOrNone("HYPERCOMM_HOME").map(Paths.get(_))
     })
