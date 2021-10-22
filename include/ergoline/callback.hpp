@@ -25,7 +25,7 @@ struct immediate<Ret(Args...)> : public hypercomm::immediate_action<Ret(Args...)
 };
 
 template<typename Ret, typename... Args>
-std::shared_ptr<immediate<Ret(Args...)>> wrap_lambda(const typename immediate<Ret(Args...)>::action_type& action) {
+std::shared_ptr<hypercomm::immediate_action<Ret(Args...)>> wrap_lambda(const typename immediate<Ret(Args...)>::action_type& action) {
   return std::make_shared<immediate<Ret(Args...)>>(action);
 }
 

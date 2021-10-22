@@ -70,6 +70,7 @@ struct nd_span {
   }
 
   static void operator delete(void *ptr) { std::free(ptr); }
+  static void operator delete(void *ptr, const std::array<std::size_t, N> &) { std::free(ptr); }
 
  private:
   nd_span(const std::array<std::size_t, N> &_, const bool &init) : shape(_) {
@@ -118,6 +119,11 @@ using array = nd_span<T, N>;
 template <typename T, std::size_t N>
 std::size_t total_size(const std::shared_ptr<nd_span<T, N>>& span) {
   return nd_span<T, N>::total_size(span->shape);
+}
+
+template <typename T>
+constexpr std::size_t offset_for(void) {
+  return T::offset;
 }
 }  // namespace ergoline
 

@@ -25,8 +25,8 @@ import ck;
                                       : ck::nodeFirst(whichNode);
         // set up all the sizes
         sizes = new queue<int>();
-        val maxSize = 512 * 1024;
-        for (var size = 1; size <= maxSize; size *= 2) {
+        val maxSize = 4 * 1024 * 1024;
+        for (var size = 8; size <= maxSize; size *= 2) {
             sizes.append(size);
         }
         // and create the other chare on it
@@ -45,8 +45,7 @@ import ck;
     }
 
     @threaded @entry def run(size: int) {
-        // create an array filled with the value "0.5"
-        val arr = array<double, 1>::fill(size, 0.5);
+        val arr = new array<char, 1>(size);
         var totalTime = 0.0;
 
         for (var rep = 0; rep < (nReps + nSkip); rep += 1) {
@@ -71,11 +70,11 @@ import ck;
             }
         }
 
-        val totalSize = arr.totalSize() / 1024.0;
         val avgTime = totalTime / nReps;
-        val bw = (totalSize * nIters) / (avgTime * 1024.0);
+        val totalSize = arr.totalSize();
+        val bw = (totalSize * nIters) / (avgTime * 1024.0 * 1024.0);
 
-        println(`${size * sizeof<double>()}\t\t${bw}`);
+        println(`${size}\t\t${bw}`);
 
         self@next();
     }
@@ -89,10 +88,10 @@ class bandwidth {
 
     @entry def self(=mainProxy: main@, maxSize: int) {
         // this is a property of the machine
-        val overhead = 24;
+        val overhead = array<char, 1>::offset();
         // allocate all the receive buffers
         buffers = new map<int, array<char, 1>>();
-        for (var size = ck::zcThreshold(); size <= (maxSize * sizeof<double>()); size *= 2) {
+        for (var size = ck::zcThreshold(); size <= maxSize; size *= 2) {
             val total = size + overhead;
             buffers[total] = new array<char, 1>(total);
         }
@@ -126,5 +125,5 @@ class bandwidth {
         mainProxy.continue();
     }
 
-    @mailbox def arrival(arr: array<double, 1>);
+    @mailbox def arrival(arr: array<char, 1>);
 }
