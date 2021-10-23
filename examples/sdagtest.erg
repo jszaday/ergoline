@@ -28,10 +28,10 @@ class sdagtest {
         neighbors[0] = (idx + n - 1) % n;
         neighbors[1] = (idx + 1) % n;
         self[@]run();
-        self[@]valid(idx);
+        self[@]valid();
     }
 
-    @mailbox def valid(idx: int);
+    @mailbox def valid();
     @mailbox def invalid();
 
     @mailbox def receive(it: int, from: int);
@@ -41,7 +41,7 @@ class sdagtest {
         val idx = self[@]index();
 
         await any {
-            when valid(_ == idx) => println(`ch(${idx})> received a message from itself!`);
+            when valid() => println(`ch(${idx})> received a valid message.`);
             when invalid() => abort("you shouldn't see this!");
         }
 
