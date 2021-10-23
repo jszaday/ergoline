@@ -579,7 +579,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (fc.exists(ctx.shouldRepack)) ctx << "ergoline::repack("
         else ctx << "hypercomm::pack("
       case Some((true, tys)) =>
-        ctx << "hypercomm::make_typed_value<std::tuple<" << (tys, ",") << ">>("
+        ctx << "hypercomm::make_typed_value<"
+        if (tys.length == 1) {
+          ctx << tys.head
+        } else {
+          ctx << "std::tuple<" << (tys, ",") << ">"
+        }
+        ctx << ">("
       case _ =>
     }
 
