@@ -22,7 +22,10 @@ import edu.illinois.cs.ergoline.resolution.{
   EirTemplateFacade,
   Find
 }
-import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
+  RichOption,
+  RichResolvableTypeIterable
+}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{Errors, assertValid, onLeftSide}
 import edu.illinois.cs.ergoline.util
@@ -579,7 +582,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         if (fc.exists(ctx.shouldRepack)) ctx << "ergoline::repack("
         else ctx << "hypercomm::pack("
       case Some((true, tys)) =>
-        ctx << "hypercomm::make_typed_value<std::tuple<" << (tys, ",") << ">>("
+        ctx << "hypercomm::make_typed_value<"
+        if (tys.length == 1) {
+          ctx << tys.head
+        } else {
+          ctx << "std::tuple<" << (tys, ",") << ">"
+        }
+        ctx << ">("
       case _ =>
     }
 
@@ -2967,8 +2976,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     if (compound && x.condition.isDefined) ???
 
     def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
-      if (types.nonEmpty) EirTupleType(None, types)
-      else globals.unitType
+      types.toTupleType(allowUnit = true)(None).asInstanceOf[EirType]
     }
 
     val nPorts = x.patterns.length
@@ -3013,16 +3021,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << "[=](" << (set + "type__") << "&" << set << ")" << "{"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
-      val (m, mboxName, _, arrayArgs) = quadruplets(i)
+      val (m, _, _, arrayArgs) = quadruplets(i)
       val name = s"__value${i}__"
-      val ty = name.init + "type__"
 
       ctx << "auto" << name << "=" << s"std::move(std::get<$i>($set));"
+
       ctx << visitPatternDecl(
         ctx,
         patterns,
-        name + "->value()",
-        forceTuple = true
+        name + "->value()"
       ).split(n)
 
       if (arrayArgs.nonEmpty) {
@@ -3033,13 +3040,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << visitOptionalStatement(x.body) << "}" << ");"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
-      val (m, mboxName, resolved, arrayArgs) = quadruplets(i)
+      val (_, mboxName, resolved, _) = quadruplets(i)
       val temp = ctx.temporary
       val tempVal = s"$temp->value()"
-      val declarations =
-        visitPatternDecl(ctx, patterns, tempVal, forceTuple = true).split(n)
-      val conditions =
-        visitPatternCond(ctx, patterns, tempVal, Some(resolved)).mkString(" && ")
+      val declarations = visitPatternDecl(ctx, patterns, tempVal).split(n)
+      val conditions = visitPatternCond(ctx, patterns, tempVal, Some(resolved))
+        .mkString(" && ")
 
       val pred: Option[String] = Option.when(conditions.nonEmpty)({
         val name = s"__pred${i}__"
