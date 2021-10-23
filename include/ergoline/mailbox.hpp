@@ -6,7 +6,17 @@
 namespace ergoline {
 
 template<typename... Ts>
-using compact_t = std::tuple<std::tuple<Ts...>>;
+struct compactor_ {
+  using type = std::tuple<std::tuple<Ts...>>;
+};
+
+template<typename T>
+struct compactor_<T> {
+  using type = std::tuple<T>;
+};
+
+template<typename... Ts>
+using compact_t = typename compactor_<Ts...>::type;
 
 template<typename... Ts>
 class mailbox : public hypercomm::mailbox<compact_t<Ts...>> {
