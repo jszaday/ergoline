@@ -781,7 +781,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     m.name match {
       case "apply" => ctx.proxy match {
-          case Some(_) => ctx << "this->make_future()"
+          case Some(_) => ctx << ctx.currentProxySelf << "->make_future()"
           case None => ctx << "ergoline::make_future(" << {
               globals.implicitProxyName
             } << ")"
@@ -850,7 +850,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     proxy.kind match {
       case Some(EirSectionProxy) =>
         val argv = flattenArgs(args)
-        ctx << "this->local_contribution(" << "ergoline::conv2section(" << stripSection(
+        ctx << ctx.currentProxySelf << "->local_contribution(" << "ergoline::conv2section(" << stripSection(
           target
         ) << ")" << {
           if (argv.size == 1)
@@ -860,7 +860,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           argv.last,
           isReduction = true
         ) << ")" << ")"
-      case Some(EirElementProxy) => ctx << "ergoline::contribute(this," << {
+      case Some(EirElementProxy) =>
+        ctx << "ergoline::contribute(" << ctx.currentProxySelf << "," << {
           visitCallback(
             flattenArgs(args) match {
               case List(value, reducer, target) =>
@@ -941,7 +942,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     {
       stripSection(target, getProxy = true) match {
         case s: EirSymbol[_] if CheckTypes.isSelf(s) =>
-          ctx << "this->broadcast("
+          ctx << ctx.currentProxySelf << "->broadcast("
         case s =>
           ctx << "hypercomm::broadcast_to(hypercomm::make_proxy(" << s << "),"
       }
@@ -1020,13 +1021,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ) << ")"
       case "requirePost" =>
         ctx << "(([&](void) { CkAssert(" << fc.args.map(_.expr) << ");"
-        ctx << "this->manual_mode(" << idx << ");" << "})())"
+        ctx << ctx.currentProxySelf << "->manual_mode(" << idx << ");" << "})())"
       case "post" =>
         val bufName = "__buffer__"
         ctx << "(([&](void) { auto" << bufName << " = " << fc.args.map(
           _.expr
         ) << ";"
-        ctx << "this->post_buffer(" << idx << ","
+        ctx << ctx.currentProxySelf << "->post_buffer(" << idx << ","
         ctx << "std::shared_ptr<void>(" << bufName << "," << bufName << "->data())"
         ctx << "," << bufName << "->size());" << "})())"
       case _ => Errors.unreachable()
@@ -1243,7 +1244,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
         ctx << "(([&](){" << ctx.typeFor(
           retTy
-        ) << ctx.temporary << "=" << "this->make_future()" << ";"
+        ) << ctx.temporary << "=" << ctx.currentProxySelf << "->make_future()" << ";"
       }
       val isPointer = x.target match {
         // TODO make this more robust
@@ -1756,7 +1757,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     } else if (systemParent) {
       proxyParent.flatMap(_ => Errors.unreachable()).orElse(Some("self"))
     } else {
-      proxyParent.map(_ => "this->impl_").orElse(Some("this"))
+      proxyParent
+        .map(_ => ctx.currentProxySelf + "->impl_")
+        .orElse(Some("this"))
     }
   }
 
@@ -3041,7 +3044,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
       val tys = declTys.map(ctx.typeFor(_, Some(x)))
       val resolved = ctx.resolve(encapsulate(declTys))
-      val mboxName = "this->" + GenerateProxies.mailboxName(ctx, f, tys)
+      val mboxName =
+        ctx.currentProxySelf + "->" + GenerateProxies.mailboxName(ctx, f, tys)
       val arrayArgs = f.functionArgs.zipWithIndex
         .filter(x => isArray(ctx, ctx.typeOf(x._1)))
         .map(_._2)
@@ -3057,7 +3061,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << "using" << (set + "type__") << "=" << setType << ";"
 
-    ctx << "auto" << com << "=" << "ergoline::make_component<" << (set + "type__") << ">(*this," << nPorts.toString << ","
+    ctx << "auto" << com << "=" << "ergoline::make_component<" << (set + "type__") << ">(*" << ctx.currentProxySelf << "," << nPorts.toString << ","
     ctx << "[=](" << (set + "type__") << "&" << set << ")" << "{"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
@@ -3123,7 +3127,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (sentinel._3.isEmpty) {
       ctx << sentinel._2 << "->" << "expect_all" << "(" << com << ");"
-      ctx << "this->activate_component(" << com << ");"
+      ctx << ctx.currentProxySelf << "->activate_component(" << com << ");"
       ctx << "}"
     }
 
@@ -3146,7 +3150,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         s.init.foreach(com => ctx << com << ",")
         ctx << s.last << ");"
 
-        s.foreach(com => ctx << "this->activate_component(" << com << ");")
+        s.foreach(com =>
+          ctx << ctx.currentProxySelf << "->activate_component(" << com << ");"
+        )
       case _ =>
     }
     ctx << s"${sentinel._2}->suspend();"

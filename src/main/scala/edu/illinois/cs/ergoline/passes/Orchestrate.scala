@@ -46,6 +46,7 @@ object Orchestrate {
   }
 
   def selfIndexAt(i: Int): EirExpressionNode = {
+    // TODO ( this will breakdown for threaded EPs )
     val s = GenerateCpp.CppNode(s"((this->thisIndexMax).data())[$i]")
     s.foundType = Some(globals.integerType)
     s
