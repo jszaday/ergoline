@@ -166,8 +166,49 @@ object GenerateProxies {
       })
   }
 
+  def formatArgs(ctx: CodeGenerationContext, entry: EirMember): List[String] = {
+    val fn = assertValid[EirFunction](entry.member)
+    fn.functionArgs.map(_.declaredType).map(ctx.typeFor(_, Some(entry)))
+  }
+
+  val valueSuffix = "value"
+  val deliverableSuffix = "deliverable"
+
+  def valueHandlerFor(
+      ctx: CodeGenerationContext,
+      member: EirMember,
+      suffix: String
+  ): String = {
+    val name = ctx.nameFor(member, None)
+    s"${name.substring(0, name.length - 1)}${suffix}_handler__"
+  }
+
+  private def containTypes(tys: List[String]): String = {
+    if (tys.length == 1) tys.head else s"std::tuple<${tys mkString ","}>"
+  }
+
+  def generateHandlers(ctx: CodeGenerationContext, entry: EirMember): Unit = {
+    val baseName = assertValid[EirProxy](entry.base).baseName
+    val tys = formatArgs(ctx, entry)
+    val valHandler = valueHandlerFor(ctx, entry, valueSuffix)
+    ctx << "static" << "void" << valueHandlerFor(
+      ctx,
+      entry,
+      deliverableSuffix
+    ) << "(hypercomm::generic_locality_* self, hypercomm::deliverable&& dev)" << "{"
+    ctx << "((" << baseName << "*)self)->" << valHandler << "(hypercomm::dev2typed<" << containTypes(
+      tys
+    ) << ">(std::move(dev)));"
+    ctx << "}"
+    makeEntry(ctx, entry, valHandler, Some(tys))
+  }
+
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
-    val mailboxes = x.mailboxes.map(mailboxName(ctx, _)._1).toList
+    val members = x.members
+    val entries = members
+      .filter(x => x.isEntry && !(x.isConstructor || x.isMailbox))
+      .filter(GenerateCpp.memberHasArgs)
+    val mailboxes = members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
     val base = ctx.nameFor(x.base)
     val name = x.baseName
     assert(name == s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}")
@@ -187,12 +228,24 @@ object GenerateProxies {
     ) << ">" << "{"
 
     val idxName = indicesName(x)
-    val registerFn = "hypercomm::CkIndex_locality_base_::register_value_handler"
+    val localityPrefix = "hypercomm::CkIndex_locality_base_::"
+    val handlerFn = s"${localityPrefix}put_value_handler"
+    val registerFn = s"${localityPrefix}register_value_handler"
     ctx << s"static inline void $registerMailboxes(void)" << "{"
     mailboxes.foreach(mboxName => {
       ctx << s"$idxName::${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
     })
+    entries.foreach(entry => {
+      ctx << handlerFn << "(" << GenerateCpp.epIndexFor(
+        x,
+        entry,
+        None,
+        hasArgs = true
+      )(ctx) << "," << valueHandlerFor(ctx, entry, deliverableSuffix) << ");"
+    })
     ctx << "}"
+
+    entries.foreach(generateHandlers(ctx, _))
 
     // TODO call superclasses' PUP::er and Maiblox initer
     ctx << "inline void __init_mailboxes__(void) {"
@@ -241,11 +294,18 @@ object GenerateProxies {
 
   private def makeEntryBody(
       ctx: CodeGenerationContext,
-      member: EirMember
+      member: EirMember,
+      msgName: Option[String]
   ): Unit = {
-    member.counterpart match {
-      case Some(m: EirMember) if m.isMailbox => Errors.unreachable()
-      case Some(m @ EirMember(_, f: EirFunction, _)) =>
+    (msgName, member.counterpart) match {
+      case (Some(name), _) if !member.isConstructor =>
+        ctx << valueHandlerFor(
+          ctx,
+          member,
+          deliverableSuffix
+        ) << s"(this, hypercomm::deliverable($name))"
+      case (_, Some(m: EirMember)) if m.isMailbox => Errors.unreachable()
+      case (_, Some(m @ EirMember(_, f: EirFunction, _))) =>
         if (m.isEntryOnly) {
           ctx.pushSelf("this->impl_")
           ctx << "(([&](void) mutable" << visitFunctionBody(
@@ -263,7 +323,7 @@ object GenerateProxies {
   def visitMailbox(m: EirMember, f: EirFunction)(
       ctx: CodeGenerationContext
   ): Unit = {
-    val (mboxName, tys) = mailboxName(ctx, m)
+    val (mboxName, _) = mailboxName(ctx, m)
     val value = "dev_"
     val implSelf = "impl_self_"
     val baseName = m.base.asInstanceOf[EirProxy].baseName
@@ -290,8 +350,7 @@ object GenerateProxies {
       ctx: CodeGenerationContext,
       x: EirMember
   ): (String, List[String]) = {
-    val f = assertValid[EirFunction](x.member)
-    val tys = f.functionArgs.map(_.declaredType).map(ctx.typeFor(_, Some(x)))
+    val tys = formatArgs(ctx, x)
     (mailboxName(ctx, x, tys), tys)
   }
 
@@ -318,6 +377,29 @@ object GenerateProxies {
   def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val proxy = x.parent.to[EirProxy]
     val isConstructor = x.isConstructor
+    val f = assertValid[EirFunction](x.member)
+    makeEntry(
+      ctx,
+      x, {
+        if (isConstructor) {
+          val baseName = proxy.map(x => ctx.nameFor(x.base)).getOrElse("")
+          s"${baseName}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
+        } else {
+          ctx.nameFor(f)
+        }
+      },
+      None
+    )
+  }
+
+  def makeEntry(
+      ctx: CodeGenerationContext,
+      x: EirMember,
+      name: String,
+      tys: Option[List[String]]
+  ): Unit = {
+    val proxy = x.parent.to[EirProxy]
+    val isConstructor = x.isConstructor
     val base = proxy
       .map(x => nameFor(ctx, x.base, includeTemplates = true))
       .getOrElse("")
@@ -326,44 +408,59 @@ object GenerateProxies {
     val isAsync = x.annotation("async").isDefined
     val isMailbox = x.isMailbox
     val args = f.functionArgs
+    val valName = tys.map(_ => "val")
+    val msgName = Option.when(tys.isEmpty)(GenerateProxies.msgName)
     visitTemplateArgs(f)(ctx)
-    if (isAsync) ctx << "void"
-    else if (!isConstructor) ctx << ctx.typeFor(f.returnType)
-    ctx << {
-      if (isConstructor) {
-        val baseName = proxy.map(x => ctx.nameFor(x.base)).getOrElse("")
-        s"${baseName}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
-      } else {
-        ctx.nameFor(f)
-      }
-    } << "(" << {
-      if (isMain && isConstructor) {
-        ctx << (if (args.nonEmpty) s"CkMessage* $msgName" else "void")
-      } else {
-        ctx << Option.when(args.nonEmpty || isAsync)(s"CkMessage* $msgName")
-      }
-    } << ")" << "{"
+
+    if (!isConstructor) {
+      ctx << (if (isAsync) "void" else ctx.typeFor(f.returnType))
+    }
+    ctx << name << "("
+    tys match {
+      case Some(x) =>
+        ctx << s"hypercomm::typed_value_ptr<${containTypes(x)}>&&" << valName
+      case None => if (args.nonEmpty || isAsync) {
+          ctx << "CkMessage*" << msgName
+        }
+    }
+    ctx << ")" << "{"
+
     if (isMain && isConstructor) {
       args.headOption.foreach(x => makeArgsVector(ctx, x.name))
     } else if (!isMailbox && (args.nonEmpty || isAsync)) {
-      if (isAsync) {
-        ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
+      if (isConstructor) {
+        args.foreach(makeParameter(ctx, _))
+        ctx << s"hypercomm::unpack(" << msgName << "," << (args.map(
+          _.name
+        ), ",") << ");"
+      } else {
+        tys match {
+          case Some(x) if x.length == 1 =>
+            ctx << "auto&" << args.headOption.map(
+              _.name
+            ) << "=" << valName << "->value();"
+          case Some(_) => args.zipWithIndex.foreach { case (x, i) =>
+              ctx << s"auto& ${x.name} = std::get<$i>(" << valName << "->value());"
+            }
+          case _ =>
+//        TODO ( this code-path does not work well for async )
+//        if (isAsync) {
+//          ctx << ctx.typeFor(f.returnType) << "__future__" << ";"
+//        (Option.when(isAsync)("__future__")
+//        }
+        }
       }
-      args.foreach(makeParameter(ctx, _))
-      ctx << s"hypercomm::unpack($msgName," << (Option.when(isAsync)(
-        "__future__"
-      ) ++ args.map(_.name), ",") << ");"
     }
 
-    updateLocalityContext(ctx)
-
     if (isConstructor) {
+      updateLocalityContext(ctx)
+
       ctx << "this->__init_mailboxes__();"
 
       x.counterpart match {
         case Some(m) if m.isEntryOnly =>
           ctx << "this->impl_ = std::make_shared<" << base << ">(PUP::reconstruct{});"
-          makeEntryBody(ctx, x)
+          makeEntryBody(ctx, x, msgName)
           ctx << ";"
         case _ =>
           ctx << "this->impl_ = std::make_shared<" << base << ">(" << (args.map(
@@ -371,12 +468,13 @@ object GenerateProxies {
           ), ", ") << ");"
       }
     } else {
+      valName.foreach(_ => updateLocalityContext(ctx))
       if (isAsync) {
         ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
       } else if (ctx.resolve(f.returnType) != globals.unitType) {
         ctx << "return "
       }
-      makeEntryBody(ctx, x)
+      makeEntryBody(ctx, x, msgName.filterNot(_ => args.isEmpty))
       if (isAsync) ctx << "));"
       else ctx << ";"
     }

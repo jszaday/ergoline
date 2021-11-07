@@ -566,7 +566,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             if (m.isMailbox) {
               mailboxName(ctx, m)._2
             } else {
-              args.map(ctx.exprType).map(ctx.typeFor(_, fc))
+              args
+                .map(ctx.exprType)
+                .map(CheckTypes.stripReference)
+                .map(ctx.typeFor(_, fc))
             }
           )
         )
@@ -597,6 +600,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << "std::tuple<" << (tys, ",") << ">"
         }
         ctx << ">("
+        if (tys.length >= 2) ctx << "std::forward_as_tuple("
       case None =>
     }
 
@@ -622,7 +626,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << (args, ",")
     }
 
-    ctx << shouldPack.map(_ => ")")
+    ctx << shouldPack.map {
+      case (true, tys) if tys.length >= 2 => "))"
+      case _                              => ")"
+    }
   }
 
   def visitCallback(target: EirExpressionNode, isReduction: Boolean)(implicit
@@ -861,6 +868,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def memberHasArgs(m: EirMember): Boolean = m.member match {
+    case f: EirFunction => f.functionArgs.nonEmpty
+    case _              => false
+  }
+
   def epIndexFor(proxy: EirProxy, member: EirMember, usage: Option[EirNode])(
       implicit ctx: CodeGenerationContext
   ): String = {
@@ -868,10 +880,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       proxy,
       member,
       usage,
-      hasArgs = member.member match {
-        case f: EirFunction => f.functionArgs.nonEmpty
-        case _              => false
-      }
+      hasArgs = memberHasArgs(member)
     )
   }
 

@@ -92,7 +92,7 @@ object GenerateCi {
     }
   }
 
-  val registerMailboxes = "__register_mailboxes__"
+  val registerMailboxes = "__register_handlers__"
 
   def visitNamespaces(
       ctx: CiUnparseContext,
@@ -110,9 +110,7 @@ object GenerateCi {
       .foreach(p => {
         visit(ctx, p)
 
-        if (p.mailboxes.nonEmpty) {
-          ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
-        }
+        ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
 
         if (p.templateArgs.nonEmpty) {
           makeChareSpecializations(ctx, p)
