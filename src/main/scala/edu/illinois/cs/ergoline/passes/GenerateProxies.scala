@@ -285,6 +285,7 @@ object GenerateProxies {
     s"$prefix${if (prefix.endsWith("_")) "" else "_"}mailbox__"
   }
 
+  // TODO ( rename this to "mailboxInfo" )
   def mailboxName(
       ctx: CodeGenerationContext,
       x: EirMember

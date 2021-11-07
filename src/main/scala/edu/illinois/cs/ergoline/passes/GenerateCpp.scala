@@ -558,10 +558,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val member: Option[EirMember] = asMember(disambiguation)
     val isAsync = disambiguation.flatMap(_.annotation("async")).isDefined
     val shouldPack = member.flatMap {
-      case m @ EirMember(Some(_: EirProxy), _, _) if m.isMailbox =>
-        Some((true, mailboxName(ctx, m)._2))
       case m @ EirMember(Some(_: EirProxy), _, _) =>
-        Option.when((args.nonEmpty || isAsync) && m.isEntry)((false, Nil))
+        // (args.nonEmpty || isAsync
+        Some(
+          (
+            !m.isConstructor,
+            if (m.isMailbox) {
+              mailboxName(ctx, m)._2
+            } else {
+              args.map(ctx.exprType).map(ctx.typeFor(_, fc))
+            }
+          )
+        )
       // TODO this should be a local call (that does not involve packing!)
       case m: EirMember =>
         Option.when(args.nonEmpty && m.isEntryOnly)((false, Nil))
@@ -578,7 +586,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
 
     shouldPack match {
-      case Some((false, Nil)) =>
+      case Some((false, _)) =>
         if (fc.exists(ctx.shouldRepack)) ctx << "ergoline::repack("
         else ctx << "hypercomm::pack("
       case Some((true, tys)) =>
@@ -589,7 +597,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << "std::tuple<" << (tys, ",") << ">"
         }
         ctx << ">("
-      case _ =>
+      case None =>
     }
 
     if (isAsync) {
@@ -1197,6 +1205,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         (x.args, implicits)
       )
     } else {
+      val proxy = member.flatMap(_.parent).to[EirProxy]
       val functor = isFunctor(x.target, disambiguated)
       if (isAsync) {
         val retTy = disambiguated match {
@@ -1238,30 +1247,30 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
             ctx.nameFor(disambiguated)
           }
-        } else if (isMailbox) {
-          val target = x.target match {
-            case s: EirScopedSymbol[_] => s.target
-            case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
-          }
-          val targetType = ctx.exprType(target)
-          ctx << (Find.tryClassLike(targetType) match {
-            case Some(p: EirProxy) if p.isCollective || p.isSection =>
-              "ergoline::broadcast_value"
-            case Some(p: EirProxy) => "hypercomm::interceptor::send_async"
-            case n                 => Errors.incorrectType(n.orNull, classOf[EirProxy])
-          })
-          ctx << "(" << target << ","
-          // TODO ( make this a FQN! )
-          val proxy = member.flatMap(_.parent).to[EirProxy]
-          ctx << member
-            .zip(proxy)
-            .map({ case (m, p) => epIndexFor(p, m, Some(x)) }) << ","
-          ctx.ignoreNext("(")
-        } else {
-          if (isPointer) ctx << "(*"
-          ctx << x.target
-          if (isPointer) ctx << ")"
+        } else proxy match {
+          case Some(_) =>
+            val target = x.target match {
+              case s: EirScopedSymbol[_] => s.target
+              case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
+            }
+            val targetType = ctx.exprType(target)
+            ctx << (Find.tryClassLike(targetType) match {
+              case Some(p: EirProxy) if p.isCollective || p.isSection =>
+                "ergoline::broadcast_value"
+              case Some(_: EirProxy) => "hypercomm::interceptor::send_async"
+              case n                 => Errors.incorrectType(n.orNull, classOf[EirProxy])
+            })
+            ctx << "(" << target << ","
+            ctx << member
+              .zip(proxy)
+              .map({ case (m, p) => epIndexFor(p, m, Some(x)) }) << ","
+            ctx.ignoreNext("(")
+          case None =>
+            if (isPointer) ctx << "(*"
+            ctx << x.target
+            if (isPointer) ctx << ")"
         }
+
         ctx << visitSpecialization(sp) << "(" << {
           ctx << visitArguments(
             Some(x),
