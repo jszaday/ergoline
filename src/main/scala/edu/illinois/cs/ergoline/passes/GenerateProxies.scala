@@ -193,14 +193,23 @@ object GenerateProxies {
     val baseName = assertValid[EirProxy](entry.base).baseName
     val tys = formatArgs(ctx, entry)
     val valHandler = valueHandlerFor(ctx, entry, valueSuffix)
+    val threaded = entry.annotation("threaded").nonEmpty
     ctx << "static" << "void" << valueHandlerFor(
       ctx,
       entry,
       deliverableSuffix
     ) << "(hypercomm::generic_locality_* self, hypercomm::deliverable&& dev)" << "{"
-    ctx << "((" << baseName << "*)self)->" << valHandler << "(hypercomm::dev2typed<" << containTypes(
+    ctx << "auto val = hypercomm::dev2typed<" << containTypes(
       tys
-    ) << ">(std::move(dev)));"
+    ) << ">(std::move(dev));"
+    if (threaded) {
+      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << ", new CkThrCallArg(val.release(), self), 0);"
+      ctx << "self->CkAddThreadListeners(tid, nullptr); // TODO (this will fail if CMK_TRACE_ENABLED) ;"
+      ctx << "CthTraceResume(tid);"
+      ctx << "CthResume(tid);"
+    } else {
+      ctx << "((" << baseName << "*)self)->" << valHandler << "(std::move(val));"
+    }
     ctx << "}"
     makeEntry(ctx, entry, valHandler, Some(tys))
   }
@@ -307,7 +316,7 @@ object GenerateProxies {
 
   def updateLocalityContext(implicit ctx: CodeGenerationContext): Unit = {
     // NOTE this is a temporary solution until an RTS-level one becomes available
-    ctx << "this->update_context();"
+    ctx << ctx.currentProxySelf << "->update_context();"
   }
 
   private def makeEntryBody(
@@ -321,18 +330,19 @@ object GenerateProxies {
           ctx,
           member,
           deliverableSuffix
-        ) << s"(this, hypercomm::deliverable($name))"
+        ) << s"(${ctx.currentProxySelf}, hypercomm::deliverable($name))"
       case (_, Some(m: EirMember)) if m.isMailbox => Errors.unreachable()
       case (_, Some(m @ EirMember(_, f: EirFunction, _))) =>
         if (m.isEntryOnly) {
-          ctx.pushSelf("this->impl_")
+          ctx.pushSelf(ctx.currentProxySelf + "->impl_")
           ctx << "(([&](void) mutable" << visitFunctionBody(
             f
           )(ctx) << ")())"
           ctx.popSelf()
         } else {
-          ctx << s"this->impl_->${ctx
-            .nameFor(f)}(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
+          ctx << ctx.currentProxySelf << "->impl_->" << ctx.nameFor(
+            f
+          ) << s"(${f.functionArgs.map(ctx.nameFor(_)).mkString(", ")})"
         }
       case _ => Errors.unreachable()
     }
@@ -428,7 +438,15 @@ object GenerateProxies {
     val args = f.functionArgs
     val valName = tys.map(_ => "val")
     val msgName = Option.when(tys.isEmpty)(GenerateProxies.msgName)
+    val hasArgs = args.nonEmpty || isAsync
+    val threaded = x.annotation("threaded").nonEmpty
+    val threadedHandler = valName.exists(_ => threaded)
+    val threadArg = Option.when(threadedHandler)("__ckThrCallArg__")
     visitTemplateArgs(f)(ctx)
+
+    if (threadedHandler) {
+      ctx << "static"
+    }
 
     if (!isConstructor) {
       ctx << (if (isAsync) "void" else ctx.typeFor(f.returnType))
@@ -436,16 +454,30 @@ object GenerateProxies {
     ctx << name << "("
     tys match {
       case Some(x) =>
-        ctx << s"hypercomm::typed_value_ptr<${containTypes(x)}>&&" << valName
-      case None => if (args.nonEmpty || isAsync) {
+        if (threadedHandler) {
+          ctx << "CkThrCallArg*" << threadArg
+        } else {
+          ctx << s"hypercomm::typed_value_ptr<${containTypes(x)}>&&" << valName
+        }
+      case None => if (hasArgs) {
           ctx << "CkMessage*" << msgName
         }
     }
     ctx << ")" << "{"
 
+    threadArg.foreach(arg => {
+      val contained = containTypes(tys.get)
+      ctx << "hypercomm::typed_value_ptr<" << contained << "> val((hypercomm::typed_value<" << contained << ">*)" << arg << "->msg);"
+      ctx << "auto* self = (" << proxy.map(
+        _.baseName
+      ) << "*)" << arg << "->obj;"
+      ctx << "delete" << arg << ";"
+      ctx.pushProxySelf("self")
+    })
+
     if (isMain && isConstructor) {
       args.headOption.foreach(x => makeArgsVector(ctx, x.name))
-    } else if (!isMailbox && (args.nonEmpty || isAsync)) {
+    } else if (!isMailbox && hasArgs) {
       if (isConstructor) {
         args.foreach(makeParameter(ctx, _))
         ctx << s"hypercomm::unpack(" << msgName << "," << (args.map(
@@ -486,7 +518,9 @@ object GenerateProxies {
           ), ", ") << ");"
       }
     } else {
-      valName.foreach(_ => updateLocalityContext(ctx))
+      if (valName.nonEmpty || !hasArgs) {
+        updateLocalityContext(ctx)
+      }
       if (isAsync) {
         ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
       } else if (ctx.resolve(f.returnType) != globals.unitType) {
@@ -496,6 +530,9 @@ object GenerateProxies {
       if (isAsync) ctx << "));"
       else ctx << ";"
     }
+
+    threadArg.foreach(_ => ctx.popProxySelf())
+
     ctx << "}"
   }
 

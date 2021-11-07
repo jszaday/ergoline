@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   collectiveTypeFor,
+  memberHasArgs,
   readOnlyFor,
   zipWithSpecializations
 }
@@ -147,13 +148,15 @@ object GenerateCi {
 
   val passThruAttributes: Seq[String] = Seq(
     "local",
-    "threaded",
     "createhere",
     "createhome"
   )
 
   def attributesFor(p: EirProxy, m: EirMember): String = {
-    val attributes = passThruAttributes.flatMap(m.annotation).map(_.name)
+    val threaded =
+      m.annotation("threaded").map(_.name).filterNot(_ => memberHasArgs(m))
+    val attributes =
+      (passThruAttributes ++ threaded).flatMap(m.annotation).map(_.name)
 //      Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
     if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }

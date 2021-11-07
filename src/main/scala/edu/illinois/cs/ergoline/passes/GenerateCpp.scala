@@ -557,12 +557,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
     val member: Option[EirMember] = asMember(disambiguation)
     val isAsync = disambiguation.flatMap(_.annotation("async")).isDefined
+    // TODO ( make these checks more robust )
+    val isDoneInserting = member.exists(_.name == "doneInserting")
+    val isConstructorOrInserter = (m: EirMember) => {
+      m.isConstructor || (m.name == "insert")
+    }
+
     val shouldPack = member.flatMap {
+      case _ if isDoneInserting                   => None
       case m @ EirMember(Some(_: EirProxy), _, _) =>
         // (args.nonEmpty || isAsync
         Some(
           (
-            !m.isConstructor,
+            !isConstructorOrInserter(m),
             if (m.isMailbox) {
               mailboxName(ctx, m)._2
             } else {
@@ -786,7 +793,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val retTy = ctx.typeFor(ty, Some(base))
         ctx << "(([&](const hypercomm::future&" << futureName << ")" << "->" << retTy << "{"
         ctx << "auto cb = std::make_shared<hypercomm::resuming_callback<" << retTy << ">>();"
-        ctx << "this->request_future(" << futureName << ", cb);"
+        ctx << ctx.currentProxySelf << "->request_future(" << futureName << ", cb);"
         ctx << "cb->wait();"
         updateLocalityContext(ctx)
         ctx << "return cb->value();"
@@ -1097,7 +1104,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case m @ EirMember(Some(p: EirProxy), _, _)
           if m.name == "index" || m.name == "parent" =>
         name match {
-          case "index" => ctx << selfIndex
+          case "index" => ctx << selfIndex(ctx)
           case "parent" => ctx << s"(CProxy_${p.baseName}(" << base << {
               p.collective match {
                 case Some("group" | "nodegroup")      => ".ckGetGroupID()))"
@@ -1964,18 +1971,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     )).mkString("::")
   }
 
-  def selfIndex: String = "this->__index__()"
+  def selfIndex(ctx: CodeGenerationContext): String =
+    s"${ctx.currentProxySelf}->__index__()"
 
   def selfName(ctx: CodeGenerationContext, s: EirSymbol[_]): String = {
     s.qualifiedName.last match {
       case "self@" => {
         ctx.proxy
           .flatMap(_.collective)
-          .map(_ => "this->thisProxy")
-          .getOrElse("this->thisProxy[this->thisIndexMax]")
+          .map(_ => s"${ctx.currentProxySelf}->thisProxy")
+          .getOrElse(
+            s"${ctx.currentProxySelf}->thisProxy[${ctx.currentProxySelf}->thisIndexMax]"
+          )
       }
-      case "self[@]" => s"this->thisProxy[" + {
-          s"hypercomm::conv2idx<CkArrayIndex>($selfIndex)"
+      case "self[@]" => s"${ctx.currentProxySelf}->thisProxy[" + {
+          s"hypercomm::conv2idx<CkArrayIndex>(${selfIndex(ctx)})"
         } + "]"
       case _ => selfName(ctx, s.asInstanceOf[EirNode])
     }
@@ -2111,7 +2121,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             case None
                 if s.qualifiedName.lastOption.contains(
                   globals.implicitProxyName
-                ) => s"(this->__element__())"
+                ) => s"(${ctx.currentProxySelf}->__element__())"
             case _ => Errors.unableToResolve(s)
           }
         }
