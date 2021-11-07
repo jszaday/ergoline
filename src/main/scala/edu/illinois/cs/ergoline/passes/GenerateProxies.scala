@@ -1,11 +1,13 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCi.registerMailboxes
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp._
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
 
@@ -227,6 +229,7 @@ object GenerateProxies {
       x
     ) << ">" << "{"
 
+    val thisType = Find.uniqueResolution[EirType](x.asType)
     val idxName = indicesName(x)
     val localityPrefix = "hypercomm::CkIndex_locality_base_::"
     val handlerFn = s"${localityPrefix}put_value_handler"
@@ -237,7 +240,7 @@ object GenerateProxies {
     })
     entries.foreach(entry => {
       ctx << handlerFn << "(" << GenerateCpp.epIndexFor(
-        x,
+        thisType,
         entry,
         None,
         hasArgs = true
@@ -272,6 +275,21 @@ object GenerateProxies {
       x.base,
       includeTemplates = true
     ) << ">" << s" impl_;" << s"};"
+
+    if (x.templateArgs.nonEmpty) {
+      ctx << "void" << GenerateCi.makeGenericRegistration(x) << "(void)" << "{"
+      val specs = ctx.checked
+        .getOrElse(x.base, Nil)
+        .map(
+          _.types.map(Find.uniqueResolution[EirType])
+        )
+      specs.foreach(sp => {
+        ctx << x.baseName << "<" << {
+          (sp.map(ctx.typeFor(_, Some(x))), ", ")
+        } << ">::" << registerMailboxes << "()" << ";"
+      })
+      ctx << "}"
+    }
   }
 
   def makeArgsVector(

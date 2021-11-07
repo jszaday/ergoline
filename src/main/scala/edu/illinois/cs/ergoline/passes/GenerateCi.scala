@@ -94,6 +94,11 @@ object GenerateCi {
 
   val registerMailboxes = "__register_handlers__"
 
+  def makeGenericRegistration(p: EirProxy): String = {
+    "__" + p.baseName.substring(0, p.baseName.length - 1) + registerMailboxes
+      .substring(1)
+  }
+
   def visitNamespaces(
       ctx: CiUnparseContext,
       namespaces: List[EirNamespace],
@@ -110,10 +115,11 @@ object GenerateCi {
       .foreach(p => {
         visit(ctx, p)
 
-        ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
-
         if (p.templateArgs.nonEmpty) {
           makeChareSpecializations(ctx, p)
+          ctx << "initnode" << "void" << makeGenericRegistration(p) << "(void);"
+        } else {
+          ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
         }
 
         makeEntrySpecializations(p)(ctx)

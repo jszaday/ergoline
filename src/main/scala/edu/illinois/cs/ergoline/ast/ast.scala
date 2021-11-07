@@ -1,15 +1,10 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirIntegerLiteral,
-  EirLiteral,
-  EirStringLiteral
-}
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.{child, withName}
+import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -21,14 +16,13 @@ import edu.illinois.cs.ergoline.util.{
   AstManipulation,
   Errors,
   TopologicalSort,
-  isSystem,
-  isType
+  isSystem
 }
 import edu.illinois.cs.ergoline.{globals, util}
 
 import java.io.File
 import scala.collection.mutable
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
