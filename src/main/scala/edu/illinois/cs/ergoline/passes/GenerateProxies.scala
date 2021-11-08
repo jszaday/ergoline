@@ -122,7 +122,12 @@ object GenerateProxies {
       .flatten
       .foreach { case (f, n) =>
         ctx << (ctx
-          .nameFor(f) + "_idx__") << "=" << epIndexFor(derived, n, Some(base))(
+          .nameFor(f) + "_idx__") << "=" << epIndexFor(
+          derived,
+          n,
+          Some(base),
+          None
+        )(
           ctx
         ) << ";"
       }
@@ -190,10 +195,17 @@ object GenerateProxies {
   }
 
   def generateHandlers(ctx: CodeGenerationContext, entry: EirMember): Unit = {
+    val fn = assertValid[EirFunction](entry.member)
     val baseName = assertValid[EirProxy](entry.base).baseName
     val tys = formatArgs(ctx, entry)
     val valHandler = valueHandlerFor(ctx, entry, valueSuffix)
     val threaded = entry.annotation("threaded").nonEmpty
+    val ts = templateArgsOf(fn)
+    val args = () => {
+      if (ts.nonEmpty) ctx << "<" << (ts.map(_.name), ",") << ">"
+      else ctx
+    }
+    visitTemplateArgs(ts)(ctx)
     ctx << "static" << "void" << valueHandlerFor(
       ctx,
       entry,
@@ -203,15 +215,45 @@ object GenerateProxies {
       tys
     ) << ">(std::move(dev));"
     if (threaded) {
-      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << ", new CkThrCallArg(val.release(), self), 0);"
+      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << ", new CkThrCallArg(val.release(), self), 0);"
       ctx << "self->CkAddThreadListeners(tid, nullptr); // TODO (this will fail if CMK_TRACE_ENABLED) ;"
       ctx << "CthTraceResume(tid);"
       ctx << "CthResume(tid);"
     } else {
-      ctx << "((" << baseName << "*)self)->" << valHandler << "(std::move(val));"
+      ctx << "((" << baseName << "*)self)->" << valHandler << args() << "(std::move(val));"
     }
     ctx << "}"
     makeEntry(ctx, entry, valHandler, Some(tys))
+  }
+
+  val localityPrefix = "hypercomm::CkIndex_locality_base_::"
+
+  def makeHandler(
+      ctx: CodeGenerationContext,
+      ty: EirType,
+      entry: EirMember
+  ): Unit = {
+    val fn = entry.counterpart.map(_.member).to[EirFunction]
+    val handlerFn = s"${localityPrefix}put_value_handler"
+    val helper = (sp: EirSpecialization) => {
+      val osp = Option(sp)
+      ctx << handlerFn << "(" << GenerateCpp.epIndexFor(
+        ty,
+        entry,
+        None,
+        hasArgs = true,
+        osp
+      )(ctx) << "," << valueHandlerFor(ctx, entry, deliverableSuffix)
+      osp.foreach(_ =>
+        ctx << templateArgumentsToString(sp.types, Some(entry))(ctx)
+      )
+      ctx << ");"
+    }
+
+    fn match {
+      case Some(x) if x.templateArgs.nonEmpty => ctx.checked(x).foreach(helper)
+      case _                                  => helper(null)
+    }
   }
 
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
@@ -240,21 +282,12 @@ object GenerateProxies {
 
     val thisType = Find.uniqueResolution[EirType](x.asType)
     val idxName = indicesName(x)
-    val localityPrefix = "hypercomm::CkIndex_locality_base_::"
-    val handlerFn = s"${localityPrefix}put_value_handler"
     val registerFn = s"${localityPrefix}register_value_handler"
     ctx << s"static inline void $registerMailboxes(void)" << "{"
     mailboxes.foreach(mboxName => {
       ctx << s"$idxName::${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
     })
-    entries.foreach(entry => {
-      ctx << handlerFn << "(" << GenerateCpp.epIndexFor(
-        thisType,
-        entry,
-        None,
-        hasArgs = true
-      )(ctx) << "," << valueHandlerFor(ctx, entry, deliverableSuffix) << ");"
-    })
+    entries.foreach(makeHandler(ctx, thisType, _))
     ctx << "}"
 
     entries.foreach(generateHandlers(ctx, _))
@@ -326,11 +359,17 @@ object GenerateProxies {
   ): Unit = {
     (msgName, member.counterpart) match {
       case (Some(name), _) if !member.isConstructor =>
+        val fn = assertValid[EirFunction](member.member)
+        val ts = templateArgsOf(fn)
         ctx << valueHandlerFor(
           ctx,
           member,
           deliverableSuffix
-        ) << s"(${ctx.currentProxySelf}, hypercomm::deliverable($name))"
+        )
+        if (ts.nonEmpty) {
+          ctx << "<" << (ts.map(_.name), ",") << ">"
+        }
+        ctx << s"(${ctx.currentProxySelf}, hypercomm::deliverable($name))"
       case (_, Some(m: EirMember)) if m.isMailbox => Errors.unreachable()
       case (_, Some(m @ EirMember(_, f: EirFunction, _))) =>
         if (m.isEntryOnly) {

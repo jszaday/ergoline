@@ -562,9 +562,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isConstructorOrInserter = (m: EirMember) => {
       m.isConstructor || (m.name == "insert")
     }
+    val isMulticast = member.flatMap(_.parent).to[EirProxy].exists(_.isSection)
 
     val shouldPack = member.flatMap {
-      case _ if isDoneInserting                   => None
+      case _ if isDoneInserting || isMulticast    => None
       case m @ EirMember(Some(_: EirProxy), _, _) =>
         // (args.nonEmpty || isAsync
         Some(
@@ -653,7 +654,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val proxy = baseType.flatMap(Find.tryClassLike).to[EirProxy]
         if (proxy.isDefined && found.exists(_.isEntry)) {
           ctx << "CkCallback("
-          ctx << epIndexFor(baseType.get, found.get, Some(target))
+          ctx << epIndexFor(baseType.get, found.get, Some(target), None)
           ctx << "," << base << ")"
         } else {
           Errors.expectedCallback(target)
@@ -882,14 +883,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     case _              => false
   }
 
-  def epIndexFor(proxy: EirType, member: EirMember, usage: Option[EirNode])(
-      implicit ctx: CodeGenerationContext
+  def epIndexFor(
+      proxy: EirType,
+      member: EirMember,
+      usage: Option[EirNode],
+      sp: Option[EirSpecialization]
+  )(implicit
+      ctx: CodeGenerationContext
   ): String = {
     epIndexFor(
       proxy,
       member,
       usage,
-      hasArgs = memberHasArgs(member)
+      hasArgs = memberHasArgs(member),
+      sp
     )
   }
 
@@ -897,10 +904,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ty: EirType,
       member: EirMember,
       usage: Option[EirNode],
-      hasArgs: Boolean
+      hasArgs: Boolean,
+      sp: Option[EirSpecialization] = None
   )(implicit
       ctx: CodeGenerationContext
   ): String = {
+    val fn = assertValid[EirFunction](member.member)
     val proxy = assertValid[EirProxy](Find.asClassLike(ty))
     val qualifications = usage.map(qualificationsFor(proxy, _)).getOrElse(Nil)
     val args =
@@ -908,7 +917,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         case ty: EirTemplatedType => ty.args
         case _                    => Errors.missingSpecialization(proxy)
       }
-      else Nil
+      else {
+        Nil
+      }
     (qualifications ++ {
       if (member.isMailbox) {
         Seq(
@@ -916,13 +927,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           s"${mailboxName(ctx, member)._1}idx__"
         )
       } else {
+        val spec = sp
+          .map(x => templateArgumentsToString(x.types, usage)(ctx))
+          .getOrElse("")
         Seq(
           s"CkIndex_${proxy.baseName}" + (
             if (args.nonEmpty)
               templateArgumentsToString(ctx, Some(proxy), args, usage)
             else ""
           ),
-          ctx.nameFor(member) + "(" + {
+          ctx.nameFor(member) + spec + "(" + {
             Option.when(hasArgs)("nullptr").getOrElse("")
           } + ")"
         )
@@ -1003,7 +1017,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     )
     if (proxy.isEmpty || member.isEmpty) Errors.invalidAccess(fc, m)
     val idx =
-      proxy.zip(member).map { case (p, m) => epIndexFor(p, m, Some(fc)) }
+      proxy.zip(member).map { case (p, m) => epIndexFor(p, m, Some(fc), None) }
     m.name match {
       case "apply" =>
         ctx << (proxy match {
@@ -1292,21 +1306,24 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             ctx << "(" << target << ","
             ctx << member
               .zip(proxy)
-              .map({ case (m, p) => epIndexFor(targetType, m, Some(x)) }) << ","
-            ctx.ignoreNext("(")
+              .map({ case (m, p) =>
+                epIndexFor(targetType, m, Some(x), Option(sp))
+              }) << ","
           case None =>
             if (isPointer) ctx << "(*"
             ctx << x.target
             if (isPointer) ctx << ")"
         }
 
-        ctx << visitSpecialization(sp) << "(" << {
-          ctx << visitArguments(
-            Some(x),
-            Some(disambiguated),
-            (x.args, implicits)
-          )
-        } << ")"
+        if (proxy.forall(_ => functor)) {
+          ctx << visitSpecialization(sp) << "("
+        }
+
+        ctx << visitArguments(
+          Some(x),
+          Some(disambiguated),
+          (x.args, implicits)
+        ) << ")"
       }
       if (isAsync) {
         ctx << "; return" << ctx.temporary << ";" << "})())"
@@ -1581,6 +1598,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): Unit = visit(x.member)
 
   def templateArgumentsToString(
+      args: List[EirResolvable[EirType]],
+      usage: Option[EirNode]
+  )(ctx: CodeGenerationContext): String = {
+    "<" + {
+      args
+        .map(ctx.resolve[EirResolvable[EirType]])
+        .map(ctx.typeFor(_, usage))
+        .mkString(",")
+    } + ">"
+  }
+
+  def templateArgumentsToString(
       ctx: CodeGenerationContext,
       source: Option[EirResolvable[EirType]],
       params: List[EirResolvable[EirType]],
@@ -1603,12 +1632,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
     }
 
-    "<" + {
-      args
-        .map(ctx.resolve[EirResolvable[EirType]])
-        .map(ctx.typeFor(_, usage))
-        .mkString(",")
-    } + ">"
+    templateArgumentsToString(args, usage)(ctx)
   }
 
   def templatize(x: EirType with EirSpecializable): EirType = {
