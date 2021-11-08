@@ -196,11 +196,11 @@ object GenerateProxies {
 
   def generateHandlers(ctx: CodeGenerationContext, entry: EirMember): Unit = {
     val fn = assertValid[EirFunction](entry.member)
+    val ts = fn.templateArgs
     val baseName = assertValid[EirProxy](entry.base).baseName
     val tys = formatArgs(ctx, entry)
     val valHandler = valueHandlerFor(ctx, entry, valueSuffix)
     val threaded = entry.annotation("threaded").nonEmpty
-    val ts = templateArgsOf(fn)
     val args = () => {
       if (ts.nonEmpty) ctx << "<" << (ts.map(_.name), ",") << ">"
       else ctx
@@ -360,7 +360,7 @@ object GenerateProxies {
     (msgName, member.counterpart) match {
       case (Some(name), _) if !member.isConstructor =>
         val fn = assertValid[EirFunction](member.member)
-        val ts = templateArgsOf(fn)
+        val ts = fn.templateArgs
         ctx << valueHandlerFor(
           ctx,
           member,

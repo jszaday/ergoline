@@ -909,7 +909,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit
       ctx: CodeGenerationContext
   ): String = {
-    val fn = assertValid[EirFunction](member.member)
     val proxy = assertValid[EirProxy](Find.asClassLike(ty))
     val qualifications = usage.map(qualificationsFor(proxy, _)).getOrElse(Nil)
     val args =
@@ -928,7 +927,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         )
       } else {
         val spec = sp
-          .map(x => templateArgumentsToString(x.types, usage)(ctx))
+          .map(_.types)
+          .filterNot(_.isEmpty)
+          .map(templateArgumentsToString(_, usage)(ctx))
           .getOrElse("")
         Seq(
           s"CkIndex_${proxy.baseName}" + (
@@ -1306,7 +1307,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             ctx << "(" << target << ","
             ctx << member
               .zip(proxy)
-              .map({ case (m, p) =>
+              .map({ case (m, _) =>
                 epIndexFor(targetType, m, Some(x), Option(sp))
               }) << ","
           case None =>
