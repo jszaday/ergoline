@@ -530,6 +530,7 @@ case class EirMember(
   def ordinal: Option[Int] =
     parent.to[EirClassLike].map(_.members.indexOf(this)).find(_ >= 0)
 
+  def isLocal: Boolean = annotations.exists(_.name == "local")
   def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox
 

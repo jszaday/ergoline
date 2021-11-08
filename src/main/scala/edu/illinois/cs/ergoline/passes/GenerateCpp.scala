@@ -13,7 +13,8 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   indicesName,
   mailboxName,
-  updateLocalityContext
+  updateLocalityContext,
+  valueHandlerFor
 }
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{
@@ -549,6 +550,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     visitArguments(fc, disambiguation, rawArgs._1 ++ rawArgs._2)
   }
 
+  private def prepareType(
+      ty: EirType
+  )(implicit ctx: CodeGenerationContext): EirType = {
+    val place = Orchestrate.placeholder
+    val deref = CheckTypes.stripReference(ty)
+    deref match {
+      case t: EirTemplatedType
+          if place == Find.uniqueResolution[EirType](t.base) =>
+        Find.uniqueResolution[EirType](t.args.head)
+      case _ => deref
+    }
+  }
+
   // TODO direct use of this function should be considered suspect!
   def visitArguments(
       fc: Option[EirFunctionCall],
@@ -563,10 +577,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       m.isConstructor || (m.name == "insert")
     }
     val isMulticast = member.flatMap(_.parent).to[EirProxy].exists(_.isSection)
+    val isUnitLocal = member.exists(x => x.isLocal && !memberHasArgs(x))
 
     val shouldPack = member.flatMap {
-      case _ if isDoneInserting || isMulticast    => None
-      case m @ EirMember(Some(_: EirProxy), _, _) =>
+      case _ if isDoneInserting || isMulticast || isUnitLocal => None
+      case m @ EirMember(Some(_: EirProxy), _, _)             =>
         // (args.nonEmpty || isAsync
         Some(
           (
@@ -576,7 +591,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             } else {
               args
                 .map(ctx.exprType)
-                .map(CheckTypes.stripReference)
+                .map(prepareType)
                 .map(ctx.typeFor(_, fc))
             }
           )
@@ -1208,6 +1223,27 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  private def ckLocalBranch(proxy: EirProxy, expr: EirExpressionNode)(implicit
+      ctx: CodeGenerationContext
+  ): Unit = {
+    ctx << "((" << proxy.baseName << "*)("
+    val idx = expr match {
+      case x: EirArrayReference =>
+        ctx << x.target
+        Some(x.args)
+      case _ =>
+        ctx << expr
+        None
+    }
+    ctx << ".ckLocalBranch())->lookup("
+    idx match {
+      case Some(is) => makeArrayIndex(is)
+      // TODO ( this is unreliable if expr is unrepeatable )
+      case None => ctx << "(" << expr << ".ckGetIndex())"
+    }
+    ctx << "))"
+  }
+
   override def visitFunctionCall(
       x: EirFunctionCall
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -1241,6 +1277,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       .getOrElse(x)
     val isAsync = disambiguated.annotation("async").isDefined
     val isMailbox = member.exists(_.isMailbox)
+    val isLocal = member.exists(_.isLocal)
     if (disambiguated.isSystem) {
       ctx << visitSystemCall(
         ctx,
@@ -1298,18 +1335,32 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
             }
             val targetType = ctx.exprType(target)
-            ctx << (Find.tryClassLike(targetType) match {
-              case Some(p: EirProxy) if p.isCollective || p.isSection =>
-                "ergoline::broadcast_value"
-              case Some(_: EirProxy) => "hypercomm::interceptor::send_async"
-              case n                 => Errors.incorrectType(n.orNull, classOf[EirProxy])
-            })
-            ctx << "(" << target << ","
-            ctx << member
-              .zip(proxy)
-              .map({ case (m, _) =>
-                epIndexFor(targetType, m, Some(x), Option(sp))
-              }) << ","
+            val proxyType = Find.tryClassLike(targetType).to[EirProxy]
+            if (isLocal) {
+              proxyType.foreach(ckLocalBranch(_, target))
+              ctx << "->" << {
+                if (member.exists(memberHasArgs)) {
+                  member.map(
+                    valueHandlerFor(ctx, _, GenerateProxies.valueSuffix)
+                  )
+                } else {
+                  member.map(ctx.nameFor(_, Some(x)))
+                }
+              } << "("
+            } else {
+              ctx << (proxyType match {
+                case Some(p) if p.isCollective || p.isSection =>
+                  "ergoline::broadcast_value"
+                case Some(_) => "hypercomm::interceptor::send_async"
+                case _       => Errors.incorrectType(targetType, classOf[EirProxy])
+              })
+              ctx << "(" << target << ","
+              ctx << member
+                .zip(proxy)
+                .map({ case (m, _) =>
+                  epIndexFor(targetType, m, Some(x), Option(sp))
+                }) << ","
+            }
           case None =>
             if (isPointer) ctx << "(*"
             ctx << x.target
@@ -2669,6 +2720,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << ">"
   }
 
+  def makeArrayIndex(
+      is: List[EirExpressionNode]
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    ctx << "hypercomm::conv2idx<CkArrayIndex>(" << {
+      if (is.length == 1) {
+        ctx << is.head
+      } else {
+        ctx << "std::make_tuple(" << (is, ",") << ")"
+      }
+    } << ")"
+  }
+
   override def visitArrayReference(
       arrayRef: EirArrayReference
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -2690,13 +2753,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           case _ => Errors.invalidTupleIndices(tty, arrayRef.args)
         }
       case _ if collective.isDefined =>
-        ctx << arrayRef.target << "[" << "hypercomm::conv2idx<CkArrayIndex>(" << {
-          if (arrayRef.args.length == 1) {
-            ctx << arrayRef.args.head
-          } else {
-            ctx << "std::make_tuple(" << (arrayRef.args, ",") << ")"
-          }
-        } << ")" << "]"
+        ctx << arrayRef.target << "[" << makeArrayIndex(arrayRef.args) << "]"
       case t if isArray(ctx, t) =>
         val target = arrayRef.target
         val args = arrayRef.args

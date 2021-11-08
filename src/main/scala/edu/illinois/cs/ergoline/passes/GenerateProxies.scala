@@ -196,6 +196,8 @@ object GenerateProxies {
 
   def generateHandlers(ctx: CodeGenerationContext, entry: EirMember): Unit = {
     val fn = assertValid[EirFunction](entry.member)
+    val retTy = Find.uniqueResolution[EirType](fn.returnType)
+    val unitRet = retTy == globals.unitType
     val ts = fn.templateArgs
     val baseName = assertValid[EirProxy](entry.base).baseName
     val tys = formatArgs(ctx, entry)
@@ -205,8 +207,11 @@ object GenerateProxies {
       if (ts.nonEmpty) ctx << "<" << (ts.map(_.name), ",") << ">"
       else ctx
     }
+    if (!unitRet && threaded) {
+      Errors.unreachable()
+    }
     visitTemplateArgs(ts)(ctx)
-    ctx << "static" << "void" << valueHandlerFor(
+    ctx << "static" << ctx.typeFor(retTy, Some(entry)) << valueHandlerFor(
       ctx,
       entry,
       deliverableSuffix
@@ -220,7 +225,9 @@ object GenerateProxies {
       ctx << "CthTraceResume(tid);"
       ctx << "CthResume(tid);"
     } else {
-      ctx << "((" << baseName << "*)self)->" << valHandler << args() << "(std::move(val));"
+      ctx << Option.unless(unitRet)(
+        "return"
+      ) << "((" << baseName << "*)self)->" << valHandler << args() << "(std::move(val));"
     }
     ctx << "}"
     makeEntry(ctx, entry, valHandler, Some(tys))
@@ -287,7 +294,10 @@ object GenerateProxies {
     mailboxes.foreach(mboxName => {
       ctx << s"$idxName::${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
     })
-    entries.foreach(makeHandler(ctx, thisType, _))
+    entries
+      // local EPs can't have value handlers
+      .filterNot(_.isLocal)
+      .foreach(makeHandler(ctx, thisType, _))
     ctx << "}"
 
     entries.foreach(generateHandlers(ctx, _))
@@ -459,6 +469,8 @@ object GenerateProxies {
     )
   }
 
+  val threadedSelf = "self"
+
   def makeEntry(
       ctx: CodeGenerationContext,
       x: EirMember,
@@ -507,11 +519,11 @@ object GenerateProxies {
     threadArg.foreach(arg => {
       val contained = containTypes(tys.get)
       ctx << "hypercomm::typed_value_ptr<" << contained << "> val((hypercomm::typed_value<" << contained << ">*)" << arg << "->msg);"
-      ctx << "auto* self = (" << proxy.map(
+      ctx << "auto*" << threadedSelf << "=" << "(" << proxy.map(
         _.baseName
       ) << "*)" << arg << "->obj;"
       ctx << "delete" << arg << ";"
-      ctx.pushProxySelf("self")
+      ctx.pushProxySelf(threadedSelf)
     })
 
     if (isMain && isConstructor) {
