@@ -53,12 +53,14 @@ object GenerateProxies {
     } << ns.map(_ => "}")
   }
 
+  private val ckArrayBase = "CProxyElement_ArrayElement"
+
   def visitAbstractPup(
       ctx: CodeGenerationContext,
       indices: List[String]
   ): Unit = {
     ctx << s"void pup(PUP::er &p)" << "{"
-    ctx << "CProxyElement_ArrayBase::pup(p);"
+    ctx << ckArrayBase << "::pup(p);"
     ctx << indices.map(idx => s"p | $idx;")
     ctx << s"}"
   }
@@ -79,7 +81,7 @@ object GenerateProxies {
       ctx << "UsrToEnv(" << msgName << ")->setMsgtype(ForArrayEltMsg);"
       ctx << "CkArrayMessage* impl_amsg=(CkArrayMessage*)" << msgName << ";"
       ctx << "impl_amsg->array_setIfNotThere(CkArray_IfNotThere_buffer);"
-      ctx << "ckSend(impl_amsg," << (name + "_idx__") << ",0);"
+      ctx << "ckSend(impl_amsg," << abstractIndexOf(name) << ",0);"
     } << "}"
   }
 
@@ -106,7 +108,7 @@ object GenerateProxies {
       derived,
       Some(base)
     ) << "&" << tmp << ")"
-    ctx << ":" << "CProxyElement_ArrayBase" << "(" << tmp << ".ckGetArrayID()," << tmp << ".ckGetIndex()" << ")" << "{"
+    ctx << ":" << ckArrayBase << "(" << tmp << ".ckGetArrayID()," << tmp << ".ckGetIndex()" << ")" << "{"
     base.members
       .collect {
         case m @ EirMember(_, f: EirFunction, _) if m.isEntry =>
@@ -121,8 +123,7 @@ object GenerateProxies {
       }
       .flatten
       .foreach { case (f, n) =>
-        ctx << (ctx
-          .nameFor(f) + "_idx__") << "=" << epIndexFor(
+        ctx << abstractIndexOf(ctx.nameFor(f)) << "=" << epIndexFor(
           derived,
           n,
           Some(base),
@@ -141,11 +142,21 @@ object GenerateProxies {
     ctx << "}"
   }
 
+  private def abstractIndexOf(name: String): String = {
+    name.substring(0, name.length - 1) + "idx__"
+  }
+
+  def abstractIndexOf(
+      entry: EirMember
+  )(implicit ctx: CodeGenerationContext): String = {
+    abstractIndexOf(ctx.nameFor(entry))
+  }
+
   def visitAbstractProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val name = ctx.nameFor(x)
     val impls = x.derived.toList
-    val indices = x.members.map(m => ctx.nameFor(m) + "_idx__")
-    ctx << s"struct $name: public CProxyElement_ArrayBase" << "{"
+    val indices = x.members.map(abstractIndexOf(_)(ctx))
+    ctx << s"struct $name: public" << ckArrayBase << "{"
     // TODO public ergoline::hashable,
 //    ctx << "CkChareID" << "__id__" << ";"
 //    ctx << "CkEnvelopeType" << "__msgType__" << ";"

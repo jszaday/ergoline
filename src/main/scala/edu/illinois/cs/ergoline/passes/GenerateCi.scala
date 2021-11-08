@@ -8,7 +8,6 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   readOnlyFor,
   zipWithSpecializations
 }
-import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.assertValid

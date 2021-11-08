@@ -925,6 +925,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): String = {
     val proxy = assertValid[EirProxy](Find.asClassLike(ty))
+    val isAbstract = proxy.isAbstract
     val qualifications = usage.map(qualificationsFor(proxy, _)).getOrElse(Nil)
     val args =
       if (templateArgsOf(proxy).nonEmpty) ty match {
@@ -946,16 +947,27 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           .filterNot(_.isEmpty)
           .map(templateArgumentsToString(_, usage)(ctx))
           .getOrElse("")
-        Seq(
-          s"CkIndex_${proxy.baseName}" + (
-            if (args.nonEmpty)
-              templateArgumentsToString(ctx, Some(proxy), args, usage)
-            else ""
-          ),
-          ctx.nameFor(member) + spec + "(" + {
-            Option.when(hasArgs)("nullptr").getOrElse("")
-          } + ")"
-        )
+        if (isAbstract) {
+          // TODO ( this is NOT robust if usage is wrong/unrepeatable )
+          Seq({
+            val inner = ctx.makeSubContext()
+            inner << usage << "." << GenerateProxies.abstractIndexOf(member)(
+              inner
+            )
+            inner.toString
+          })
+        } else {
+          Seq(
+            s"CkIndex_${proxy.baseName}" + (
+              if (args.nonEmpty)
+                templateArgumentsToString(ctx, Some(proxy), args, usage)
+              else ""
+            ),
+            ctx.nameFor(member) + spec + "(" + {
+              Option.when(hasArgs)("nullptr").getOrElse("")
+            } + ")"
+          )
+        }
       }
     }).mkString("::")
   }
@@ -1032,8 +1044,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       else target.flatMap(_.disambiguation)
     )
     if (proxy.isEmpty || member.isEmpty) Errors.invalidAccess(fc, m)
-    val idx =
-      proxy.zip(member).map { case (p, m) => epIndexFor(p, m, Some(fc), None) }
+    val idx = proxy.zip(member).map { case (p, m) =>
+      epIndexFor(p, m, target.orElse(Some(fc)), None)
+    }
     m.name match {
       case "apply" =>
         ctx << (proxy match {
@@ -1358,7 +1371,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               ctx << member
                 .zip(proxy)
                 .map({ case (m, _) =>
-                  epIndexFor(targetType, m, Some(x), Option(sp))
+                  epIndexFor(targetType, m, Some(target), Option(sp))
                 }) << ","
             }
           case None =>
@@ -2646,7 +2659,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         parentType match {
           case None => Errors.missingType(x)
           // TODO use a more reliable comparison here!
-          case Some(u) if !i.needsCasting => Nil
+          case Some(_) if !i.needsCasting => Nil
           case _                          =>
             // TODO this needs to inherit substitutions
             //      (when such things are added)
