@@ -213,7 +213,9 @@ object GenerateProxies {
     val baseName = assertValid[EirProxy](entry.base).baseName
     val tys = formatArgs(ctx, entry)
     val valHandler = valueHandlerFor(ctx, entry, valueSuffix)
+    val isAsync = entry.annotation("async").nonEmpty
     val threaded = entry.annotation("threaded").nonEmpty
+    val future = Option.when(isAsync)("fut")
     val args = () => {
       if (ts.nonEmpty) ctx << "<" << (ts.map(_.name), ",") << ">"
       else ctx
@@ -222,23 +224,37 @@ object GenerateProxies {
       Errors.unreachable()
     }
     visitTemplateArgs(ts)(ctx)
-    ctx << "static" << ctx.typeFor(retTy, Some(entry)) << valueHandlerFor(
+    ctx << "static" << (if (isAsync) "void"
+                        else
+                          ctx.typeFor(retTy, Some(entry))) << valueHandlerFor(
       ctx,
       entry,
       deliverableSuffix
     ) << "(hypercomm::generic_locality_* self, hypercomm::deliverable&& dev)" << "{"
-    ctx << "auto val = hypercomm::dev2typed<" << containTypes(
-      tys
-    ) << ">(std::move(dev));"
+    if (isAsync) {
+      ctx << "hypercomm::future" << future << ";"
+      ctx << "auto val = hypercomm::make_typed_value<" << containTypes(
+        tys
+      ) << ">(hypercomm::tags::no_init());"
+      ctx << "hypercomm::unpack(dev.release<CkMessage>(), " << future << ", val->value());"
+    } else {
+      ctx << "auto val = hypercomm::dev2typed<" << containTypes(
+        tys
+      ) << ">(std::move(dev));"
+    }
     if (threaded) {
       ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << ", new CkThrCallArg(val.release(), self), 0);"
       ctx << "self->CkAddThreadListeners(tid, nullptr); // TODO (this will fail if CMK_TRACE_ENABLED) ;"
       ctx << "CthTraceResume(tid);"
       ctx << "CthResume(tid);"
     } else {
-      ctx << Option.unless(unitRet)(
-        "return"
-      ) << "((" << baseName << "*)self)->" << valHandler << args() << "(std::move(val));"
+      if (!(isAsync || unitRet)) {
+        ctx << "return ("
+      }
+      ctx << "((" << baseName << "*)self)->" << valHandler << args() << "(" << future
+        .map(_ + ",") << "std::move(val))"
+      if (isAsync || unitRet) ctx << ";"
+      else ctx << ");"
     }
     ctx << "}"
     makeEntry(ctx, entry, valHandler, Some(tys))
@@ -503,7 +519,9 @@ object GenerateProxies {
     val hasArgs = args.nonEmpty || isAsync
     val threaded = x.annotation("threaded").nonEmpty
     val threadedHandler = valName.exists(_ => threaded)
+    val future = Option.when(isAsync)("__future__")
     val threadArg = Option.when(threadedHandler)("__ckThrCallArg__")
+    val asyncHandler = valName.nonEmpty || args.isEmpty
     visitTemplateArgs(f)(ctx)
 
     if (threadedHandler) {
@@ -514,8 +532,10 @@ object GenerateProxies {
       ctx << (if (isAsync) "void" else ctx.typeFor(f.returnType))
     }
     ctx << name << "("
+
     tys match {
       case Some(x) =>
+        future.foreach(f => ctx << "hypercomm::future&" << f << ",")
         if (threadedHandler) {
           ctx << "CkThrCallArg*" << threadArg
         } else {
@@ -526,6 +546,14 @@ object GenerateProxies {
         }
     }
     ctx << ")" << "{"
+
+    future
+      .zip(msgName)
+      .filter(_ => args.isEmpty)
+      .foreach { case (f, m) =>
+        ctx << "hypercomm::future" << f << ";"
+        ctx << "hypercomm::unpack(" << m << "," << f << ");"
+      }
 
     threadArg.foreach(arg => {
       val contained = containTypes(tys.get)
@@ -583,13 +611,13 @@ object GenerateProxies {
       if (valName.nonEmpty || !hasArgs) {
         updateLocalityContext(ctx)
       }
-      if (isAsync) {
+      if (isAsync && asyncHandler) {
         ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
-      } else if (ctx.resolve(f.returnType) != globals.unitType) {
+      } else if (!(isAsync || ctx.resolve(f.returnType) == globals.unitType)) {
         ctx << "return "
       }
       makeEntryBody(ctx, x, msgName.filterNot(_ => args.isEmpty))
-      if (isAsync) ctx << "));"
+      if (isAsync && asyncHandler) ctx << "));"
       else ctx << ";"
     }
 

@@ -581,11 +581,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     val shouldPack = member.flatMap {
       case _ if isDoneInserting || isMulticast || isUnitLocal => None
-      case m @ EirMember(Some(_: EirProxy), _, _)             =>
-        // (args.nonEmpty || isAsync
-        Some(
+      case m @ EirMember(Some(_: EirProxy), _, _) => Some(
           (
-            !isConstructorOrInserter(m),
+            !(isAsync || isConstructorOrInserter(m)),
             if (m.isMailbox) {
               mailboxName(ctx, m)._2
             } else {
@@ -925,6 +923,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx: CodeGenerationContext
   ): String = {
     val proxy = assertValid[EirProxy](Find.asClassLike(ty))
+    val isAsync = member.annotation("async").nonEmpty
     val isAbstract = proxy.isAbstract
     val qualifications = usage.map(qualificationsFor(proxy, _)).getOrElse(Nil)
     val args =
@@ -964,7 +963,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
               else ""
             ),
             ctx.nameFor(member) + spec + "(" + {
-              Option.when(hasArgs)("nullptr").getOrElse("")
+              Option.when(hasArgs || isAsync)("nullptr").getOrElse("")
             } + ")"
           )
         }
