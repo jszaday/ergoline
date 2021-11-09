@@ -30,7 +30,7 @@ class Orchestrate extends Pass {
 object Orchestrate {
   private val annotationName = "charisma"
   private def namespace: Option[EirScope] = Modules("or", EirGlobalNamespace)
-  private def placeholder: EirClass =
+  def placeholder: EirClass =
     Find.namedChild[EirClass](namespace, "placeholder")
 
   def forRelated(node: EirNode): Option[EirForLoop] = {
@@ -45,8 +45,18 @@ object Orchestrate {
     }
   }
 
-  def selfIndexAt(i: Int): EirExpressionNode = {
-    val s = GenerateCpp.CppNode(s"((this->thisIndexMax).data())[$i]")
+  def currentSelf(fn: EirFunction): String = {
+    if (fn.functionArgs.isEmpty) {
+      "this"
+    } else {
+      GenerateProxies.threadedSelf
+    }
+  }
+
+  def selfIndexAt(fn: EirFunction, i: Int): EirExpressionNode = {
+    // TODO ( this will breakdown for threaded EPs )
+    val s =
+      GenerateCpp.CppNode(s"((${currentSelf(fn)}->thisIndexMax).data())[$i]")
     s.foundType = Some(globals.integerType)
     s
   }
@@ -71,6 +81,14 @@ object Orchestrate {
   def visit(fn: EirFunction)(implicit ctx: TypeCheckContext): Unit = {
     val pred = (x: EirNode) => x.annotations.find(_.name == annotationName)
     val annotation = pred(fn).orElse(fn.parent.to[EirMember].flatMap(pred))
+    val genSym: () => CodeGenerationContext = () => {
+      val cgen = new CodeGenerationContext("cpp", ctx)
+      val self = currentSelf(fn)
+      cgen.pushProxySelf(self)
+      cgen.pushSelf(s"$self->impl_")
+      cgen
+    }
+
     assert(annotation.nonEmpty)
     annotation.foreach(_.name = "threaded")
 
@@ -142,13 +160,13 @@ object Orchestrate {
               AstManipulation.insertBefore(
                 use, {
                   val node = GenerateCpp.CppNode({
-                    val cgen = new CodeGenerationContext("cpp", ctx)
+                    val cgen = genSym()
                     cgen << "auto" << name.map(_ + "_req") <<
                       "=std::make_shared<hypercomm::resuming_callback<" << argTy
                         .map(
                           cgen.typeFor(_)
                         ) << ">>();"
-                    cgen << "this->open(" << name.map(
+                    cgen << currentSelf(fn) << "->open(" << name.map(
                       _ + "_port"
                     ) << "," << name.map(_ + "_req") << ");"
                     cgen << name.map(_ + "_req") << "->wait();"
@@ -182,7 +200,7 @@ object Orchestrate {
             AstManipulation.insertBefore(
               use, {
                 val node = GenerateCpp.CppNode({
-                  val cgen = new CodeGenerationContext("cpp", ctx)
+                  val cgen = genSym()
                   cgen << "auto" << name.map(
                     _ + "_port"
                   ) << "=" << "std::make_shared<hypercomm::temporary_port<std::string>>(std::string(\"" << name << "\"));"
@@ -204,9 +222,10 @@ object Orchestrate {
                     implicit val visitor
                         : (CodeGenerationContext, EirNode) => Unit =
                       GenerateCpp.visitor
-                    val cgen = new CodeGenerationContext("cpp", ctx)
-                    cgen.pushSelf("this->impl_")
-                    cgen << "hypercomm::send2port(this->thisProxy[hypercomm::conv2idx<CkArrayIndex>(" << arg << ")]," << name
+                    val cgen = genSym()
+                    cgen << "hypercomm::send2port(" << currentSelf(
+                      fn
+                    ) << "->thisProxy[hypercomm::conv2idx<CkArrayIndex>(" << arg << ")]," << name
                       .map(
                         _ + "_port"
                       ) << ",hypercomm::make_typed_value<" << argTy
@@ -248,7 +267,7 @@ object Orchestrate {
           isFinal = true,
           d.name,
           d.declaredType,
-          Some(selfIndexAt(i))
+          Some(selfIndexAt(fn, i))
         )
       })
       // TODO ( assert idx is in range of for-loop )

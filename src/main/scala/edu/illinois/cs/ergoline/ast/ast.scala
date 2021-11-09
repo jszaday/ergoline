@@ -1,15 +1,10 @@
 package edu.illinois.cs.ergoline.ast
 
-import edu.illinois.cs.ergoline.ast.literals.{
-  EirIntegerLiteral,
-  EirLiteral,
-  EirStringLiteral
-}
+import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.passes.UnparseAst
-import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
+import edu.illinois.cs.ergoline.passes.{CheckTypes, UnparseAst}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.{child, withName}
+import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
   EirResolvable,
@@ -21,14 +16,13 @@ import edu.illinois.cs.ergoline.util.{
   AstManipulation,
   Errors,
   TopologicalSort,
-  isSystem,
-  isType
+  isSystem
 }
 import edu.illinois.cs.ergoline.{globals, util}
 
 import java.io.File
 import scala.collection.mutable
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
 object EirAccessibility extends Enumeration {
   type EirAccessibility = Value
@@ -220,6 +214,8 @@ case class EirDeclaration(
     var declaredType: EirResolvable[EirType],
     var initialValue: Option[EirExpressionNode]
 ) extends EirImplicitDeclaration {
+
+  var captured: Boolean = false
 
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] =
@@ -536,6 +532,7 @@ case class EirMember(
   def ordinal: Option[Int] =
     parent.to[EirClassLike].map(_.members.indexOf(this)).find(_ >= 0)
 
+  def isLocal: Boolean = annotations.exists(_.name == "local")
   def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox
 
@@ -827,32 +824,22 @@ case class EirLambdaExpression(
     var body: EirBlock
 ) extends EirExpressionNode {
 
-  private[this] def hasArgument(x: EirFunctionArgument): Boolean = {
-    x.parent.contains(this) || args.contains(x)
-  }
+  private[this] var _captures: Option[List[EirNamedNode]] = None
 
   def captures: List[EirNamedNode] = {
-    val predicate = (x: EirNode) =>
-      x match {
-        case s: EirScopedSymbol[_] => Some(false)
-        case s: EirResolvable[_] => Find
-            .resolutions[EirNamedNode](s)
-            .collectFirst({
-              case f: EirFunctionArgument             => !hasArgument(f)
-              case d: EirDeclaration                  => !Find.ancestors(d).contains(this)
-              case EirMember(_, _: EirDeclaration, _) => true
-              case _                                  => false
-            })
-        case _ => Some(false)
-      }
-    Find
-      .descendant(body, predicate)
-      .map(x =>
-        Find.uniqueResolution[EirNamedNode](x.asInstanceOf[EirResolvable[_]])
-      )
-      .toList
-      .distinct
-      .sortBy(_.name)
+    _captures.getOrElse {
+      val tmp = CheckTypes.findLambdaCaptures(this)
+      _captures = Some(tmp)
+      tmp
+    }
+  }
+
+  def captures_=(list: List[EirNamedNode]): Unit = {
+    _captures = Some(list)
+  }
+
+  def containsArgument(x: EirFunctionArgument): Boolean = {
+    x.parent.contains(this) || args.contains(x)
   }
 
   override def children: Iterable[EirNode] = args ++ List(body)

@@ -4,10 +4,10 @@ import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   collectiveTypeFor,
+  memberHasArgs,
   readOnlyFor,
   zipWithSpecializations
 }
-import edu.illinois.cs.ergoline.proxies.ProxyManager.arrayPtn
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.assertValid
@@ -92,7 +92,12 @@ object GenerateCi {
     }
   }
 
-  val registerMailboxes = "__register_mailboxes__"
+  val registerMailboxes = "__register_handlers__"
+
+  def makeGenericRegistration(p: EirProxy): String = {
+    "__" + p.baseName.substring(0, p.baseName.length - 1) + registerMailboxes
+      .substring(1)
+  }
 
   def visitNamespaces(
       ctx: CiUnparseContext,
@@ -110,12 +115,11 @@ object GenerateCi {
       .foreach(p => {
         visit(ctx, p)
 
-        if (p.mailboxes.nonEmpty) {
-          ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
-        }
-
         if (p.templateArgs.nonEmpty) {
           makeChareSpecializations(ctx, p)
+          ctx << "initnode" << "void" << makeGenericRegistration(p) << "(void);"
+        } else {
+          ctx << s"initnode void ${p.baseName}::$registerMailboxes(void);"
         }
 
         makeEntrySpecializations(p)(ctx)
@@ -143,13 +147,15 @@ object GenerateCi {
 
   val passThruAttributes: Seq[String] = Seq(
     "local",
-    "threaded",
     "createhere",
     "createhome"
   )
 
   def attributesFor(p: EirProxy, m: EirMember): String = {
-    val attributes = passThruAttributes.flatMap(m.annotation).map(_.name)
+    val threaded =
+      m.annotation("threaded").map(_.name).filterNot(_ => memberHasArgs(m))
+    val attributes =
+      (passThruAttributes ++ threaded).flatMap(m.annotation).map(_.name)
 //      Option.when(p.collective.contains("nodegroup") && !m.isConstructor)("exclusive") ++
     if (attributes.nonEmpty) s" [${attributes mkString ","}] " else ""
   }

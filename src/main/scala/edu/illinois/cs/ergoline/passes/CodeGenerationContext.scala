@@ -36,6 +36,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   private var _replacements = Map[String, String]()
 
   private val _selves = new mutable.Stack[String]
+  private val _proxySelves = new mutable.Stack[String]
   private val _sentinels = new mutable.Stack[Sentinel]
   private val _inplace = mutable.Set[EirFunctionCall]()
 
@@ -50,6 +51,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
   def popSelf(): Unit = _selves.pop()
 
   def currentSelf: String = _selves.headOption.getOrElse("this")
+
+  def pushProxySelf(self: String): Unit = _proxySelves.push(self)
+  def popProxySelf(): Unit = _proxySelves.pop()
+  def currentProxySelf: String = _proxySelves.headOption.getOrElse("this")
 
   def checked: Map[EirSpecializable, List[EirSpecialization]] = tyCtx.checked
 

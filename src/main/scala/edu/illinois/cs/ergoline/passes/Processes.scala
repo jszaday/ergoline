@@ -184,6 +184,12 @@ object Processes {
 
     sensitiveHelper(sensitiveDeclIncludes)(ctx)
 
+    ctx << List(
+      "#define CK_TEMPLATES_ONLY",
+      "#include \"generate.def.h\"",
+      "#undef CK_TEMPLATES_ONLY"
+    ).map(_ + "// ;")
+
     GenerateCpp.declareGlobals(ctx)
 
     // NOTE do we ever need to topo sort proxies?
@@ -231,12 +237,7 @@ object Processes {
 
     sensitiveHelper(sensitiveDefIncludes)(ctx)
 
-    ctx << List(
-      "#define CK_TEMPLATES_ONLY",
-      "#include \"generate.def.h\"",
-      "#undef CK_TEMPLATES_ONLY",
-      "#include \"generate.def.h\""
-    ).map(_ + "// ;")
+    ctx << "#include \"generate.def.h\" // ;"
 
     List(ctx.toString)
   }

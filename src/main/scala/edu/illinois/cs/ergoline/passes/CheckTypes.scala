@@ -1428,9 +1428,38 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     })
   }
 
+  def findLambdaCaptures(node: EirLambdaExpression): List[EirNamedNode] = {
+    val predicate = (x: EirNode) =>
+      x match {
+        case _: EirScopedSymbol[_] => Some(false)
+        case s: EirResolvable[_] => Find
+            .resolutions[EirNamedNode](s)
+            .collectFirst({
+              case f: EirFunctionArgument             => !node.containsArgument(f)
+              case d: EirDeclaration                  => !Find.ancestors(d).contains(node)
+              case EirMember(_, _: EirDeclaration, _) => true
+              case _                                  => false
+            })
+        case _ => Some(false)
+      }
+    Find
+      .descendant(node.body, predicate)
+      .map(x =>
+        Find.uniqueResolution[EirNamedNode](x.asInstanceOf[EirResolvable[_]])
+      )
+      .toList
+      .distinct
+      .sortBy(_.name)
+  }
+
   override def visitLambdaExpression(
       node: EirLambdaExpression
   )(implicit ctx: TypeCheckContext): EirType = {
+    node.captures = findLambdaCaptures(node)
+    node.captures
+      .collect { case d: EirDeclaration => d }
+      .foreach(_.captured = true)
+
     ctx.registerLambda(node)
     ctx.lambdaWith(expand(node.args), visit(node.body))
   }
