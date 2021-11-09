@@ -2334,12 +2334,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirLambdaExpression
   )(implicit ctx: CodeGenerationContext): Unit = {
     val ty = ctx.typeOf(x)
+    val wasCaptured: EirNode => Boolean = {
+      case d: EirDeclaration => d.captured
+      case _                 => false
+    }
     val captures = x.captures.map(captured => {
       // TODO use specialized version when avail
       val ty = CheckTypes.stripReference(ctx.typeOf(captured))
       val name = ctx.nameFor(captured, Some(x))
       if (ty.isPointer) name
-      else {
+      else if (wasCaptured(captured)) {
+        captured.name
+      } else {
         val t = ctx.typeFor(ty, Some(x))
         s"std::shared_ptr<$t>(std::shared_ptr<$t>{}, &$name)"
       }
@@ -3278,8 +3284,19 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     node match {
       case x: EirDeclaration =>
         val ty = ctx.resolve(x.declaredType)
-        ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x)
-        ctx << value.foreach { x => assignmentRhs(ty, "=", x) } << ";"
+        if (x.captured && !ty.isPointer) {
+          val name = ctx.nameFor(x)
+          ctx.makePointer(x)
+          ctx << "auto" << name << "=" << "std::make_shared<" << ctx.typeFor(
+            ty,
+            Some(x)
+          ) << ">("
+          value.foreach { x => assignmentRhs(ty, "", x) }
+          ctx << ");"
+        } else {
+          ctx << ctx.typeFor(ty, Some(x)) << ctx.nameFor(x)
+          ctx << value.foreach { x => assignmentRhs(ty, "=", x) } << ";"
+        }
       case x: EirMultiDeclaration =>
         val tmp = value.map(value => {
           (value, x.children.map(_.name).mkString("_") + "_value_")

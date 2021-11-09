@@ -2,7 +2,7 @@ package edu.illinois.cs.ergoline.ast
 
 import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
-import edu.illinois.cs.ergoline.passes.UnparseAst
+import edu.illinois.cs.ergoline.passes.{CheckTypes, UnparseAst}
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.{
@@ -214,6 +214,8 @@ case class EirDeclaration(
     var declaredType: EirResolvable[EirType],
     var initialValue: Option[EirExpressionNode]
 ) extends EirImplicitDeclaration {
+
+  var captured: Boolean = false
 
   // NOTE this _might_ infinitely recurse for self so we skip declType
   override def children: Iterable[EirNode] =
@@ -822,32 +824,22 @@ case class EirLambdaExpression(
     var body: EirBlock
 ) extends EirExpressionNode {
 
-  private[this] def hasArgument(x: EirFunctionArgument): Boolean = {
-    x.parent.contains(this) || args.contains(x)
-  }
+  private[this] var _captures: Option[List[EirNamedNode]] = None
 
   def captures: List[EirNamedNode] = {
-    val predicate = (x: EirNode) =>
-      x match {
-        case s: EirScopedSymbol[_] => Some(false)
-        case s: EirResolvable[_] => Find
-            .resolutions[EirNamedNode](s)
-            .collectFirst({
-              case f: EirFunctionArgument             => !hasArgument(f)
-              case d: EirDeclaration                  => !Find.ancestors(d).contains(this)
-              case EirMember(_, _: EirDeclaration, _) => true
-              case _                                  => false
-            })
-        case _ => Some(false)
-      }
-    Find
-      .descendant(body, predicate)
-      .map(x =>
-        Find.uniqueResolution[EirNamedNode](x.asInstanceOf[EirResolvable[_]])
-      )
-      .toList
-      .distinct
-      .sortBy(_.name)
+    _captures.getOrElse {
+      val tmp = CheckTypes.findLambdaCaptures(this)
+      _captures = Some(tmp)
+      tmp
+    }
+  }
+
+  def captures_=(list: List[EirNamedNode]): Unit = {
+    _captures = Some(list)
+  }
+
+  def containsArgument(x: EirFunctionArgument): Boolean = {
+    x.parent.contains(this) || args.contains(x)
   }
 
   override def children: Iterable[EirNode] = args ++ List(body)
