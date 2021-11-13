@@ -881,7 +881,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case Some(name) => (
           None,
           ctx.ancestor[EirMember] match {
-            case Some(m) => m.selfDeclarations collect {
+            case Some(m) =>
+              val decls = {
+                Option
+                  .when(m.hasAnnotation("proxy"))({
+                    ctx
+                      .ancestor[EirProxy]
+                      .find(x => m.base == x.base)
+                      .map(_.selfDeclarations)
+                  })
+                  .flatten
+                  .getOrElse(m.selfDeclarations)
+              }
+              decls collect {
                 case m: EirNamedNode if m.name == name => (m, None)
               }
             case _ => Nil
@@ -1660,8 +1672,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       ctx: TypeCheckContext
   ): Boolean = {
     x match {
-      case t: EirTemplatedType => hasField(visit(t.base), field)
-      case c: EirClassLike     => c.members.exists(_.name == field)
+      case t: EirTemplatedType =>
+        hasField(Find.uniqueResolution[EirType](t.base), field)
+      case c: EirClassLike => c.members.exists(_.name == field)
     }
   }
 

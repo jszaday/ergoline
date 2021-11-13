@@ -54,6 +54,8 @@ abstract class EirNode {
 
   def location_=(location: Option[EirSourceInfo]): Unit = _location = location
 
+  def hasAnnotation(name: String): Boolean = annotations.exists(name == _.name)
+
   def annotation(name: String): Option[EirAnnotation] =
     annotations.find(_.name == name)
 
@@ -532,8 +534,8 @@ case class EirMember(
   def ordinal: Option[Int] =
     parent.to[EirClassLike].map(_.members.indexOf(this)).find(_ >= 0)
 
-  def isLocal: Boolean = annotations.exists(_.name == "local")
-  def isMailbox: Boolean = annotations.exists(_.name == "mailbox")
+  def isLocal: Boolean = hasAnnotation("local")
+  def isMailbox: Boolean = hasAnnotation("mailbox")
   def isEntryOnly: Boolean = entryOnly || isMailbox
 
   def isImplOnly: Boolean = member match {
@@ -571,7 +573,7 @@ case class EirMember(
 
   // TODO also ensure return type is "unit" unless a/sync or local
   def isEntry: Boolean = member match {
-    case _: EirFunction => isMailbox || annotations.exists(_.name == "entry")
+    case _: EirFunction => isMailbox || hasAnnotation("entry")
     case _              => false
   }
 

@@ -570,8 +570,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       args: List[EirExpressionNode]
   )(implicit ctx: CodeGenerationContext): CodeGenerationContext = {
     val member: Option[EirMember] = asMember(disambiguation)
-    val isAsync = disambiguation.flatMap(_.annotation("async")).isDefined
     // TODO ( make these checks more robust )
+    val isAsync = member.exists(_.hasAnnotation("async"))
+    val isProxyMember = member.exists(_.hasAnnotation("proxy"))
     val isDoneInserting = member.exists(_.name == "doneInserting")
     val isConstructorOrInserter = (m: EirMember) => {
       m.isConstructor || (m.name == "insert")
@@ -580,7 +581,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isUnitLocal = member.exists(x => x.isLocal && !memberHasArgs(x))
 
     val shouldPack = member.flatMap {
-      case _ if isDoneInserting || isMulticast || isUnitLocal => None
+      case _
+          if isDoneInserting || isMulticast || isUnitLocal || isProxyMember =>
+        None
       case m @ EirMember(Some(_: EirProxy), _, _) => Some(
           (
             !(isAsync || isConstructorOrInserter(m)),
@@ -1263,6 +1266,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val member = asMember(disambiguated)
     val static = member.map(_.isStatic)
     val systemParent = disambiguated.systemParent
+    val target = x.target match {
+      case s: EirScopedSymbol[_] => Some(s.target)
+      case _                     => None
+    }
     val implicits = CheckTypes.getImplicitArgs(disambiguated) map { i =>
       // TODO enforce implicitness
       val symbol = EirSymbol[EirImplicitDeclaration](Some(x), List(i.name))
@@ -1287,8 +1294,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
       }
       .getOrElse(x)
-    val isAsync = disambiguated.annotation("async").isDefined
-    val isMailbox = member.exists(_.isMailbox)
+    val isAsync = disambiguated.hasAnnotation("async")
+    val isProxy = disambiguated.hasAnnotation("proxy")
     val isLocal = member.exists(_.isLocal)
     if (disambiguated.isSystem) {
       ctx << visitSystemCall(
@@ -1340,16 +1347,27 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           ctx << x.target << x.foundType.map(fieldAccessorFor(_)(static)) << {
             ctx.nameFor(disambiguated)
           }
+        } else if (isProxy) {
+          val targetType = target.map(ctx.exprType)
+          val (proxyType, sp) = targetType match {
+            case Some(EirTemplatedType(_, t: EirProxy, args)) =>
+              (Some(t), Some(args))
+            case Some(t: EirProxy) => (Some(t), None)
+            case _                 => (None, None)
+          }
+          val ts = sp.getOrElse(Nil).map(ctx.typeFor(_, Some(x)))
+          val qs = proxyType.map(qualificationsFor(_, x)).map(_.mkString("::"))
+          ctx << qs << "::" << proxyType.map(_.baseName) << sp.map(_ =>
+            "<"
+          ) << (ts, ",") << sp.map(_ => ">")
+          ctx << "::" << member.map(ctx.nameFor(_)) << "(" << target
+          ctx << Option.when(x.args.nonEmpty || implicits.nonEmpty)(",")
         } else proxy match {
           case Some(_) =>
-            val target = x.target match {
-              case s: EirScopedSymbol[_] => s.target
-              case s                     => Errors.incorrectType(s, classOf[EirScopedSymbol[_]])
-            }
-            val targetType = ctx.exprType(target)
-            val proxyType = Find.tryClassLike(targetType).to[EirProxy]
+            val targetType = target.map(ctx.exprType)
+            val proxyType = targetType.flatMap(Find.tryClassLike).to[EirProxy]
             if (isLocal) {
-              proxyType.foreach(ckLocalBranch(_, target))
+              proxyType.foreach(ckLocalBranch(_, target.get))
               ctx << "->" << {
                 if (member.exists(memberHasArgs)) {
                   member.map(
@@ -1364,13 +1382,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
                 case Some(p) if p.isCollective || p.isSection =>
                   "ergoline::broadcast_value"
                 case Some(_) => "hypercomm::interceptor::send_async"
-                case _       => Errors.incorrectType(targetType, classOf[EirProxy])
+                case _ =>
+                  Errors.incorrectType(targetType.orNull, classOf[EirProxy])
               })
               ctx << "(" << target << ","
               ctx << member
                 .zip(proxy)
-                .map({ case (m, _) =>
-                  epIndexFor(targetType, m, Some(target), Option(sp))
+                .flatMap({ case (m, _) =>
+                  targetType.map(epIndexFor(_, m, target, Option(sp)))
                 }) << ","
             }
           case None =>
@@ -1379,7 +1398,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             if (isPointer) ctx << ")"
         }
 
-        if (proxy.forall(_ => functor)) {
+        if (!isProxy && proxy.forall(_ => functor)) {
           ctx << visitSpecialization(sp) << "("
         }
 
@@ -2067,14 +2086,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
   def selfName(ctx: CodeGenerationContext, s: EirSymbol[_]): String = {
     s.qualifiedName.last match {
-      case "self@" => {
-        ctx.proxy
-          .flatMap(_.collective)
-          .map(_ => s"${ctx.currentProxySelf}->thisProxy")
-          .getOrElse(
-            s"${ctx.currentProxySelf}->thisProxy[${ctx.currentProxySelf}->thisIndexMax]"
-          )
-      }
+      case "self@" =>
+        val proxySelf = ctx.currentProxySelf
+        if (proxySelf == GenerateProxies.proxyMemberProxySelf) {
+          ctx.currentSelf
+        } else {
+          ctx.proxy
+            .flatMap(_.collective)
+            .map(_ => s"${ctx.currentProxySelf}->thisProxy")
+            .getOrElse(
+              s"${ctx.currentProxySelf}->thisProxy[${ctx.currentProxySelf}->thisIndexMax]"
+            )
+        }
       case "self[@]" => s"${ctx.currentProxySelf}->thisProxy[" + {
           s"hypercomm::conv2idx<CkArrayIndex>(${selfIndex(ctx)})"
         } + "]"
@@ -2090,9 +2113,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case _                                  => Errors.missingType(n)
     })
 
+    val currSelf = ctx.currentSelf
     if (ty.isPointer(ctx)) {
-      if (ctx.currentSelf == "self") {
-        "self"
+      if (currSelf != "this") {
+        currSelf
       } else if (ty.isTrait) {
         "this->__self__()"
       } else {
@@ -2104,7 +2128,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         ) + "::shared_from_this())"
       }
     } else {
-      "(*" + ctx.currentSelf + ")"
+      s"(*$currSelf)"
     }
   }
 
