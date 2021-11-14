@@ -55,8 +55,8 @@ template<typename T>
 using extricate_t = typename extractor_<T>::type;
 
 inline hypercomm::future make_future(const std::shared_ptr<hypercomm::proxy>& proxy) {
-  auto* chare = static_cast<Chare*>(proxy->local());
-  auto* manager = dynamic_cast<hypercomm::future_manager_*>(chare);
+  auto* chare = static_cast<ArrayElement*>(proxy->local());
+  auto* manager = static_cast<hypercomm::generic_locality_*>(chare);
   CkAssert(manager && "unable to retrieve local chare");
   return manager->make_future();
 }
