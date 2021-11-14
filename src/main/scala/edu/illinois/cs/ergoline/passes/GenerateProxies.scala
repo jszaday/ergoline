@@ -347,7 +347,7 @@ object GenerateProxies {
         .foreach {
           case m @ EirMember(_, f: EirFunction, _) if m.isMailbox =>
             visitMailbox(m, f)(ctx)
-          case x => visitProxyMember(ctx, x)
+          case y => visitProxyMember(ctx, x, y)
         }
     } << "std::shared_ptr<" << nameFor(
       ctx,
@@ -478,22 +478,55 @@ object GenerateProxies {
     }
   }
 
-  def visitProxyMember(ctx: CodeGenerationContext, x: EirMember): Unit = {
-    val proxy = x.parent.to[EirProxy]
+  def proxyMemberSelf(proxyType: String): String = "thisProxy"
+
+  def proxyMemberProxySelf: String =
+    s"((hypercomm::generic_locality_*)${globals.implicitProxyName}->local())"
+
+  def makeProxyMember(
+      ctx: CodeGenerationContext,
+      proxy: EirProxy,
+      member: EirMember
+  ): Unit = {
+    val fn = assertValid[EirFunction](member.member)
+    val args = fn.functionArgs ++ fn.implicitArgs
+    val proxyType = ctx.typeFor(proxy.asType)
+    ctx << "static" << ctx.typeFor(fn.returnType, Some(fn)) << ctx.nameFor(
+      member
+    ) << "(" << "const" << proxyType << "&" << "thisProxy"
+    ctx << Option.unless(args.isEmpty)(",") << (args, ",")
+    ctx << ")" << "{"
+    ctx.pushSelf(proxyMemberSelf(proxyType))
+    ctx.pushProxySelf(proxyMemberProxySelf)
+    visitFunctionBody(fn)(ctx)
+    ctx.popProxySelf()
+    ctx.popSelf()
+    ctx << "}"
+  }
+
+  def visitProxyMember(
+      ctx: CodeGenerationContext,
+      proxy: EirProxy,
+      x: EirMember
+  ): Unit = {
     val isConstructor = x.isConstructor
     val f = assertValid[EirFunction](x.member)
-    makeEntry(
-      ctx,
-      x, {
-        if (isConstructor) {
-          val baseName = proxy.map(x => ctx.nameFor(x.base)).getOrElse("")
-          s"${baseName}_${proxy.flatMap(_.collective).map(x => s"${x}_").getOrElse("")}"
-        } else {
-          ctx.nameFor(f)
-        }
-      },
-      None
-    )
+    if (x.annotation("proxy").nonEmpty) {
+      makeProxyMember(ctx, proxy, x)
+    } else {
+      makeEntry(
+        ctx,
+        x, {
+          if (isConstructor) {
+            val baseName = ctx.nameFor(proxy.base)
+            s"${baseName}_${proxy.collective.map(x => s"${x}_").getOrElse("")}"
+          } else {
+            ctx.nameFor(f)
+          }
+        },
+        None
+      )
+    }
   }
 
   val threadedSelf = "self"
@@ -514,6 +547,7 @@ object GenerateProxies {
     val isAsync = x.annotation("async").isDefined
     val isMailbox = x.isMailbox
     val args = f.functionArgs
+    assert(f.implicitArgs.isEmpty)
     val valName = tys.map(_ => "val")
     val msgName = Option.when(tys.isEmpty)(GenerateProxies.msgName)
     val hasArgs = args.nonEmpty || isAsync

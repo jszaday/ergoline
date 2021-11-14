@@ -15,9 +15,7 @@ import ck::future;
 
     @threaded @entry def receive() {
         for (var i = 0; i < 16; i += 1) {
-            val f = future<int>();
-            ch.receive(f);
-            println(`received value: ${await f}`);
+            println(`received value: ${await ch}`);
         }
         exit();
     }

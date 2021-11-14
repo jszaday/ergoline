@@ -141,13 +141,16 @@ object Parser {
 
   def Specialized[A <: EirNamedNode: ClassTag](implicit
       ctx: P[Any]
-  ): P[EirResolvable[A]] = P(Identifier[A] ~ Specialization.?).map {
-    case (id, Some(sp)) => mkSpecialization[A](
-        None,
-        id,
-        sp.toList
+  ): P[EirResolvable[A]] = P(Index ~ Identifier[A] ~ Specialization.?).map {
+    case (idx, id, Some(sp)) => SetLocation(
+        mkSpecialization[A](
+          None,
+          id,
+          sp.toList
+        ),
+        idx
       )
-    case (id, None) => id
+    case (idx, id, None) => SetLocation(id, idx)
   }
 
   def Expression[_: P](implicit
@@ -583,9 +586,11 @@ object Parser {
   }
 
   def PostfixExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = {
-    if (static) P(PrimaryExpr ~ ExprSuffix.rep(0))
-    else P((ProxyAccessor | PrimaryExpr) ~ ExprSuffix.rep(0))
-  }.map { case (expr, suffixes) => applySuffixes(expr, suffixes) }
+    if (static) P(Index ~ PrimaryExpr ~ ExprSuffix.rep(0))
+    else P(Index ~ (ProxyAccessor | PrimaryExpr) ~ ExprSuffix.rep(0))
+  }.map { case (idx, expr, suffixes) =>
+    SetLocation(applySuffixes(expr, suffixes), idx)
+  }
 
   def UnaryExpr[_: P](implicit static: Boolean): P[EirExpressionNode] =
     P(PrefixOp.? ~ PostfixExpr).map {

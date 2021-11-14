@@ -210,8 +210,8 @@ case class EirProxy(
   private def descriptor: String = collective.getOrElse(ProxyManager.chareKwd)
 
   private def validMember(m: EirMember): Boolean = {
-    (m.annotation("entry")
-      .orElse(m.annotation("mailbox")))
+    m.annotation("entry")
+      .orElse(m.annotation("mailbox"))
       .map(_.opts)
       .exists(opts => {
         val enabled = opts.keys.filter(ProxyManager.isChareDescriptor).toList
@@ -324,6 +324,10 @@ case class EirProxy(
       .map(updateConstructor(asInsert))
   }
 
+  def proxyMembers: List[EirMember] = {
+    base.members.filter(_.annotation("proxy").nonEmpty)
+  }
+
   def baseMembers: List[EirMember] = {
     baseConstructors() ++ {
       base.members
@@ -361,7 +365,7 @@ case class EirProxy(
         case _                          => Nil
       }
 
-      internalMembers = fromKind ++ baseMembers
+      internalMembers = fromKind ++ baseMembers ++ proxyMembers
     }
 
     internalMembers

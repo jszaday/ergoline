@@ -141,7 +141,9 @@ object GenerateCi {
     GenerateCpp.visitTemplateArgs(proxy.templateArgs)(ctx)
     ctx << visitChareType(proxy.isMain, proxy.collective) << proxy.baseName
     ctx << ":" << "hypercomm::locality_base_" << "{" << {
-      proxy.membersToGen.foreach(visit(ctx, proxy, _))
+      proxy.membersToGen
+        .filterNot(_.hasAnnotation("proxy"))
+        .foreach(visit(ctx, proxy, _))
     } << "};"
   }
 

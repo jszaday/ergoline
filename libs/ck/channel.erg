@@ -28,4 +28,10 @@ class channel<A> {
             values.removeHead();
         }
     }
+
+    @proxy @sync def get()(implicit __proxy__: proxy): A {
+        val f = future<A>();
+        self@receive(f);
+        return f.get();
+    }
 }

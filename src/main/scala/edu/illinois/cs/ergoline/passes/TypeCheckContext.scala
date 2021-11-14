@@ -7,6 +7,7 @@ import edu.illinois.cs.ergoline.ast.types.{
   EirTupleType,
   EirType
 }
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Transactions.EirSubstituteTransaction
 import edu.illinois.cs.ergoline.resolution.{
   EirPlaceholder,
@@ -263,7 +264,20 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
   ): Option[Context] = {
     val tyCtx = parent.getOrElse(this)
     val checked = tyCtx._checked.getOrElse(s, Nil)
-    val ctx = (immediateAncestor[EirMember].map(_.base), sp)
+    val member = immediateAncestor[EirMember]
+    val isProxy = member.exists(_.hasAnnotation("proxy"))
+    val ctx = (
+      {
+        val base = member.map(_.base)
+        Option
+          .when(isProxy)({
+            tyCtx.ancestor[EirProxy].find(x => base.contains(x.base))
+          })
+          .flatten
+          .orElse(base)
+      },
+      sp
+    )
     Option.unless(checked.contains(ctx))({
       tyCtx._checked += (s -> (checked :+ ctx))
       ctx
