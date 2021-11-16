@@ -433,7 +433,7 @@ object GenerateProxies {
     val baseName = m.base.asInstanceOf[EirProxy].baseName
     ctx << "static" << "void" << s"${mboxName}fn__" << s"(hypercomm::generic_locality_* $implSelf, hypercomm::deliverable&& $value)" << "{"
     ctx << "auto*" << "self" << "=(" << baseName << s"*)$implSelf;"
-    ctx << "self->passthru(std::make_pair((hypercomm::component_id_t)self->" << mboxName << ", 0), std::move(" << value << "));"
+    ctx << "CkAssert(self->passthru(std::make_pair((hypercomm::component_id_t)self->" << mboxName << ", 0), " << value << "));"
     ctx << "}"
     visitTemplateArgs(f)(ctx)
     makeMailboxDecl(ctx, m)
