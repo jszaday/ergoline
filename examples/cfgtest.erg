@@ -1,0 +1,17 @@
+package examples;
+
+import ergoline::_;
+
+@main class cfgtest {
+    @entry def self() {
+        for (var x = 0; x < 16; x += 1) {
+            if (x == 15) {
+                return;
+
+                println("unreachable");
+            } else {
+                println("hello");
+            }
+        }
+    }
+}

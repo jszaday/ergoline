@@ -229,9 +229,11 @@ object Parser {
       Identifier[EirNamedNode] ~ `(` ~/ PatternList.? ~ `)`
     )
 
-  def Block[_: P]: P[EirBlock] = P(`{` ~/ OptionalStatement.rep(0) ~ `}`)
-    .map(_.flatten.toList)
-    .map(EirBlock(None, _))
+  def Block[_: P]: P[EirBlock] =
+    P(Index ~ `{` ~/ OptionalStatement.rep(0) ~ `}`)
+      .map { case (idx, slst) =>
+        SetLocation(EirBlock(None, slst.flatten.toList), idx)
+      }
 
   def OptionalExpression[_: P]: P[Option[EirExpressionNode]] =
     P((!:(Expression) ~ Semi) | `;`(None))

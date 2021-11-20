@@ -1,7 +1,8 @@
 package edu.illinois.cs.ergoline
 
+import edu.illinois.cs.ergoline.analysis.ControlFlow
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
-import edu.illinois.cs.ergoline.passes.Processes
+import edu.illinois.cs.ergoline.passes.{Processes, Registry}
 import edu.illinois.cs.ergoline.resolution.Find.withName
 import edu.illinois.cs.ergoline.resolution.Modules.{charmc, load}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
@@ -29,6 +30,10 @@ object Driver extends App {
   else if (options.contains("--debug")) Errors.useDebugAction()
 
   Modules.useFastParse = !options.contains("--antlr4")
+
+  if (options.contains("--cfa")) {
+    Registry.instance[ControlFlow.Pass]
+  }
 
   val skipCompilation = options.contains("--no-compile")
   globals.strict = options.contains("-Wall")
