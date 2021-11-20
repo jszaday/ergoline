@@ -69,21 +69,25 @@ object Processes {
     val all =
       (node +: Modules.fileSiblings.getOrElse(node, Nil)).sortBy(!isMain(_))
 
+    def compatible(pass: Pass)(node: EirNode): Boolean = {
+      !node.isInstanceOf[EirFileSymbol] && {
+        pass.annotations.isEmpty || pass.annotations.exists(node.hasAnnotation)
+      }
+    }
+
     for (node <- all) {
       Registry.onLoad.foreach(pass => {
         if (pass.canEnter[EirFileSymbol]) {
           pass(node)
         } else {
           node match {
-            case n: EirNamespace => n.children
-                .filterNot(_.isInstanceOf[EirFileSymbol])
-                .foreach(pass(_))
-            case _ => pass(node)
+            case n: EirNamespace =>
+              n.children.filter(compatible(pass)).map(pass(_))
+            case _ => if (compatible(pass)(node)) pass(node)
           }
         }
       })
     }
-
     for (node <- all) {
       onOptimize(node)
     }
