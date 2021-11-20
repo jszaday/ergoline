@@ -1032,7 +1032,8 @@ case class EirWhileLoop(
     var parent: Option[EirNode],
     var condition: EirExpressionNode,
     var body: Option[EirNode]
-) extends EirNode {
+) extends EirNode
+    with EirScope {
   override def children: Iterable[EirNode] = condition +: body.toList
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
@@ -1041,7 +1042,8 @@ case class EirDoWhileLoop(
     var parent: Option[EirNode],
     var condition: EirExpressionNode,
     var body: Option[EirNode]
-) extends EirNode {
+) extends EirNode
+    with EirScope {
   override def children: Iterable[EirNode] = condition +: body.toList
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
