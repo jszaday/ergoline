@@ -13,5 +13,20 @@ import ergoline::_;
                 println("hello");
             }
         }
+
+        var y = 0;
+        do {
+            println("hi");
+            y -= 1;
+        } while (y > 0);
+
+        while (y < 0) {
+            if (y % 2 == 0) {
+                println("hey");
+            } else {
+                println("hola");
+            }
+            y += 1;
+        }
     }
 }

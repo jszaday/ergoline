@@ -4,13 +4,15 @@ import edu.illinois.cs.ergoline.ast.{
   EirBlock,
   EirCStyleHeader,
   EirClass,
+  EirDoWhileLoop,
   EirExpressionNode,
   EirForLoop,
   EirFunction,
   EirIfElse,
   EirNode,
   EirReturn,
-  EirScope
+  EirScope,
+  EirWhileLoop
 }
 import edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.passes.Pass.Phase
@@ -165,6 +167,15 @@ object ControlFlow {
       } f.out.filter(_.to == t).foreach(_.label = Some(label))
     }
 
+    private[this] def interconnect(from: List[Node], to: List[Node])(implicit
+        graph: Graph
+    ): List[Edge] = {
+      for {
+        f <- from
+        t <- to
+      } yield graph.insert(f, t)
+    }
+
     private[this] def visit(node: EirNode, prev: List[Node])(implicit
         graph: Graph
     ): List[Node] = {
@@ -191,16 +202,21 @@ object ControlFlow {
               val testNodes = iterate(test, lockAll(declNodes))
               val bodyNodes = iterate(x.body, lockAll(testNodes))
               val incrNodes = iterate(incr, lockAll(bodyNodes))
-
-              for {
-                testNode <- testNodes
-                incrNode <- incrNodes
-              } graph.insert(incrNode, testNode)
-
+              interconnect(incrNodes, testNodes)
               labelEdges(testNodes, bodyNodes, "YES")
-
               testNodes
           }
+        case x: EirDoWhileLoop =>
+          val bodyNodes = iterate(x.body, lockAll(prev))
+          val testNodes = chain(x.condition, bodyNodes)
+          interconnect(testNodes, bodyNodes).foreach(_.label = Some("YES"))
+          testNodes
+        case x: EirWhileLoop =>
+          val testNodes = chain(x.condition, lockAll(prev))
+          val bodyNodes = iterate(x.body, lockAll(testNodes))
+          interconnect(bodyNodes, testNodes)
+          labelEdges(testNodes, bodyNodes, "YES")
+          testNodes
         case x: EirReturn =>
           lockAll(chain(x, prev)).foreach(graph.insert(_, graph.end))
           Nil
