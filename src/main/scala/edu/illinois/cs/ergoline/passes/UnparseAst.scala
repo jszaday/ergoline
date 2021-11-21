@@ -324,7 +324,6 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       loop: EirWhileLoop
   )(implicit ctx: UnparseContext): String = {
     visitLoopHeader(loop).format(visitOptionalStatement(loop.body))
-    s"while (${visit(loop.condition)})${}"
   }
 
   override def visitDoWhileLoop(
