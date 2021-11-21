@@ -29,6 +29,23 @@ object UnparseAst {
   def nameFor(node: EirNode): String = _instance.nameFor(node)(mkContext())
 
   def visit(node: EirNode): String = _instance.visit(node)(mkContext())
+
+  def visitLoopHeader(node: EirNode): String =
+    _instance.visitLoopHeader(node)(mkContext())
+
+  def visitWhenHeader(node: EirSdagWhen): String =
+    _instance.visitWhenHeader(node)(mkContext())
+
+  def escape(s: String): String = {
+    s.replace("\\", "\\\\")
+      .replace("\t", "\\t")
+      .replace("\b", "\\b")
+      .replace("\n", "\\n")
+      .replace("\r", "\\r")
+      .replace("\f", "\\f")
+      .replace("\'", "\\'")
+      .replace("\"", "\\\"");
+  }
 }
 
 class UnparseAst extends EirVisitor[UnparseContext, String] {
@@ -267,6 +284,28 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       ctx: UnparseContext
   ): String = x.value.toString
 
+  def visitLoopHeader(node: EirNode)(implicit ctx: UnparseContext): String = {
+    node match {
+      case x: EirDoWhileLoop => s"do%s while(${visit(x.condition)});"
+      case x: EirWhileLoop   => s"while(${visit(x.condition)})%s"
+      case EirForLoop(_, hdr, _) => "for (" + {
+          hdr match {
+            case x: EirCStyleHeader =>
+              x.declaration.mapOrSemi(visit(_)) + visitOptionalStatement(
+                x.test
+              ) + x.increment.mapOrEmpty(" " + visit(_))
+            case x: EirForAllHeader =>
+              (if (x.identifiers.length == 1) {
+                 x.identifiers.head
+               } else {
+                 s"(${x.identifiers.mkString(", ")})"
+               }) + " <- " + visit(x.expression)
+          }
+        } + ")%s"
+      case _ => ???
+    }
+  }
+
   def visitStatement(x: EirNode)(implicit ctx: UnparseContext): String = {
     x match {
       case _: EirExpressionNode => visit(x) + ";"
@@ -284,32 +323,20 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
   override def visitWhileLoop(
       loop: EirWhileLoop
   )(implicit ctx: UnparseContext): String = {
-    s"while (${visit(loop.condition)})${visitOptionalStatement(loop.body)}"
+    visitLoopHeader(loop).format(visitOptionalStatement(loop.body))
+    s"while (${visit(loop.condition)})${}"
   }
 
   override def visitDoWhileLoop(
       loop: EirDoWhileLoop
   )(implicit ctx: UnparseContext): String = {
-    s"do${visitOptionalStatement(loop.body)} while (${visit(loop.condition)});"
+    visitLoopHeader(loop).format(visitOptionalStatement(loop.body))
   }
 
   override def visitForLoop(
       loop: EirForLoop
   )(implicit ctx: UnparseContext): String = {
-    val header: String = loop.header match {
-      case EirCStyleHeader(declaration, test, increment) =>
-        declaration.mapOrSemi(visit(_)) + visitOptionalStatement(
-          test
-        ) + increment.mapOrEmpty(" " + visit(_))
-      case hdr: EirForAllHeader =>
-        val idents = hdr.identifiers
-        (if (idents.length == 1) {
-           idents.head
-         } else {
-           s"(${idents.mkString(",")})"
-         }) + " <- " + visit(hdr.expression)
-    }
-    s"for ($header)${visitOptionalStatement(loop.body)}"
+    visitLoopHeader(loop).format(visitOptionalStatement(loop.body))
   }
 
   override def visitFunctionCall(
@@ -494,14 +521,18 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
       facade: EirConstantFacade
   )(implicit context: UnparseContext): String = visit(facade.value)
 
-  override def visitWhen(
-      x: EirSdagWhen
-  )(implicit ctx: UnparseContext): String = {
+  def visitWhenHeader(x: EirSdagWhen)(implicit ctx: UnparseContext): String = {
     "when " + x.patterns
       .map(p => s"${visit(p._1)}${visit(p._2)}")
       .mkString(", ") + {
       x.condition.map(visitExpression(_)).map(" if " + _).getOrElse("")
-    } + s" =>${visitOptionalStatement(x.body, alt = " ;")}"
+    } + " =>"
+  }
+
+  override def visitWhen(
+      x: EirSdagWhen
+  )(implicit ctx: UnparseContext): String = {
+    visitWhenHeader(x) + visitOptionalStatement(x.body, alt = " ;")
   }
 
   override def visitSlice(x: EirSlice)(implicit ctx: UnparseContext): String = {
