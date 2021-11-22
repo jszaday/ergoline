@@ -55,9 +55,15 @@ object Segmentation {
     }
   }
 
-  case class Clause(var node: EirSdagWhen, var body: Option[Construct])
+  case class Clause(var node: EirNode, var body: Option[Construct])
       extends ScopingConstruct {
-    override def label: String = UnparseAst.visitWhenHeader(node) + " ;"
+    override def label: String = {
+      node match {
+        case x: EirSdagWhen => UnparseAst.visitWhenHeader(x) + " ;"
+        case x: EirAwait    => UnparseAst.visit(x) + ";"
+        case _              => ???
+      }
+    }
     override def members: Iterable[Construct] = body.toIterable
   }
 
@@ -80,7 +86,7 @@ object Segmentation {
 
   case class SerialBlock(var slst: List[EirNode]) extends Construct {
     override def toString: String = {
-      this.id.toString + "[label=\"" + {
+      this.id.toString + "[label=\"" + UnparseAst.forceSemi {
         slst
           .map(_.toString)
           .map(UnparseAst.escape)
@@ -92,7 +98,10 @@ object Segmentation {
 
   case class Loop(var node: EirNode, var body: Option[Construct])
       extends ScopingConstruct {
-    override def label: String = UnparseAst.visitLoopHeader(node).format(";")
+    override def label: String = {
+      val (head, tail) = UnparseAst.visitLoopHeader(node)
+      s"$head;$tail"
+    }
     override def members: Iterable[Construct] = body.toIterable
   }
 
@@ -153,10 +162,13 @@ object Segmentation {
       .descendant(
         node,
         {
+          // TODO temporarily forbid SDAG within...
           case _: EirLambdaExpression => None
           case _: EirFunction         => None
-          case _: EirSdagWhen         => Some(true)
-          case _                      => Some(false)
+          // AwaitMany will always contain...
+          case _: EirSdagWhen => Some(true)
+          case _: EirAwait    => Some(true)
+          case _              => Some(false)
         }
       )
       .nonEmpty
@@ -187,13 +199,13 @@ object Segmentation {
           split.foldLeft(head)((sum, group) => {
             group match {
               case (false, nodes) =>
-                val block = Some(getBlock(sum))
+                val block = Some(SerialBlock(Nil))
                 head = head.orElse(block)
                 putSuccessor(sum, block)
                 block.foreach(_.slst ++= nodes)
                 block
               case (true, nodes) => nodes.foldLeft(sum)((partialSum, node) => {
-                  val next = visit(node, partialSum)
+                  val next = visit(node, None)
                   head = head.orElse(next)
                   putSuccessor(partialSum, next)
                 })
@@ -204,6 +216,7 @@ object Segmentation {
         case x: EirDoWhileLoop => Some(Loop(x, x.body.flatMap(visit(_, None))))
         case x: EirWhileLoop   => Some(Loop(x, x.body.flatMap(visit(_, None))))
         case x: EirSdagWhen    => Some(Clause(x, x.body.flatMap(visit(_, None))))
+        case x: EirAwait       => Some(Clause(x, None))
         case x: EirAwaitMany => Some(
             MultiClause(
               x, {
@@ -243,16 +256,18 @@ object Segmentation {
 
     override def after: Seq[Pass] = Seq()
 
-    override def annotations: Seq[String] = Seq("main")
-
-    override def apply(n: EirNode): Unit = {
-      val asClass = assertValid[EirClass](n)
-      asClass.members
-        .map(_.member)
-        .collect { case f: EirFunction if f.body.nonEmpty => f }
-        .flatMap(Analysis.analyze)
-        .map(toGraph)
-        .foreach(println(_))
+    override def apply(node: EirNode): Unit = {
+      node match {
+        case x: EirNamespace => x.children.foreach(apply)
+        case x: EirClassLike => x.members
+            .filter(_.hasAnnotation("threaded"))
+            .map(_.member)
+            .collect { case f: EirFunction if f.body.nonEmpty => f }
+            .flatMap(Analysis.analyze)
+            .map(toGraph)
+            .foreach(println(_))
+        case _ => ;
+      }
     }
   }
 }
