@@ -1,6 +1,6 @@
 package edu.illinois.cs.ergoline
 
-import edu.illinois.cs.ergoline.analysis.ControlFlow
+import edu.illinois.cs.ergoline.analysis.{ControlFlow, Segmentation}
 import edu.illinois.cs.ergoline.ast.{EirGlobalNamespace, EirNamespace, EirNode}
 import edu.illinois.cs.ergoline.passes.{Processes, Registry}
 import edu.illinois.cs.ergoline.resolution.Find.withName
@@ -33,6 +33,10 @@ object Driver extends App {
 
   if (options.contains("--cfa")) {
     Registry.instance[ControlFlow.Pass]
+  }
+
+  if (options.contains("--sdag")) {
+    Registry.instance[Segmentation.Pass]
   }
 
   val skipCompilation = options.contains("--no-compile")
