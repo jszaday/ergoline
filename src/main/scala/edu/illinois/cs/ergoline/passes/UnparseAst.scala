@@ -48,8 +48,17 @@ object UnparseAst {
   }
 
   def forceSemi(s: String): String = {
-    val st = s.stripTrailing()
-    if (st.endsWith(";") || st.endsWith("}")) s else s"$st;"
+    // here for compatibility with JDK8 -- borrowed from rosetta code
+    // JDK11+ should simply use "stripTrailing"
+    def rtrim(s: String): String = {
+      var i = s.length() - 1
+      while (i > 0 && Character.isWhitespace(s.charAt(i))) {
+        i -= 1
+      }
+      s.substring(0, i + 1)
+    }
+    val st = rtrim(s)
+    if (st.endsWith(";") || st.endsWith("}")) st else s"$st;"
   }
 }
 
