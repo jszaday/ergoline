@@ -23,6 +23,10 @@ object Segmentation {
 
     def name: String = id.toString
 
+    def head: String = this.name
+
+    def tail: Seq[Construct] = Seq(this)
+
     override def toString: String = {
       successors.map(_.toString).mkString("\n")
     }
@@ -34,6 +38,10 @@ object Segmentation {
     def divergent: Boolean = true
     override def name: String =
       members.headOption.map(_.name).getOrElse(s"dummy_${this.id}")
+
+    override def tail: Seq[Construct] =
+      this.members.flatMap(findLast).flatMap(_.tail).toSeq
+
     override def toString: String = {
       s"subgraph cluster_${this.id} {" + {
         "label=\"" + this.label + "\";\n" + {
@@ -51,12 +59,6 @@ object Segmentation {
       extends ScopingConstruct {
     override def label: String = UnparseAst.visitWhenHeader(node) + " ;"
     override def members: Iterable[Construct] = body.toIterable
-  }
-
-  case class ControlPoint(var clauses: Seq[Construct]) extends Construct {
-    override def toString: String = {
-      this.id.toString + "[label=<&#968;>];\n" + super.toString
-    }
   }
 
   case class MultiClause(var node: EirAwaitMany, var members: Seq[Clause])
@@ -94,14 +96,21 @@ object Segmentation {
     override def members: Iterable[Construct] = body.toIterable
   }
 
+  private def findLast(f: Construct): List[Construct] = {
+    if (f.successors.isEmpty) {
+      List(f)
+    } else {
+      f.successors.partition(_.successors.isEmpty) match {
+        case (_1, _2) => _1 ++ _2.flatMap(findLast)
+      }
+    }
+  }
+
   def toGraph(construct: Construct): String = {
     val edges = new ListBuffer[String]
 
     def makeEdge(f: Construct, t: Construct, style: String = ""): String = {
-      s"${f match {
-        case s: ScopingConstruct => s.name
-        case _                   => f.id
-      }} -> ${t.name} [ " + {
+      s"${f.name} -> ${t.name} [ " + {
         t match {
           case s: ScopingConstruct => s"lhead=cluster_${s.id} "
           case _                   => ""
@@ -109,20 +118,10 @@ object Segmentation {
       } + s"minlen=2 $style ]"
     }
 
-    def findLast(f: Construct): List[Construct] = {
-      if (f.successors.isEmpty) {
-        List(f)
-      } else {
-        f.successors.partition(_.successors.isEmpty) match {
-          case (_1, _2) => _1 ++ _2.flatMap(findLast)
-        }
-      }
-    }
-
     def enumerate(f: Construct): Unit = {
       f match {
         case s: ScopingConstruct =>
-          var last = s.members.flatMap(findLast)
+          var last: Iterable[Construct] = s.tail
           if (!s.divergent) last = last.lastOption
           assert(s.members.isEmpty || last.nonEmpty)
           last.foreach(l =>
