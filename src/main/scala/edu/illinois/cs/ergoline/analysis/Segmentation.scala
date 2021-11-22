@@ -1,13 +1,14 @@
 package edu.illinois.cs.ergoline.analysis
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.passes
+import edu.illinois.cs.ergoline.{globals, passes}
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.assertValid
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object Segmentation {
@@ -19,6 +20,7 @@ object Segmentation {
       _count
     }
 
+    var predecessors: List[Construct] = Nil
     var successors: List[Construct] = Nil
 
     def name: String = id.toString
@@ -115,7 +117,7 @@ object Segmentation {
     }
   }
 
-  def toGraph(construct: Construct): String = {
+  def toGraph(construct: Construct, name: String): String = {
     val edges = new ListBuffer[String]
 
     def makeEdge(f: Construct, t: Construct, style: String = ""): String = {
@@ -150,7 +152,7 @@ object Segmentation {
 
     enumerate(construct)
 
-    "digraph g {" + {
+    s"digraph $name {" + {
       "graph [compound=true];\n" +
         construct.toString + "\n" +
         edges.mkString("\n")
@@ -187,7 +189,12 @@ object Segmentation {
         from: Option[Construct],
         to: Option[Construct]
     ): Option[Construct] = {
-      from.filterNot(to.contains(_)).foreach(_.successors ++= to)
+      from
+        .filterNot(to.contains(_))
+        .foreach(x => {
+          x.successors ++= to
+          to.foreach(_.predecessors :+= x)
+        })
       to
     }
 
@@ -252,21 +259,36 @@ object Segmentation {
   }
 
   class Pass extends passes.Pass {
+    private val _memo: mutable.Map[EirFunction, Construct] = mutable.Map()
+
     override def phase: Phase = Phase.Load
 
     override def after: Seq[Pass] = Seq()
 
+    private def analyze(fn: EirFunction): Option[Construct] = {
+      this._memo.get(fn).orElse {
+        val cons = Analysis.analyze(fn)
+        cons.foreach(this._memo.put(fn, _))
+        cons
+      }
+    }
+
     override def apply(node: EirNode): Unit = {
       node match {
         case x: EirNamespace => x.children.foreach(apply)
-        case x: EirClassLike => x.members
+        case x: EirClassLike =>
+          val fns = x.members
             .filter(_.hasAnnotation("threaded"))
             .map(_.member)
             .collect { case f: EirFunction if f.body.nonEmpty => f }
-            .flatMap(Analysis.analyze)
-            .map(toGraph)
-            .foreach(println(_))
-        case _ => ;
+          val res = fns.map(fn => (fn, analyze(fn))).collect {
+            case (fn, Some(cons)) => (fn, cons)
+          }
+          if (globals.verbose) {
+            res.foreach { case (fn, cons) => println(toGraph(cons, fn.name)) }
+          }
+        case x: EirFunction => this.analyze(x)
+        case _              => ;
       }
     }
   }
