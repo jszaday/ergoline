@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCi.registerMailboxes
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp._
-import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -411,9 +411,11 @@ object GenerateProxies {
       case (_, Some(m @ EirMember(_, f: EirFunction, _))) =>
         if (m.isEntryOnly) {
           ctx.pushSelf(ctx.currentProxySelf + "->impl_")
-          ctx << "(([&](void) mutable" << visitFunctionBody(
+          ctx << "(([&](void) mutable" << makeMemberBody(
+            ctx,
+            member,
             f
-          )(ctx) << ")())"
+          ) << ")())"
           ctx.popSelf()
         } else {
           ctx << ctx.currentProxySelf << "->impl_->" << ctx.nameFor(
@@ -484,6 +486,18 @@ object GenerateProxies {
   def proxyMemberProxySelf: String =
     s"((hypercomm::generic_locality_*)${globals.implicitProxyName}->local())"
 
+  def makeMemberBody(
+      ctx: CodeGenerationContext,
+      member: EirMember,
+      fn: EirFunction
+  ): Unit = {
+    if (
+      !member.hasAnnotation("threaded") || !GenerateSdag.visit(member, fn)(ctx)
+    ) {
+      visitFunctionBody(fn)(ctx)
+    }
+  }
+
   def makeProxyMember(
       ctx: CodeGenerationContext,
       proxy: EirProxy,
@@ -499,7 +513,7 @@ object GenerateProxies {
     ctx << ")" << "{"
     ctx.pushSelf(proxyMemberSelf(proxyType))
     ctx.pushProxySelf(proxyMemberProxySelf)
-    visitFunctionBody(fn)(ctx)
+    makeMemberBody(ctx, member, fn)
     ctx.popProxySelf()
     ctx.popSelf()
     ctx << "}"
@@ -659,6 +673,8 @@ object GenerateProxies {
     threadArg.foreach(_ => ctx.popProxySelf())
 
     ctx << "}"
+
+    ctx << GenerateSdag.generated.get(x).map(_.toString)
   }
 
 }

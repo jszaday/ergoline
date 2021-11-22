@@ -265,7 +265,7 @@ object Segmentation {
 
     override def after: Seq[Pass] = Seq()
 
-    private def analyze(fn: EirFunction): Option[Construct] = {
+    def apply(fn: EirFunction): Option[Construct] = {
       this._memo.get(fn).orElse {
         val cons = Analysis.analyze(fn)
         cons.foreach(this._memo.put(fn, _))
@@ -281,13 +281,13 @@ object Segmentation {
             .filter(_.hasAnnotation("threaded"))
             .map(_.member)
             .collect { case f: EirFunction if f.body.nonEmpty => f }
-          val res = fns.map(fn => (fn, analyze(fn))).collect {
+          val res = fns.map(fn => (fn, apply(fn))).collect {
             case (fn, Some(cons)) => (fn, cons)
           }
           if (globals.verbose) {
             res.foreach { case (fn, cons) => println(toGraph(cons, fn.name)) }
           }
-        case x: EirFunction => this.analyze(x)
+        case x: EirFunction => this.apply(x)
         case _              => ;
       }
     }
