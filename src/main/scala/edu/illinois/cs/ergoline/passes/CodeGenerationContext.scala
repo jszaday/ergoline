@@ -145,6 +145,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     _replacements += (from -> to)
   }
 
+  def popReplacement(from: String): Unit = {
+    _replacements -= from
+  }
+
   def typeFor(
       x: EirResolvable[EirType],
       ctx: Option[EirNode] = None

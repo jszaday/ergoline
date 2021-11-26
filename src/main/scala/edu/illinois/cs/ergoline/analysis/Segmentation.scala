@@ -38,6 +38,7 @@ object Segmentation {
     def members: Iterable[Construct]
     def label: String
     def divergent: Boolean = true
+
     override def name: String =
       members.headOption.map(_.name).getOrElse(s"dummy_${this.id}")
 
