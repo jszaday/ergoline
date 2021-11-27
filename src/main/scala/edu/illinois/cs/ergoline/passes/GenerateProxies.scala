@@ -674,7 +674,8 @@ object GenerateProxies {
 
     ctx << "}"
 
-    ctx << GenerateSdag.generated.get(x).map(_.toString)
+    val lines = GenerateSdag.generated.get(x).toList.flatMap(_.lines)
+    ctx << lines
   }
 
 }

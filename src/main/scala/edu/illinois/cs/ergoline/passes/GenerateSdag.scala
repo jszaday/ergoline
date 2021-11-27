@@ -10,7 +10,8 @@ import edu.illinois.cs.ergoline.ast.{
   EirFunction,
   EirMember,
   EirMultiDeclaration,
-  EirNode
+  EirNode,
+  EirSdagWhen
 }
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.EirResolvable
@@ -44,6 +45,21 @@ object GenerateSdag {
     }
 
     def proxy: Option[EirProxy] = cgen.proxy
+
+    def cloneWith(cgen: CodeGenerationContext): SdagGenerationContext = {
+      SdagGenerationContext(cgen, this.table, this.continuation)
+    }
+
+    def cloneWith(table: SymbolTable): SdagGenerationContext = {
+      SdagGenerationContext(this.cgen, table, this.continuation)
+    }
+
+    def cloneWith(
+        cgen: CodeGenerationContext,
+        table: SymbolTable
+    ): SdagGenerationContext = {
+      SdagGenerationContext(cgen, table, this.continuation)
+    }
   }
 
   def current(implicit ctx: CodeGenerationContext): String = _current
@@ -65,10 +81,29 @@ object GenerateSdag {
     } + "__"
   }
 
-  def continuation(to: Construct, state: String, stack: String)(implicit
-      ctx: CodeGenerationContext
+  def continuation(
+      ctx: SdagGenerationContext,
+      to: Option[Any],
+      state: String,
+      stack: String
   ): Unit = {
-    ctx << "//" << prefixFor(to) << "(...);"
+    val s = to.orElse(ctx.continuation).map {
+      case x: Construct => prefixFor(x)(ctx.cgen)
+      case x: String    => x
+      case _            => ???
+    }
+
+    ctx.cgen << "//" << s << "(...);"
+  }
+
+  def continuation(
+      ctx: SdagGenerationContext,
+      to: Seq[Construct],
+      state: String,
+      stack: String
+  ): Unit = {
+    assert(to.isEmpty || to.size == 1)
+    continuation(ctx, to.headOption, state, stack)
   }
 
   private def functionHeader(
@@ -163,34 +198,34 @@ object GenerateSdag {
       ctx << s"static constexpr auto ${offsetFor(
         blockName,
         decls(i + 1)._1
-      )} = ${offsetFor(blockName, decls(i)._1)} + sizeof(${decls(i)._2});"
+      )} = ${offsetFor(blockName, decls(i)._1)} + sizeof(${ctx.typeFor(decls(i)._2)});"
     }
   }
 
   def visit(
-      ctx: SdagGenerationContext,
+      _ctx: SdagGenerationContext,
       block: SerialBlock
   ): SymbolTable = {
-    val sctx = subcontext
     val decls = collectDeclarations(block.slst)
-    val blockName = prefixFor(block)(ctx.cgen)
-    val blockTable = ctx.table :+ (blockName, decls)
-    declareOffsets(sctx, blockName, decls)
-    val (argName, stateName) = functionHeader(blockName, ctx.proxy, sctx)
-    val stkName = functionStack(sctx, decls.map(_._2), stateName)
-    sctx << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
-    ctx.enter(stkName)
+    val blockName = prefixFor(block)(_ctx.cgen)
+    val blockTable = _ctx.table :+ (blockName, decls)
+    val sctx = _ctx.cloneWith(subcontext, blockTable)
+    declareOffsets(sctx.cgen, blockName, decls)
+    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, sctx.cgen)
+    val stkName = functionStack(sctx.cgen, decls.map(_._2), stateName)
+    sctx.cgen << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
+    sctx.enter(stkName)
     block.slst.foreach {
       case d: EirDeclaration =>
         val (ref, ty) =
-          derefVariable(ctx.cgen, blockName, (d.name, d.declaredType), stkName)
-        sctx << "new (&(" << ref << ")) " << ty << "(" << d.initialValue
-          .foreach(GenerateCpp.visit(_)(sctx)) << ");"
-      case n: EirNode => sctx << GenerateCpp.visit(n)(sctx) << ";"
+          derefVariable(sctx.cgen, blockName, (d.name, d.declaredType), stkName)
+        sctx.cgen << "new (&(" << ref << ")) " << ty << "(" << d.initialValue
+          .foreach(GenerateCpp.visit(_)(sctx.cgen)) << ");"
+      case n: EirNode => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
     }
-    block.successors.foreach(continuation(_, stateName, stkName)(sctx))
-    ctx.leave()
-    sctx << "}"
+    continuation(sctx, block.successors, stateName, stkName)
+    sctx.leave()
+    sctx.cgen << "}"
     blockTable
   }
 
@@ -198,7 +233,7 @@ object GenerateSdag {
       ctx: SdagGenerationContext,
       loop: Loop
   ): SymbolTable = {
-    val (_, headerTable) = visitLoopHeader(
+    val headerTable = visitLoopHeader(
       SdagGenerationContext(subcontext, ctx.table),
       loop,
       ctx.proxy
@@ -208,16 +243,39 @@ object GenerateSdag {
       headerTable,
       Some(prefixFor(loop, start = false)(subcontext))
     )
+    visitLoopLatch(sctx, loop, ctx.proxy)
     loop.body.map(visit(sctx, _))
     ctx.table
   }
 
+  def visit(
+      _ctx: SdagGenerationContext,
+      clause: Clause
+  ): SymbolTable = {
+    val decls = collectDeclarations(clause.node match {
+      case x: EirSdagWhen => x.declarations
+      case _              => ???
+    })
+    val name = prefixFor(clause)(_ctx.cgen)
+    val table = _ctx.table :+ (name, decls)
+    val sctx = _ctx.cloneWith(subcontext)
+    declareOffsets(sctx.cgen, name, decls)
+    val (_, stateName) = functionHeader(name, _ctx.cgen.proxy, sctx.cgen)
+    val stkName = functionStack(sctx.cgen, decls.map(_._2), stateName)
+    sctx.enter(stkName)
+    sctx.cgen << "// put request to ... ;"
+    sctx.leave()
+    sctx.cgen << "}"
+    clause.body.foreach(visit(_ctx.cloneWith(table), _))
+    _ctx.table
+  }
+
   def visitLoopHeader(
-      ctx: SdagGenerationContext,
+      _ctx: SdagGenerationContext,
       loop: Loop,
       proxy: Option[EirProxy]
-  ): (String, SymbolTable) = {
-    val blockName = prefixFor(loop)(ctx.cgen)
+  ): SymbolTable = {
+    val blockName = prefixFor(loop)(_ctx.cgen)
     val decls = collectDeclarations(loop.node match {
       case x: EirForLoop => x.header match {
           case y: EirCStyleHeader => y.declaration
@@ -225,7 +283,8 @@ object GenerateSdag {
         }
       case _ => None
     })
-    val blockTable = ctx.table :+ (blockName, decls)
+    val blockTable = _ctx.table :+ (blockName, decls)
+    val ctx = _ctx.cloneWith(blockTable)
     declareOffsets(ctx.cgen, blockName, decls)
     val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, decls.map(_._2), stateName)
@@ -237,12 +296,35 @@ object GenerateSdag {
         }
     }
     ctx.cgen << ")" << "{"
-    loop.body.foreach(continuation(_, stateName, stkName)(ctx.cgen))
+    continuation(ctx, loop.body, stateName, stkName)
     ctx.cgen << "}" << "else" << "{"
-    loop.successors.foreach(continuation(_, stateName, stkName)(ctx.cgen))
+    continuation(ctx, loop.successors, stateName, stkName)
     ctx.cgen << "}" << "}"
     ctx.leave()
-    (blockName, blockTable)
+    blockTable
+  }
+
+  def visitLoopLatch(
+      ctx: SdagGenerationContext,
+      loop: Loop,
+      proxy: Option[EirProxy]
+  ): Unit = {
+    val blockName = prefixFor(loop, start = false)(ctx.cgen)
+    val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
+    val stkName = functionStack(ctx.cgen, Nil, stateName)
+    ctx.enter(stkName)
+    loop.node match {
+      case x: EirForLoop => x.header match {
+          case y: EirCStyleHeader =>
+            GenerateCpp.visit(y.increment)(ctx.cgen)
+            ctx.cgen << ";"
+          case _ => ???
+        }
+      case _ => ???
+    }
+    continuation(ctx, Some(prefixFor(loop)(ctx.cgen)), stateName, stkName)
+    ctx.leave()
+    ctx.cgen << "}"
   }
 
   def visit(
@@ -252,12 +334,13 @@ object GenerateSdag {
     val next = construct match {
       case x: SerialBlock => visit(ctx, x)
       case x: Loop        => visit(ctx, x)
+      case x: Clause      => visit(ctx, x)
       case _              => ctx.table
     }
 
     if (construct.successors.size <= 1) {
       construct.successors.foldLeft(next)((next, nextConstruct) => {
-        visit(SdagGenerationContext(ctx.cgen, next), nextConstruct)
+        visit(ctx.cloneWith(next), nextConstruct)
       })
     } else {
       ???
