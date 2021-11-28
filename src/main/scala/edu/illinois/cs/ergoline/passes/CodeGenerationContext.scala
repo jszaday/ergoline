@@ -104,6 +104,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     // TODO do something smarter here
     subCtx._proxies.pushAll(_proxies.reverse)
     subCtx._selves.pushAll(_selves.reverse)
+    subCtx._replacements = this._replacements
     subCtx
   }
 

@@ -461,9 +461,11 @@ object GenerateProxies {
     (mailboxName(ctx, x, tys), tys)
   }
 
+  def mailboxType(name: String): String = s"${name}type__"
+
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val (name, tys) = mailboxName(ctx, x)
-    ctx << s"using ${name}type__ = ergoline::mailbox<${tys mkString ", "}>;"
+    ctx << s"using ${mailboxType(name)} = ergoline::mailbox<${tys mkString ", "}>;"
     ctx << s"hypercomm::comproxy<${name}type__> $name;"
   }
 

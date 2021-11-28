@@ -81,9 +81,18 @@ object GenerateSdag {
     } + "__"
   }
 
+  def forwardState(
+      ctx: SdagGenerationContext,
+      stateName: String,
+      stackName: String
+  ): Unit = {
+    ctx.cgen << stateType << "(" << stateName << ".first, std::move(" << stackName << "))"
+  }
+
   def continuation(
       ctx: SdagGenerationContext,
       to: Option[Any],
+      arg: String,
       state: String,
       stack: String
   ): Unit = {
@@ -93,17 +102,22 @@ object GenerateSdag {
       case _            => ???
     }
 
-    ctx.cgen << "//" << s << "(...);"
+    ctx.cgen << s << "(" << arg << "," << forwardState(
+      ctx,
+      state,
+      stack
+    ) << ");"
   }
 
   def continuation(
       ctx: SdagGenerationContext,
       to: Seq[Construct],
+      arg: String,
       state: String,
       stack: String
   ): Unit = {
     assert(to.isEmpty || to.size == 1)
-    continuation(ctx, to.headOption, state, stack)
+    continuation(ctx, to.headOption, arg, state, stack)
   }
 
   private def functionHeader(
@@ -123,17 +137,35 @@ object GenerateSdag {
   private def functionStack(
       ctx: CodeGenerationContext,
       decls: List[EirResolvable[EirType]],
-      stateName: String
+      stateName: String,
+      shared: Boolean = false
   ): String = {
     val stkName = "__stk__"
-    if (decls.isEmpty) {
-      ctx << s"auto& $stkName = $stateName.second;"
+
+    val makeStack = (release: Boolean) => {
+      if (decls.isEmpty) {
+        ctx << s"$stateName.second${if (release) ".release()" else ""}"
+      } else {
+        ctx << "new hypercomm::typed_microstack<" << (decls.map(
+          ctx.typeFor(_, _current)
+        ), ",") << ">("
+        ctx << s"$stateName.second.release(),"
+        ctx << (decls.map(_ => "hypercomm::tags::no_init()"), ",") << ")"
+      }
+    }
+
+    if (shared) {
+      ctx << "auto" << stkName << "=" << s"std::shared_ptr<hypercomm::microstack>(" << makeStack(
+        true
+      ) << ");"
     } else {
-      ctx << s"auto* $stkName = new hypercomm::typed_microstack<" << (decls.map(
-        ctx.typeFor(_, _current)
-      ), ",") << ">("
-      ctx << s"$stateName.second.release(),"
-      ctx << (decls.map(_ => "hypercomm::tags::no_init()"), ",") << ");"
+      ctx << {
+        if (decls.isEmpty) {
+          "auto&"
+        } else {
+          "auto*"
+        }
+      } << stkName << "=" << makeStack(false) << ";"
     }
     stkName
   }
@@ -223,7 +255,7 @@ object GenerateSdag {
           .foreach(GenerateCpp.visit(_)(sctx.cgen)) << ");"
       case n: EirNode => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
     }
-    continuation(sctx, block.successors, stateName, stkName)
+    continuation(sctx, block.successors, argName, stateName, stkName)
     sctx.leave()
     sctx.cgen << "}"
     blockTable
@@ -233,7 +265,7 @@ object GenerateSdag {
       ctx: SdagGenerationContext,
       loop: Loop
   ): SymbolTable = {
-    val headerTable = visitLoopHeader(
+    val (headerTable, argName) = visitLoopHeader(
       SdagGenerationContext(subcontext, ctx.table),
       loop,
       ctx.proxy
@@ -243,9 +275,38 @@ object GenerateSdag {
       headerTable,
       Some(prefixFor(loop, start = false)(subcontext))
     )
-    visitLoopLatch(sctx, loop, ctx.proxy)
+    visitLoopLatch(sctx, loop, ctx.proxy, argName)
     loop.body.map(visit(sctx, _))
     ctx.table
+  }
+
+  val argType =
+    "std::tuple<void*, std::size_t, std::shared_ptr<hypercomm::microstack>>"
+
+  def makeRequest(
+      clause: Clause,
+      when: EirSdagWhen,
+      stateName: String,
+      stackName: String,
+      argName: String,
+      wrapperName: Option[String]
+  )(
+      ctx: SdagGenerationContext
+  ): String = {
+    val list = GenerateCpp.generateRequestList(when)(ctx.cgen)
+    val ty = GenerateCpp.joinRequestTypes(list)
+    val com = "__com__"
+    val set = "__set__"
+    val setTy = s"${set.substring(0, set.length - 1)}type__"
+
+    ctx.cgen << "using" << setTy << "=" << ty << ";"
+    ctx.cgen << "auto" << com << "=" << s"ergoline::make_component<$setTy, $argType>(*" << ctx.cgen.currentProxySelf << ","
+    ctx.cgen << wrapperName << "," << "std::make_tuple(" << argName << s", $stateName.first, " << stackName << ")"
+    ctx.cgen << ");"
+
+    GenerateCpp.generateRequest(when, list, com)(ctx.cgen)
+
+    ty
   }
 
   def visit(
@@ -260,13 +321,25 @@ object GenerateSdag {
     val table = _ctx.table :+ (name, decls)
     val sctx = _ctx.cloneWith(subcontext)
     declareOffsets(sctx.cgen, name, decls)
-    val (_, stateName) = functionHeader(name, _ctx.cgen.proxy, sctx.cgen)
-    val stkName = functionStack(sctx.cgen, decls.map(_._2), stateName)
+    val (argName, stateName) = functionHeader(name, _ctx.cgen.proxy, sctx.cgen)
+    val stkName =
+      functionStack(sctx.cgen, decls.map(_._2), stateName, shared = true)
+    val wrapperName = clause.body
+      .map(prefixFor(_)(sctx.cgen))
+      .map(s => s.substring(0, s.length - 1) + "wrapper__")
     sctx.enter(stkName)
-    sctx.cgen << "// put request to ... ;"
+    val reqTy = clause.node match {
+      case x: EirSdagWhen =>
+        makeRequest(clause, x, stateName, stkName, argName, wrapperName)(sctx)
+    }
     sctx.leave()
     sctx.cgen << "}"
     clause.body.foreach(visit(_ctx.cloneWith(table), _))
+
+    sctx.cgen << "static" << "void" << wrapperName << "(" << reqTy << "&" << "__set__" << "," << argType << "&&" << argName << ")" << "{"
+
+    sctx.cgen << "}"
+
     _ctx.table
   }
 
@@ -274,7 +347,7 @@ object GenerateSdag {
       _ctx: SdagGenerationContext,
       loop: Loop,
       proxy: Option[EirProxy]
-  ): SymbolTable = {
+  ): (SymbolTable, String) = {
     val blockName = prefixFor(loop)(_ctx.cgen)
     val decls = collectDeclarations(loop.node match {
       case x: EirForLoop => x.header match {
@@ -286,7 +359,7 @@ object GenerateSdag {
     val blockTable = _ctx.table :+ (blockName, decls)
     val ctx = _ctx.cloneWith(blockTable)
     declareOffsets(ctx.cgen, blockName, decls)
-    val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
+    val (argName, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, decls.map(_._2), stateName)
     ctx.enter(stkName)
     ctx.cgen << "if" << "("
@@ -296,18 +369,19 @@ object GenerateSdag {
         }
     }
     ctx.cgen << ")" << "{"
-    continuation(ctx, loop.body, stateName, stkName)
+    continuation(ctx, loop.body, argName, stateName, stkName)
     ctx.cgen << "}" << "else" << "{"
-    continuation(ctx, loop.successors, stateName, stkName)
+    continuation(ctx, loop.successors, argName, stateName, stkName)
     ctx.cgen << "}" << "}"
     ctx.leave()
-    blockTable
+    (blockTable, argName)
   }
 
   def visitLoopLatch(
       ctx: SdagGenerationContext,
       loop: Loop,
-      proxy: Option[EirProxy]
+      proxy: Option[EirProxy],
+      argName: String
   ): Unit = {
     val blockName = prefixFor(loop, start = false)(ctx.cgen)
     val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
@@ -322,7 +396,13 @@ object GenerateSdag {
         }
       case _ => ???
     }
-    continuation(ctx, Some(prefixFor(loop)(ctx.cgen)), stateName, stkName)
+    continuation(
+      ctx,
+      Some(prefixFor(loop)(ctx.cgen)),
+      argName,
+      stateName,
+      stkName
+    )
     ctx.leave()
     ctx.cgen << "}"
   }

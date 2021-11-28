@@ -3130,6 +3130,77 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  type RequestList = List[(EirMember, String, EirType, List[Int])]
+
+  def generateRequestList(
+      when: EirSdagWhen
+  )(implicit ctx: CodeGenerationContext): RequestList = {
+    def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
+      types.toTupleType(allowUnit = true)(None).asInstanceOf[EirType]
+    }
+
+    when.patterns.map({ case (symbol, _) =>
+      val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
+        ctx.proxy,
+        Some(false)
+      )(ctx.tyCtx)
+      val m =
+        accessors.headOption.map(_._1).getOrElse(Errors.unableToResolve(symbol))
+      val f = assertValid[EirFunction](m.member)
+      val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
+      val tys = declTys.map(ctx.typeFor(_, Some(when)))
+      val resolved = ctx.resolve(encapsulate(declTys))
+      val mboxName = GenerateProxies.mailboxName(ctx, f, tys)
+      val arrayArgs = f.functionArgs.zipWithIndex
+        .filter(x => isArray(ctx, ctx.typeOf(x._1)))
+        .map(_._2)
+      (m, mboxName, resolved, arrayArgs)
+    })
+  }
+
+  def generateRequest(
+      when: EirSdagWhen,
+      list: RequestList,
+      com: String
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    when.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
+      val (_, mboxName, resolved, _) = list(i)
+      val temp = ctx.temporary
+      val tempVal = s"$temp->value()"
+      val declarations = visitPatternDecl(ctx, patterns, tempVal).split(n)
+      val conditions = visitPatternCond(ctx, patterns, tempVal, Some(resolved))
+        .mkString(" && ")
+
+      val pred: Option[String] = Option.when(conditions.nonEmpty)({
+        val name = s"__pred${i}__"
+        val ty = name.init + "arg_type__"
+        val constRef = s"const $ty&"
+        ctx << "{"
+        ctx << "using" << ty << "=" << "typename" << s"${GenerateProxies.mailboxType(mboxName)}::type;"
+        ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
+        ctx << declarations
+        ctx << "return" << conditions
+        ctx << when.condition.map(_ => "&&") << when.condition
+        ctx << ";" << "});"
+        name
+      })
+
+      ctx << ctx.currentProxySelf << "->" << s"$mboxName->put_request_to(" << pred
+        .getOrElse("{},") << pred
+        .map(_ => ",") << com << "," << i.toString << ");"
+
+      pred.foreach(_ => ctx << "}")
+    })
+  }
+
+  def joinRequestTypes(list: RequestList): String = {
+    s"std::tuple<${list
+      .map { case (_, mboxName, _, _) =>
+        s"typename ${GenerateProxies.mailboxType(mboxName)}::type"
+      }
+      .mkString(", ")}>"
+  }
+
   override def visitWhen(
       x: EirSdagWhen
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -3142,10 +3213,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val compound = x.patterns.length > 1
     if (compound && x.condition.isDefined) ???
 
-    def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
-      types.toTupleType(allowUnit = true)(None).asInstanceOf[EirType]
-    }
-
     val nPorts = x.patterns.length
     val com = sentinel._3
       .map(s => {
@@ -3157,36 +3224,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (sentinel._3.isEmpty) ctx << "{"
 
-    val quadruplets = x.patterns.map({ case (symbol, _) =>
-      val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
-        ctx.proxy,
-        Some(false)
-      )(ctx.tyCtx)
-      val m =
-        accessors.headOption.map(_._1).getOrElse(Errors.unableToResolve(symbol))
-      val f = assertValid[EirFunction](m.member)
-      val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
-      val tys = declTys.map(ctx.typeFor(_, Some(x)))
-      val resolved = ctx.resolve(encapsulate(declTys))
-      val mboxName =
-        ctx.currentProxySelf + "->" + GenerateProxies.mailboxName(ctx, f, tys)
-      val arrayArgs = f.functionArgs.zipWithIndex
-        .filter(x => isArray(ctx, ctx.typeOf(x._1)))
-        .map(_._2)
-      (m, mboxName, resolved, arrayArgs)
-    })
+    val quadruplets = generateRequestList(x)
 
     val set = s"${com}vals__"
-    val setType = "std::tuple<" + quadruplets
-      .map { case (_, mboxName, _, _) =>
-        s"typename decltype($mboxName)::type::type"
-      }
-      .mkString(", ") + ">"
+    val setType = s"${set}type__"
 
-    ctx << "using" << (set + "type__") << "=" << setType << ";"
+    ctx << "using" << setType << "=" << joinRequestTypes(quadruplets) << ";"
 
-    ctx << "auto" << com << "=" << "ergoline::make_component<" << (set + "type__") << ">(*" << ctx.currentProxySelf << "," << nPorts.toString << ","
-    ctx << "[=](" << (set + "type__") << "&" << set << ")" << "{"
+    ctx << "auto" << com << "=" << "ergoline::make_component<" << setType << ">(*" << ctx.currentProxySelf << "," << nPorts.toString << ","
+    ctx << "[=](" << setType << "&" << set << ")" << "{"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
       val (m, _, _, arrayArgs) = quadruplets(i)
@@ -3207,33 +3253,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << visitOptionalStatement(x.body) << "}" << ");"
 
-    x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
-      val (_, mboxName, resolved, _) = quadruplets(i)
-      val temp = ctx.temporary
-      val tempVal = s"$temp->value()"
-      val declarations = visitPatternDecl(ctx, patterns, tempVal).split(n)
-      val conditions = visitPatternCond(ctx, patterns, tempVal, Some(resolved))
-        .mkString(" && ")
-
-      val pred: Option[String] = Option.when(conditions.nonEmpty)({
-        val name = s"__pred${i}__"
-        val ty = name.init + "arg_type__"
-        val constRef = s"const $ty&"
-        ctx << "{"
-        ctx << "using" << ty << "=" << "typename" << "decltype(" << mboxName << ")::type::type;"
-        ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
-        ctx << declarations
-        ctx << "return" << conditions
-        ctx << x.condition.map(_ => "&&") << x.condition
-        ctx << ";" << "});"
-        name
-      })
-
-      ctx << s"$mboxName->put_request_to(" << pred.getOrElse("{},") << pred
-        .map(_ => ",") << com << "," << i.toString << ");"
-
-      pred.foreach(_ => ctx << "}")
-    })
+    generateRequest(x, quadruplets, com)
 
 //    if (compound) {
 //      ctx << "auto __compound__ ="
