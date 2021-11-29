@@ -68,8 +68,9 @@ object GenerateSdag {
     }
 
     def last: Option[(String, String, EirResolvable[EirType])] = {
-      this.table.lastOption.flatMap { case (block, decls) =>
-        decls.lastOption.map(decl => (block, decl._1, decl._2))
+      this.table.filter(_._2.nonEmpty).lastOption.flatMap {
+        case (block, decls) =>
+          decls.lastOption.map(decl => (block, decl._1, decl._2))
       }
     }
   }
@@ -82,13 +83,15 @@ object GenerateSdag {
   def subcontext: CodeGenerationContext =
     _current.flatMap(generated.get).getOrElse(???)
 
-  def prefixFor(construct: Construct, start: Boolean = true)(implicit
+  def prefixFor(construct: Construct, suffix: Option[String] = None)(implicit
       ctx: CodeGenerationContext
   ): String = {
     current + {
       construct match {
-        case s: Loop => s"loop_${s.id}_${if (start) "header" else "latch"}"
-        case _       => s"block_${construct.id}"
+        case s: Loop => s"loop_${s.id}_${suffix
+            .orElse(s.declaration.map(_ => "preheader"))
+            .getOrElse("header")}"
+        case _ => s"block_${construct.id}"
       }
     } + "__"
   }
@@ -247,17 +250,25 @@ object GenerateSdag {
   ): Unit = {
     decls.headOption.foreach { case (declName, _) =>
       ctx.cgen << s"static constexpr auto ${offsetFor(blockName, declName)} = ${prev
-        .map { case (block, name, ty) =>
-          s"${offsetFor(block, name)} + sizeof(${ctx.cgen.typeFor(ty)})"
-        }
+        .map { case (block, name, ty) => s"${offsetFor(block, name)} + 1" }
         .getOrElse("0")};"
     }
     if (decls.nonEmpty) decls.tail.indices.foreach { i =>
       ctx.cgen << s"static constexpr auto ${offsetFor(
         blockName,
         decls(i + 1)._1
-      )} = ${offsetFor(blockName, decls(i)._1)} + sizeof(${ctx.cgen.typeFor(decls(i)._2)});"
+      )} = ${offsetFor(blockName, decls(i)._1)} + 1;"
     }
+  }
+
+  def visitDeclaration(ctx: SdagGenerationContext, d: EirDeclaration)(
+      blockName: String,
+      stkName: String
+  ): Unit = {
+    val (ref, ty) =
+      derefVariable(ctx.cgen, blockName, (d.name, d.declaredType), stkName)
+    ctx.cgen << "new (&(" << ref << ")) " << ty << "(" << d.initialValue
+      .foreach(GenerateCpp.visit(_)(ctx.cgen)) << ");"
   }
 
   def visit(
@@ -274,12 +285,8 @@ object GenerateSdag {
     sctx.cgen << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
     sctx.enter(stkName)
     block.slst.foreach {
-      case d: EirDeclaration =>
-        val (ref, ty) =
-          derefVariable(sctx.cgen, blockName, (d.name, d.declaredType), stkName)
-        sctx.cgen << "new (&(" << ref << ")) " << ty << "(" << d.initialValue
-          .foreach(GenerateCpp.visit(_)(sctx.cgen)) << ");"
-      case n: EirNode => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
+      case d: EirDeclaration => visitDeclaration(sctx, d)(blockName, stkName)
+      case n: EirNode        => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
     }
     continuation(sctx, block.successors, argName, stateName, stkName)
     sctx.leave()
@@ -299,7 +306,7 @@ object GenerateSdag {
     val sctx = SdagGenerationContext(
       subcontext,
       headerTable,
-      Some(prefixFor(loop, start = false)(subcontext))
+      Some(prefixFor(loop, suffix = Some("latch"))(subcontext))
     )
     visitLoopLatch(sctx, loop, ctx.proxy, argName)
     loop.body.map(visit(sctx, _))
@@ -440,20 +447,55 @@ object GenerateSdag {
       loop: Loop,
       proxy: Option[EirProxy]
   ): (SymbolTable, String) = {
+    val decl = loop.declaration
+    val decls = collectDeclarations(decl)
+    // can be either pre/header
     val blockName = prefixFor(loop)(_ctx.cgen)
-    val decls = collectDeclarations(loop.node match {
-      case x: EirForLoop => x.header match {
-          case y: EirCStyleHeader => y.declaration
-          case y: EirForAllHeader => y.declaration
-        }
-      case _ => None
-    })
     val blockTable = _ctx.table :+ (blockName, decls)
     val ctx = _ctx.cloneWith(blockTable)
     declareOffsets(ctx, _ctx.last, blockName, decls)
     val (argName, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, decls.map(_._2), stateName)
-    ctx.enter(stkName)
+    if (decls.isEmpty) {
+      visitLoopHeaderLast(ctx, loop, decls.nonEmpty)(
+        stateName,
+        stkName,
+        argName
+      )
+    } else {
+      val headerName = prefixFor(loop, suffix = Some("header"))(_ctx.cgen)
+      decl.toList.flatMap {
+        case d: EirDeclaration      => List(d)
+        case d: EirMultiDeclaration => d.children
+      } foreach { d => visitDeclaration(ctx, d)(blockName, stkName) }
+      continuation(ctx, Some(headerName), argName, stateName, stkName)
+      ctx.cgen << "}"
+      visitLoopHeaderInit(ctx, loop, proxy, headerName)
+    }
+    (blockTable, argName)
+  }
+
+  def visitLoopHeaderInit(
+      ctx: SdagGenerationContext,
+      loop: Loop,
+      proxy: Option[EirProxy],
+      blockName: String
+  ): Unit = {
+    val (argName, stateName) = functionHeader(blockName, proxy, ctx.cgen)
+    val stkName = functionStack(ctx.cgen, Nil, stateName)
+    visitLoopHeaderLast(ctx, loop, unwind = true)(stateName, stkName, argName)
+  }
+
+  def visitLoopHeaderLast(
+      ctx: SdagGenerationContext,
+      loop: Loop,
+      unwind: Boolean
+  )(
+      stateName: String,
+      stackName: String,
+      argName: String
+  ): Unit = {
+    ctx.enter(stackName)
     ctx.cgen << "if" << "("
     loop.node match {
       case x: EirForLoop => x.header match {
@@ -461,19 +503,18 @@ object GenerateSdag {
         }
     }
     ctx.cgen << ")" << "{"
-    continuation(ctx, loop.body, argName, stateName, stkName)
+    continuation(ctx, loop.body, argName, stateName, stackName)
     ctx.cgen << "}" << "else" << "{"
     continuation(
       ctx,
       loop.successors,
       argName,
       stateName, {
-        if (decls.isEmpty) stkName else s"$stkName->unwind()"
+        if (unwind) s"$stackName->unwind()" else stackName
       }
     )
     ctx.cgen << "}" << "}"
     ctx.leave()
-    (blockTable, argName)
   }
 
   def visitLoopLatch(
@@ -482,7 +523,7 @@ object GenerateSdag {
       proxy: Option[EirProxy],
       argName: String
   ): Unit = {
-    val blockName = prefixFor(loop, start = false)(ctx.cgen)
+    val blockName = prefixFor(loop, suffix = Some("latch"))(ctx.cgen)
     val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, Nil, stateName)
     ctx.enter(stkName)
@@ -497,7 +538,7 @@ object GenerateSdag {
     }
     continuation(
       ctx,
-      Some(prefixFor(loop)(ctx.cgen)),
+      Some(prefixFor(loop, suffix = Some("header"))(ctx.cgen)),
       argName,
       stateName,
       stkName

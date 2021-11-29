@@ -101,6 +101,17 @@ object Segmentation {
 
   case class Loop(var node: EirNode, var body: Option[Construct])
       extends ScopingConstruct {
+
+    def declaration: Option[EirNode] = {
+      node match {
+        case x: EirForLoop => x.header match {
+            case y: EirForAllHeader => y.declaration
+            case y: EirCStyleHeader => y.declaration
+          }
+        case _ => None
+      }
+    }
+
     override def label: String = {
       val (head, tail) = UnparseAst.visitLoopHeader(node)
       s"$head;$tail"
