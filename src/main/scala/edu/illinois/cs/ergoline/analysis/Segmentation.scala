@@ -1,12 +1,11 @@
 package edu.illinois.cs.ergoline.analysis
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.{globals, passes}
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.passes.UnparseAst
 import edu.illinois.cs.ergoline.resolution.Find
-import edu.illinois.cs.ergoline.util.assertValid
+import edu.illinois.cs.ergoline.{globals, passes}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer

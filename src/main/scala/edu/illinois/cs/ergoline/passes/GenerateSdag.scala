@@ -2,17 +2,8 @@ package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.analysis.Segmentation._
 import edu.illinois.cs.ergoline.ast.types.EirType
-import edu.illinois.cs.ergoline.ast.{
-  EirCStyleHeader,
-  EirDeclaration,
-  EirForAllHeader,
-  EirForLoop,
-  EirFunction,
-  EirMember,
-  EirMultiDeclaration,
-  EirNode,
-  EirSdagWhen
-}
+import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   RequestList,
   visitPatternDecl
@@ -91,7 +82,8 @@ object GenerateSdag {
         case s: Loop => s"loop_${s.id}_${suffix
             .orElse(s.declaration.map(_ => "preheader"))
             .getOrElse("header")}"
-        case _ => s"block_${construct.id}"
+        case s: MultiClause => s"await_${s.id}_lead_${suffix.getOrElse("in")}"
+        case _              => s"block_${construct.id}"
       }
     } + "__"
   }
@@ -99,9 +91,11 @@ object GenerateSdag {
   def forwardState(
       ctx: SdagGenerationContext,
       stateName: String,
-      stackName: String
+      stackName: String,
+      forward: Boolean = true
   ): Unit = {
-    ctx.cgen << stateType << "(" << stateName << ", std::move(" << stackName << "))"
+    ctx.cgen << stateType << "(" << stateName << s", ${if (forward) "std::move"
+    else ""}(" << stackName << "))"
   }
 
   def continuation(
@@ -110,19 +104,22 @@ object GenerateSdag {
       arg: String,
       state: String,
       stack: String,
-      append: Boolean = true
+      append: Boolean = true,
+      forward: Boolean = true
   ): Unit = {
-    val s = to.orElse(ctx.continuation).map {
+    to.orElse(ctx.continuation).map {
       case x: Construct => prefixFor(x)(ctx.cgen)
       case x: String    => x
       case _            => ???
+    } match {
+      case Some(s) => ctx.cgen << s << "(" << arg << "," << forwardState(
+          ctx,
+          if (append) s"$state.first" else state,
+          if (to.isEmpty) s"$stack->unwind()" else stack,
+          forward
+        ) << ");"
+      case None => ctx.cgen << "// no continuation ;"
     }
-
-    ctx.cgen << s << "(" << arg << "," << forwardState(
-      ctx,
-      if (append) s"$state.first" else state,
-      if (to.isEmpty) s"$stack->unwind()" else stack
-    ) << ");"
   }
 
   def continuation(
@@ -298,6 +295,7 @@ object GenerateSdag {
       ctx: SdagGenerationContext,
       loop: Loop
   ): SymbolTable = {
+    // TODO ( add support for do-while loops )
     val (headerTable, argName) = visitLoopHeader(
       SdagGenerationContext(subcontext, ctx.table),
       loop,
@@ -420,8 +418,7 @@ object GenerateSdag {
     val sctx = _ctx.cloneWith(subcontext)
     declareOffsets(sctx, _ctx.last, name, decls)
     val (argName, stateName) = functionHeader(name, _ctx.cgen.proxy, sctx.cgen)
-    val stkName =
-      functionStack(sctx.cgen, decls.map(_._2), stateName, shared = true)
+    val stkName = functionStack(sctx.cgen, Nil, stateName, shared = true)
     val wrappedBlock = clause.body.map(prefixFor(_)(sctx.cgen))
     sctx.enter(stkName)
     val (reqList, reqTy) = clause.node match {
@@ -547,6 +544,78 @@ object GenerateSdag {
     ctx.cgen << "}"
   }
 
+  def makeLeadIn(
+      _ctx: SdagGenerationContext,
+      multiClause: MultiClause
+  ): (SdagGenerationContext, List[String]) = {
+    val all = multiClause.node.waitAll
+    val decls = if (all) List(("__recvd__", globals.integerType)) else Nil
+    val blockName = prefixFor(multiClause)(_ctx.cgen)
+    val blockTable = _ctx.table :+ (blockName, decls)
+    val ctx = _ctx.cloneWith(blockTable)
+    declareOffsets(ctx, _ctx.last, blockName, decls)
+    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, ctx.cgen)
+    val stkName =
+      functionStack(ctx.cgen, decls.map(_._2), stateName, shared = true)
+    val members = multiClause.members
+    val refs = decls.map { case (ref, ty) =>
+      derefVariable(
+        ctx.cgen,
+        blockName,
+        (ref, ty),
+        stkName
+      )._1
+    }
+    refs.foreach(ctx.cgen << _ << "=0;")
+    members.zipWithIndex.foreach { case (x, i) =>
+      continuation(
+        ctx,
+        Some(x),
+        argName,
+        stateName,
+        stkName,
+        forward = i == (members.size - 1)
+      )
+    }
+    ctx.cgen << "}"
+    (ctx, refs)
+  }
+
+  def makeLeadOut(
+      ctx: SdagGenerationContext,
+      proxy: Option[EirProxy],
+      multiClause: MultiClause,
+      leadOut: String,
+      refs: List[String]
+  ): Unit = {
+    val (argName, stateName) = functionHeader(leadOut, proxy, ctx.cgen)
+    val stkName = functionStack(ctx.cgen, Nil, stateName, shared = true)
+
+    if (multiClause.node.waitAll) {
+      val numMembers = multiClause.members.length
+      assert(refs.length == 1)
+      ctx.cgen << refs.head << "+=1;"
+      ctx.cgen << "if" << "(" << refs.head << "==" << numMembers.toString << ")" << "{"
+      continuation(ctx, multiClause.successors, argName, stateName, stkName)
+      ctx.cgen << "}"
+    }
+
+    ctx.cgen << "}"
+  }
+
+  def visit(
+      _ctx: SdagGenerationContext,
+      multiClause: MultiClause
+  ): SymbolTable = {
+    val (ctx, refs) = makeLeadIn(_ctx, multiClause)
+    val leadOut = prefixFor(multiClause, suffix = Some("out"))(ctx.cgen)
+    multiClause.members.foreach(
+      visit(SdagGenerationContext(ctx.cgen, ctx.table, Some(leadOut)), _)
+    )
+    makeLeadOut(ctx, _ctx.proxy, multiClause, leadOut, refs)
+    _ctx.table
+  }
+
   def visit(
       ctx: SdagGenerationContext,
       construct: Construct
@@ -555,7 +624,9 @@ object GenerateSdag {
       case x: SerialBlock => visit(ctx, x)
       case x: Loop        => visit(ctx, x)
       case x: Clause      => visit(ctx, x)
-      case _              => ctx.table
+      case _: Divergence  => ???
+      case x: MultiClause => visit(ctx, x)
+      case _              => ???
     }
 
     if (construct.successors.size <= 1) {

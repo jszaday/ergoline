@@ -452,7 +452,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
 
         (if (targetsSelf && isEntryOnly) {
-           ctx << ctx.currentSelf
+           ctx << ctx.currentProxySelf
          } else {
            ctx << x.target
          }) << fieldAccessorFor(targetTy)(Some(x.isStatic)) << ctx.nameFor(
@@ -1501,7 +1501,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       member match {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
-            if (m.isEntryOnly) {
+            if (m.isEntry || m.isEntryOnly) {
               ctx.currentProxySelf
             } else {
               ctx.currentSelf
