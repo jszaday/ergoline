@@ -10,7 +10,8 @@ def zcThreshold(): int;
 /* Returns the elapsed wall time since the start of execution. */
 @system(alias="CkWallTimer") def wallTime(): double;
 
-@system(alias="CkWaitQD") def awaitQuiescence(): unit;
+@system(alias="CkWaitQD")
+@sync def awaitQuiescence(): unit;
 
 @system(alias="CkExitAfterQuiescence") def exitAfterQuiescence(): unit;
 

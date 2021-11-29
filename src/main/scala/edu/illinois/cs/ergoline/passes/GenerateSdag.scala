@@ -212,7 +212,8 @@ object GenerateSdag {
   ): List[(String, EirResolvable[EirType])] = {
     nodes
       .collect {
-        case x: EirDeclaration => Seq((x.name, x.declaredType))
+        case x: EirDeclaration      => Seq((x.name, x.declaredType))
+        case x: EirFunctionArgument => Seq((x.name, x.declaredType))
         case x: EirMultiDeclaration =>
           x.children.map(c => (c.name, c.declaredType))
       }
@@ -263,7 +264,7 @@ object GenerateSdag {
   ): Unit = {
     decls.headOption.foreach { case (declName, _) =>
       ctx.cgen << s"static constexpr auto ${offsetFor(blockName, declName)} = ${prev
-        .map { case (block, name, ty) => s"${offsetFor(block, name)} + 1" }
+        .map { case (block, name, _) => s"${offsetFor(block, name)} + 1" }
         .getOrElse("0")};"
     }
     if (decls.nonEmpty) decls.tail.indices.foreach { i =>
@@ -336,7 +337,7 @@ object GenerateSdag {
       stateName: String,
       stackName: String,
       argName: String,
-      wrapperName: Option[String]
+      wrapperName: String
   )(
       ctx: SdagGenerationContext
   ): (RequestList, String) = {
@@ -348,8 +349,8 @@ object GenerateSdag {
 
     ctx.cgen << "using" << setTy << "=" << ty << ";"
     ctx.cgen << "auto" << com << "=" << s"ergoline::make_component<$setTy, $argType>(*" << ctx.cgen.currentProxySelf << ","
-    ctx.cgen << wrapperName.map(
-      wrapperFor
+    ctx.cgen << wrapperFor(
+      wrapperName
     ) << "," << "std::make_tuple(" << argName << s", $stateName.first, " << stackName << ")"
     ctx.cgen << ");"
 
@@ -368,7 +369,7 @@ object GenerateSdag {
       arg: String,
       ty: String,
       decls: List[(String, EirResolvable[EirType])],
-      list: RequestList
+      cont: Option[Any]
   )(
       ctx: SdagGenerationContext,
       when: EirSdagWhen
@@ -411,7 +412,7 @@ object GenerateSdag {
 
     continuation(
       ctx,
-      Some(name),
+      cont,
       s"std::get<0>($arg)",
       s"std::get<1>($arg)",
       stk,
@@ -444,7 +445,7 @@ object GenerateSdag {
       "hypercomm::component_id_t"
     )
     val stkName = functionStack(sctx.cgen, Nil, stateName, shared = true)
-    val wrappedBlock = clause.body.map(prefixFor(_)(sctx.cgen))
+    val wrappedBlock = clause.body.map(prefixFor(_)(sctx.cgen)).getOrElse(name)
     sctx.enter(stkName)
     val (reqList, reqTy) = clause.node match {
       case x: EirSdagWhen =>
@@ -455,10 +456,10 @@ object GenerateSdag {
 
     clause.body.foreach(visit(_ctx.cloneWith(table), _))
 
+    val cont = clause.body.map(_ => name).orElse(clause.successors.headOption)
     clause.node match {
-      case x: EirSdagWhen => wrappedBlock.foreach(
-          makeWrapper(name, _, argName, reqTy, decls, reqList)(sctx, x)
-        )
+      case x: EirSdagWhen =>
+        makeWrapper(name, wrappedBlock, argName, reqTy, decls, cont)(sctx, x)
     }
 
     _ctx.table
@@ -700,12 +701,36 @@ object GenerateSdag {
       ctx << "{"
       _current = Some(member)
       generated.put(member, ctx.makeSubContext())
-      val table: SymbolTable = Nil
+      val decls = collectDeclarations(fn.functionArgs)
+      val stkName = "__stk__"
+      ctx << "auto*" << stkName << "="
+      val table: SymbolTable = {
+        if (decls.isEmpty) {
+          ctx << "nullptr;"
+          Nil
+        } else {
+          val blkName = ctx.nameFor(member)
+          val table = List((blkName, decls))
+          declareOffsets(
+            SdagGenerationContext(subcontext, table),
+            None,
+            blkName,
+            decls
+          )
+          makeMicroStack(ctx, "nullptr", decls.map(_._2))
+          ctx << ";"
+          decls.foreach(decl => {
+            val ref = derefVariable(ctx, blkName, decl, stkName)
+            ctx << s"new (&${ref._1}) ${ref._2}(" << decl._1 << ");"
+          })
+          table
+        }
+      }
       res.foldLeft(table)((table, construct) => {
         val next = visit(SdagGenerationContext(ctx, table), construct)
         ctx << prefixFor(construct)(
           ctx
-        ) << "(nullptr, std::make_pair(0, nullptr));"
+        ) << s"(nullptr, std::make_pair(0, $stkName));"
         next
       })
       _current = None
