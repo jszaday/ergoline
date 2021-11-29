@@ -10,6 +10,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCpp.LazyCodeBlock
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   indicesName,
   mailboxName,
@@ -2586,11 +2587,25 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  type LazyCodeBlock = () => CodeGenerationContext
+  type DeclarationFormatter =
+    (CodeGenerationContext, String, Option[String], LazyCodeBlock) => Unit
+
+  def defaultFormat(
+      ctx: CodeGenerationContext,
+      name: String,
+      ty: Option[String],
+      blk: LazyCodeBlock
+  ): Unit = {
+    ctx << ty.getOrElse("auto") << name << "=" << blk() << ";"
+  }
+
   def visitPatternDecl(
       parent: CodeGenerationContext,
       x: EirPattern,
       current: String,
-      forceTuple: Boolean = false
+      forceTuple: Boolean = false,
+      format: DeclarationFormatter = defaultFormat
   ): String = {
     implicit val ctx = parent.makeSubContext()
     x match {
@@ -2598,34 +2613,57 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           val tmp = pickName(current, parent)(x)
           val node = CppNode(current)
           node.foundType = f.args.lastOption.flatMap(_.foundType)
+          val ty = node.foundType.map(ctx.typeFor(_, Some(x)))
           f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
-          ctx << "auto" << tmp << "=" << f << ";"
+          format(ctx, tmp, ty, () => { ctx << f })
           x.list.map(_.patterns).filterNot(_.length <= 1) match {
             case Some(patterns) =>
               patterns.zipWithIndex.foreach { case (p, i) =>
                 val nextTmp = s"((bool)$tmp ? &std::get<$i>(*$tmp) : nullptr)"
-                ctx << visitPatternDecl(ctx, p, nextTmp)
+                ctx << visitPatternDecl(ctx, p, nextTmp, format = format)
               }
             case None =>
           }
         })
       case EirPatternList(_, ps) => ps match {
           case p :: Nil if !forceTuple =>
-            ctx << visitPatternDecl(ctx, p, current)
-          case p :: Nil =>
-            ctx << visitPatternDecl(ctx, p, s"std::get<0>($current)")
+            ctx << visitPatternDecl(ctx, p, current, format = format)
+          case p :: Nil => ctx << visitPatternDecl(
+              ctx,
+              p,
+              s"std::get<0>($current)",
+              format = format
+            )
           case patterns => ctx << patterns.zipWithIndex.map({ case (p, idx) =>
-              visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
+              visitPatternDecl(
+                ctx,
+                p,
+                s"std::get<$idx>($current)",
+                format = format
+              )
             })
         }
       case i @ EirIdentifierPattern(_, n, t) if n != "_" =>
         val declName = i.declarations.headOption.map(ctx.nameFor(_))
         val ty = ctx.resolve(t)
-        if (ty.isPointer && i.needsCasting)
-          ctx << "auto" << declName << "=" << "std::dynamic_pointer_cast<" << ctx
-            .nameFor(t) << ">(" << current << ");"
-        // TODO make this a reference!
-        else ctx << "auto" << declName << "=" << current << ";"
+        val fmtTy = Some(ctx.typeFor(ty, Some(i)))
+        if (ty.isPointer && i.needsCasting) {
+          declName.foreach(
+            format(
+              ctx,
+              _,
+              fmtTy,
+              () => {
+                ctx << "std::dynamic_pointer_cast<" << ctx.nameFor(
+                  t
+                ) << ">(" << current << ")"
+              }
+            )
+          )
+        } else {
+          // TODO make this a reference!
+          declName.foreach(format(ctx, _, fmtTy, () => { ctx << current }))
+        }
       case i: EirIdentifierPattern => if (i.name != "_") Errors.missingType(x)
       case _: EirExpressionPattern =>
     }
