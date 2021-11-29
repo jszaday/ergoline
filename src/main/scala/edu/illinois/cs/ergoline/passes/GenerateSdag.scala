@@ -5,11 +5,12 @@ import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
+  CppNode,
   RequestList,
   visitPatternDecl
 }
 import edu.illinois.cs.ergoline.proxies.EirProxy
-import edu.illinois.cs.ergoline.resolution.EirResolvable
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
 import edu.illinois.cs.ergoline.util.Errors
 
 import scala.collection.mutable
@@ -136,15 +137,26 @@ object GenerateSdag {
   private def functionHeader(
       name: String,
       proxy: Option[EirProxy],
-      ctx: CodeGenerationContext
+      ctx: CodeGenerationContext,
+      retTy: String = "void"
   ): (String, String) = {
     val argName = "__arg__"
     val stateName = "__state__"
-    ctx << "static" << "void" << name << "(" << "void*" << argName << "," << stateType << "&&" << stateName << ")" << "{"
+    ctx << "static" << retTy << name << "(" << "void*" << argName << "," << stateType << "&&" << stateName << ")" << "{"
     ctx << "auto*" << "self" << "=" << "(" << proxy.map(
       _.baseName
     ) << "*)hypercomm::access_context_();"
     (argName, stateName)
+  }
+
+  private def stringFromType(t: EirResolvable[EirType]): String = {
+    t match {
+      case EirPlaceholder(Some(n: CppNode), None) => n.s
+      case _ => this._current
+          .flatMap(this.generated.get)
+          .map(_.typeFor(t, this._current))
+          .getOrElse(???)
+    }
   }
 
   def makeMicroStack(
@@ -152,11 +164,15 @@ object GenerateSdag {
       prev: String,
       decls: List[EirResolvable[EirType]]
   ): CodeGenerationContext = {
-    ctx << "new hypercomm::typed_microstack<" << (decls.map(
-      ctx.typeFor(_, _current)
-    ), ",") << ">("
-    ctx << prev << ","
-    ctx << (decls.map(_ => "hypercomm::tags::no_init()"), ",") << ")"
+    if (decls.isEmpty) {
+      ctx << prev
+    } else {
+      ctx << "new hypercomm::typed_microstack<" << (decls.map(
+        stringFromType
+      ), ",") << ">("
+      ctx << prev << ","
+      ctx << (decls.map(_ => "hypercomm::tags::no_init()"), ",") << ")"
+    }
   }
 
   private def functionStack(
@@ -214,7 +230,7 @@ object GenerateSdag {
       decl: (String, EirResolvable[EirType]),
       stkName: String
   ): (String, String) = {
-    val ty = ctx.typeFor(decl._2, _current)
+    val ty = stringFromType(decl._2)
     (s"$stkName->at<$ty>(${offsetFor(blockName, decl._1)})", ty)
   }
 
@@ -297,7 +313,7 @@ object GenerateSdag {
   ): SymbolTable = {
     // TODO ( add support for do-while loops )
     val (headerTable, argName) = visitLoopHeader(
-      SdagGenerationContext(subcontext, ctx.table),
+      SdagGenerationContext(subcontext, ctx.table, ctx.continuation),
       loop,
       ctx.proxy
     )
@@ -341,6 +357,8 @@ object GenerateSdag {
 
     ctx.cgen << ctx.cgen.currentProxySelf << "->activate_component(" << com << ");"
 
+    ctx.cgen << "return" << com << ";"
+
     (list, ty)
   }
 
@@ -362,7 +380,9 @@ object GenerateSdag {
       name
     ) << "(" << ty << "&" << set << "," << argType << "&&" << arg << ")" << "{"
 
-    ctx.cgen << "auto*" << stk << "=" << makeMicroStack(
+    ctx.cgen << {
+      if (decls.isEmpty) "auto&" else "auto*"
+    } << stk << "=" << makeMicroStack(
       ctx.cgen,
       s"std::get<2>($arg)",
       decls.map(_._2)
@@ -417,7 +437,12 @@ object GenerateSdag {
     val table = _ctx.table :+ (name, decls)
     val sctx = _ctx.cloneWith(subcontext)
     declareOffsets(sctx, _ctx.last, name, decls)
-    val (argName, stateName) = functionHeader(name, _ctx.cgen.proxy, sctx.cgen)
+    val (argName, stateName) = functionHeader(
+      name,
+      _ctx.cgen.proxy,
+      sctx.cgen,
+      "hypercomm::component_id_t"
+    )
     val stkName = functionStack(sctx.cgen, Nil, stateName, shared = true)
     val wrappedBlock = clause.body.map(prefixFor(_)(sctx.cgen))
     sctx.enter(stkName)
@@ -507,7 +532,8 @@ object GenerateSdag {
       loop.successors,
       argName,
       stateName, {
-        if (unwind) s"$stackName->unwind()" else stackName
+        if (unwind && loop.successors.nonEmpty) s"$stackName->unwind()"
+        else stackName
       }
     )
     ctx.cgen << "}" << "}"
@@ -544,15 +570,24 @@ object GenerateSdag {
     ctx.cgen << "}"
   }
 
+  val comIdType = "hypercomm::component_id_t"
+
   def makeLeadIn(
       _ctx: SdagGenerationContext,
       multiClause: MultiClause
   ): (SdagGenerationContext, List[String]) = {
     val all = multiClause.node.waitAll
-    val decls = if (all) List(("__recvd__", globals.integerType)) else Nil
+    val decls =
+      if (all) List(("__recvd__", globals.integerType))
+      else List(
+        (
+          "__ids__",
+          EirPlaceholder[EirType](Some(CppNode(s"${comIdType}*")), None)
+        )
+      )
     val blockName = prefixFor(multiClause)(_ctx.cgen)
     val blockTable = _ctx.table :+ (blockName, decls)
-    val ctx = _ctx.cloneWith(blockTable)
+    val ctx = _ctx.cloneWith(subcontext, blockTable)
     declareOffsets(ctx, _ctx.last, blockName, decls)
     val (argName, stateName) = functionHeader(blockName, _ctx.proxy, ctx.cgen)
     val stkName =
@@ -566,8 +601,17 @@ object GenerateSdag {
         stkName
       )._1
     }
-    refs.foreach(ctx.cgen << _ << "=0;")
+    refs.foreach(ref =>
+      if (all) {
+        ctx.cgen << ref << "=0;"
+      } else {
+        ctx.cgen << ref << "=" << "new" << comIdType << "[" << members.size.toString << "];"
+      }
+    )
     members.zipWithIndex.foreach { case (x, i) =>
+      if (!all) {
+        ctx.cgen << refs.headOption << s"[$i]" << "="
+      }
       continuation(
         ctx,
         Some(x),
@@ -590,14 +634,23 @@ object GenerateSdag {
   ): Unit = {
     val (argName, stateName) = functionHeader(leadOut, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, Nil, stateName, shared = true)
+    val numMembers = multiClause.members.length
 
     if (multiClause.node.waitAll) {
-      val numMembers = multiClause.members.length
       assert(refs.length == 1)
       ctx.cgen << refs.head << "+=1;"
       ctx.cgen << "if" << "(" << refs.head << "==" << numMembers.toString << ")" << "{"
       continuation(ctx, multiClause.successors, argName, stateName, stkName)
       ctx.cgen << "}"
+    } else {
+      assert(refs.length == 1)
+      val ids = "__ids__"
+      ctx.cgen << s"auto& $ids = " << refs.head << ";"
+      for (i <- 0 until numMembers) {
+        ctx.cgen << s"if (self->is_idle($ids[$i]))" << s"self->invalidate_component($ids[$i]);"
+      }
+      ctx.cgen << s"delete $ids;"
+      continuation(ctx, multiClause.successors, argName, stateName, stkName)
     }
 
     ctx.cgen << "}"

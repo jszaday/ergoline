@@ -1192,7 +1192,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             args
           ) << ")"
         }
-      case f: EirFunction if name == "CkPrintf" || name == "CkAbort" =>
+      case f: EirFunction if name == "CkPrintf" || name == "::CkAbort" =>
         val endl = if (f.name == "println") "\\n" else ""
         ctx << name << "(\"%s" << endl << "\"," << "(" << {
           visitArguments(Some(fc), Some(disambiguated), args)
@@ -1612,7 +1612,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << header << "{"
 
     if (x.isTransient) {
-      ctx << "CkAbort(\"cannot pup transient types\");"
+      ctx << "::CkAbort(\"cannot pup transient types\");"
     } else {
       val parents = puppingParents(ctx, x)
         .map(ctx.nameFor(_))
@@ -2411,7 +2411,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"$name(PUP::reconstruct __tag__): ergoline::function<${args mkString ","}>(__tag__) { }"
     ctx << "virtual void __pup__(hypercomm::serdes& _) override" << "{"
     if (isTransient) {
-      ctx << "CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
+      ctx << "::CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
     } else {
       ctx << captures
         .zip(ctypes)
@@ -2571,7 +2571,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx.exprType(x)
     ) << "{" << x.cases << {
       val location = Errors.contextualize(x)
-      "CkAbort(\"no match found at " + location.substring(
+      "::CkAbort(\"no match found at " + location.substring(
         location.lastIndexOf(File.separator) + 1
       ) + "\");"
     } << "})(" << x.expression << ")"
