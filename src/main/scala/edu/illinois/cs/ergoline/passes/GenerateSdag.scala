@@ -459,7 +459,7 @@ object GenerateSdag {
     val stkName = functionStack(sctx.cgen, Nil, stateName, shared = true)
     val wrappedBlock = clause.body.map(prefixFor(_)(sctx.cgen)).getOrElse(name)
     sctx.enter(stkName)
-    val (reqList, reqTy) = clause.node match {
+    val (_, reqTy) = clause.node match {
       case x: EirSdagWhen =>
         makeRequest(clause, x, stateName, stkName, argName, wrappedBlock)(sctx)
     }
@@ -468,7 +468,7 @@ object GenerateSdag {
 
     clause.body.foreach(visit(_ctx.cloneWith(table), _))
 
-    val cont = clause.body.map(_ => name).orElse(clause.successors.headOption)
+    val cont = clause.body.map(_ => wrappedBlock).orElse(clause.successors.headOption)
     clause.node match {
       case x: EirSdagWhen =>
         makeWrapper(name, wrappedBlock, argName, reqTy, decls, cont)(sctx, x)
