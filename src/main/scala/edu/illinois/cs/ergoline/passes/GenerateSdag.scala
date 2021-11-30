@@ -28,8 +28,18 @@ object GenerateSdag {
   case class SdagGenerationContext(
       cgen: CodeGenerationContext,
       table: SymbolTable,
-      continuation: Option[Any] = None
+      var continuation: Option[Any] = None,
+      stack: mutable.Stack[Construct] = new mutable.Stack()
   ) {
+    def deeper: Boolean = {
+      val n = this.stack.length
+      (n == 0) || {
+        (n == 1) && (this.stack(0).depth > 0)
+      } || {
+        this.stack(0).depth > this.stack(1).depth
+      }
+    }
+
     def enter(stkName: String): Unit = {
       windTable(cgen, table, stkName)
       cgen.pushProxySelf("self")
@@ -44,19 +54,23 @@ object GenerateSdag {
 
     def proxy: Option[EirProxy] = cgen.proxy
 
+    def cloneWith(cont: Option[Any]): SdagGenerationContext = {
+      SdagGenerationContext(cgen, table, cont, stack)
+    }
+
     def cloneWith(cgen: CodeGenerationContext): SdagGenerationContext = {
-      SdagGenerationContext(cgen, this.table, this.continuation)
+      SdagGenerationContext(cgen, this.table, this.continuation, stack)
     }
 
     def cloneWith(table: SymbolTable): SdagGenerationContext = {
-      SdagGenerationContext(this.cgen, table, this.continuation)
+      SdagGenerationContext(this.cgen, table, this.continuation, stack)
     }
 
     def cloneWith(
         cgen: CodeGenerationContext,
         table: SymbolTable
     ): SdagGenerationContext = {
-      SdagGenerationContext(cgen, table, this.continuation)
+      SdagGenerationContext(cgen, table, this.continuation, stack)
     }
 
     def last: Option[(String, String, EirResolvable[EirType])] = {
@@ -81,7 +95,7 @@ object GenerateSdag {
     current + {
       construct match {
         case s: Loop => s"loop_${s.id}_${suffix
-            .orElse(s.declaration.map(_ => "preheader"))
+            .orElse(s.declarations.headOption.map(_ => "preheader"))
             .getOrElse("header")}"
         case s: MultiClause => s"await_${s.id}_lead_${suffix.getOrElse("in")}"
         case _              => s"block_${construct.id}"
@@ -116,7 +130,7 @@ object GenerateSdag {
       case Some(s) => ctx.cgen << s << "(" << arg << "," << forwardState(
           ctx,
           if (append) s"$state.first" else state,
-          if (to.isEmpty) s"$stack->unwind()" else stack,
+          if (to.isEmpty && ctx.deeper) s"$stack->unwind()" else stack,
           forward
         ) << ");"
       case None => ctx.cgen << "// no continuation ;"
@@ -314,15 +328,13 @@ object GenerateSdag {
   ): SymbolTable = {
     // TODO ( add support for do-while loops )
     val (headerTable, argName) = visitLoopHeader(
-      SdagGenerationContext(subcontext, ctx.table, ctx.continuation),
+      ctx.cloneWith(subcontext),
       loop,
       ctx.proxy
     )
-    val sctx = SdagGenerationContext(
-      subcontext,
-      headerTable,
+    val sctx = ctx.cloneWith(subcontext, headerTable)
+    sctx.continuation =
       Some(prefixFor(loop, suffix = Some("latch"))(subcontext))
-    )
     visitLoopLatch(sctx, loop, ctx.proxy, argName)
     loop.body.map(visit(sctx, _))
     ctx.table
@@ -470,8 +482,8 @@ object GenerateSdag {
       loop: Loop,
       proxy: Option[EirProxy]
   ): (SymbolTable, String) = {
-    val decl = loop.declaration
-    val decls = collectDeclarations(decl)
+    val _decls = loop.declarations
+    val decls = collectDeclarations(_decls)
     // can be either pre/header
     val blockName = prefixFor(loop)(_ctx.cgen)
     val blockTable = _ctx.table :+ (blockName, decls)
@@ -487,7 +499,7 @@ object GenerateSdag {
       )
     } else {
       val headerName = prefixFor(loop, suffix = Some("header"))(_ctx.cgen)
-      decl.toList.flatMap {
+      _decls.flatMap {
         case d: EirDeclaration      => List(d)
         case d: EirMultiDeclaration => d.children
       } foreach { d => visitDeclaration(ctx, d)(blockName, stkName) }
@@ -583,7 +595,7 @@ object GenerateSdag {
       else List(
         (
           "__ids__",
-          EirPlaceholder[EirType](Some(CppNode(s"${comIdType}*")), None)
+          EirPlaceholder[EirType](Some(CppNode(s"$comIdType*")), None)
         )
       )
     val blockName = prefixFor(multiClause)(_ctx.cgen)
@@ -663,9 +675,7 @@ object GenerateSdag {
   ): SymbolTable = {
     val (ctx, refs) = makeLeadIn(_ctx, multiClause)
     val leadOut = prefixFor(multiClause, suffix = Some("out"))(ctx.cgen)
-    multiClause.members.foreach(
-      visit(SdagGenerationContext(ctx.cgen, ctx.table, Some(leadOut)), _)
-    )
+    multiClause.members.foreach(visit(ctx.cloneWith(Some(leadOut)), _))
     makeLeadOut(ctx, _ctx.proxy, multiClause, leadOut, refs)
     _ctx.table
   }
@@ -674,6 +684,8 @@ object GenerateSdag {
       ctx: SdagGenerationContext,
       construct: Construct
   ): SymbolTable = {
+    ctx.stack.push(construct)
+
     val next = construct match {
       case x: SerialBlock => visit(ctx, x)
       case x: Loop        => visit(ctx, x)
@@ -684,9 +696,13 @@ object GenerateSdag {
     }
 
     if (construct.successors.size <= 1) {
-      construct.successors.foldLeft(next)((next, nextConstruct) => {
+      val last = construct.successors.foldLeft(next)((next, nextConstruct) => {
         visit(ctx.cloneWith(next), nextConstruct)
       })
+
+      assert(construct == ctx.stack.pop())
+
+      last
     } else {
       ???
     }
@@ -703,7 +719,7 @@ object GenerateSdag {
       generated.put(member, ctx.makeSubContext())
       val decls = collectDeclarations(fn.functionArgs)
       val stkName = "__stk__"
-      ctx << "auto*" << stkName << "="
+      ctx << s"hypercomm::microstack*" << stkName << "="
       val table: SymbolTable = {
         if (decls.isEmpty) {
           ctx << "nullptr;"

@@ -14,7 +14,9 @@ object Segmentation {
   private[this] var _count: Int = 0
 
   sealed abstract class Construct {
-    var id: Int = {
+    private[this] var _depth: Int = 0
+
+    val id: Int = {
       _count += 1
       _count
     }
@@ -27,6 +29,14 @@ object Segmentation {
     def head: String = this.name
 
     def tail: Seq[Construct] = Seq(this)
+
+    def declarations: List[EirNode] = Nil
+
+    def depth: Int = this._depth
+    def depth_=(nu: Int): Unit = {
+      this._depth = nu + (if (declarations.isEmpty) 0 else 1)
+      this.successors.foreach(_.depth = this._depth)
+    }
 
     override def toString: String = {
       successors.map(_.toString).mkString("\n")
@@ -44,6 +54,12 @@ object Segmentation {
     override def tail: Seq[Construct] =
       this.members.flatMap(findLast).flatMap(_.tail).toSeq
 
+    override def depth_=(nu: Int): Unit = {
+      super.depth_=(nu)
+
+      this.members.foreach(_.depth = this.depth)
+    }
+
     override def toString: String = {
       s"subgraph cluster_${this.id} {" + {
         "label=\"" + this.label + "\";\n" + {
@@ -57,15 +73,12 @@ object Segmentation {
     }
   }
 
-  case class Clause(var node: EirNode, var body: Option[Construct])
+  case class Clause(var node: EirSdagWhen, var body: Option[Construct])
       extends ScopingConstruct {
     override def label: String = {
-      node match {
-        case x: EirSdagWhen => UnparseAst.visitWhenHeader(x) + " ;"
-        case x: EirAwait    => UnparseAst.visit(x) + ";"
-        case _              => ???
-      }
+      UnparseAst.visitWhenHeader(this.node) + " ;"
     }
+    override def declarations: List[EirNode] = node.declarations
     override def members: Iterable[Construct] = body.toIterable
   }
 
@@ -73,6 +86,8 @@ object Segmentation {
       extends ScopingConstruct {
     override def divergent: Boolean = !node.waitAll
     override def label: String = s"await ${if (node.waitAll) "all" else "any"};"
+    // multi-clauses have an implicit context for the time being
+    override def depth_=(nu: Int): Unit = super.depth_=(nu + 1)
   }
 
   case class Divergence(var node: EirNode, var members: Seq[Construct])
@@ -87,6 +102,8 @@ object Segmentation {
   }
 
   case class SerialBlock(var slst: List[EirNode]) extends Construct {
+    var threaded: Boolean = false
+
     override def toString: String = {
       this.id.toString + "[label=\"" + UnparseAst.forceSemi {
         slst
@@ -96,18 +113,26 @@ object Segmentation {
           .replace("\\n", "\\l")
       } + "\\l\"];\n" + super.toString
     }
+
+    // TODO ( enhance discovery of declarations )
+    override def declarations: List[EirNode] = {
+      slst.collect {
+        case x: EirDeclaration      => List(x)
+        case x: EirMultiDeclaration => x.children
+      }.flatten
+    }
   }
 
   case class Loop(var node: EirNode, var body: Option[Construct])
       extends ScopingConstruct {
 
-    def declaration: Option[EirNode] = {
+    override def declarations: List[EirNode] = {
       node match {
-        case x: EirForLoop => x.header match {
+        case x: EirForLoop => (x.header match {
             case y: EirForAllHeader => y.declaration
             case y: EirCStyleHeader => y.declaration
-          }
-        case _ => None
+          }).toList
+        case _ => Nil
       }
     }
 
@@ -115,6 +140,7 @@ object Segmentation {
       val (head, tail) = UnparseAst.visitLoopHeader(node)
       s"$head;$tail"
     }
+
     override def members: Iterable[Construct] = body.toIterable
   }
 
@@ -224,6 +250,10 @@ object Segmentation {
                 block
               case (true, nodes) => nodes.foldLeft(sum)((partialSum, node) => {
                   val next = visit(node, None)
+                  next.foreach {
+                    case x: SerialBlock => x.threaded = true
+                    case _              =>
+                  }
                   head = head.orElse(next)
                   putSuccessor(partialSum, next)
                 })
@@ -234,7 +264,6 @@ object Segmentation {
         case x: EirDoWhileLoop => Some(Loop(x, x.body.flatMap(visit(_, None))))
         case x: EirWhileLoop   => Some(Loop(x, x.body.flatMap(visit(_, None))))
         case x: EirSdagWhen    => Some(Clause(x, x.body.flatMap(visit(_, None))))
-        case x: EirAwait       => Some(Clause(x, None))
         case x: EirAwaitMany => Some(
             MultiClause(
               x, {
@@ -280,6 +309,7 @@ object Segmentation {
       this._memo.get(fn).orElse {
         val cons = Analysis.analyze(fn)
         cons.foreach(this._memo.put(fn, _))
+        cons.foreach(_.depth = 0)
         cons
       }
     }
