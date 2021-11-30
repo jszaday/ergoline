@@ -152,11 +152,12 @@ object GenerateSdag {
       name: String,
       proxy: Option[EirProxy],
       ctx: CodeGenerationContext,
-      retTy: String = "void"
+      retTy: String = "void",
+      attribute: Option[String] = None
   ): (String, String) = {
     val argName = "__arg__"
     val stateName = "__state__"
-    ctx << "static" << retTy << name << "(" << "void*" << argName << "," << stateType << "&&" << stateName << ")" << "{"
+    ctx << attribute << "static" << retTy << name << "(" << "void*" << argName << "," << stateType << "&&" << stateName << ")" << "{"
     ctx << "auto*" << "self" << "=" << "(" << proxy.map(
       _.baseName
     ) << "*)hypercomm::access_context_();"
@@ -308,7 +309,7 @@ object GenerateSdag {
     val blockTable = _ctx.table :+ (blockName, decls)
     val sctx = _ctx.cloneWith(subcontext, blockTable)
     declareOffsets(sctx, _ctx.last, blockName, decls)
-    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, sctx.cgen)
+    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, sctx.cgen, attribute = Option.when(block.threaded)("/* threaded */ "))
     val stkName = functionStack(sctx.cgen, decls.map(_._2), stateName)
     sctx.cgen << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
     sctx.enter(stkName)
