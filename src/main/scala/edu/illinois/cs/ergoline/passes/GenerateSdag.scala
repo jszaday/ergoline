@@ -309,7 +309,12 @@ object GenerateSdag {
     val blockTable = _ctx.table :+ (blockName, decls)
     val sctx = _ctx.cloneWith(subcontext, blockTable)
     declareOffsets(sctx, _ctx.last, blockName, decls)
-    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, sctx.cgen, attribute = Option.when(block.threaded)("/* threaded */ "))
+    val (argName, stateName) = functionHeader(
+      blockName,
+      _ctx.proxy,
+      sctx.cgen,
+      attribute = Option.when(block.threaded)("/* threaded */ ")
+    )
     val stkName = functionStack(sctx.cgen, decls.map(_._2), stateName)
     sctx.cgen << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
     sctx.enter(stkName)
@@ -469,7 +474,8 @@ object GenerateSdag {
 
     clause.body.foreach(visit(_ctx.cloneWith(table), _))
 
-    val cont = clause.body.map(_ => wrappedBlock).orElse(clause.successors.headOption)
+    val cont =
+      clause.body.map(_ => wrappedBlock).orElse(clause.successors.headOption)
     clause.node match {
       case x: EirSdagWhen =>
         makeWrapper(name, wrappedBlock, argName, reqTy, decls, cont)(sctx, x)
@@ -499,12 +505,14 @@ object GenerateSdag {
         argName
       )
     } else {
+      ctx.enter(stkName)
       val headerName = prefixFor(loop, suffix = Some("header"))(_ctx.cgen)
       _decls.flatMap {
         case d: EirDeclaration      => List(d)
         case d: EirMultiDeclaration => d.children
       } foreach { d => visitDeclaration(ctx, d)(blockName, stkName) }
       continuation(ctx, Some(headerName), argName, stateName, stkName)
+      ctx.leave()
       ctx.cgen << "}"
       visitLoopHeaderInit(ctx, loop, proxy, headerName)
     }

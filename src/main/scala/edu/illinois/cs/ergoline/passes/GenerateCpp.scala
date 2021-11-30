@@ -2597,7 +2597,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ty: Option[String],
       blk: LazyCodeBlock
   ): Unit = {
-    ctx << ty.getOrElse("auto") << name << "=" << blk() << ";"
+    // TODO ( eventually, we need to use ty.getOrElse("auto") here )
+    // TODO ( but typing is quite weak here -- needs some buffing up )
+    ctx << "auto" << name << "=" << blk() << ";"
   }
 
   def visitPatternDecl(
