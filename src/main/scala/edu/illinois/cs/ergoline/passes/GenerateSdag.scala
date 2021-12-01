@@ -17,6 +17,8 @@ import scala.collection.mutable
 import scala.util.Properties
 
 object GenerateSdag {
+  val sentinelType = "ergoline::sentinel_link"
+  val speculatorType = "ergoline::speculator_link"
   val serverType = "hypercomm::state_server<hypercomm::microstack>"
   val stateType = s"typename $serverType::state_type"
 
@@ -339,8 +341,14 @@ object GenerateSdag {
       ctx.proxy
     )
     val sctx = ctx.cloneWith(subcontext, headerTable)
-    sctx.continuation =
-      Some(prefixFor(loop, suffix = Some("latch"))(subcontext))
+    val overlap = loop.node.hasAnnotation("overlap")
+    sctx.continuation = Some(
+      if (overlap) {
+        prefixFor(loop, suffix = Some("sentinel"))(ctx.cgen)
+      } else {
+        latchName(sctx, loop)
+      }
+    )
     visitLoopLatch(sctx, loop, ctx.proxy, argName)
     loop.body.map(visit(sctx, _))
     ctx.table
@@ -498,8 +506,10 @@ object GenerateSdag {
     declareOffsets(ctx, _ctx.last, blockName, decls)
     val (argName, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, decls.map(_._2), stateName)
+    val overlap = loop.node.hasAnnotation("overlap")
+    val unwind = decls.nonEmpty
     if (decls.isEmpty) {
-      visitLoopHeaderLast(ctx, loop, decls.nonEmpty)(
+      visitLoopHeaderLast(ctx, loop, unwind)(
         stateName,
         stkName,
         argName
@@ -511,12 +521,44 @@ object GenerateSdag {
         case d: EirDeclaration      => List(d)
         case d: EirMultiDeclaration => d.children
       } foreach { d => visitDeclaration(ctx, d)(blockName, stkName) }
-      continuation(ctx, Some(headerName), argName, stateName, stkName)
-      ctx.leave()
+      if (overlap) {
+        val linkName = "__link__"
+        ctx.cgen << "auto*" << linkName << "=" << "new" << sentinelType << "(" << asLink(
+          argName
+        ) << ")" << ";"
+        continuation(ctx, Some(headerName), linkName, stateName, stkName)
+      } else {
+        continuation(ctx, Some(headerName), argName, stateName, stkName)
+      }
       ctx.cgen << "}"
+      if (overlap) {
+        visitLoopSentinel(ctx, loop, proxy, unwind)
+      }
+      ctx.leave()
       visitLoopHeaderInit(ctx, loop, proxy, headerName)
     }
     (blockTable, argName)
+  }
+
+  def visitLoopSentinel(
+      ctx: SdagGenerationContext,
+      loop: Loop,
+      proxy: Option[EirProxy],
+      unwind: Boolean
+  ): Unit = {
+    val sentinelName = prefixFor(loop, suffix = Some("sentinel"))(ctx.cgen)
+    val (argName, stateName) = functionHeader(sentinelName, proxy, ctx.cgen)
+    val stackName = s"$stateName.second"
+    ctx.cgen << s"(${asSentinel(argName)})->consume();"
+    ctx.cgen << s"if ((${asSentinel(argName)})->complete())" << "{"
+    visitLoopContinuation(ctx, loop)(
+      stateName,
+      stackName,
+      argName,
+      unwind,
+      overlap = true
+    )
+    ctx.cgen << "}" << "}"
   }
 
   def visitLoopHeaderInit(
@@ -530,6 +572,22 @@ object GenerateSdag {
     visitLoopHeaderLast(ctx, loop, unwind = true)(stateName, stkName, argName)
   }
 
+  def latchName(ctx: SdagGenerationContext, loop: Loop): String = {
+    prefixFor(loop, suffix = Some("latch"))(ctx.cgen)
+  }
+
+  def asLink(s: String): String = {
+    s"(ergoline::link *)$s"
+  }
+
+  def asSentinel(s: String): String = {
+    s"($sentinelType *)$s"
+  }
+
+  def unlink(s: String): String = {
+    s"(${asLink(s)})->prev"
+  }
+
   def visitLoopHeaderLast(
       ctx: SdagGenerationContext,
       loop: Loop,
@@ -539,6 +597,7 @@ object GenerateSdag {
       stackName: String,
       argName: String
   ): Unit = {
+    val overlap = loop.node.hasAnnotation("overlap")
     ctx.enter(stackName)
     ctx.cgen << "if" << "("
     loop.node match {
@@ -547,19 +606,70 @@ object GenerateSdag {
         }
     }
     ctx.cgen << ")" << "{"
-    continuation(ctx, loop.body, argName, stateName, stackName)
-    ctx.cgen << "}" << "else" << "{"
+    if (overlap) {
+      ctx.cgen << s"(${asSentinel(argName)})->produce();"
+      continuation(ctx, loop.body, argName, stateName, s"$stackName->clone()")
+      continuation(
+        ctx,
+        Some(latchName(ctx, loop)),
+        argName,
+        stateName,
+        stackName
+      )
+    } else {
+      continuation(ctx, loop.body, argName, stateName, stackName)
+    }
+    ctx.cgen << "}" << "else"
+    if (overlap) {
+      ctx.cgen << s"if ((${asSentinel(argName)})->deactivate())"
+    }
+    ctx.cgen << "{"
+    visitLoopContinuation(ctx, loop)(
+      stateName,
+      stackName,
+      argName,
+      unwind,
+      overlap
+    )
+    ctx.cgen << "}" << "}"
+    ctx.leave()
+  }
+
+  def deleteLink(
+      ctx: SdagGenerationContext,
+      ty: String,
+      name: String
+  ): String = {
+    val linkName = s"__link${name.substring(1)}"
+    ctx.cgen << "auto*" << linkName << "=" << unlink(name) << ";"
+    ctx.cgen << "delete" << s"($ty*)" << name << ";"
+    linkName
+  }
+
+  def visitLoopContinuation(ctx: SdagGenerationContext, loop: Loop)(
+      stateName: String,
+      stackName: String,
+      argName: String,
+      unwind: Boolean,
+      overlap: Boolean
+  ): Unit = {
+    val arg = {
+      if (overlap) {
+        deleteLink(ctx, sentinelType, argName)
+      } else {
+        argName
+      }
+    }
+
     continuation(
       ctx,
       loop.successors,
-      argName,
+      arg,
       stateName, {
         if (unwind && loop.successors.nonEmpty) s"$stackName->unwind()"
         else stackName
       }
     )
-    ctx.cgen << "}" << "}"
-    ctx.leave()
   }
 
   def visitLoopLatch(
@@ -568,7 +678,7 @@ object GenerateSdag {
       proxy: Option[EirProxy],
       argName: String
   ): Unit = {
-    val blockName = prefixFor(loop, suffix = Some("latch"))(ctx.cgen)
+    val blockName = latchName(ctx, loop)
     val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, Nil, stateName)
     ctx.enter(stkName)
@@ -597,95 +707,95 @@ object GenerateSdag {
   def makeLeadIn(
       _ctx: SdagGenerationContext,
       multiClause: MultiClause
-  ): (SdagGenerationContext, List[String]) = {
+  ): SdagGenerationContext = {
     val all = multiClause.node.waitAll
-    val decls =
-      if (all) List(("__recvd__", globals.integerType))
-      else List(
-        (
-          "__ids__",
-          EirPlaceholder[EirType](Some(CppNode(s"$comIdType*")), None)
-        )
-      )
     val blockName = prefixFor(multiClause)(_ctx.cgen)
-    val blockTable = _ctx.table :+ (blockName, decls)
-    val ctx = _ctx.cloneWith(subcontext, blockTable)
-    declareOffsets(ctx, _ctx.last, blockName, decls)
-    val (argName, stateName) = functionHeader(blockName, _ctx.proxy, ctx.cgen)
-    val stkName =
-      functionStack(ctx.cgen, decls.map(_._2), stateName, shared = true)
+    val ctx = _ctx.cloneWith(subcontext)
+    val (prevName, stateName) = functionHeader(blockName, _ctx.proxy, ctx.cgen)
+    val stkName = functionStack(ctx.cgen, Nil, stateName, shared = true)
     val members = multiClause.members
-    val refs = decls.map { case (ref, ty) =>
-      derefVariable(
-        ctx.cgen,
-        blockName,
-        (ref, ty),
-        stkName
-      )._1
+    val linkName = "__link__"
+
+    assert(members.nonEmpty)
+
+    ctx.cgen << "auto*" << linkName << "=" << "new"
+    if (all) {
+      ctx.cgen << sentinelType << "(" << asLink(prevName) << ");"
+    } else {
+      ctx.cgen << speculatorType << "(" << asLink(
+        prevName
+      ) << "," << members.size.toString << ");"
     }
-    refs.foreach(ref =>
-      if (all) {
-        ctx.cgen << ref << "=0;"
-      } else {
-        ctx.cgen << ref << "=" << "new" << comIdType << "[" << members.size.toString << "];"
-      }
-    )
+
     members.zipWithIndex.foreach { case (x, i) =>
-      if (!all) {
-        ctx.cgen << refs.headOption << s"[$i]" << "="
+      val last = i == (members.size - 1)
+
+      if (all) {
+        ctx.cgen << linkName << "->produce();"
+
+        if (last) {
+          ctx.cgen << linkName << "->deactivate();"
+        }
+      } else {
+        ctx.cgen << linkName << s"->ids[$i]" << "="
       }
+
       continuation(
         ctx,
         Some(x),
-        argName,
+        linkName,
         stateName,
         stkName,
-        forward = i == (members.size - 1)
+        forward = last
       )
     }
+
     ctx.cgen << "}"
-    (ctx, refs)
+
+    ctx
   }
 
   def makeLeadOut(
       ctx: SdagGenerationContext,
       proxy: Option[EirProxy],
       multiClause: MultiClause,
-      leadOut: String,
-      refs: List[String]
+      leadOut: String
   ): Unit = {
     val (argName, stateName) = functionHeader(leadOut, proxy, ctx.cgen)
     val stkName = functionStack(ctx.cgen, Nil, stateName, shared = true)
     val numMembers = multiClause.members.length
+    val all = multiClause.node.waitAll
 
-    if (multiClause.node.waitAll) {
-      assert(refs.length == 1)
-      ctx.cgen << refs.head << "+=1;"
-      ctx.cgen << "if" << "(" << refs.head << "==" << numMembers.toString << ")" << "{"
-      continuation(ctx, multiClause.successors, argName, stateName, stkName)
-      ctx.cgen << "}"
-    } else {
-      assert(refs.length == 1)
-      val ids = "__ids__"
-      ctx.cgen << s"auto& $ids = " << refs.head << ";"
-      for (i <- 0 until numMembers) {
-        ctx.cgen << s"if (self->is_idle($ids[$i]))" << s"self->invalidate_component($ids[$i]);"
-      }
-      ctx.cgen << s"delete $ids;"
-      continuation(ctx, multiClause.successors, argName, stateName, stkName)
-    }
+    continuation(
+      ctx,
+      multiClause.successors,
+      if (all) {
+        ctx.cgen << s"(${asSentinel(argName)})->consume();"
+        ctx.cgen << "if" << s"((${asSentinel(argName)})->complete())" << "{"
+        deleteLink(ctx, sentinelType, argName)
+      } else {
+        val ids = "__ids__"
+        ctx.cgen << s"auto& $ids = (($speculatorType*)$argName)->ids;"
+        for (i <- 0 until numMembers) {
+          ctx.cgen << s"if (self->is_idle($ids[$i]))" << s"self->invalidate_component($ids[$i]);"
+        }
+        deleteLink(ctx, speculatorType, argName)
+      },
+      stateName,
+      stkName
+    )
 
-    ctx.cgen << "}"
+    ctx.cgen << Option.when(all)("}") << "}"
   }
 
   def visit(
       _ctx: SdagGenerationContext,
       multiClause: MultiClause
   ): SymbolTable = {
-    val (ctx, refs) = makeLeadIn(_ctx, multiClause)
+    val ctx = makeLeadIn(_ctx, multiClause)
     val leadOut = prefixFor(multiClause, suffix = Some("out"))(ctx.cgen)
     multiClause.members.foreach(visit(ctx.cloneWith(Some(leadOut)), _))
-    makeLeadOut(ctx, _ctx.proxy, multiClause, leadOut, refs)
+    makeLeadOut(ctx, _ctx.proxy, multiClause, leadOut)
     _ctx.table
   }
 

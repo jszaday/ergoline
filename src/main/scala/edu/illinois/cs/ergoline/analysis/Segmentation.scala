@@ -86,8 +86,6 @@ object Segmentation {
       extends ScopingConstruct {
     override def divergent: Boolean = !node.waitAll
     override def label: String = s"await ${if (node.waitAll) "all" else "any"};"
-    // multi-clauses have an implicit context for the time being
-    override def depth_=(nu: Int): Unit = super.depth_=(nu + 1)
   }
 
   case class Divergence(var node: EirNode, var members: Seq[Construct])

@@ -66,6 +66,41 @@ inline std::int64_t timestamp() {
   return std::chrono::duration_cast<std::chrono::seconds>(curr.time_since_epoch()).count();
 }
 
+struct link {
+  link* prev;
+
+  link(link* prev_) : prev(prev_) {}
+
+ protected:
+  ~link() = default;
+};
+
+struct sentinel_link : public link {
+  std::int64_t count;
+  bool active;
+
+  sentinel_link(link* prev) : link(prev), count(0), active(false) {}
+
+  inline void produce(void) {
+    this->active = true;
+    this->count++;
+  }
+
+  inline void consume(void) { this->count--; }
+
+  inline bool deactivate(void) {
+    this->active = false;
+    return (this->count == 0);
+  }
+
+  inline bool complete(void) { return !(this->active) && (this->count == 0); }
+};
+
+struct speculator_link : public link {
+  std::vector<hypercomm::component_id_t> ids;
+
+  speculator_link(link* prev, std::size_t count) : link(prev), ids(count) {}
+};
 }
 
 #endif
