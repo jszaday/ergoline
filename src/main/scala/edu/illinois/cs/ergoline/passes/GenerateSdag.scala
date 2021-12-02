@@ -410,7 +410,9 @@ object GenerateSdag {
       ctx.proxy
     )
     val sctx = ctx.cloneWith(subcontext, headerTable)
-    visitLoopLatch(sctx, loop, ctx.proxy, argName)
+    if (!overlap) {
+      visitLoopLatch(sctx, loop, ctx.proxy, argName)
+    }
     ctx.pushContinuation(cont)
     loop.body.map(visit(sctx, _))
     ctx.popContinuation(Some(cont))
@@ -676,7 +678,13 @@ object GenerateSdag {
   ): Unit = {
     val overlap = loop.node.hasAnnotation("overlap")
     ctx.enter(stackName)
-    ctx.cgen << "if" << "("
+    ctx.cgen << {
+      if (overlap) {
+        "while"
+      } else {
+        "if"
+      }
+    } << "("
     loop.node match {
       case x: EirForLoop => x.header match {
           case EirCStyleHeader(_, test, _) => GenerateCpp.visit(test)(ctx.cgen)
@@ -686,19 +694,15 @@ object GenerateSdag {
     if (overlap) {
       ctx.cgen << s"(${asSentinel(argName)})->produce();"
       continuation(ctx, loop.body, argName, stateName, s"$stackName->clone()")
-      continuation(
-        ctx,
-        Some(latchName(ctx, loop)),
-        argName,
-        stateName,
-        stackName
-      )
+      visitLatchImplementation(ctx, loop)
     } else {
       continuation(ctx, loop.body, argName, stateName, stackName)
     }
-    ctx.cgen << "}" << "else"
+    ctx.cgen << "}"
     if (overlap) {
       ctx.cgen << s"if ((${asSentinel(argName)})->deactivate())"
+    } else {
+      ctx.cgen << "else"
     }
     ctx.cgen << "{"
     visitLoopContinuation(ctx, loop)(
@@ -750,6 +754,21 @@ object GenerateSdag {
     )
   }
 
+  def visitLatchImplementation(
+      ctx: SdagGenerationContext,
+      loop: Loop
+  ): Unit = {
+    loop.node match {
+      case x: EirForLoop => x.header match {
+          case y: EirCStyleHeader =>
+            GenerateCpp.visit(y.increment)(ctx.cgen)
+            ctx.cgen << ";"
+          case _ => ???
+        }
+      case _ => ???
+    }
+  }
+
   def visitLoopLatch(
       ctx: SdagGenerationContext,
       loop: Loop,
@@ -760,15 +779,7 @@ object GenerateSdag {
     val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
     val stkName = functionStack(ctx, Nil, stateName)
     ctx.enter(stkName)
-    loop.node match {
-      case x: EirForLoop => x.header match {
-          case y: EirCStyleHeader =>
-            GenerateCpp.visit(y.increment)(ctx.cgen)
-            ctx.cgen << ";"
-          case _ => ???
-        }
-      case _ => ???
-    }
+    visitLatchImplementation(ctx, loop)
     continuation(
       ctx,
       Some((loop, Some("header"))),
