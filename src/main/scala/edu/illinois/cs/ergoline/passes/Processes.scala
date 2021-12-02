@@ -102,6 +102,7 @@ object Processes {
     "#include <ergoline/components.hpp> // ;",
     "#include <hypercomm/core/typed_value.hpp> // ;",
     "#include <hypercomm/components/sentinel.hpp> // ;",
+    "#include <hypercomm/components/multistate_component.hpp> // ;",
     "#include <hypercomm/core/resuming_callback.hpp> // ;",
     "#include <hypercomm/core/inter_callback.hpp> // ;",
     "#include <hypercomm/core/temporary_port.hpp> // ;",

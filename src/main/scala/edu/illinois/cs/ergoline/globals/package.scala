@@ -135,6 +135,8 @@ package object globals {
     EirSymbol[EirNamedType](parent, List("::", ergolineName, unitName))
   }
 
+  def defaultStackSize = 64 * 1024
+
   def unitType: EirType = typeFor(unitName)
   def nothingType: EirType = typeFor("nothing")
 

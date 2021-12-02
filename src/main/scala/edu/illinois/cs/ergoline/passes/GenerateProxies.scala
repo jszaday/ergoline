@@ -6,7 +6,7 @@ import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCi.registerMailboxes
 import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp._
-import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
+import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 import edu.illinois.cs.ergoline.util.{Errors, assertValid}
@@ -243,7 +243,7 @@ object GenerateProxies {
       ) << ">(std::move(dev));"
     }
     if (threaded) {
-      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << ", new CkThrCallArg(val.release(), self), 0);"
+      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << s", new CkThrCallArg(val.release(), self), ${globals.defaultStackSize});"
       ctx << "self->CkAddThreadListeners(tid, nullptr); // TODO (this will fail if CMK_TRACE_ENABLED) ;"
       ctx << "CthTraceResume(tid);"
       ctx << "CthResume(tid);"
@@ -290,12 +290,27 @@ object GenerateProxies {
     }
   }
 
+  def makeMailboxInit(
+      ctx: CodeGenerationContext,
+      mailboxNames: List[String]
+  ): Unit = {
+    // TODO call superclasses' PUP::er and Maiblox initer
+    ctx << "inline void __init_mailboxes__(void) {"
+    mailboxNames.foreach(mboxName => {
+      val ty = mboxName + "type"
+      ctx << "using" << ty << "=" << "typename decltype(" << mboxName << ")::type;"
+      ctx << "this->" << mboxName << s"=" << "this->emplace_component<" << ty << ">();"
+    })
+    ctx << "}"
+  }
+
   def visitConcreteProxy(ctx: CodeGenerationContext, x: EirProxy): Unit = {
     val members = x.members
     val entries = members
       .filter(x => x.isEntry && !(x.isConstructor || x.isMailbox))
       .filter(GenerateCpp.memberHasArgs)
-    val mailboxes = members.filter(_.isMailbox).map(mailboxName(ctx, _)._1)
+    val mailboxes = members.filter(_.isMailbox)
+    val mailboxNames = mailboxes.map(mailboxName(ctx, _)._1)
     val base = ctx.nameFor(x.base)
     val name = x.baseName
     assert(name == s"${base}_${x.collective.map(x => s"${x}_").getOrElse("")}")
@@ -314,11 +329,14 @@ object GenerateProxies {
       x
     ) << ">" << "{"
 
+    mailboxes.foreach(makeMailboxDecl(ctx, _))
+    makeMailboxInit(ctx, mailboxNames)
+
     val thisType = Find.uniqueResolution[EirType](x.asType)
     val idxName = indicesName(x)
     val registerFn = s"${localityPrefix}register_value_handler"
     ctx << s"static inline void $registerMailboxes(void)" << "{"
-    mailboxes.foreach(mboxName => {
+    mailboxNames.foreach(mboxName => {
       ctx << s"$idxName::${mboxName}idx__" << "=" << registerFn << "<" << s"${mboxName}fn__" << ">(\"" << s"$name::$mboxName" << "\");"
     })
     entries
@@ -328,15 +346,6 @@ object GenerateProxies {
     ctx << "}"
 
     entries.foreach(generateHandlers(ctx, _))
-
-    // TODO call superclasses' PUP::er and Maiblox initer
-    ctx << "inline void __init_mailboxes__(void) {"
-    mailboxes.foreach(mboxName => {
-      val ty = mboxName + "type"
-      ctx << "using" << ty << "=" << "typename decltype(" << mboxName << ")::type;"
-      ctx << "this->" << mboxName << s"=" << "this->emplace_component<" << ty << ">();"
-    })
-    ctx << "}"
 
     ctx << "void pup(PUP::er &p)" << "{" << {
       "hypercomm::interpup(p, impl_);"
@@ -411,9 +420,11 @@ object GenerateProxies {
       case (_, Some(m @ EirMember(_, f: EirFunction, _))) =>
         if (m.isEntryOnly) {
           ctx.pushSelf(ctx.currentProxySelf + "->impl_")
-          ctx << "(([&](void) mutable" << visitFunctionBody(
+          ctx << "(([&](void) mutable" << makeMemberBody(
+            ctx,
+            member,
             f
-          )(ctx) << ")())"
+          ) << ")())"
           ctx.popSelf()
         } else {
           ctx << ctx.currentProxySelf << "->impl_->" << ctx.nameFor(
@@ -437,7 +448,6 @@ object GenerateProxies {
     ctx << "CkAssert(status);"
     ctx << "}"
     visitTemplateArgs(f)(ctx)
-    makeMailboxDecl(ctx, m)
   }
 
   def mailboxName(
@@ -459,9 +469,11 @@ object GenerateProxies {
     (mailboxName(ctx, x, tys), tys)
   }
 
+  def mailboxType(name: String): String = s"${name}type__"
+
   def makeMailboxDecl(ctx: CodeGenerationContext, x: EirMember): Unit = {
     val (name, tys) = mailboxName(ctx, x)
-    ctx << s"using ${name}type__ = ergoline::mailbox<${tys mkString ", "}>;"
+    ctx << s"using ${mailboxType(name)} = ergoline::mailbox<${tys mkString ", "}>;"
     ctx << s"hypercomm::comproxy<${name}type__> $name;"
   }
 
@@ -484,6 +496,18 @@ object GenerateProxies {
   def proxyMemberProxySelf: String =
     s"((hypercomm::generic_locality_*)${globals.implicitProxyName}->local())"
 
+  def makeMemberBody(
+      ctx: CodeGenerationContext,
+      member: EirMember,
+      fn: EirFunction
+  ): Unit = {
+    if (
+      !member.hasAnnotation("threaded") || !GenerateSdag.visit(member, fn)(ctx)
+    ) {
+      visitFunctionBody(fn)(ctx)
+    }
+  }
+
   def makeProxyMember(
       ctx: CodeGenerationContext,
       proxy: EirProxy,
@@ -499,7 +523,7 @@ object GenerateProxies {
     ctx << ")" << "{"
     ctx.pushSelf(proxyMemberSelf(proxyType))
     ctx.pushProxySelf(proxyMemberProxySelf)
-    visitFunctionBody(fn)(ctx)
+    makeMemberBody(ctx, member, fn)
     ctx.popProxySelf()
     ctx.popSelf()
     ctx << "}"
@@ -527,6 +551,12 @@ object GenerateProxies {
         },
         None
       )
+
+      val lines = GenerateSdag.generated.get(x).toList.flatMap(_.lines)
+      ctx << lines
+      if (lines.nonEmpty) {
+        GenerateSdag.generated.remove(x)
+      }
     }
   }
 

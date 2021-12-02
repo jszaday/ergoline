@@ -45,12 +45,9 @@ object Orchestrate {
     }
   }
 
+  // TODO ( need to refine this somewhat )
   def currentSelf(fn: EirFunction): String = {
-    if (fn.functionArgs.isEmpty) {
-      "this"
-    } else {
-      GenerateProxies.threadedSelf
-    }
+    GenerateProxies.threadedSelf
   }
 
   def selfIndexAt(fn: EirFunction, i: Int): EirExpressionNode = {

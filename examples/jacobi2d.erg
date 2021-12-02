@@ -143,7 +143,7 @@ class jacobi2d {
                 }
             }
             // compute the max difference for this iteration
-            var maxDiff = check_and_compute();
+            val maxDiff = check_and_compute();
             converged = (maxDiff <= globals.threshold);
             // then contribute to the reduction over members
             // (self[@] is this element, self@ is the whole array's proxy)

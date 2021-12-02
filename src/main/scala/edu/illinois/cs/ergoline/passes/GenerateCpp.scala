@@ -10,6 +10,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCpp.LazyCodeBlock
 import edu.illinois.cs.ergoline.passes.GenerateProxies.{
   indicesName,
   mailboxName,
@@ -451,7 +452,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         }
 
         (if (targetsSelf && isEntryOnly) {
-           ctx << "this"
+           ctx << ctx.currentProxySelf
          } else {
            ctx << x.target
          }) << fieldAccessorFor(targetTy)(Some(x.isStatic)) << ctx.nameFor(
@@ -1191,7 +1192,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             args
           ) << ")"
         }
-      case f: EirFunction if name == "CkPrintf" || name == "CkAbort" =>
+      case f: EirFunction if name == "CkPrintf" || name == "::CkAbort" =>
         val endl = if (f.name == "println") "\\n" else ""
         ctx << name << "(\"%s" << endl << "\"," << "(" << {
           visitArguments(Some(fc), Some(disambiguated), args)
@@ -1500,8 +1501,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       member match {
         case Some(m: EirMember) if !m.isStatic =>
           ctx << {
-            if (m.isEntryOnly) {
-              "this"
+            if (m.isEntry || m.isEntryOnly) {
+              ctx.currentProxySelf
             } else {
               ctx.currentSelf
             }
@@ -1611,7 +1612,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << header << "{"
 
     if (x.isTransient) {
-      ctx << "CkAbort(\"cannot pup transient types\");"
+      ctx << "::CkAbort(\"cannot pup transient types\");"
     } else {
       val parents = puppingParents(ctx, x)
         .map(ctx.nameFor(_))
@@ -2410,7 +2411,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << s"$name(PUP::reconstruct __tag__): ergoline::function<${args mkString ","}>(__tag__) { }"
     ctx << "virtual void __pup__(hypercomm::serdes& _) override" << "{"
     if (isTransient) {
-      ctx << "CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
+      ctx << "::CkAbort(\"lambda" << name << "is transient and cannot be pup'd.\""
     } else {
       ctx << captures
         .zip(ctypes)
@@ -2570,7 +2571,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx.exprType(x)
     ) << "{" << x.cases << {
       val location = Errors.contextualize(x)
-      "CkAbort(\"no match found at " + location.substring(
+      "::CkAbort(\"no match found at " + location.substring(
         location.lastIndexOf(File.separator) + 1
       ) + "\");"
     } << "})(" << x.expression << ")"
@@ -2586,11 +2587,27 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  type LazyCodeBlock = () => CodeGenerationContext
+  type DeclarationFormatter =
+    (CodeGenerationContext, String, Option[String], LazyCodeBlock) => Unit
+
+  def defaultFormat(
+      ctx: CodeGenerationContext,
+      name: String,
+      ty: Option[String],
+      blk: LazyCodeBlock
+  ): Unit = {
+    // TODO ( eventually, we need to use ty.getOrElse("auto") here )
+    // TODO ( but typing is quite weak here -- needs some buffing up )
+    ctx << "auto" << name << "=" << blk() << ";"
+  }
+
   def visitPatternDecl(
       parent: CodeGenerationContext,
       x: EirPattern,
       current: String,
-      forceTuple: Boolean = false
+      forceTuple: Boolean = false,
+      format: DeclarationFormatter = defaultFormat
   ): String = {
     implicit val ctx = parent.makeSubContext()
     x match {
@@ -2598,34 +2615,57 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
           val tmp = pickName(current, parent)(x)
           val node = CppNode(current)
           node.foundType = f.args.lastOption.flatMap(_.foundType)
+          val ty = node.foundType.map(ctx.typeFor(_, Some(x)))
           f.args = List(EirCallArgument(node, isRef = false)(Some(f)))
-          ctx << "auto" << tmp << "=" << f << ";"
+          format(ctx, tmp, ty, () => { ctx << f })
           x.list.map(_.patterns).filterNot(_.length <= 1) match {
             case Some(patterns) =>
               patterns.zipWithIndex.foreach { case (p, i) =>
                 val nextTmp = s"((bool)$tmp ? &std::get<$i>(*$tmp) : nullptr)"
-                ctx << visitPatternDecl(ctx, p, nextTmp)
+                ctx << visitPatternDecl(ctx, p, nextTmp, format = format)
               }
             case None =>
           }
         })
       case EirPatternList(_, ps) => ps match {
           case p :: Nil if !forceTuple =>
-            ctx << visitPatternDecl(ctx, p, current)
-          case p :: Nil =>
-            ctx << visitPatternDecl(ctx, p, s"std::get<0>($current)")
+            ctx << visitPatternDecl(ctx, p, current, format = format)
+          case p :: Nil => ctx << visitPatternDecl(
+              ctx,
+              p,
+              s"std::get<0>($current)",
+              format = format
+            )
           case patterns => ctx << patterns.zipWithIndex.map({ case (p, idx) =>
-              visitPatternDecl(ctx, p, s"std::get<$idx>($current)")
+              visitPatternDecl(
+                ctx,
+                p,
+                s"std::get<$idx>($current)",
+                format = format
+              )
             })
         }
       case i @ EirIdentifierPattern(_, n, t) if n != "_" =>
         val declName = i.declarations.headOption.map(ctx.nameFor(_))
         val ty = ctx.resolve(t)
-        if (ty.isPointer && i.needsCasting)
-          ctx << "auto" << declName << "=" << "std::dynamic_pointer_cast<" << ctx
-            .nameFor(t) << ">(" << current << ");"
-        // TODO make this a reference!
-        else ctx << "auto" << declName << "=" << current << ";"
+        val fmtTy = Some(ctx.typeFor(ty, Some(i)))
+        if (ty.isPointer && i.needsCasting) {
+          declName.foreach(
+            format(
+              ctx,
+              _,
+              fmtTy,
+              () => {
+                ctx << "std::dynamic_pointer_cast<" << ctx.nameFor(
+                  t
+                ) << ">(" << current << ")"
+              }
+            )
+          )
+        } else {
+          // TODO make this a reference!
+          declName.foreach(format(ctx, _, fmtTy, () => { ctx << current }))
+        }
       case i: EirIdentifierPattern => if (i.name != "_") Errors.missingType(x)
       case _: EirExpressionPattern =>
     }
@@ -3130,6 +3170,77 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  type RequestList = List[(EirMember, String, EirType, List[Int])]
+
+  def generateRequestList(
+      when: EirSdagWhen
+  )(implicit ctx: CodeGenerationContext): RequestList = {
+    def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
+      types.toTupleType(allowUnit = true)(None).asInstanceOf[EirType]
+    }
+
+    when.patterns.map({ case (symbol, _) =>
+      val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
+        ctx.proxy,
+        Some(false)
+      )(ctx.tyCtx)
+      val m =
+        accessors.headOption.map(_._1).getOrElse(Errors.unableToResolve(symbol))
+      val f = assertValid[EirFunction](m.member)
+      val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
+      val tys = declTys.map(ctx.typeFor(_, Some(when)))
+      val resolved = ctx.resolve(encapsulate(declTys))
+      val mboxName = GenerateProxies.mailboxName(ctx, f, tys)
+      val arrayArgs = f.functionArgs.zipWithIndex
+        .filter(x => isArray(ctx, ctx.typeOf(x._1)))
+        .map(_._2)
+      (m, mboxName, resolved, arrayArgs)
+    })
+  }
+
+  def generateRequest(
+      when: EirSdagWhen,
+      list: RequestList,
+      com: String
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    when.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
+      val (_, mboxName, resolved, _) = list(i)
+      val temp = ctx.temporary
+      val tempVal = s"$temp->value()"
+      val declarations = visitPatternDecl(ctx, patterns, tempVal).split(n)
+      val conditions = visitPatternCond(ctx, patterns, tempVal, Some(resolved))
+        .mkString(" && ")
+
+      val pred: Option[String] = Option.when(conditions.nonEmpty)({
+        val name = s"__pred${i}__"
+        val ty = name.init + "arg_type__"
+        val constRef = s"const $ty&"
+        ctx << "{"
+        ctx << "using" << ty << "=" << "typename" << s"${GenerateProxies.mailboxType(mboxName)}::type;"
+        ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
+        ctx << declarations
+        ctx << "return" << conditions
+        ctx << when.condition.map(_ => "&&") << when.condition
+        ctx << ";" << "});"
+        name
+      })
+
+      ctx << ctx.currentProxySelf << "->" << s"$mboxName->put_request_to(" << pred
+        .getOrElse("{},") << pred
+        .map(_ => ",") << com << "," << i.toString << ");"
+
+      pred.foreach(_ => ctx << "}")
+    })
+  }
+
+  def joinRequestTypes(list: RequestList): String = {
+    s"std::tuple<${list
+      .map { case (_, mboxName, _, _) =>
+        s"typename ${GenerateProxies.mailboxType(mboxName)}::type"
+      }
+      .mkString(", ")}>"
+  }
+
   override def visitWhen(
       x: EirSdagWhen
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -3142,10 +3253,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val compound = x.patterns.length > 1
     if (compound && x.condition.isDefined) ???
 
-    def encapsulate(types: List[EirResolvable[EirType]]): EirType = {
-      types.toTupleType(allowUnit = true)(None).asInstanceOf[EirType]
-    }
-
     val nPorts = x.patterns.length
     val com = sentinel._3
       .map(s => {
@@ -3157,36 +3264,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     if (sentinel._3.isEmpty) ctx << "{"
 
-    val quadruplets = x.patterns.map({ case (symbol, _) =>
-      val accessors = Find.resolveAccessor(EirScopedSymbol(null, symbol)(None))(
-        ctx.proxy,
-        Some(false)
-      )(ctx.tyCtx)
-      val m =
-        accessors.headOption.map(_._1).getOrElse(Errors.unableToResolve(symbol))
-      val f = assertValid[EirFunction](m.member)
-      val declTys = f.functionArgs.map(_.declaredType).map(ctx.resolve)
-      val tys = declTys.map(ctx.typeFor(_, Some(x)))
-      val resolved = ctx.resolve(encapsulate(declTys))
-      val mboxName =
-        ctx.currentProxySelf + "->" + GenerateProxies.mailboxName(ctx, f, tys)
-      val arrayArgs = f.functionArgs.zipWithIndex
-        .filter(x => isArray(ctx, ctx.typeOf(x._1)))
-        .map(_._2)
-      (m, mboxName, resolved, arrayArgs)
-    })
+    val quadruplets = generateRequestList(x)
 
     val set = s"${com}vals__"
-    val setType = "std::tuple<" + quadruplets
-      .map { case (_, mboxName, _, _) =>
-        s"typename decltype($mboxName)::type::type"
-      }
-      .mkString(", ") + ">"
+    val setType = s"${set}type__"
 
-    ctx << "using" << (set + "type__") << "=" << setType << ";"
+    ctx << "using" << setType << "=" << joinRequestTypes(quadruplets) << ";"
 
-    ctx << "auto" << com << "=" << "ergoline::make_component<" << (set + "type__") << ">(*" << ctx.currentProxySelf << "," << nPorts.toString << ","
-    ctx << "[=](" << (set + "type__") << "&" << set << ")" << "{"
+    ctx << "auto" << com << "=" << "ergoline::make_component<" << setType << ">(*" << ctx.currentProxySelf << "," << nPorts.toString << ","
+    ctx << "[=](" << setType << "&" << set << ")" << "{"
 
     x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
       val (m, _, _, arrayArgs) = quadruplets(i)
@@ -3207,33 +3293,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
 
     ctx << visitOptionalStatement(x.body) << "}" << ");"
 
-    x.patterns.zipWithIndex.foreach({ case ((_, patterns), i) =>
-      val (_, mboxName, resolved, _) = quadruplets(i)
-      val temp = ctx.temporary
-      val tempVal = s"$temp->value()"
-      val declarations = visitPatternDecl(ctx, patterns, tempVal).split(n)
-      val conditions = visitPatternCond(ctx, patterns, tempVal, Some(resolved))
-        .mkString(" && ")
-
-      val pred: Option[String] = Option.when(conditions.nonEmpty)({
-        val name = s"__pred${i}__"
-        val ty = name.init + "arg_type__"
-        val constRef = s"const $ty&"
-        ctx << "{"
-        ctx << "using" << ty << "=" << "typename" << "decltype(" << mboxName << ")::type::type;"
-        ctx << s"auto" << name << s"=ergoline::wrap_lambda<bool, $constRef>([=]($constRef $temp)" << "->" << "bool" << "{"
-        ctx << declarations
-        ctx << "return" << conditions
-        ctx << x.condition.map(_ => "&&") << x.condition
-        ctx << ";" << "});"
-        name
-      })
-
-      ctx << s"$mboxName->put_request_to(" << pred.getOrElse("{},") << pred
-        .map(_ => ",") << com << "," << i.toString << ");"
-
-      pred.foreach(_ => ctx << "}")
-    })
+    generateRequest(x, quadruplets, com)
 
 //    if (compound) {
 //      ctx << "auto __compound__ ="

@@ -104,6 +104,7 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
     // TODO do something smarter here
     subCtx._proxies.pushAll(_proxies.reverse)
     subCtx._selves.pushAll(_selves.reverse)
+    subCtx._replacements = this._replacements
     subCtx
   }
 
@@ -143,6 +144,10 @@ class CodeGenerationContext(val language: String, val tyCtx: TypeCheckContext) {
 
   def putReplacement(from: String, to: String): Unit = {
     _replacements += (from -> to)
+  }
+
+  def popReplacement(from: String): Unit = {
+    _replacements -= from
   }
 
   def typeFor(
