@@ -243,7 +243,7 @@ object GenerateProxies {
       ) << ">(std::move(dev));"
     }
     if (threaded) {
-      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << ", new CkThrCallArg(val.release(), self), 0);"
+      ctx << "CthThread tid = CthCreate((CthVoidFn)" << valHandler << args() << s", new CkThrCallArg(val.release(), self), ${globals.defaultStackSize});"
       ctx << "self->CkAddThreadListeners(tid, nullptr); // TODO (this will fail if CMK_TRACE_ENABLED) ;"
       ctx << "CthTraceResume(tid);"
       ctx << "CthResume(tid);"

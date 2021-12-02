@@ -32,10 +32,14 @@ object Segmentation {
 
     def declarations: List[EirNode] = Nil
 
+    def encapsulate: Boolean = false
+
     def depth: Int = this._depth
     def depth_=(nu: Int): Unit = {
-      this._depth = nu + (if (declarations.isEmpty) 0 else 1)
-      this.successors.foreach(_.depth = this._depth)
+      val offset = if (this.declarations.nonEmpty) 1 else 0
+      val unwind = if (this.encapsulate) offset else 0
+      this._depth = nu + offset
+      this.successors.foreach(_.depth = nu + offset - unwind)
     }
 
     override def toString: String = {
@@ -56,9 +60,10 @@ object Segmentation {
 
     override def depth_=(nu: Int): Unit = {
       super.depth_=(nu)
-
       this.members.foreach(_.depth = this.depth)
     }
+
+    override def encapsulate: Boolean = true
 
     override def toString: String = {
       s"subgraph cluster_${this.id} {" + {
@@ -307,7 +312,7 @@ object Segmentation {
       this._memo.get(fn).orElse {
         val cons = Analysis.analyze(fn)
         cons.foreach(this._memo.put(fn, _))
-        cons.foreach(_.depth = 0)
+        cons.foreach(_.depth = if (fn.functionArgs.isEmpty) 0 else 1)
         cons
       }
     }

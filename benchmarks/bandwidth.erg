@@ -105,12 +105,10 @@ class bandwidth {
     @threaded @entry def run(nMsgs: int, size: int) {
         // if we have a zc receive buffer
         if (buffers.contains(size)) {
-            // get the pre-alloc'd buffer
-            val buffer = buffers[size];
             // for all n messages (in any order):
             @overlap for (var i = 0; i < nMsgs; i += 1) {
                 // manually post a receive buffer
-                (self@arrival).post(buffer);
+                (self@arrival).post(buffers[size]);
                 // then await the message's arrival
                 when arrival(_) => ;
             }
