@@ -24,7 +24,7 @@ struct equal_to<std::shared_ptr<T>,
 };
 
 template <typename K, typename V>
-using hash_map = std::unordered_map<K, V, hypercomm::utilities::hash<K>, equal_to<K>>;
+using hash_map = hypercomm::hash_map<K, V, hypercomm::utilities::hash<K>, equal_to<K>>;
 
 template <typename K, typename V>
 inline bool map_contains(const hash_map<K, V>& map, const K& k) {

@@ -7,13 +7,37 @@ import edu.illinois.cs.ergoline.passes.{CheckTypes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 
+import java.io.PrintWriter
+import java.nio.file.{Files, Path}
 import scala.annotation.tailrec
 import scala.collection.View
 import scala.reflect.{ClassTag, classTag}
+import scala.util.Properties
 
 package object util {
 
   import EirUtilitySyntax.RichEirNode
+
+  def readLibsAndIncludes(home: Path): Option[(String, String)] = {
+    import sys.process._
+    val file = Files.createTempFile("tmp-", ".mk")
+    val pw = new PrintWriter(file.toFile)
+    val libs = "LIBS"
+    val includes = "INCLUDES"
+    pw.write(s"""include ${home.resolve("Makefile.common").toAbsolutePath}
+                |
+                |info:
+                |\t$$(info $libs=$$($libs))
+                |\t$$(info $includes=$$($includes))
+                |""".stripMargin)
+    pw.close()
+    val result =
+      s"make -f ${file.toAbsolutePath}".!!.split(Properties.lineSeparator)
+    def getLine(prefix: String): Option[String] = {
+      result.find(_.startsWith(prefix)).map(_.substring(prefix.length + 1))
+    }
+    getLine(libs).zip(getLine(includes))
+  }
 
   def addExplicitSelf(
       ctx: TypeCheckContext,

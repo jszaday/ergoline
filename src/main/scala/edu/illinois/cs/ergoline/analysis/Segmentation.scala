@@ -1,6 +1,7 @@
 package edu.illinois.cs.ergoline.analysis
 
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.passes.UnparseAst
@@ -129,12 +130,31 @@ object Segmentation {
   case class Loop(var node: EirNode, var body: Option[Construct])
       extends ScopingConstruct {
 
+    val iteratorDeclaration: Option[EirDeclaration] = {
+      node match {
+        case x: EirForLoop => x.header match {
+            case y: EirForAllHeader => y.expression.foundType.map(t =>
+                EirDeclaration(
+                  None,
+                  isFinal = true,
+                  "__it__",
+                  t,
+                  Some(y.expression)
+                )
+              )
+            case _ => None
+          }
+        case _ => None
+      }
+    }
+
     override def declarations: List[EirNode] = {
       node match {
-        case x: EirForLoop => (x.header match {
+        case x: EirForLoop =>
+          (x.header match {
             case y: EirForAllHeader => y.declaration
             case y: EirCStyleHeader => y.declaration
-          }).toList
+          }).toList ++ iteratorDeclaration.toList
         case _ => Nil
       }
     }

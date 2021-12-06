@@ -41,7 +41,7 @@ class pingpong {
     @mailbox def receive(src: int, msg: message<string>);
 
     @threaded @entry def exchange() {
-        @overlap for (var it = 0; it < ck::numPes(); it += 1) {
+        @overlap for (it <- (0 to ck::numPes())) {
             await all {
                 when receive(src, msg: ping) if src == it => {
                     acknowledge(src, msg);

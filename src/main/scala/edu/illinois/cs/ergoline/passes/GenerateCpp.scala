@@ -1425,6 +1425,18 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def iteratorNext(
+      x: EirForAllHeader,
+      iterName: String,
+      fieldAccessor: String
+  )(implicit ctx: CodeGenerationContext): Option[CppNode] = {
+    x.declaration.map { decl =>
+      val node = CppNode(s"$iterName${fieldAccessor}next()")
+      node.foundType = Some(ctx.typeOf(decl))
+      node
+    }
+  }
+
   override def visitForLoop(
       x: EirForLoop
   )(implicit ctx: CodeGenerationContext): Unit = {
@@ -1449,16 +1461,9 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         val fieldAccessor = fieldAccessorFor(ctx.exprType(h.expression))(None)
         // TODO find a better name than it_
         val iterName = "it_"
-        ctx << "{" << s"auto $iterName =" << h.expression << ";" << "while (it_" << fieldAccessor << "hasNext()) {"
+        ctx << "{" << s"auto $iterName =" << h.expression << ";" << s"while ($iterName" << fieldAccessor << "hasNext()) {"
         h.declaration.foreach(
-          visitDeclarationLike(
-            _,
-            Some({
-              val node = CppNode(s"$iterName${fieldAccessor}next()")
-              node.foundType = h.declaration.map(ctx.typeOf)
-              node
-            })
-          )
+          visitDeclarationLike(_, iteratorNext(h, iterName, fieldAccessor))
         )
         // TODO add declarations
         ctx << x.body << "}" << "}"

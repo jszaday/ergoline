@@ -1060,6 +1060,13 @@ case class EirForLoop(
 //    ((body == oldNode) && util.applyOrFalse[EirBlock](body = _, newNode)) ||
 //    header.replaceChild(oldNode, newNode)
 //  }
+
+  def headerIs[A <: EirForLoopHeader: ClassTag]: Boolean = {
+    this.header match {
+      case _: A => true
+      case _    => false
+    }
+  }
 }
 
 case class EirSpecializedSymbol[A <: EirNamedNode: ClassTag](

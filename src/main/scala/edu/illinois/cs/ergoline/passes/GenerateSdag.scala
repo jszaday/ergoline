@@ -1,9 +1,8 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.analysis.Segmentation._
-import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   CppNode,
   RequestList,
@@ -355,12 +354,28 @@ object GenerateSdag {
 
   def visitDeclaration(ctx: SdagGenerationContext, d: EirDeclaration)(
       blockName: String,
-      stkName: String
+      stkName: String,
+      initialValue: Option[EirNode]
   ): Unit = {
     val (ref, ty) =
       derefVariable(ctx.cgen, blockName, (d.name, d.declaredType), stkName)
-    ctx.cgen << "new (&(" << ref << ")) " << ty << "(" << d.initialValue
-      .foreach(GenerateCpp.visit(_)(ctx.cgen)) << ");"
+    ctx.cgen << "new (&(" << ref << ")) " << ty << "(" << {
+      initialValue
+        .orElse(d.initialValue)
+        .foreach(GenerateCpp.visit(_)(ctx.cgen))
+    } << ");"
+  }
+
+  def visitDeclaration(ctx: SdagGenerationContext, node: EirNode)(
+      blockName: String,
+      stkName: String,
+      initialValue: Option[EirNode] = None
+  ): Unit = {
+    node match {
+      case d: EirDeclaration =>
+        visitDeclaration(ctx, d)(blockName, stkName, initialValue)
+      case _ => ???
+    }
   }
 
   def visit(
@@ -382,8 +397,9 @@ object GenerateSdag {
     sctx.cgen << "auto*" << "__server__" << "=" << s"(std::shared_ptr<$serverType>*)$argName;"
     sctx.enter(stkName)
     block.slst.foreach {
-      case d: EirDeclaration => visitDeclaration(sctx, d)(blockName, stkName)
-      case n: EirNode        => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
+      case d: EirDeclaration =>
+        visitDeclaration(sctx, d)(blockName, stkName, None)
+      case n: EirNode => sctx.cgen << GenerateCpp.visit(n)(sctx.cgen) << ";"
     }
     continuation(sctx, block.successors, argName, stateName, stkName)
     sctx.leave()
@@ -595,10 +611,7 @@ object GenerateSdag {
     } else {
       ctx.enter(stkName)
       val headerName = (loop, Some("header"))
-      _decls.flatMap {
-        case d: EirDeclaration      => List(d)
-        case d: EirMultiDeclaration => d.children
-      } foreach { d => visitDeclaration(ctx, d)(blockName, stkName) }
+      _decls.foreach(visitDeclaration(ctx, _)(blockName, stkName))
       if (overlap) {
         val linkName = "__link__"
         ctx.cgen << "auto*" << linkName << "=" << "new" << sentinelType << "(" << asLink(
@@ -652,7 +665,13 @@ object GenerateSdag {
   }
 
   def latchName(ctx: SdagGenerationContext, loop: Loop): Continuation = {
-    (loop, Some("latch"))
+    (
+      loop,
+      loop.node match {
+        case x: EirForLoop if x.headerIs[EirCStyleHeader] => Some("latch")
+        case _                                            => Some("header")
+      }
+    )
   }
 
   def asLink(s: String): String = {
@@ -676,6 +695,7 @@ object GenerateSdag {
       stackName: String,
       argName: String
   ): Unit = {
+    val blockName = prefixFor(loop)(ctx.cgen)
     val overlap = loop.node.hasAnnotation("overlap")
     ctx.enter(stackName)
     ctx.cgen << {
@@ -685,12 +705,37 @@ object GenerateSdag {
         "if"
       }
     } << "("
-    loop.node match {
+    val refAccess = loop.node match {
       case x: EirForLoop => x.header match {
-          case EirCStyleHeader(_, test, _) => GenerateCpp.visit(test)(ctx.cgen)
+          case EirCStyleHeader(_, test, _) =>
+            GenerateCpp.visit(test)(ctx.cgen)
+            None
+          case x: EirForAllHeader => loop.iteratorDeclaration match {
+              case Some(decl) =>
+                val fieldAccessor =
+                  GenerateCpp.fieldAccessorFor(ctx.cgen.typeOf(decl))(None)
+                val (ref, _) = derefVariable(
+                  ctx.cgen,
+                  blockName,
+                  (decl.name, decl.declaredType),
+                  stackName
+                )
+                ctx.cgen << ref << fieldAccessor << "hasNext()"
+                Some((x, ref, fieldAccessor))
+              case _ => ???
+            }
         }
+      case x: EirWhileLoop =>
+        GenerateCpp.visit(x.condition)(ctx.cgen)
+        None
     }
     ctx.cgen << ")" << "{"
+    refAccess.foreach { case (h, it, fieldAccessor) =>
+      val rhs = GenerateCpp.iteratorNext(h, it, fieldAccessor)(ctx.cgen)
+      h.declaration.foreach(
+        visitDeclaration(ctx, _)(blockName, stackName, rhs)
+      )
+    }
     if (overlap) {
       ctx.cgen << s"(${asSentinel(argName)})->produce();"
       continuation(ctx, loop.body, argName, stateName, s"$stackName->clone()")
@@ -763,7 +808,7 @@ object GenerateSdag {
           case y: EirCStyleHeader =>
             GenerateCpp.visit(y.increment)(ctx.cgen)
             ctx.cgen << ";"
-          case _ => ???
+          case _: EirForAllHeader =>
         }
       case _ => ???
     }
@@ -775,20 +820,26 @@ object GenerateSdag {
       proxy: Option[EirProxy],
       argName: String
   ): Unit = {
-    val blockName = prefixFor(latchName(ctx, loop))(ctx.cgen)
-    val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
-    val stkName = functionStack(ctx, Nil, stateName)
-    ctx.enter(stkName)
-    visitLatchImplementation(ctx, loop)
-    continuation(
-      ctx,
-      Some((loop, Some("header"))),
-      argName,
-      stateName,
-      stkName
-    )
-    ctx.leave()
-    ctx.cgen << "}"
+    val hasLatch = loop.node match {
+      case x: EirForLoop => x.headerIs[EirCStyleHeader]
+      case _             => false
+    }
+    if (hasLatch) {
+      val blockName = prefixFor(latchName(ctx, loop))(ctx.cgen)
+      val (_, stateName) = functionHeader(blockName, proxy, ctx.cgen)
+      val stkName = functionStack(ctx, Nil, stateName)
+      ctx.enter(stkName)
+      visitLatchImplementation(ctx, loop)
+      continuation(
+        ctx,
+        Some((loop, Some("header"))),
+        argName,
+        stateName,
+        stkName
+      )
+      ctx.leave()
+      ctx.cgen << "}"
+    }
   }
 
   val comIdType = "hypercomm::component_id_t"

@@ -88,32 +88,24 @@ object Driver extends App {
   if (!skipCompilation) compile()
 
   private def compile(): Unit = {
-    val hyperInclPaths = Seq(
-      Modules.hypercommHome.map(_.resolve("include")),
-      Modules.hypercommHome.map(_.resolve("include/hypercomm/core"))
-    )
+    def splitInfo(o: Option[String]): Seq[String] = {
+      o.toSeq.flatMap(_.split(" "))
+    }
 
     val ergoInclPaths = Seq(
       Modules.ergolineHome.map(_.resolve("include"))
     )
 
-    val hyperLibsPath = Modules.hypercommHome.map(_.resolve("lib"))
+    val info = Modules.hypercommHome.flatMap(util.readLibsAndIncludes)
 
-    val hyperLibs = Seq(
-      "core",
-      "utilities",
-      "components",
-      "messaging",
-      "serialization"
-    ).map(x => s"-lhypercomm-$x")
+    val hyperLibs = splitInfo(info.map(_._1))
+    val hyperIncl = splitInfo(info.map(_._2))
 
-    val inclPaths: Seq[String] = (hyperInclPaths ++ ergoInclPaths)
-      .flatMap(_.map(_.toRealPath().toString))
-      .map("-I" + _)
-
-    val libPaths: Seq[String] = (hyperLibsPath
-      .map(_.toRealPath().toString)
-      .map("-L" + _) ++ hyperLibs).toSeq
+    val inclPaths: Seq[String] = hyperIncl ++ {
+      ergoInclPaths
+        .flatMap(_.map(_.toRealPath().toString))
+        .map("-I" + _)
+    }
 
     try {
       val cmd =
@@ -132,7 +124,7 @@ object Driver extends App {
       val linkOptions: Iterable[String] = options ++ {
         if (usingBlas) LibUtils.linkLib("gsl")
         else None
-      } ++ libPaths
+      } ++ hyperLibs
       val cmd: Iterable[String] =
         Seq(charmc.map(_.toRealPath().toString).getOrElse("charmc")) ++
           (linkOptions ++ out ++ inclPaths ++ Seq("generate.cc"))
