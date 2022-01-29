@@ -29,7 +29,7 @@ struct nd_span {
 
   using shape_type = std::array<std::size_t, N>;
   static constexpr auto shape_size = sizeof(shape_type);
-  static constexpr auto non_trivial = !hypercomm::is_bytes<T>();
+  static constexpr auto non_trivial = !hypercomm::is_bytes<T>::value;
 
   shape_type shape;
 
@@ -136,12 +136,12 @@ struct is_idiosyncratic_ptr<ergoline::nd_span<T, N>> {
 
 template <typename T, std::size_t N>
 struct is_zero_copyable<ergoline::nd_span<T, N>> {
-  static constexpr auto value = is_bytes<T>();
+  static constexpr auto value = is_bytes<T>::value;
 };
 
 template <typename T, std::size_t N>
 struct quick_sizer<ergoline::nd_span<T, N>,
-                   typename std::enable_if<is_bytes<T>()>::type> {
+                   typename std::enable_if<is_bytes<T>::value>::type> {
   inline static std::size_t impl(const ergoline::nd_span<T, N> &t) {
     return ergoline::nd_span<T, N>::total_size(t.shape);
   }
@@ -149,7 +149,7 @@ struct quick_sizer<ergoline::nd_span<T, N>,
 
 template <typename T, std::size_t N>
 struct zero_copy_fallback<ergoline::nd_span<T, N>,
-                          typename std::enable_if<is_bytes<T>()>::type> {
+                          typename std::enable_if<is_bytes<T>::value>::type> {
   using type = std::shared_ptr<ergoline::nd_span<T, N>>;
   using shape_type = typename ergoline::nd_span<T, N>::shape_type;
 
@@ -170,7 +170,7 @@ struct zero_copy_fallback<ergoline::nd_span<T, N>,
 
 template <typename T, std::size_t N>
 struct puper<std::shared_ptr<ergoline::nd_span<T, N>>,
-             typename std::enable_if<!is_bytes<T>()>::type> {
+             typename std::enable_if<!is_bytes<T>::value>::type> {
   using shape_type = typename ergoline::nd_span<T, N>::shape_type;
   inline static void impl(serdes &s,
                           std::shared_ptr<ergoline::nd_span<T, N>> &t) {

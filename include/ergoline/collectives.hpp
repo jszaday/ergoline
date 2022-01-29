@@ -24,7 +24,7 @@ void contribute(T* t, const Args&... arguments, CkReduction::reducerType ty, con
 
 template <typename T, typename Value>
 void contribute(T* t, const Value& value, CkReduction::reducerType ty, const CkCallback& cb) {
-  if (hypercomm::is_bytes<Value>()) {
+  if (hypercomm::is_bytes<Value>::value) {
     t->contribute(sizeof(Value), &value, ty, cb);
   } else {
     auto val = const_cast<Value&>(value);
