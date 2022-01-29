@@ -86,7 +86,6 @@ class jacobi2d {
     val hasWest: bool;
     val hasNorth: bool;
     val hasSouth: bool;
-    var converged: bool = false;
 
     val iStart: int = 1;
     val jStart: int = 1;
@@ -131,6 +130,7 @@ class jacobi2d {
     @mailbox def receive_status(g_converged: bool);
 
     @threaded @entry def run() {
+        var converged: bool = false;
         var it: int = 0;
         // for maxIters iterations, unless we converge:
         for (; !converged && (it < globals.maxIters); it += 1) {
@@ -274,7 +274,7 @@ class jacobi2d {
                        grid[i, j - 1] + grid[i, j + 1]
                     );
 
-                var diff = math::abs(nextGrid[i, j] - grid[i, j]);
+                val diff = math::abs(nextGrid[i, j] - grid[i, j]);
                 if (diff > maxDiff) {
                     maxDiff = diff;
                 }

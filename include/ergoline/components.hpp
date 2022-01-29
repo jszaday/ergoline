@@ -1,6 +1,12 @@
 #ifndef __ERGOLINE_COMPONENTS_HPP__
 #define __ERGOLINE_COMPONENTS_HPP__
 
+#include <tuple>
+#include <ostream>
+
+template<typename... Ts>
+std::ostream& operator<< (std::ostream&, const std::tuple<Ts...>&);
+
 #include <hypercomm/core/locality.hpp>
 
 namespace ergoline {
