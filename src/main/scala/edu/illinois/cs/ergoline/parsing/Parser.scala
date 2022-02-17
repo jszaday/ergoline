@@ -182,12 +182,12 @@ object Parser {
   ).map { case (decl, test, incr) => EirCStyleHeader(decl, test, incr) }
 
   def InnerStatement[_: P]: P[EirNode] = P(
-    Block | ForLoop | DoWhileLoop | WhileLoop | IfElseStatement | NamespaceMember |
+    ForLoop | DoWhileLoop | WhileLoop | IfElseStatement | NamespaceMember |
       InnerDeclaration | ReturnStatement | AwaitManyStatement | WhenStatement | ExprStatement
   )
 
-  def ExprStatement[_: P]: P[EirExpressionNode] =
-    P(MatchExpr | (Expression ~ Semi))
+  def ExprStatement[_: P]: P[EirNode] =
+    P((Block ~/ Semi.?) | MatchExpr | (Expression ~ Semi))
 
   def Statement[_: P]: P[EirNode] = P(Annotations.? ~ InnerStatement).map {
     case (as, node) => addAnnotations(node, as)
@@ -504,6 +504,10 @@ object Parser {
 
   def ConstSymbol[_: P]: P[EirExpressionNode] = P(Type).map(Symbolize)
 
+  def Closure[_: P]: P[EirExpressionNode] = {
+    P(Block).map(EirClosure(None, _))
+  }
+
   def PrimaryExpr[_: P](implicit static: Boolean): P[EirExpressionNode] = {
     if (static) {
       P(Constant | ConstSymbol | TupleExpr)
@@ -513,7 +517,7 @@ object Parser {
           EirNamedNode
         ].map(
           _.asInstanceOf[EirSymbolLike[EirNamedNode]]
-        ) | TupleExpr | LambdaExpr | InterpolatedString
+        ) | Closure | TupleExpr | LambdaExpr | InterpolatedString
       )
     }
   }
@@ -547,18 +551,15 @@ object Parser {
   def AccessSuffix[_: P]: P[ExprSuffixTuple] =
     P("." ~/ Id).map(AccessSuffixTuple)
 
-  def Slice[_: P](implicit static: Boolean): P[EirExpressionNode] = P(
-    Index ~ Expression.? ~ (":" ~/ (Expression ~ ":").? ~ Expression.?).?
+  def Slice[_: P](implicit static: Boolean): P[Option[EirExpressionNode]] = P(
+    Expression.? ~ (":" ~/ (Expression ~ ":").? ~ Expression.?).?
   ).map {
-    case (_, Some(expr), None)         => expr
-    case (_, start, Some((step, end))) => EirSlice(start, step, end)(None)
-    case (idx, None, None) => Errors.exit(
-        s"${PrettyIndex(idx).getOrElse("???")}: expected expression, instead got nothing!"
-      )
+    case (expr, None)               => expr
+    case (start, Some((step, end))) => Some(EirSlice(start, step, end)(None))
   }
 
   def AtSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] =
-    P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(AtSuffixTuple)
+    P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(_.flatten).map(AtSuffixTuple)
 
   def ExprSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] = {
     if (static) P(AtSuffix) else P(CallSuffix | AccessSuffix | AtSuffix)
