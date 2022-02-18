@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.analysis.Stencil
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
@@ -13,6 +14,7 @@ import edu.illinois.cs.ergoline.util.{Errors, TopologicalSort, isSystem}
 object Processes {
   def registerPasses(): Unit = {
     Registry.instance[FullyResolve]
+    Registry.instance[Stencil.Pass]
     Registry.instance[CheckTypes]
     Registry.instance[Orchestrate]
   }

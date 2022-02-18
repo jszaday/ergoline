@@ -558,8 +558,9 @@ object Parser {
     case (start, Some((step, end))) => Some(EirSlice(start, step, end)(None))
   }
 
-  def AtSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] =
-    P("[" ~/ Slice.rep(min = 0, sep = ",") ~ "]").map(_.flatten).map(AtSuffixTuple)
+  def AtSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] = P(
+    "[" ~/ Slice.rep(min = 0, sep = ",") ~ "]"
+  ).map(_.flatten).map(AtSuffixTuple)
 
   def ExprSuffix[_: P](implicit static: Boolean): P[ExprSuffixTuple] = {
     if (static) P(AtSuffix) else P(CallSuffix | AccessSuffix | AtSuffix)

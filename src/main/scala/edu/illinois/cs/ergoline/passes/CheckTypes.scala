@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.analysis.Stencil
 import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
@@ -50,7 +51,8 @@ class CheckTypes extends Pass {
   override def apply(n: EirNode): Unit = {
     CheckTypes.visit(n)(Processes.typeContext())
   }
-  override def after: Seq[Pass] = Seq(Registry.instance[FullyResolve])
+  override def after: Seq[Pass] =
+    Seq(Registry.instance[FullyResolve], Registry.instance[Stencil.Pass])
   override def phase: Phase = Phase.Load
 }
 

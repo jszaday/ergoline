@@ -869,8 +869,8 @@ case class EirReturn(
 }
 
 case class EirClosure(
-  var parent: Option[EirNode],
-  var block: EirBlock
+    var parent: Option[EirNode],
+    var block: EirBlock
 ) extends EirExpressionNode {
   override def children: Iterable[EirNode] = Seq(block)
 

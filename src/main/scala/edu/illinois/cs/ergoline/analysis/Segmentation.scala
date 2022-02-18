@@ -1,7 +1,6 @@
 package edu.illinois.cs.ergoline.analysis
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichSeq
 import edu.illinois.cs.ergoline.passes.UnparseAst
