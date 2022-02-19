@@ -190,10 +190,10 @@ object Segmentation {
 
     def enumerate(f: Construct): Unit = {
       f match {
-        case s: ScopingConstruct =>
+        case s: ScopingConstruct if s.members.nonEmpty =>
           var last: Iterable[Construct] = s.tail
           if (!s.divergent) last = last.lastOption
-          assert(s.members.isEmpty || last.nonEmpty)
+          assert(last.nonEmpty)
           last.foreach(l =>
             f.successors.foreach(t => edges.append(makeEdge(l, t)))
           )

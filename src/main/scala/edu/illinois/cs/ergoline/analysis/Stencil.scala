@@ -1,13 +1,13 @@
 package edu.illinois.cs.ergoline.analysis
 
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.EirIntegerLiteral
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
-import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.{globals, passes}
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.{FullyResolve, Registry}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
+import edu.illinois.cs.ergoline.{globals, passes}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -42,6 +42,10 @@ object Stencil {
     var halos: Map[EirDeclaration, Int] = Map()
     var loops: Map[EirBlock, Loop] = Map()
     var loopStack: mutable.Stack[Loop] = new mutable.Stack
+
+    def apply[A](f: Loop => A): Option[A] = {
+      this.loopStack.headOption.map(f)
+    }
   }
 
   def visit(ctx: Context, declaration: EirDeclaration): Unit = {
@@ -143,9 +147,7 @@ object Stencil {
                 .getOrElse(i))
             })
 
-            ctx.loopStack.headOption.foreach(loop => {
-              loop +:= ctx.dimensions.get(declaration)
-            })
+            ctx(_ +:= ctx.dimensions.get(declaration))
           })
       case _ =>
     }
@@ -187,13 +189,17 @@ object Stencil {
 
     combiner.foreach(op => {
       lhs.map(declaration =>
-        ctx.loopStack.headOption.foreach(loop => {
-          loop.reductions += (declaration -> (assignment, op))
-        })
+        ctx(_.reductions += (declaration -> (assignment, op)))
       )
     })
 
     assignment.children.foreach(visit(ctx, _))
+  }
+
+  def makeCommentBlock(parent: EirNode, string: String): Option[EirBlock] = {
+    Some(
+      EirBlock(Some(parent), List(EirComment(string, multiline = true)(None)))
+    )
   }
 
   def visitForEach(ctx: Context, call: EirFunctionCall): Unit = {
@@ -209,7 +215,26 @@ object Stencil {
         visit(ctx, block)
 
         assert(loop == ctx.loopStack.pop())
+
+        if (loop.reductions.nonEmpty) {
+          call.parent
+            .collect { case block: EirBlock => block }
+            .foreach(block => {
+              val pos = block.findPositionOf(call)
+              val clause = EirSdagWhen(Nil, None, None)(call.parent)
+              clause.body = makeCommentBlock(clause, "wait for reduction")
+              pos.foreach(x => block.insertAt(x + 1, clause))
+            })
+        }
       })
+  }
+
+  def visitBoundary(ctx: Context, call: EirFunctionCall): Unit = {
+    call.parent.foreach(node => {
+      val clause = EirSdagWhen(Nil, None, None)(call.parent)
+      clause.body = makeCommentBlock(clause, "wait for neighbors")
+      assert(node.replaceChild(call, clause))
+    })
   }
 
   def visit(ctx: Context, call: EirFunctionCall): Unit = {
@@ -222,10 +247,12 @@ object Stencil {
             case _ =>
           }
         }
-      case x: EirSymbol[_] => if (isSymbolInList(x, List("foreach"))) {
+      case x: EirSymbol[_] =>
+        if (isSymbolInList(x, List("foreach"))) {
           visitForEach(ctx, call)
+        } else if (isSymbolInList(x, List("boundary"))) {
+          visitBoundary(ctx, call)
         }
-      // else if (isSymbolInList(x, List("boundary"))) {}
       case _ =>
     }
   }
@@ -246,13 +273,16 @@ object Stencil {
       case None    => Errors.missingBody(fn)
     }
 
+    val ctx = new Context()
+    visit(ctx, blk)
+
+    val graph = Registry.instance[Segmentation.Pass].apply(fn)
+    graph.map(Segmentation.toGraph(_, fn.name)).foreach(println)
+
     fn.body = None
     fn.annotations ++= List(EirAnnotation("system", Map()))
     fn.returnType =
       EirTemplatedType(None, globals.futureType, List(fn.returnType))
-
-    val ctx = new Context()
-    blk.children.foreach(visit(ctx, _))
 
     ctx.boundaries.foreach(println(_))
     ctx.dimensions.foreach(println(_))
@@ -267,12 +297,11 @@ object Stencil {
       Seq(Registry.instance[FullyResolve])
     }
 
-    override def annotations: Seq[String] = Seq("stencil")
-
     override def apply(n: EirNode): Unit = {
       n match {
-        case fn: EirFunction => visit(fn)
-        case _               =>
+        case x: EirFunction if x.hasAnnotation("stencil") => visit(x)
+        case x: EirClassLike                              => x.members.foreach(member => this(member.member))
+        case _                                            =>
       }
     }
   }
