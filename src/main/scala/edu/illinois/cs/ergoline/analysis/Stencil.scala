@@ -1,8 +1,13 @@
 package edu.illinois.cs.ergoline.analysis
 
+import edu.illinois.cs.ergoline.ast.literals.EirIntegerLiteral
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast.{
   EirAnnotation,
+  EirArrayReference,
+  EirAssignment,
+  EirBlock,
+  EirClosure,
   EirDeclaration,
   EirExpressionNode,
   EirFunction,
@@ -10,6 +15,7 @@ import edu.illinois.cs.ergoline.ast.{
   EirNew,
   EirNode,
   EirScopedSymbol,
+  EirSpecializedSymbol,
   EirSymbol,
   EirTupleExpression
 }
@@ -19,10 +25,32 @@ import edu.illinois.cs.ergoline.passes.{FullyResolve, Registry}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 object Stencil {
+  class Loop {
+    var dimensions: Option[List[EirExpressionNode]] = None
+    var reductions: Map[EirDeclaration, (EirAssignment, String)] = Map()
+
+    override def toString: String = {
+      val builder = new StringBuilder()
+      builder.append(super.toString)
+      builder.append("(dimensions=")
+      builder.append(this.dimensions.toString)
+      builder.append(", reductions=")
+      reductions.map(_.toString).foreach(builder.append)
+      builder.append(")")
+      builder.toString()
+    }
+  }
+
   class Context {
     var boundaries: Map[EirDeclaration, EirExpressionNode] = Map()
     var dimensions: Map[EirDeclaration, List[EirExpressionNode]] = Map()
+    var halos: Map[EirDeclaration, Int] = Map()
+    var loops: Map[EirBlock, Loop] = Map()
+    var loopStack: mutable.Stack[Loop] = new mutable.Stack
   }
 
   def visit(ctx: Context, declaration: EirDeclaration): Unit = {
@@ -81,8 +109,13 @@ object Stencil {
     }
   }
 
+  @tailrec
   def isArray(resolvable: EirResolvable[_]): Boolean = {
-    true
+    resolvable match {
+      case x: EirSpecializedSymbol[_] => isArray(x.symbol)
+      case x: EirSymbol[_]            => isSymbolInList(x, List("array"))
+      case _                          => false
+    }
   }
 
   def isSymbolInList(
@@ -99,6 +132,112 @@ object Stencil {
     isSymbolInList(resolvable, List("pad"))
   }
 
+  def visit(
+      ctx: Context,
+      ref: EirArrayReference
+  ): Iterable[List[EirExpressionNode]] = {
+    val halo = {
+      val args = ref.args.collect { case EirIntegerLiteral(x) => Math.abs(x) }
+      Option.when(args.nonEmpty)(args.max)
+    }
+
+    ref.target match {
+      case x: EirSymbol[_] => Find
+          .resolutions[EirDeclaration](x)
+          .flatMap(declaration => {
+            halo.foreach(i => {
+              ctx.halos += (declaration -> ctx.halos
+                .get(declaration)
+                .map(Math.max(_, i))
+                .getOrElse(i))
+            })
+            ctx.dimensions.get(declaration)
+          })
+      case _ => Nil
+    }
+  }
+
+  def visit(
+      ctx: Context,
+      assignment: EirAssignment
+  ): Iterable[List[EirExpressionNode]] = {
+    val lhs = assignment.lval match {
+      case resolvable: EirResolvable[_] => Find
+          .resolutions[EirDeclaration](resolvable)
+          .filterNot(declaration => isArray(declaration.declaredType))
+      case _ => Nil
+    }
+    val rhs = Find
+      .descendant(
+        assignment.rval,
+        node => Some(node.isInstanceOf[EirResolvable[_]])
+      )
+      .map(_.asInstanceOf[EirResolvable[EirNode]])
+      .flatMap(Find.resolutions[EirDeclaration])
+      .toList
+    val reduction = lhs.exists(rhs.contains(_))
+    val combiner =
+      if (assignment.op == "=") {
+        if (reduction) {
+          assignment.rval match {
+            case call: EirFunctionCall => Some(call.target.toString)
+            case _                     => None
+          }
+        } else {
+          None
+        }
+      } else {
+        assert(!reduction)
+        Some(assignment.op.substring(0, assignment.op.length - 2))
+      }
+
+    combiner.foreach(op => {
+      lhs.map(declaration =>
+        ctx.loopStack.headOption.foreach(loop => {
+          loop.reductions += (declaration -> (assignment, op))
+        })
+      )
+    })
+
+    Nil
+  }
+
+  def pickDimensions(
+      iterable: Iterable[List[EirExpressionNode]]
+  ): Option[List[EirExpressionNode]] = {
+    val set = iterable.toSet
+    set.headOption.filter(_ => set.size == 1)
+  }
+
+  def visitForEach(ctx: Context, call: EirFunctionCall): Unit = {
+    val loop = new Loop
+    val block = call.args
+      .map(_.expr)
+      .collectFirst { case x: EirClosure => x.block }
+      .getOrElse(???)
+
+    ctx.loops += (block -> loop)
+    ctx.loopStack.push(loop)
+
+    loop.dimensions = pickDimensions(
+      Find
+        .descendant(
+          block,
+          node =>
+            Some(node match {
+              case _: EirArrayReference | _: EirAssignment => true
+              case _                                       => false
+            })
+        )
+        .flatMap {
+          case x: EirArrayReference => visit(ctx, x)
+          case x: EirAssignment     => visit(ctx, x)
+        }
+    )
+
+    assert(loop == ctx.loopStack.pop())
+  }
+
   def visit(ctx: Context, call: EirFunctionCall): Unit = {
     call.target match {
       case x: EirScopedSymbol[_] => if (isBoundingCall(x.pending)) {
@@ -110,7 +249,10 @@ object Stencil {
           }
         }
       case x: EirSymbol[_] =>
-      case _               =>
+        if (isSymbolInList(x, List("foreach"))) {
+          visitForEach(ctx, call)
+        } else if (isSymbolInList(x, List("boundary"))) {}
+      case _ =>
     }
   }
 
@@ -136,8 +278,10 @@ object Stencil {
     val ctx = new Context()
     blk.children.foreach(visit(ctx, _))
 
-    ctx.dimensions.foreach(println(_))
     ctx.boundaries.foreach(println(_))
+    ctx.dimensions.foreach(println(_))
+    ctx.halos.foreach(println(_))
+    ctx.loops.foreach(println(_))
   }
 
   class Pass extends passes.Pass {
