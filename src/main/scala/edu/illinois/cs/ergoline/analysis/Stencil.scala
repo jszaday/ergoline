@@ -8,6 +8,7 @@ import edu.illinois.cs.ergoline.passes.{FullyResolve, Registry}
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.{globals, passes}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -55,6 +56,8 @@ object Stencil {
         )
       case None =>
     }
+
+    declaration.children.foreach(visit(ctx, _))
   }
 
   def extractDimensions(
@@ -131,26 +134,34 @@ object Stencil {
       ctx: Context,
       ref: EirArrayReference
   ): Unit = {
+    val decl = ref.target match {
+      case x: EirSymbol[_] => Find.resolutions[EirDeclaration](x).headOption
+      case _               => None
+    }
+
+    if (ref.args.isEmpty) {
+      val nd = decl.map(ctx.dimensions.get).map(_.size)
+      nd.foreach(x => {
+        ref.args = (0 to x).map(_ => EirIntegerLiteral(0)(Some(ref))).toList
+      })
+    }
+
     val halo = {
       val args = ref.args.collect { case EirIntegerLiteral(x) => Math.abs(x) }
       Option.when(args.nonEmpty)(args.max)
     }
 
-    ref.target match {
-      case x: EirSymbol[_] => Find
-          .resolutions[EirDeclaration](x)
-          .foreach(declaration => {
-            halo.foreach(i => {
-              ctx.halos += (declaration -> ctx.halos
-                .get(declaration)
-                .map(Math.max(_, i))
-                .getOrElse(i))
-            })
+    decl
+      .foreach(declaration => {
+        halo.foreach(i => {
+          ctx.halos += (declaration -> ctx.halos
+            .get(declaration)
+            .map(Math.max(_, i))
+            .getOrElse(i))
+        })
 
-            ctx(_ +:= ctx.dimensions.get(declaration))
-          })
-      case _ =>
-    }
+        ctx(_ +:= ctx.dimensions.get(declaration))
+      })
   }
 
   def visit(
@@ -238,22 +249,54 @@ object Stencil {
   }
 
   def visit(ctx: Context, call: EirFunctionCall): Unit = {
-    call.target match {
-      case x: EirScopedSymbol[_] => if (isBoundingCall(x.pending)) {
+    val visited = call.target match {
+      case x: EirScopedSymbol[_] =>
+        if (isBoundingCall(x.pending)) {
           x.target match {
             case target: EirResolvable[_] => Find
                 .resolutions[EirDeclaration](target)
                 .foreach(declaration => ctx.boundaries += (declaration -> call))
             case _ =>
           }
+
+          call.parent.to[EirBlock].foreach(block => {
+            block.findPositionOf(call).foreach(pos => {
+              block.children = block.children.patch(pos, Nil, 1)
+            })
+          })
         }
+        false
       case x: EirSymbol[_] =>
-        if (isSymbolInList(x, List("foreach"))) {
+        val foreach = isSymbolInList(x, List("foreach"))
+        if (foreach) {
           visitForEach(ctx, call)
         } else if (isSymbolInList(x, List("boundary"))) {
           visitBoundary(ctx, call)
         }
-      case _ =>
+        foreach
+      case _ => false
+    }
+
+    if (!visited) {
+      call.args.foreach(visit(ctx, _))
+    }
+  }
+
+  def visit(ctx: Context, ret: EirReturn): Unit = {
+    // TODO ( support more complicated expressions here )
+    val returnValue = ret.expression match {
+      case resolvable: EirResolvable[_] => Find
+          .resolutions[EirDeclaration](resolvable)
+          .headOption
+      case _ => None
+    }
+
+    if (returnValue.exists(ctx.dimensions.contains)) {
+      ret.parent.foreach(parent => {
+        val clause = EirSdagWhen(Nil, None, None)(ret.parent)
+        clause.body = makeCommentBlock(clause, "gather return value, set")
+        parent.replaceChild(ret, clause)
+      })
     }
   }
 
@@ -263,6 +306,7 @@ object Stencil {
       case x: EirFunctionCall   => visit(ctx, x)
       case x: EirArrayReference => visit(ctx, x)
       case x: EirAssignment     => visit(ctx, x)
+      case x: EirReturn         => visit(ctx, x)
       case _                    => node.children.foreach(visit(ctx, _))
     }
   }
@@ -279,8 +323,8 @@ object Stencil {
     val graph = Registry.instance[Segmentation.Pass].apply(fn)
     graph.map(Segmentation.toGraph(_, fn.name)).foreach(println)
 
-    fn.body = None
-    fn.annotations ++= List(EirAnnotation("system", Map()))
+//    fn.body = None
+//    fn.annotations ++= List(EirAnnotation("system", Map()))
     fn.returnType =
       EirTemplatedType(None, globals.futureType, List(fn.returnType))
 
