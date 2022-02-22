@@ -1,11 +1,20 @@
 package ck;
 
 import ergoline::bool;
+import ergoline::unit;
 
 @system(alias="hypercomm::future")
 struct future<T> {
     @system def set(t: T);
+
     @system @sync def get(): T;
-    @system(alias="is_ready") def isReady(): bool;
-    @system static def apply()(implicit __proxy__: ck::proxy): future<T>;
+
+    @system def then(fn: (T => unit));
+
+    @system(alias="is_ready")
+    def isReady(): bool;
+    
+    @system static def apply()(
+        implicit __proxy__: ck::proxy
+    ): future<T>;
 }
