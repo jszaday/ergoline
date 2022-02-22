@@ -2,10 +2,19 @@ package edu.illinois.cs.ergoline.analysis
 
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.literals.EirIntegerLiteral
-import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
+import edu.illinois.cs.ergoline.ast.types.{
+  EirNamedType,
+  EirTemplatedType,
+  EirType
+}
 import edu.illinois.cs.ergoline.passes.Pass.Phase
-import edu.illinois.cs.ergoline.passes.{FullyResolve, Registry}
-import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.passes.{
+  CheckEnclose,
+  FullyResolve,
+  GenerateProxies,
+  Registry
+}
+import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.{globals, passes}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -259,11 +268,15 @@ object Stencil {
             case _ =>
           }
 
-          call.parent.to[EirBlock].foreach(block => {
-            block.findPositionOf(call).foreach(pos => {
-              block.children = block.children.patch(pos, Nil, 1)
+          call.parent
+            .to[EirBlock]
+            .foreach(block => {
+              block
+                .findPositionOf(call)
+                .foreach(pos => {
+                  block.children = block.children.patch(pos, Nil, 1)
+                })
             })
-          })
         }
         false
       case x: EirSymbol[_] =>
@@ -311,6 +324,67 @@ object Stencil {
     }
   }
 
+  private def update(fn: EirFunction): Unit = {
+    val returnType = fn.returnType
+    val futureType =
+      EirTemplatedType(Some(fn), globals.futureType, List(returnType))
+    returnType.parent = Some(futureType)
+    fn.returnType = futureType
+
+    val block = EirBlock(Some(fn), Nil)
+    fn.body = Some(block)
+
+    val decl = EirDeclaration(
+      Some(block),
+      isFinal = true,
+      GenerateProxies.asyncFuture,
+      null,
+      None
+    )
+    val creator = EirFunctionCall(Some(decl), null, Nil, Nil)
+    decl.declaredType = EirPlaceholder(Some(decl), None)
+    decl.initialValue = Some(creator)
+    val symbol =
+      EirSpecializedSymbol[EirNamedNode](Some(creator), null, List(returnType))
+    creator.target = symbol
+    symbol.symbol = EirSymbol[EirClassLike](Some(symbol), List("ck", "future"))
+
+    val ret = EirReturn(Some(block), null)
+    val futureSymbol =
+      EirSymbol[EirDeclaration](Some(ret), List(GenerateProxies.asyncFuture))
+    ret.expression = futureSymbol
+
+    val call = EirFunctionCall(Some(block), null, Nil, Nil)
+    call.target = EirSymbol[EirFunction](Some(call), List("launch_"))
+    call.args = EirCallArgument(futureSymbol, isRef = false)(Some(call)) +: {
+      fn.functionArgs
+        .map(x => EirSymbol[EirFunctionArgument](None, List(x.name)))
+        .map(x => {
+          val arg: EirCallArgument =
+            EirCallArgument(x, isRef = false)(Some(call))
+          x.parent = Some(arg)
+          arg
+        })
+    }
+
+    block.children = List(decl, call, ret)
+
+    if (fn.implicitArgs.isEmpty) {
+      val arg = EirFunctionArgument(
+        Some(fn),
+        globals.implicitProxyName,
+        null,
+        isExpansion = false
+      )
+      arg.declaredType =
+        EirSymbol[EirClassLike](Some(symbol), List("ck", "proxy"))
+      arg.isImplicit = true
+      fn.implicitArgs = List(arg)
+    }
+
+    println(fn)
+  }
+
   def visit(fn: EirFunction): Unit = {
     val blk = fn.body match {
       case Some(x) => x
@@ -323,10 +397,7 @@ object Stencil {
     val graph = Registry.instance[Segmentation.Pass].apply(fn)
     graph.map(Segmentation.toGraph(_, fn.name)).foreach(println)
 
-//    fn.body = None
-//    fn.annotations ++= List(EirAnnotation("system", Map()))
-    fn.returnType =
-      EirTemplatedType(None, globals.futureType, List(fn.returnType))
+    update(fn)
 
     ctx.boundaries.foreach(println(_))
     ctx.dimensions.foreach(println(_))
