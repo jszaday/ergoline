@@ -83,10 +83,8 @@ object Processes {
 
     passes.foreach(pass => {
       expanded.foreach {
-        case x: EirFileSymbol =>
-          if (pass.canEnter[EirFileSymbol]) pass(x)
-        case x =>
-          if (compatible(x, pass)) pass(x)
+        case x: EirFileSymbol => if (pass.canEnter[EirFileSymbol]) pass(x)
+        case x                => if (compatible(x, pass)) pass(x)
       }
     })
   }
@@ -122,8 +120,8 @@ object Processes {
   )
 
   def willGenerate(
-                    name: String
-                  )(implicit ctx: CodeGenerationContext): Boolean = {
+      name: String
+  )(implicit ctx: CodeGenerationContext): Boolean = {
     ctx.checked.keys exists {
       case n: EirNamedNode => n.name == name
       case _               => false
@@ -131,8 +129,8 @@ object Processes {
   }
 
   def sensitiveHelper(
-                       map: Map[String, String]
-                     )(implicit ctx: CodeGenerationContext): Unit = {
+      map: Map[String, String]
+  )(implicit ctx: CodeGenerationContext): Unit = {
     map foreach { case (name, header) =>
       if (willGenerate(name)) {
         ctx << s"#include <$header> // ;"
@@ -260,8 +258,8 @@ object Processes {
 
       // TODO find a more idiomatic way to do this
       def orderedPartition[B](
-                               f: A => B
-                             ): List[(B, List[A])] = {
+          f: A => B
+      ): List[(B, List[A])] = {
         var current: Option[B] = None
         var group: List[A] = Nil
         var result: List[(B, List[A])] = Nil
