@@ -816,6 +816,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         updateLocalityContext(ctx)
         ctx << "return cb->value();"
         ctx << "})(" << fut << "))"
+      case "then" =>
+        val futureName = "f"
+        ctx << "(([&](const hypercomm::future&" << futureName << ")" << "{"
+        ctx << "auto cb = " << {
+          args.headOption.foreach(x => {
+            visitCallback(x, isReduction = false)(ctx)
+          })
+        } << ";"
+        ctx << ctx.currentProxySelf << "->request_future(" << futureName << ", std::make_shared<hypercomm::inter_callback>(cb));"
+        ctx << "})(" << fut << "))"
       case _ => ???
     }
   }

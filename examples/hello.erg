@@ -34,12 +34,12 @@ class hello {
        }
        // set the first future
        first.set(0);
-       // then we wait on the last
-       self@wait(curr);
+       // then call "done" when the future's
+       // value becomes available
+       curr.then(self@done);
     }
 
-    @threaded @entry def wait(f: ck::future<int>) {
-        val i = await f;
+    @entry def done(i: int) {
         assert(i == n);
         println(`hello #${i}`);
         exit();
