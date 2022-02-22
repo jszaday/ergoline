@@ -9,8 +9,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
   EirLiteralSymbol,
-  EirLiteralType,
-  EirUnitLiteral
+  EirLiteralType
 }
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
@@ -22,7 +21,7 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.{resolveAccessor, tryClassLike}
+import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
@@ -33,14 +32,7 @@ import edu.illinois.cs.ergoline.util.TypeCompatibility.{
   RichEirClassLike,
   RichEirType
 }
-import edu.illinois.cs.ergoline.util.{
-  Errors,
-  addExplicitSelf,
-  assertValid,
-  isSystem,
-  onLeftSide,
-  validAccessibility
-}
+import edu.illinois.cs.ergoline.util._
 
 import scala.annotation.tailrec
 import scala.collection.SeqOps
@@ -583,6 +575,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     known
   }
 
+  // TODO ( how to support multiple parameter pack expansions? )
   def inferSpecialization(
       s: EirSpecializable,
       args: List[EirType],
@@ -597,11 +590,76 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case _                => Option.when(unknownArgs.nonEmpty)(unknownArgs)
     } // TODO this needs further testing to ensure it doesn't mess with things!
 
+    def compatible(
+        a: List[EirType],
+        b: List[EirResolvable[EirType]]
+    ): Boolean = {
+      a.nonEmpty && (a.length == b.length || {
+        b.lastOption match {
+          case Some(_: EirPackExpansion) => true
+          case _                         => false
+        }
+      })
+    }
+
+    type KnowledgeList = List[(EirResolvable[EirType], EirType)]
+
+    def zip(
+        a: List[EirType],
+        b: List[EirResolvable[EirType]]
+    ): (KnowledgeList, Option[(EirPackExpansion, List[EirType])]) = {
+      val lastPack = b.lastOption.to[EirPackExpansion]
+      lastPack
+        .map(pack => {
+          val len = b.length - 1
+          val tuple = Some((pack, a.slice(len, a.length)))
+          if (b.isEmpty) {
+            (Nil, tuple)
+          } else {
+            (b.init.zip(a.slice(0, len)), tuple)
+          }
+        })
+        .getOrElse({
+          (b.zip(a), None)
+        })
+    }
+
+    def combine(
+        a: Map[EirTemplateArgument, EirType],
+        b: Option[(EirPackExpansion, List[EirType])]
+    ): Map[EirTemplateArgument, EirType] = {
+      b match {
+        case Some((expansion, types)) =>
+          // a very open-ended and cautious resolution attempt
+          val node = Find.resolutions[EirNode](expansion.base).headOption
+          val tuple = ctx.getTupleType(types)
+          node match {
+            // presumably, the only way multiple types can be assigned to the same
+            // argument is if it's a pack... but what if it's not? idk.
+            case Some(arg: EirTemplateArgument)
+                if arg.isPack && unknownArgs.contains(arg) => a + (arg -> tuple)
+            case _ => a
+          }
+        case None => a
+      }
+    }
+
     val insights = knownArgs ++ {
+      def learnReduce(
+          list: KnowledgeList
+      ): Map[EirTemplateArgument, EirType] = {
+        if (list.nonEmpty) {
+          list.map(learn(_)).reduce(merge)
+        } else {
+          Map()
+        }
+      }
+
       unknowns
-        .filter(_.length == args.length && args.nonEmpty)
-        .map(_.zip(args).map(learn(_)))
-        .map(_.reduce(merge))
+        .filter(compatible(args, _))
+        .map(zip(args, _))
+        .map(x => (learnReduce(x._1), x._2))
+        .map(x => combine(x._1, x._2))
         .getOrElse(Map())
     }
 
@@ -1179,10 +1237,19 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         ctx.lambdaWith(expand(node.functionArgs), visit(node.returnType))
       }
     } else {
+      def expandUnknown(
+          arg: EirFunctionArgument
+      ): List[EirResolvable[EirType]] = {
+        arg.declaredType match {
+          case x: EirTupleType if arg.isExpansion => x.children
+          case _                                  => List(arg.declaredType)
+        }
+      }
+
       // NOTE expansions are explicitly not known here...
       //      what should this actually return? a placeholder?
       ctx.lambdaWith(
-        node.functionArgs.map(_.declaredType),
+        node.functionArgs.flatMap(expandUnknown),
         node.returnType,
         node.templateArgs,
         node.predicate

@@ -135,6 +135,27 @@ class EirImportTests extends AnyFunSuite {
     Processes.onLoad(module)
   }
 
+  test("test var-args functions") {
+    setupEnv()
+    val module = Modules.load("""
+    |package tests;
+    |import ergoline::_;
+    |
+    |@system def foo<As...>(as: *(As...));
+    |@system def bar<A, Bs...>(a: A, bs: *(Bs...));
+    |@system def baz<A, B, Cs...>(abs: *(A, B), cs: *(Cs...));
+    |@system def fred(xs: *(int, double));
+    |
+    |def qux() {
+    |  foo(21, 21.0);
+    |  bar(42, 42.0);
+    |  baz(63, 63.0, false);
+    |  fred(84, 84.0);
+    |}
+    |""".stripMargin)
+    Processes.onLoad(module)
+  }
+
   test("contravariant relationships work") {
     setupEnv()
     val module = Modules.load("""
