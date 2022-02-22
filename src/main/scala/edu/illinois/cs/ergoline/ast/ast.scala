@@ -1340,13 +1340,6 @@ case class EirAwaitMany(var waitAll: Boolean, var children: List[EirSdagWhen])(
   override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
 }
 
-case class EirComment(var string: String, var multiline: Boolean)(
-    var parent: Option[EirNode]
-) extends EirNode {
-  override def children: Iterable[EirNode] = Nil
-  override def replaceChild(oldNode: EirNode, newNode: EirNode): Boolean = ???
-}
-
 //case class EirTypeOf(var parent: Option[EirNode], var exprNode: EirExpressionNode) extends EirExpressionNode {
 //  override def eirType: EirResolvable[EirType] = exprNode.eirType
 //
