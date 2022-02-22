@@ -82,6 +82,7 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def fallback(implicit ctx: UnparseContext): Matcher = {
     case x: EirComment => visitComment(x)
+    case x: EirClosure => visitBlock(x.block)
   }
 
   def visitComment(

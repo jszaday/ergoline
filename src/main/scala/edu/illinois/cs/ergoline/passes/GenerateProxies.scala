@@ -561,6 +561,7 @@ object GenerateProxies {
   }
 
   val threadedSelf = "self"
+  val asyncFuture = "__future__"
 
   def makeEntry(
       ctx: CodeGenerationContext,
@@ -584,7 +585,7 @@ object GenerateProxies {
     val hasArgs = args.nonEmpty || isAsync
     val threaded = x.annotation("threaded").nonEmpty
     val threadedHandler = valName.exists(_ => threaded)
-    val future = Option.when(isAsync)("__future__")
+    val future = Option.when(isAsync)(asyncFuture)
     val threadArg = Option.when(threadedHandler)("__ckThrCallArg__")
     val asyncHandler = valName.nonEmpty || args.isEmpty
     visitTemplateArgs(f)(ctx)
@@ -677,7 +678,7 @@ object GenerateProxies {
         updateLocalityContext(ctx)
       }
       if (isAsync && asyncHandler) {
-        ctx << "__future__.set" << "(" << "hypercomm::pack_to_port({},"
+        ctx << s"$asyncFuture.set" << "(" << "hypercomm::pack_to_port({},"
       } else if (!(isAsync || ctx.resolve(f.returnType) == globals.unitType)) {
         ctx << "return "
       }
