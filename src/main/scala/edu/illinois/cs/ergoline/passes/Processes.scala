@@ -26,9 +26,9 @@ object Processes {
     "tuple",
     "utility",
     "vector",
-//    "ergoline/array.hpp",
-//    "ergoline/requests.hpp",
-//    "ergoline/reducer.hpp",
+    //    "ergoline/array.hpp",
+    //    "ergoline/requests.hpp",
+    //    "ergoline/reducer.hpp",
     "#include \"generate.decl.h\" // ;"
   )
 
@@ -52,16 +52,42 @@ object Processes {
     node.annotation("main").nonEmpty
   }
 
-  def onOptimize(node: EirNode): Unit = {
+  def onOptimize(nodes: List[EirNode]): Unit = {
     Registry.onOptimize.foreach(pass => {
-      Find
-        .topLevel(
-          node,
-          Option.unless(pass.annotations.isEmpty)((a: EirAnnotation) => {
-            pass.annotations.contains(a.name)
-          })
-        )
-        .foreach(pass(_))
+      nodes.foreach(node => {
+        Find
+          .topLevel(
+            node,
+            Option.unless(pass.annotations.isEmpty)((a: EirAnnotation) => {
+              pass.annotations.contains(a.name)
+            })
+          )
+          .foreach(pass(_))
+      })
+    })
+  }
+
+  private def runPasses(nodes: List[EirNode], passes: List[Pass]): Unit = {
+    def compatible(node: EirNode, pass: Pass): Boolean = {
+      pass.annotations.isEmpty || pass.annotations.exists(node.hasAnnotation)
+    }
+
+    def expand(nodes: List[EirNode]): List[EirNode] = {
+      nodes.flatMap({
+        case x: EirNamespace => expand(x.children)
+        case x               => List(x)
+      })
+    }
+
+    val expanded = expand(nodes)
+
+    passes.foreach(pass => {
+      expanded.foreach {
+        case x: EirFileSymbol =>
+          if (pass.canEnter[EirFileSymbol]) pass(x)
+        case x =>
+          if (compatible(x, pass)) pass(x)
+      }
     })
   }
 
@@ -69,28 +95,9 @@ object Processes {
     val all =
       (node +: Modules.fileSiblings.getOrElse(node, Nil)).sortBy(!isMain(_))
 
-    def compatible(pass: Pass)(node: EirNode): Boolean = {
-      !node.isInstanceOf[EirFileSymbol] && {
-        pass.annotations.isEmpty || pass.annotations.exists(node.hasAnnotation)
-      }
-    }
+    runPasses(all, Registry.onLoad)
 
-    for (node <- all) {
-      Registry.onLoad.foreach(pass => {
-        if (pass.canEnter[EirFileSymbol]) {
-          pass(node)
-        } else {
-          node match {
-            case n: EirNamespace =>
-              n.children.filter(compatible(pass)).map(pass(_))
-            case _ => if (compatible(pass)(node)) pass(node)
-          }
-        }
-      })
-    }
-    for (node <- all) {
-      onOptimize(node)
-    }
+    onOptimize(all)
   }
 
   // NOTE This will go away once passes are implemented
@@ -115,8 +122,8 @@ object Processes {
   )
 
   def willGenerate(
-      name: String
-  )(implicit ctx: CodeGenerationContext): Boolean = {
+                    name: String
+                  )(implicit ctx: CodeGenerationContext): Boolean = {
     ctx.checked.keys exists {
       case n: EirNamedNode => n.name == name
       case _               => false
@@ -124,8 +131,8 @@ object Processes {
   }
 
   def sensitiveHelper(
-      map: Map[String, String]
-  )(implicit ctx: CodeGenerationContext): Unit = {
+                       map: Map[String, String]
+                     )(implicit ctx: CodeGenerationContext): Unit = {
     map foreach { case (name, header) =>
       if (willGenerate(name)) {
         ctx << s"#include <$header> // ;"
@@ -253,8 +260,8 @@ object Processes {
 
       // TODO find a more idiomatic way to do this
       def orderedPartition[B](
-          f: A => B
-      ): List[(B, List[A])] = {
+                               f: A => B
+                             ): List[(B, List[A])] = {
         var current: Option[B] = None
         var group: List[A] = Nil
         var result: List[(B, List[A])] = Nil
