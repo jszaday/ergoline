@@ -3,13 +3,21 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
 import edu.illinois.cs.ergoline.ast._
 
+import scala.collection.mutable
 import scala.language.implicitConversions
 
 object GenerateStencil {
   val payloadName = "__payload__"
   val payloadType = "hypercomm::tasking::task_payload"
 
-  case class Context(info: Stencil.Context, ctx: CodeGenerationContext)
+  case class Context(
+      info: Stencil.Context,
+      ctx: CodeGenerationContext,
+      taskName: String
+  ) {
+    var stack: mutable.Stack[(Segmentation.Construct, String)] =
+      new mutable.Stack
+  }
 
   implicit def ctx2ctx(ctx: Context): CodeGenerationContext = ctx.ctx
 
@@ -39,6 +47,18 @@ object GenerateStencil {
     ctx << s"hypercomm::flex::pup_unpack($arguments, $payloadName.data, std::move($payloadName.src));"
   }
 
+  def makeContinuation(x: Segmentation.Construct)(implicit
+      ctx: Context
+  ): Unit = {
+    if (x.successors.isEmpty) {
+      ctx.stack.lastOption.foreach { case (a, b) =>
+        ctx << s"${nameFor(a, b)}();"
+      }
+    } else {
+      x.successors.foreach(continuation)
+    }
+  }
+
   def visitSerialBlock(x: Segmentation.SerialBlock, inline: Boolean = false)(
       implicit ctx: Context
   ): Unit = {
@@ -47,7 +67,7 @@ object GenerateStencil {
     }
 
     x.slst.foreach(visit(_))
-    x.successors.foreach(ctx << continuation(_))
+    makeContinuation(x)
 
     if (!inline) {
       ctx << "}"
@@ -131,7 +151,6 @@ object GenerateStencil {
       case EirForLoop(_, x: EirCStyleHeader, _) => x.test
       case _                                    => ???
     }
-
     val initializer = Option(loop.node).collect { case x: EirForLoop =>
       x.header.declaration
     }.flatten
@@ -145,16 +164,31 @@ object GenerateStencil {
     } << ")" << "{"
     loop.body.foreach(continuation(_))
     ctx << "}" << "else" << "{"
-    loop.successors.foreach(continuation(_))
+    makeContinuation(loop)
     ctx << "}"
     ctx << "}"
 
-    (loop.body ++ loop.successors).foreach(visit(_))
+    ctx.stack.push((loop, suffix))
+    loop.body.foreach(visit(_))
+    ctx.stack.pop()
+
+    loop.successors.foreach(visit(_))
   }
 
   def visitClause(
       clause: Segmentation.Clause
   )(implicit ctx: Context): Unit = {
+    val continuation = nameFor(clause, "continuation")
+    val methodRef = s"&${ctx.taskName}::$continuation"
+
+    ctx << "void" << nameFor(clause) << "(void)" << "{"
+    ctx << "this->suspend<" << methodRef << ">();"
+    ctx << "}"
+
+    ctx << "void" << payloadHeader(continuation) << "{"
+    makeContinuation(clause)
+    ctx << "}"
+
     clause.successors.foreach(visit(_))
   }
 
@@ -164,10 +198,10 @@ object GenerateStencil {
     ctx << s"${nameFor(construct)}();"
   }
 
-  def visit(fn: EirFunction)(implicit cgen: CodeGenerationContext): Unit = {
+  def visit(fn: EirFunction)(implicit cgn: CodeGenerationContext): Unit = {
     val (res, graph) = Registry.instance[Stencil.Pass].apply(fn)
     val taskName = s"${fn.name}_task"
-    implicit val ctx: Context = Context(res, cgen)
+    implicit val ctx: Context = Context(res, cgn, taskName)
     ctx << "class" << taskName << ":" << "public" << "hypercomm::tasking::task<" << taskName << ">" << "{"
     ctx << "public: // ;"
     visitFields(res.declarations)
