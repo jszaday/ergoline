@@ -1,21 +1,17 @@
 package edu.illinois.cs.ergoline.passes
 
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
-import edu.illinois.cs.ergoline.ast.{
-  EirCStyleHeader,
-  EirDeclaration,
-  EirForAllHeader,
-  EirForLoop,
-  EirFunction,
-  EirFunctionArgument,
-  EirNamedNode,
-  EirNode,
-  EirWhileLoop
-}
+import edu.illinois.cs.ergoline.ast._
+
+import scala.language.implicitConversions
 
 object GenerateStencil {
   val payloadName = "__payload__"
   val payloadType = "hypercomm::tasking::task_payload"
+
+  case class Context(info: Stencil.Context, ctx: CodeGenerationContext)
+
+  implicit def ctx2ctx(ctx: Context): CodeGenerationContext = ctx.ctx
 
   def payloadHeader(name: String): String = {
     s"$name($payloadType &&$payloadName)"
@@ -23,7 +19,7 @@ object GenerateStencil {
 
   def visitFields(
       it: Iterable[EirNamedNode]
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     it.foreach(node => {
       val ty = CheckTypes.stripReference(node match {
         case x: EirDeclaration => CheckTypes.visitDeclaration(x)(ctx.tyCtx)
@@ -36,7 +32,7 @@ object GenerateStencil {
 
   def visitArguments(
       it: Iterable[EirFunctionArgument]
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     val arguments = "__arguments__"
     val names = Seq(GenerateProxies.asyncFuture) ++ it.map(ctx.nameFor(_))
     ctx << "auto" << arguments << "=" << "std::forward_as_tuple(" << (names, ",") << ");"
@@ -44,12 +40,13 @@ object GenerateStencil {
   }
 
   def visitSerialBlock(x: Segmentation.SerialBlock, inline: Boolean = false)(
-      implicit ctx: CodeGenerationContext
+      implicit ctx: Context
   ): Unit = {
     if (!inline) {
       ctx << "void" << nameFor(x) << "(void)" << "{"
     }
 
+    x.slst.foreach(visit(_))
     x.successors.foreach(ctx << continuation(_))
 
     if (!inline) {
@@ -68,9 +65,25 @@ object GenerateStencil {
     s"block_${x.id}_$suffix"
   }
 
+  def visitForEach(call: EirFunctionCall)(implicit
+      ctx: Context
+  ): Unit = {}
+
+  def visit(node: EirNode)(implicit ctx: Context): Unit = {
+    node match {
+      case x: EirFunctionCall if Stencil.isForEach(x) => visitForEach(x)
+      case x: EirDeclaration                          => visitDeclaration(x)
+      case x: EirBlock                                => ctx << "{" << x.children.foreach(visit(_)) << "}"
+      case _ =>
+        CheckTypes.visit(node)(ctx.tyCtx)
+        GenerateCpp.visit(node)(ctx.ctx)
+        ctx << ";"
+    }
+  }
+
   def visit(
       construct: Segmentation.Construct
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     construct match {
       case x: Segmentation.SerialBlock => visitSerialBlock(x)
       case x: Segmentation.Clause      => visitClause(x)
@@ -80,14 +93,30 @@ object GenerateStencil {
   }
 
   def visitDeclaration(node: EirNode)(implicit
-      ctx: CodeGenerationContext
-  ): Unit = {}
+      ctx: Context
+  ): Unit = node match {
+    case x: EirDeclaration => visitDeclaration(x)
+    case _                 => ???
+  }
+
+  def visitDeclaration(declaration: EirDeclaration)(implicit
+      ctx: Context
+  ): Unit = {
+    declaration.initialValue match {
+      case Some(x) =>
+        CheckTypes.visit(x)(ctx.tyCtx)
+        ctx << ctx.nameFor(declaration) << "=" << GenerateCpp.visit(x)(
+          ctx.ctx
+        ) << ";"
+      case None =>
+    }
+  }
 
   def visitLoopInitializer(
       loop: Segmentation.Loop,
       initializer: EirNode,
       name: String
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     ctx << "void" << nameFor(loop) << "(void)" << "{"
     visitDeclaration(initializer)
     ctx << s"$name();"
@@ -96,7 +125,7 @@ object GenerateStencil {
 
   def visitLoop(
       loop: Segmentation.Loop
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     val condition = loop.node match {
       case x: EirWhileLoop                      => Some(x.condition)
       case EirForLoop(_, x: EirCStyleHeader, _) => x.test
@@ -112,7 +141,7 @@ object GenerateStencil {
     ctx << "void" << nameFor(loop, suffix) << "(void)" << "{"
     ctx << "if" << "(" << {
       condition.foreach(CheckTypes.visitExpression(_)(ctx.tyCtx))
-      condition.foreach(GenerateCpp.visitExpression(_))
+      condition.foreach(GenerateCpp.visitExpression(_)(ctx.ctx))
     } << ")" << "{"
     loop.body.foreach(continuation(_))
     ctx << "}" << "else" << "{"
@@ -125,19 +154,20 @@ object GenerateStencil {
 
   def visitClause(
       clause: Segmentation.Clause
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     clause.successors.foreach(visit(_))
   }
 
   def continuation(
       construct: Segmentation.Construct
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  )(implicit ctx: Context): Unit = {
     ctx << s"${nameFor(construct)}();"
   }
 
-  def visit(fn: EirFunction)(implicit ctx: CodeGenerationContext): Unit = {
+  def visit(fn: EirFunction)(implicit cgen: CodeGenerationContext): Unit = {
     val (res, graph) = Registry.instance[Stencil.Pass].apply(fn)
     val taskName = s"${fn.name}_task"
+    implicit val ctx: Context = Context(res, cgen)
     ctx << "class" << taskName << ":" << "public" << "hypercomm::tasking::task<" << taskName << ">" << "{"
     ctx << "public: // ;"
     visitFields(res.declarations)

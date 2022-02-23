@@ -277,6 +277,17 @@ object Stencil {
     })
   }
 
+  def isForEach(symbol: EirSymbol[_]): Boolean = {
+    isSymbolInList(symbol, List("foreach"))
+  }
+
+  def isForEach(call: EirFunctionCall): Boolean = {
+    call.target match {
+      case x: EirSymbol[_] => isForEach(x)
+      case _               => false
+    }
+  }
+
   def visit(ctx: Context, call: EirFunctionCall): Unit = {
     val visited = call.target match {
       case x: EirScopedSymbol[_] =>
@@ -300,7 +311,7 @@ object Stencil {
         }
         false
       case x: EirSymbol[_] =>
-        val foreach = isSymbolInList(x, List("foreach"))
+        val foreach = isForEach(x)
         if (foreach) {
           visitForEach(ctx, call)
         } else if (isSymbolInList(x, List("boundary"))) {
