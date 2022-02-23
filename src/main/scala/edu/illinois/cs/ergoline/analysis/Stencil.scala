@@ -12,6 +12,7 @@ import edu.illinois.cs.ergoline.passes.{
   CheckEnclose,
   FullyResolve,
   GenerateProxies,
+  Processes,
   Registry
 }
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
@@ -445,6 +446,9 @@ object Stencil {
     }
 
     def apply(x: EirFunction): Result = {
+      Processes.cppIncludes += "hypercomm/tasking/workgroup.hpp"
+      Processes.defIncludes += "hypercomm/tasking/tasking.def.h"
+
       this._memo.getOrElse(
         x, {
           val res = visit(x)

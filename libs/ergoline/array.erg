@@ -46,4 +46,6 @@ class array<A, N: int = 1> extends iterable<A> {
 
     @system
     static def fill(idx: shapeType, value: A): array<A, N>;
+
+    @system def clone(): array<A, N>;
 }

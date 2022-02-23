@@ -34,6 +34,8 @@ object Processes {
     "#include \"generate.decl.h\" // ;"
   )
 
+  var defIncludes: Set[String] = Set("generate.def.h")
+
   var sensitiveDeclIncludes: Map[String, String] = Map(
     ("iterable", "ergoline/section.decl.hpp")
   )
@@ -247,11 +249,17 @@ object Processes {
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
 
-    sensitiveHelper(sensitiveDefIncludes)(ctx)
-
-    ctx << "#include \"generate.def.h\" // ;"
+    makeDefIncludes(ctx)
 
     List(ctx.toString)
+  }
+
+  def makeDefIncludes(ctx: CodeGenerationContext): Unit = {
+    sensitiveHelper(sensitiveDefIncludes)(ctx)
+
+    defIncludes.foreach(x => {
+      ctx << "#include \"" << x << "\" // ;"
+    })
   }
 
   // TODO this logic should be moved into its own file or generate cpp
