@@ -27,13 +27,15 @@ template <typename T, std::size_t N>
 struct nd_span {
   static_assert(N >= 0, "dimensionality must be positive");
 
+  using self_type = nd_span<T, N>;
   using shape_type = std::array<std::size_t, N>;
-  static constexpr auto shape_size = sizeof(shape_type);
+
   static constexpr auto non_trivial = !hypercomm::is_bytes<T>::value;
+  static constexpr auto shape_size = sizeof(shape_type);
+  static constexpr auto pad_amount = ALIGN_DEFAULT(shape_size) - shape_size;
 
   shape_type shape;
-
-  static constexpr auto offset = shape_size + CK_ALIGN(shape_size, 16);
+  char padding[pad_amount];
 
   ~nd_span() {
     if (non_trivial) {
@@ -43,12 +45,11 @@ struct nd_span {
     }
   }
 
-  inline T *data(void) const {
-    return const_cast<nd_span<T, N> *>(this)->begin();
-  }
+  inline T *data(void) const { return const_cast<self_type *>(this)->begin(); }
 
   inline T *begin(void) {
-    return reinterpret_cast<T *>(reinterpret_cast<char *>(this) + offset);
+    return reinterpret_cast<T *>(reinterpret_cast<char *>(this) +
+                                 sizeof(self_type));
   }
 
   inline T *end(void) { return this->begin() + this->size(); }
@@ -61,16 +62,18 @@ struct nd_span {
 
   inline static std::size_t total_size(
       const std::array<std::size_t, N> &shape) {
-    return offset + detail::reduce(shape) * sizeof(T);
+    return sizeof(self_type) + detail::reduce(shape) * sizeof(T);
   }
 
-  static void *operator new(std::size_t count,
+  static void *operator new(std::size_t,
                             const std::array<std::size_t, N> &shape) {
-    return aligned_alloc(alignof(nd_span<T, N>), total_size(shape) * count);
+    return aligned_alloc(alignof(nd_span<T, N>), total_size(shape));
   }
 
   static void operator delete(void *ptr) { std::free(ptr); }
-  static void operator delete(void *ptr, const std::array<std::size_t, N> &) { std::free(ptr); }
+  static void operator delete(void *ptr, const std::array<std::size_t, N> &) {
+    std::free(ptr);
+  }
 
  private:
   nd_span(const std::array<std::size_t, N> &_, const bool &init) : shape(_) {
@@ -82,10 +85,9 @@ struct nd_span {
   }
 
  public:
-  static std::shared_ptr<nd_span<T, N>> instantiate(
+  static std::shared_ptr<self_type> instantiate(
       const std::array<std::size_t, N> &shape, const bool &init = true) {
-    return std::shared_ptr<nd_span<T, N>>(new (shape)
-                                              nd_span<T, N>(shape, init));
+    return std::shared_ptr<self_type>(new (shape) self_type(shape, init));
   }
 
   template <class... Args>
@@ -93,6 +95,34 @@ struct nd_span {
                                              const T &value);
 
   static std::shared_ptr<nd_span<T, 1>> fill(const int &shape, const T &value);
+};
+
+template <typename T, std::size_t N>
+struct packable_slice;
+
+template <typename T>
+struct packable_slice<T, 2> {
+  using span_type = nd_span<T, 2>;
+  using shape_type = typename span_type::shape_type;
+  constexpr static std::size_t pad_amount = span_type::pad_amount;
+
+  shape_type shape;
+  char padding[pad_amount];
+  std::shared_ptr<T> data;
+
+  packable_slice(const std::shared_ptr<span_type> &span, std::size_t n_rows,
+                 std::size_t offset) {
+    auto n_cols = span->shape[1];
+    this->shape = {n_rows, n_cols};
+    auto *start = span->data() + n_cols * offset;
+    this->data = std::shared_ptr<T>(span, start);
+  }
+
+  inline std::size_t size() const { return this->shape[0] * this->shape[1]; }
+
+  std::size_t total_size(void) const {
+    return sizeof(shape_type) + pad_amount + this->size() * sizeof(T);
+  }
 };
 
 template <>
@@ -117,7 +147,7 @@ template <typename T, std::size_t N>
 using array = nd_span<T, N>;
 
 template <typename T, std::size_t N>
-std::size_t total_size(const std::shared_ptr<nd_span<T, N>>& span) {
+std::size_t total_size(const std::shared_ptr<nd_span<T, N>> &span) {
   return nd_span<T, N>::total_size(span->shape);
 }
 
@@ -184,6 +214,27 @@ struct puper<std::shared_ptr<ergoline::nd_span<T, N>>,
     }
     for (auto &elt : *t) {
       s | elt;
+    }
+  }
+};
+
+template <typename T, std::size_t N>
+struct puper<ergoline::packable_slice<T, N>,
+             typename std::enable_if<is_bytes<T>::value>::type> {
+  inline static void impl(serdes &s, ergoline::packable_slice<T, N> &t) {
+    ptr_record *rec;
+    if (s.unpacking()) {
+      CkAbort("slices must be unpacked as arrays!");
+    } else {
+      rec = s.get_record(t.data, []() { return 0; });
+    }
+
+    pup(s, *rec);
+
+    if (rec->is_instance()) {
+      s | t.shape;
+      s | t.padding;
+      s.copy(t.data.get(), t.size());
     }
   }
 };
