@@ -1,22 +1,31 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.analysis.Stencil.ClauseKind
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
 import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 
-import scala.collection.mutable
+import scala.collection.{View, mutable}
 import scala.language.implicitConversions
 
 object GenerateStencil {
   val payloadName = "__payload__"
   val payloadType = "hypercomm::tasking::task_payload"
+  val numNeighbors = "num_neighbors"
 
   case class Context(
       info: Stencil.Context,
       ctx: CodeGenerationContext,
       taskName: String
   ) {
+    var counters: List[EirSdagWhen] = Nil
     var stack: mutable.Stack[(Segmentation.Construct, String)] =
       new mutable.Stack
+
+    def counterFor(x: EirSdagWhen): String = {
+      s"__counter_${counters.indexOf(x)}__"
+    }
   }
 
   implicit def ctx2ctx(ctx: Context): CodeGenerationContext = ctx.ctx
@@ -38,13 +47,18 @@ object GenerateStencil {
     })
   }
 
+  def unpack(
+      names: Iterable[String]
+  )(implicit ctx: Context): Unit = {
+    val arguments = "__arguments__"
+    ctx << "auto" << arguments << "=" << "std::forward_as_tuple(" << (names, ",") << ");"
+    ctx << s"hypercomm::flex::pup_unpack($arguments, $payloadName.data, std::move($payloadName.src));"
+  }
+
   def visitArguments(
       it: Iterable[EirFunctionArgument]
   )(implicit ctx: Context): Unit = {
-    val arguments = "__arguments__"
-    val names = Seq(GenerateProxies.asyncFuture) ++ it.map(ctx.nameFor(_))
-    ctx << "auto" << arguments << "=" << "std::forward_as_tuple(" << (names, ",") << ");"
-    ctx << s"hypercomm::flex::pup_unpack($arguments, $payloadName.data, std::move($payloadName.src));"
+    unpack(Seq(GenerateProxies.asyncFuture) ++ it.map(ctx.nameFor(_)))
   }
 
   def makeContinuation(x: Segmentation.Construct)(implicit
@@ -175,18 +189,113 @@ object GenerateStencil {
     loop.successors.foreach(visit(_))
   }
 
+  def sendHalo(array: EirDeclaration, offset: String)(implicit
+      ctx: Context
+  ): Unit = {
+    ctx << s"// send [_, $offset] of ${array.name} ;"
+  }
+
+  def lastDimSize(array: EirDeclaration)(implicit ctx: Context): String = {
+    ctx.info.dimensions(array).lastOption.map(_.toString).getOrElse(???)
+  }
+
+  def declarationsFor(call: EirFunctionCall): View[EirDeclaration] = {
+    call.args.view
+      .map(_.expr)
+      .map(_.asInstanceOf[EirResolvable[EirNamedNode]])
+      .map(Find.uniqueResolution[EirDeclaration])
+  }
+
+  def beginBoundary(
+      clause: Segmentation.Clause,
+      call: EirFunctionCall
+  )(implicit ctx: Context): Unit = {
+    ctx << ctx.counterFor(clause.node) << "=" << "0;"
+
+    val decls = declarationsFor(call).toList
+
+    ctx << "if (this->has_left())" << "{"
+    decls.foreach(sendHalo(_, "1"))
+    ctx << "}"
+
+    ctx << "if (this->has_right())" << "{"
+    decls.foreach(x => sendHalo(x, lastDimSize(x) + "-1"))
+    ctx << "}"
+  }
+
+  def endBoundary(
+      clause: Segmentation.Clause,
+      call: EirFunctionCall,
+      methodRef: String
+  )(implicit ctx: Context): Unit = {
+    ctx << "if (++" << ctx.counterFor(
+      clause.node
+    ) << ">=" << s"this->$numNeighbors()" << ")" << "{"
+    makeContinuation(clause)
+    ctx << "}" << "else" << "{"
+    ctx << "this->suspend<" << methodRef << ">();"
+    ctx << "}"
+  }
+
+  def ckReductionFor(t: EirType, op: EirExpressionNode)(implicit
+      ctx: Context
+  ): String = {
+    "CkReduction::" + {
+      op match {
+        case EirSymbol(_, List("math", "max")) => s"max_${ctx.nameFor(t)}"
+        case _                                 => ???
+      }
+    }
+  }
+
+  def beginReduction(
+      call: EirFunctionCall,
+      methodRef: String
+  )(implicit ctx: Context): Unit = {
+    val target = declarationsFor(call).head
+    val targetType =
+      CheckTypes.stripReference(CheckTypes.visit(target)(ctx.tyCtx))
+    val operator = call.args(1).expr
+    ctx << "this->all_reduce<" << methodRef << ">(" << ctx.nameFor(
+      target
+    ) << "," << ckReductionFor(targetType, operator) << ");"
+  }
+
+  def endReduction(
+      clause: Segmentation.Clause,
+      call: EirFunctionCall
+  )(implicit ctx: Context): Unit = {
+    val target = declarationsFor(call).head
+    unpack(Seq(ctx.nameFor(target)))
+    makeContinuation(clause)
+  }
+
   def visitClause(
       clause: Segmentation.Clause
   )(implicit ctx: Context): Unit = {
     val continuation = nameFor(clause, "continuation")
     val methodRef = s"&${ctx.taskName}::$continuation"
+    val kind = ctx.info.classifications(clause.node)
+    val call = clause.node.body match {
+      case Some(x: EirFunctionCall) => x
+      case _                        => ???
+    }
 
     ctx << "void" << nameFor(clause) << "(void)" << "{"
+    kind match {
+      case ClauseKind.Boundary  => beginBoundary(clause, call)
+      case ClauseKind.Reduction => beginReduction(call, methodRef)
+      case _                    =>
+    }
     ctx << "this->suspend<" << methodRef << ">();"
     ctx << "}"
 
     ctx << "void" << payloadHeader(continuation) << "{"
-    makeContinuation(clause)
+    kind match {
+      case ClauseKind.Boundary  => endBoundary(clause, call, methodRef)
+      case ClauseKind.Reduction => endReduction(clause, call)
+      case _                    =>
+    }
     ctx << "}"
 
     clause.successors.foreach(visit(_))
@@ -205,6 +314,23 @@ object GenerateStencil {
     ctx << "class" << taskName << ":" << "public" << "hypercomm::tasking::task<" << taskName << ">" << "{"
     ctx << "public: // ;"
     visitFields(res.declarations)
+
+    res.classifications
+      .filter(_._2 == ClauseKind.Boundary)
+      .keys
+      .foreach(x => {
+        ctx.counters :+= x
+        ctx << s"int ${ctx.counterFor(x)};"
+      })
+
+    ctx << "bool has_left(void) const { return (this->index() > 0); }"
+    ctx << "bool has_right(void) const {" << {
+      "return ((this->index() + 1) < ergoline::workgroup_size());"
+    } << "}"
+    ctx << s"int $numNeighbors(void) const {" << {
+      "return (int)this->has_left() + (int)this->has_right();"
+    } << "}"
+
     ctx << taskName << "(PUP::reconstruct) {}"
     ctx << payloadHeader(taskName) << "{"
     visitArguments(fn.functionArgs)

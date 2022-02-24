@@ -24,6 +24,11 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 object Stencil {
+  object ClauseKind extends Enumeration {
+    type ClauseKind = Value
+    val Boundary, Reduction, Gather = Value
+  }
+
   class Loop {
     var dimensions: Option[List[EirExpressionNode]] = None
     var reductions: Map[EirDeclaration, (EirAssignment, EirExpressionNode)] =
@@ -48,6 +53,8 @@ object Stencil {
     }
   }
 
+  import ClauseKind._
+
   class Context {
     var boundaries: Map[EirDeclaration, EirExpressionNode] = Map()
     var declarations: Set[EirNamedNode] = Set()
@@ -55,6 +62,7 @@ object Stencil {
     var halos: Map[EirDeclaration, Int] = Map()
     var loops: Map[EirBlock, Loop] = Map()
     var loopStack: mutable.Stack[Loop] = new mutable.Stack
+    var classifications: Map[EirSdagWhen, ClauseKind] = Map()
 
     def apply[A](f: Loop => A): Option[A] = {
       this.loopStack.headOption.map(f)
@@ -245,7 +253,7 @@ object Stencil {
               it: Iterable[(EirDeclaration, (EirAssignment, EirExpressionNode))]
           ): List[EirCallArgument] = {
             it.flatMap { case (decl, (_, op)) =>
-              List(EirSymbol[EirDeclaration](None, List(decl.name)), op)
+              List(EirSymbol[EirDeclaration](Some(block), List(decl.name)), op)
             }.map(EirCallArgument(_, isRef = false)(None))
               .toList
           }
@@ -255,6 +263,7 @@ object Stencil {
             .foreach(block => {
               val pos = block.findPositionOf(call)
               val clause = EirSdagWhen(Nil, None, None)(call.parent)
+              ctx.classifications += (clause -> ClauseKind.Reduction)
               clause.body = Some(
                 EirFunctionCall(
                   None,
@@ -272,6 +281,7 @@ object Stencil {
   def visitBoundary(ctx: Context, call: EirFunctionCall): Unit = {
     call.parent.foreach(node => {
       val clause = EirSdagWhen(Nil, None, None)(call.parent)
+      ctx.classifications += (clause -> ClauseKind.Boundary)
       clause.body = Some(call)
       assert(node.replaceChild(call, clause))
     })
@@ -339,6 +349,7 @@ object Stencil {
       ret.parent.foreach(parent => {
         val clause = EirSdagWhen(Nil, None, None)(ret.parent)
         val arg = EirCallArgument(ret.expression, isRef = false)(None)
+        ctx.classifications += (clause -> ClauseKind.Gather)
         clause.body = Some(
           EirFunctionCall(None, EirSymbol(None, List("gather")), List(arg), Nil)
         )
