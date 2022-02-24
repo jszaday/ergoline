@@ -248,10 +248,19 @@ object GenerateStencil {
     loop.successors.foreach(visit(_))
   }
 
-  def sendHalo(array: EirDeclaration, offset: String)(implicit
+  def sendHalo(
+      array: EirDeclaration,
+      methodRef: String,
+      direction: String,
+      offset: String,
+      size: Int
+  )(implicit
       ctx: Context
   ): Unit = {
-    ctx << s"// send [_, $offset] of ${array.name} ;"
+    ctx << "auto __slice__ = ergoline::take_slice(" << ctx.nameFor(
+      array
+    ) << s", $size, " << offset << ");"
+    ctx << s"this->send<$methodRef>(this->index() " << direction << ", __slice__);"
   }
 
   def lastDimSize(array: EirDeclaration)(implicit ctx: Context): String = {
@@ -273,13 +282,18 @@ object GenerateStencil {
     ctx << ctx.counterFor(clause.node) << "=" << "0;"
 
     val decls = declarationsFor(call).toList
+    val halos = decls.map(ctx.info.halos(_))
 
     ctx << s"if (this->$hasAbove())" << "{"
-    decls.foreach(sendHalo(_, "1"))
+    decls.zip(halos).foreach { case (x, halo) =>
+      sendHalo(x, methodRef, "- 1", "0", halo)
+    }
     ctx << "}"
 
     ctx << s"if (this->$hasBelow())" << "{"
-    decls.foreach(x => sendHalo(x, lastDimSize(x) + "-1"))
+    decls.zip(halos).foreach { case (x, halo) =>
+      sendHalo(x, methodRef, "+ 1", s"(${lastDimSize(x)}) - $halo", halo)
+    }
     ctx << "}"
 
     ctx << "this->suspend<" << methodRef << ">();"
