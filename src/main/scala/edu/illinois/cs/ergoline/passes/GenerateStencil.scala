@@ -1,10 +1,11 @@
 package edu.illinois.cs.ergoline.passes
 
-import edu.illinois.cs.ergoline.analysis.Stencil.ClauseKind
+import edu.illinois.cs.ergoline.analysis.Stencil.{ClauseKind, isSymbolInList}
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
+import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
 import scala.collection.{View, mutable}
 import scala.language.implicitConversions
@@ -13,6 +14,8 @@ object GenerateStencil {
   val payloadName = "__payload__"
   val payloadType = "hypercomm::tasking::task_payload"
   val numNeighbors = "num_neighbors"
+  val hasAbove = "has_neighbor_above"
+  val hasBelow = "has_neighbor_below"
 
   case class Context(
       info: Stencil.Context,
@@ -36,14 +39,69 @@ object GenerateStencil {
 
   def visitFields(
       it: Iterable[EirNamedNode]
-  )(implicit ctx: Context): Unit = {
-    it.foreach(node => {
+  )(implicit ctx: Context): Iterable[EirDeclaration] = {
+    it.flatMap(node => {
       val ty = CheckTypes.stripReference(node match {
         case x: EirDeclaration => CheckTypes.visitDeclaration(x)(ctx.tyCtx)
         case x: EirFunctionArgument =>
           CheckTypes.visitFunctionArgument(x)(ctx.tyCtx)
       })
-      ctx << ctx.typeFor(ty, Some(node)) << ctx.nameFor(node) << ";"
+
+      val tyFmt = ctx.typeFor(ty, Some(node))
+      val nameFmt = ctx.nameFor(node)
+
+      ctx << tyFmt << nameFmt << ";"
+
+      val bounds = Option(node)
+        .to[EirDeclaration]
+        .filter(x => ctx.info.boundaries.contains(x))
+
+      bounds.foreach(_ => {
+        ctx << tyFmt << s"__${nameFmt}_above__" << ";"
+        ctx << tyFmt << s"__${nameFmt}_below__" << ";"
+      })
+
+      bounds
+    })
+  }
+
+  def makeBoundaryInitializer(
+      declaration: EirDeclaration,
+      boundary: EirExpressionNode
+  )(implicit ctx: Context): EirNode = {
+    val halo = ctx.info.halos(declaration)
+    val size = lastDimSize(declaration)
+    val ty = CheckTypes.stripReference(ctx.typeOf(declaration))
+    val tyFmt = ctx.nameFor(ty, Some(declaration))
+    assert(halo > 0)
+    boundary match {
+      case EirFunctionCall(_, EirScopedSymbol(_, x), value :: _, _)
+          if isSymbolInList(x, List("pad")) =>
+        GenerateCpp.CppNode(
+          s"$tyFmt::fill(std::make_tuple($halo, $size), $value)"
+        )
+    }
+  }
+
+  def makeBoundaries(
+      it: Iterable[EirDeclaration]
+  )(implicit ctx: Context): Unit = {
+    it.foreach(x => {
+      val nameFmt = ctx.nameFor(x)
+      val boundary = ctx.info.boundaries(x)
+      val initializer = makeBoundaryInitializer(x, boundary)
+
+      ctx << s"if (!this->$hasAbove()) {"
+      ctx << s"__${nameFmt}_above__" << "=" << GenerateCpp.visit(initializer)(
+        ctx.ctx
+      ) << ";"
+      ctx << "}"
+
+      ctx << s"if (!this->$hasBelow()) {"
+      ctx << s"__${nameFmt}_below__" << "=" << GenerateCpp.visit(initializer)(
+        ctx.ctx
+      ) << ";"
+      ctx << "}"
     })
   }
 
@@ -208,19 +266,22 @@ object GenerateStencil {
 
   def beginBoundary(
       clause: Segmentation.Clause,
-      call: EirFunctionCall
+      call: EirFunctionCall,
+      methodRef: String
   )(implicit ctx: Context): Unit = {
     ctx << ctx.counterFor(clause.node) << "=" << "0;"
 
     val decls = declarationsFor(call).toList
 
-    ctx << "if (this->has_left())" << "{"
+    ctx << s"if (this->$hasAbove())" << "{"
     decls.foreach(sendHalo(_, "1"))
     ctx << "}"
 
-    ctx << "if (this->has_right())" << "{"
+    ctx << s"if (this->$hasBelow())" << "{"
     decls.foreach(x => sendHalo(x, lastDimSize(x) + "-1"))
     ctx << "}"
+
+    ctx << "this->suspend<" << methodRef << ">();"
   }
 
   def endBoundary(
@@ -259,6 +320,7 @@ object GenerateStencil {
     ctx << "this->all_reduce<" << methodRef << ">(" << ctx.nameFor(
       target
     ) << "," << ckReductionFor(targetType, operator) << ");"
+    ctx << "this->suspend<" << methodRef << ">();"
   }
 
   def endReduction(
@@ -268,6 +330,23 @@ object GenerateStencil {
     val target = declarationsFor(call).head
     unpack(Seq(ctx.nameFor(target)))
     makeContinuation(clause)
+  }
+
+  def beginGather(call: EirFunctionCall, methodRef: String)(implicit
+      ctx: Context
+  ): Unit = {
+    implicit val visitor: (CodeGenerationContext, EirNode) => Unit =
+      (ctx, x) => GenerateCpp.visit(x)(ctx)
+
+    ctx << "auto __root__ = 0;"
+    ctx << "auto __mine__ = this->index();"
+    ctx << "auto __arguments__ = std::forward_as_tuple(__mine__, " << (call.args, ",") << ");"
+    ctx << s"this->reduce<$methodRef>(__arguments__, CkReduction::set, __root__);"
+    ctx << "if (__mine__ == __root__) {"
+    ctx << s"this->suspend<$methodRef>();"
+    ctx << "}" << "else {"
+    ctx << "this->terminate();"
+    ctx << "}"
   }
 
   def visitClause(
@@ -283,11 +362,10 @@ object GenerateStencil {
 
     ctx << "void" << nameFor(clause) << "(void)" << "{"
     kind match {
-      case ClauseKind.Boundary  => beginBoundary(clause, call)
+      case ClauseKind.Boundary  => beginBoundary(clause, call, methodRef)
       case ClauseKind.Reduction => beginReduction(call, methodRef)
-      case _                    =>
+      case ClauseKind.Gather    => beginGather(call, methodRef)
     }
-    ctx << "this->suspend<" << methodRef << ">();"
     ctx << "}"
 
     ctx << "void" << payloadHeader(continuation) << "{"
@@ -313,7 +391,7 @@ object GenerateStencil {
     implicit val ctx: Context = Context(res, cgn, taskName)
     ctx << "class" << taskName << ":" << "public" << "hypercomm::tasking::task<" << taskName << ">" << "{"
     ctx << "public: // ;"
-    visitFields(res.declarations)
+    val boundaries = visitFields(res.declarations)
 
     res.classifications
       .filter(_._2 == ClauseKind.Boundary)
@@ -323,17 +401,18 @@ object GenerateStencil {
         ctx << s"int ${ctx.counterFor(x)};"
       })
 
-    ctx << "bool has_left(void) const { return (this->index() > 0); }"
-    ctx << "bool has_right(void) const {" << {
+    ctx << s"bool $hasAbove(void) const { return (this->index() > 0); }"
+    ctx << s"bool $hasBelow(void) const {" << {
       "return ((this->index() + 1) < ergoline::workgroup_size());"
     } << "}"
     ctx << s"int $numNeighbors(void) const {" << {
-      "return (int)this->has_left() + (int)this->has_right();"
+      s"return (int)this->$hasAbove() + (int)this->$hasBelow();"
     } << "}"
 
     ctx << taskName << "(PUP::reconstruct) {}"
     ctx << payloadHeader(taskName) << "{"
     visitArguments(fn.functionArgs)
+    makeBoundaries(boundaries)
     graph match {
       case Some(x: Segmentation.SerialBlock) =>
         visitSerialBlock(x, inline = true)
