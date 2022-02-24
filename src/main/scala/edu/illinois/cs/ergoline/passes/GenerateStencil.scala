@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.analysis.Stencil.{ClauseKind, isSymbolInList}
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
 
@@ -289,6 +290,31 @@ object GenerateStencil {
       call: EirFunctionCall,
       methodRef: String
   )(implicit ctx: Context): Unit = {
+    val theirIdx = "__sender__"
+    val arrayDecl = declarationsFor(call)
+    val arrayName = arrayDecl.map(ctx.nameFor(_))
+    val haloName = arrayName.map(x => s"__${x}_halo__")
+    val arrayType = arrayDecl.map(ctx.typeOf).map(CheckTypes.stripReference)
+    val arrayTypeFmt = arrayDecl.zip(arrayType).map { case (node, ty) =>
+      ctx.typeFor(ty, Some(node))
+    }
+
+    ctx << s"int $theirIdx;"
+    haloName.zip(arrayTypeFmt).foreach { case (name, ty) =>
+      ctx << ty << name << ";"
+    }
+    unpack(Seq(theirIdx) ++ haloName)
+
+    ctx << s"if (this->index() > $theirIdx) {"
+    arrayName.map(x => s"__${x}_above__").zip(haloName).foreach {
+      case (arr, halo) => ctx << arr << "=" << "std::move(" << halo << ");"
+    }
+    ctx << "}" << "else {"
+    arrayName.map(x => s"__${x}_below__").zip(haloName).foreach {
+      case (arr, halo) => ctx << arr << "=" << "std::move(" << halo << ");"
+    }
+    ctx << "}"
+
     ctx << "if (++" << ctx.counterFor(
       clause.node
     ) << ">=" << s"this->$numNeighbors()" << ")" << "{"
@@ -349,6 +375,32 @@ object GenerateStencil {
     ctx << "}"
   }
 
+  def endGather(call: EirFunctionCall)(implicit
+      ctx: Context
+  ): Unit = {
+    val totalArray = "__grid_complete__"
+    val fragmentArray = "__grid_fragment__"
+    val arrayType = "std::shared_ptr<ergoline::array<double, 2>>"
+    val src = "__src__"
+    val set = "__set__"
+    val idx = "__index__"
+    ctx << s"$arrayType $totalArray;"
+    ctx << s"std::shared_ptr<void> $src(std::move(" << payloadName << ".src));"
+    ctx << s"auto *$set = (CkReduction::setElement *)$payloadName.data;"
+    ctx << s"while ($set != nullptr) {"
+    ctx << s"int $idx;"
+    ctx << s"$arrayType $fragmentArray;"
+    ctx << s"auto __arguments__ = std::forward_as_tuple($idx, $fragmentArray);"
+    ctx << s"hypercomm::unpacker p($src, (char *)$set->data);"
+    ctx << "p | __arguments__;"
+    ctx << s"CkAssert($set->dataSize == p.size());"
+    ctx << s"// TODO ( copy $fragmentArray into $totalArray at offset $idx ) ;"
+    ctx << s"$set = $set->next();"
+    ctx << "}"
+    ctx << GenerateProxies.asyncFuture << s".set(hypercomm::pack($totalArray));"
+    ctx << "this->terminate();"
+  }
+
   def visitClause(
       clause: Segmentation.Clause
   )(implicit ctx: Context): Unit = {
@@ -372,7 +424,7 @@ object GenerateStencil {
     kind match {
       case ClauseKind.Boundary  => endBoundary(clause, call, methodRef)
       case ClauseKind.Reduction => endReduction(clause, call)
-      case _                    =>
+      case ClauseKind.Gather    => endGather(call)
     }
     ctx << "}"
 
