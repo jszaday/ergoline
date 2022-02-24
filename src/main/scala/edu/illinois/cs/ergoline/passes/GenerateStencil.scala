@@ -285,22 +285,31 @@ object GenerateStencil {
     ctx << "this->suspend<" << methodRef << ">();"
   }
 
+  def extractProperties(
+      call: EirFunctionCall
+  )(implicit ctx: Context): (List[String], List[String]) = {
+    val arrayDecl = declarationsFor(call).toList
+    val arrayName = arrayDecl.map(ctx.nameFor(_))
+    val arrayType = arrayDecl.map(ctx.typeOf).map(CheckTypes.stripReference)
+    (
+      arrayName,
+      arrayDecl.zip(arrayType).map { case (node, ty) =>
+        ctx.typeFor(ty, Some(node))
+      }
+    )
+  }
+
   def endBoundary(
       clause: Segmentation.Clause,
       call: EirFunctionCall,
       methodRef: String
   )(implicit ctx: Context): Unit = {
     val theirIdx = "__sender__"
-    val arrayDecl = declarationsFor(call)
-    val arrayName = arrayDecl.map(ctx.nameFor(_))
+    val (arrayName, arrayType) = extractProperties(call)
     val haloName = arrayName.map(x => s"__${x}_halo__")
-    val arrayType = arrayDecl.map(ctx.typeOf).map(CheckTypes.stripReference)
-    val arrayTypeFmt = arrayDecl.zip(arrayType).map { case (node, ty) =>
-      ctx.typeFor(ty, Some(node))
-    }
 
     ctx << s"int $theirIdx;"
-    haloName.zip(arrayTypeFmt).foreach { case (name, ty) =>
+    haloName.zip(arrayType).foreach { case (name, ty) =>
       ctx << ty << name << ";"
     }
     unpack(Seq(theirIdx) ++ haloName)
@@ -378,26 +387,30 @@ object GenerateStencil {
   def endGather(call: EirFunctionCall)(implicit
       ctx: Context
   ): Unit = {
-    val totalArray = "__grid_complete__"
-    val fragmentArray = "__grid_fragment__"
-    val arrayType = "std::shared_ptr<ergoline::array<double, 2>>"
+    val (arrayName, arrayType) = extractProperties(call)
+    val totalArray = arrayName.map(x => s"__${x}_complete__")
+    val fragmentArray = arrayName.map(x => s"__${x}_fragment__")
     val src = "__src__"
     val set = "__set__"
     val idx = "__index__"
-    ctx << s"$arrayType $totalArray;"
+    arrayType.zip(totalArray).foreach { case (ty, name) =>
+      ctx << s"$ty $name; // TODO ( allocate this );"
+    }
     ctx << s"std::shared_ptr<void> $src(std::move(" << payloadName << ".src));"
     ctx << s"auto *$set = (CkReduction::setElement *)$payloadName.data;"
     ctx << s"while ($set != nullptr) {"
     ctx << s"int $idx;"
-    ctx << s"$arrayType $fragmentArray;"
-    ctx << s"auto __arguments__ = std::forward_as_tuple($idx, $fragmentArray);"
+    arrayType.zip(fragmentArray).foreach { case (ty, name) =>
+      ctx << s"$ty $name;"
+    }
+    ctx << s"auto __arguments__ = std::forward_as_tuple($idx," << (fragmentArray, ",") << ");"
     ctx << s"hypercomm::unpacker p($src, (char *)$set->data);"
     ctx << "p | __arguments__;"
     ctx << s"CkAssert($set->dataSize == p.size());"
     ctx << s"// TODO ( copy $fragmentArray into $totalArray at offset $idx ) ;"
     ctx << s"$set = $set->next();"
     ctx << "}"
-    ctx << GenerateProxies.asyncFuture << s".set(hypercomm::pack($totalArray));"
+    ctx << GenerateProxies.asyncFuture << s".set(hypercomm::pack(" << (totalArray, ",") << "));"
     ctx << "this->terminate();"
   }
 
