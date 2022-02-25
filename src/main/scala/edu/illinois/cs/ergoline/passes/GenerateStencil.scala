@@ -339,7 +339,7 @@ object GenerateStencil {
     ctx << "auto __slice__ = ergoline::take_slice(" << ctx.nameFor(
       array
     ) << s", $size, " << offset << ");"
-    ctx << s"this->send<$methodRef>(this->index() " << direction << ", __slice__);"
+    ctx << s"this->send<$methodRef>(this->index() " << direction << ", this->index(), __slice__);"
   }
 
   def lastDimSize(array: EirDeclaration)(implicit ctx: Context): String = {
@@ -384,12 +384,16 @@ object GenerateStencil {
 
   def extractProperties(
       call: EirFunctionCall
-  )(implicit ctx: Context): (List[String], List[String]) = {
+  )(implicit
+      ctx: Context
+  ): (List[EirDeclaration], List[String], List[EirType], List[String]) = {
     val arrayDecl = declarationsFor(call).toList
     val arrayName = arrayDecl.map(ctx.nameFor(_))
     val arrayType = arrayDecl.map(ctx.typeOf).map(CheckTypes.stripReference)
     (
+      arrayDecl,
       arrayName,
+      arrayType,
       arrayDecl.zip(arrayType).map { case (node, ty) =>
         ctx.typeFor(ty, Some(node))
       }
@@ -402,7 +406,7 @@ object GenerateStencil {
       methodRef: String
   )(implicit ctx: Context): Unit = {
     val theirIdx = "__sender__"
-    val (arrayName, arrayType) = extractProperties(call)
+    val (_, arrayName, _, arrayType) = extractProperties(call)
     val haloName = arrayName.map(x => s"__${x}_halo__")
 
     ctx << s"int $theirIdx;"
@@ -486,14 +490,20 @@ object GenerateStencil {
   def endGather(call: EirFunctionCall)(implicit
       ctx: Context
   ): Unit = {
-    val (arrayName, arrayType) = extractProperties(call)
+    val (rawDecl, arrayName, rawType, arrayType) = extractProperties(call)
     val totalArray = arrayName.map(x => s"__${x}_complete__")
     val fragmentArray = arrayName.map(x => s"__${x}_fragment__")
     val src = "__src__"
     val set = "__set__"
     val idx = "__index__"
-    arrayType.zip(totalArray).foreach { case (ty, name) =>
-      ctx << s"$ty $name; // TODO ( allocate this );"
+    rawDecl.zip(rawType).zip(totalArray).foreach { case ((decl, ty), name) =>
+      val dimensions = ctx.info.dimensions(decl)
+      ctx << s"auto $name = " << GenerateCpp.createArray(
+        ctx.nameFor(ty, Some(decl)),
+        dimensions,
+        dimensions.size,
+        initialize = false
+      )(ctx.ctx) << ";"
     }
     ctx << s"std::shared_ptr<void> $src(std::move(" << payloadName << ".src));"
     ctx << s"auto *$set = (CkReduction::setElement *)$payloadName.data;"
@@ -506,7 +516,11 @@ object GenerateStencil {
     ctx << s"hypercomm::unpacker p($src, (char *)$set->data);"
     ctx << "p | __arguments__;"
     ctx << s"CkAssert($set->dataSize == p.size());"
-    ctx << s"// TODO ( copy $fragmentArray into $totalArray at offset $idx ) ;"
+    totalArray.zip(fragmentArray).foreach { case (total, fragment) =>
+      val offset = "__offset__"
+      ctx << s"auto $offset = ($idx * $fragment->shape[0]) * $total->shape[1];"
+      ctx << s"std::copy($fragment->begin(), $fragment->end(), $total->begin() + $offset);"
+    }
     ctx << s"$set = $set->next();"
     ctx << "}"
     ctx << GenerateProxies.asyncFuture << s".set(hypercomm::pack(" << (totalArray, ",") << "));"
@@ -594,9 +608,11 @@ object GenerateStencil {
     ctx << "}" << "}" << "}" << "}"
   }
 
+  def taskNameFor(fn: EirFunction): String = s"${fn.name}_task"
+
   def visit(fn: EirFunction)(implicit cgn: CodeGenerationContext): Unit = {
     val (res, graph) = Registry.instance[Stencil.Pass].apply(fn)
-    val taskName = s"${fn.name}_task"
+    val taskName = taskNameFor(fn)
     implicit val ctx: Context = Context(res, cgn, taskName)
     ctx << "class" << taskName << ":" << "public" << "hypercomm::tasking::task<" << taskName << ">" << "{"
     ctx << "public: // ;"

@@ -21,6 +21,8 @@ object Processes {
 
   registerPasses()
 
+  var modules: Set[String] = Set()
+
   var cppIncludes: Set[String] = Set(
     "algorithm",
     "memory",

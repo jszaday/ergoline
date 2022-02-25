@@ -81,7 +81,8 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
     error(ctx, node, s"unknown error on ${node.getClass.getName}")
 
   override def fallback(implicit ctx: UnparseContext): Matcher = {
-    case x: EirClosure => visitBlock(x.block)
+    case x: EirClosure          => visitBlock(x.block)
+    case x: GenerateCpp.CppNode => s"system { ${x.s} }"
   }
 
   def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String =

@@ -471,7 +471,8 @@ object Stencil {
     }
 
     def apply(x: EirFunction): Result = {
-      Processes.cppIncludes += "hypercomm/tasking/workgroup.hpp"
+      Processes.modules += "tasking"
+      Processes.cppIncludes += "ergoline/workgroup.hpp"
       Processes.defIncludes += "hypercomm/tasking/tasking.def.h"
 
       this._memo.getOrElse(

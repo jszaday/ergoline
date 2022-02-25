@@ -85,6 +85,13 @@ struct nd_span {
   }
 
  public:
+  std::shared_ptr<self_type> clone(void) const {
+    auto *self = const_cast<self_type *>(this);
+    auto copy = self_type::instantiate(this->shape, false);
+    std::copy(self->begin(), self->end(), copy->begin());
+    return copy;
+  }
+
   static std::shared_ptr<self_type> instantiate(
       const std::array<std::size_t, N> &shape, const bool &init = true) {
     return std::shared_ptr<self_type>(new (shape) self_type(shape, init));
@@ -126,8 +133,8 @@ struct packable_slice<T, 2> {
 };
 
 template <typename T, std::size_t N>
-packable_slice<T, N> take_slice(const std::shared_ptr<nd_span<T, N>>& span, std::size_t n_rows,
-                                std::size_t offset) {
+packable_slice<T, N> take_slice(const std::shared_ptr<nd_span<T, N>> &span,
+                                std::size_t n_rows, std::size_t offset) {
   return packable_slice<T, N>(span, n_rows, offset);
 }
 
