@@ -30,6 +30,7 @@ object Stencil {
   }
 
   class Loop {
+    var references: List[EirArrayReference] = Nil
     var dimensions: Option[List[EirExpressionNode]] = None
     var reductions: Map[EirDeclaration, (EirAssignment, EirExpressionNode)] =
       Map()
@@ -184,6 +185,8 @@ object Stencil {
 
         ctx(_ +:= ctx.dimensions.get(declaration))
       })
+
+    ctx(_.references +:= ref)
   }
 
   def visit(

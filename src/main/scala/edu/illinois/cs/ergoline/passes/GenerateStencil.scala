@@ -3,7 +3,8 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.analysis.Stencil.{ClauseKind, isSymbolInList}
 import edu.illinois.cs.ergoline.analysis.{Segmentation, Stencil}
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.types.EirType
+import edu.illinois.cs.ergoline.ast.literals.EirIntegerLiteral
+import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.resolution.{EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.RichOption
@@ -160,7 +161,61 @@ object GenerateStencil {
 
   def visitForEach(call: EirFunctionCall)(implicit
       ctx: Context
-  ): Unit = {}
+  ): Unit = {
+    val body = call.args
+      .map(_.expr)
+      .headOption
+      .to[EirClosure]
+      .map(_.block)
+      .getOrElse(???)
+    val info = ctx.info.loops(body)
+    val dimensions = info.dimensions.getOrElse(???)
+    val counters = dimensions.indices.map(i => s"__it_${i}__").toList
+
+    CheckTypes.visit(body)(ctx.tyCtx)
+
+    val declarations = info.references.map(_.target).map {
+      case x: EirSymbol[_] => Find.uniqueResolution[EirDeclaration](x)
+    }
+
+    info.references.zip(declarations).foreach { case (ref, decl) =>
+      val boundary = ctx.info.boundaries.get(decl)
+      val args = counters.zip(ref.args).map { case (counter, arg) =>
+        GenerateCpp.CppNode(s"$counter + ($arg)")
+      }
+
+      if (boundary.nonEmpty) {
+        ref.parent.foreach(parent => {
+          parent match {
+            case x: EirExpressionNode => x.disambiguation = None
+            case _                    =>
+          }
+
+          assert(
+            parent.replaceChild(
+              ref, {
+                GenerateCpp.CppNode(
+                  s"this->${decl.name}_at(${args.map(_.s).mkString(", ")})"
+                )
+              }
+            )
+          )
+        })
+      } else {
+        ref.args = args
+      }
+    }
+
+    counters.zip(dimensions).foreach { case (counter, dim) =>
+      ctx << s"for (auto $counter = 0; $counter < ($dim); $counter++) {"
+    }
+
+    GenerateCpp.visit(body)(ctx.ctx)
+
+    counters.foreach(_ => {
+      ctx << "}"
+    })
+  }
 
   def visit(node: EirNode)(implicit ctx: Context): Unit = {
     node match {
@@ -464,6 +519,34 @@ object GenerateStencil {
     ctx << s"${nameFor(construct)}();"
   }
 
+  def makeAt(declaration: EirDeclaration, expression: EirExpressionNode)(
+      implicit ctx: Context
+  ): Unit = {
+    val arrayName = declaration.name
+    val arrayTy = CheckTypes.stripReference(ctx.typeOf(declaration))
+    val (ty, n) = arrayTy match {
+      case EirTemplatedType(
+            _,
+            _,
+            ty :: EirConstantFacade(EirIntegerLiteral(n)) :: _
+          ) => (ctx.typeFor(ty), n)
+    }
+    val counters = (0 until n).map(x => s"__it_${x}__")
+    ctx << s"inline $ty &${arrayName}_at(" << (counters.map(x =>
+      s"int $x"
+    ), ",") << ") {"
+    ctx << s"if (__it_1__ < 0 || __it_1__ >= $arrayName->shape[1]) {"
+    ctx << "// pull from pad;"
+    ctx << "}" << "else {"
+    ctx << "if (__it_0__ < 0) {"
+    ctx << "// get from above;"
+    ctx << "}" << s"if (__it_0__ >= $arrayName->shape[1]) {"
+    ctx << "// get from below;"
+    ctx << "}" << "else {" << "{"
+    ctx << s"// get from $arrayName;"
+    ctx << "}" << "}" << "}" << "}"
+  }
+
   def visit(fn: EirFunction)(implicit cgn: CodeGenerationContext): Unit = {
     val (res, graph) = Registry.instance[Stencil.Pass].apply(fn)
     val taskName = s"${fn.name}_task"
@@ -479,6 +562,8 @@ object GenerateStencil {
         ctx.counters :+= x
         ctx << s"int ${ctx.counterFor(x)};"
       })
+
+    ctx.info.boundaries.foreach { case (x, y) => makeAt(x, y) }
 
     ctx << s"bool $hasAbove(void) const { return (this->index() > 0); }"
     ctx << s"bool $hasBelow(void) const {" << {

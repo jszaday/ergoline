@@ -125,6 +125,12 @@ struct packable_slice<T, 2> {
   }
 };
 
+template <typename T, std::size_t N>
+packable_slice<T, N> take_slice(const std::shared_ptr<nd_span<T, N>>& span, std::size_t n_rows,
+                                std::size_t offset) {
+  return packable_slice<T, N>(span, n_rows, offset);
+}
+
 template <>
 template <>
 std::shared_ptr<nd_span<double, 2>> nd_span<double, 2>::fill<int, int>(
