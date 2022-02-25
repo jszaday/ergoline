@@ -19,6 +19,9 @@ object GenerateStencil {
   val hasAbove = "has_neighbor_above"
   val hasBelow = "has_neighbor_below"
 
+  def arrayAbove(name: String) = s"__${name}_above__"
+  def arrayBelow(name: String) = s"__${name}_below__"
+
   case class Context(
       info: Stencil.Context,
       ctx: CodeGenerationContext,
@@ -59,12 +62,19 @@ object GenerateStencil {
         .filter(x => ctx.info.boundaries.contains(x))
 
       bounds.foreach(_ => {
-        ctx << tyFmt << s"__${nameFmt}_above__" << ";"
-        ctx << tyFmt << s"__${nameFmt}_below__" << ";"
+        ctx << tyFmt << arrayAbove(nameFmt) << ";"
+        ctx << tyFmt << arrayBelow(nameFmt) << ";"
       })
 
       bounds
     })
+  }
+
+  def boundaryValue(node: EirExpressionNode): (String, EirExpressionNode) = {
+    node match {
+      case EirFunctionCall(_, EirScopedSymbol(_, x), value :: _, _)
+          if isSymbolInList(x, List("pad")) => ("pad", value.expr)
+    }
   }
 
   def makeBoundaryInitializer(
@@ -76,10 +86,8 @@ object GenerateStencil {
     val ty = CheckTypes.stripReference(ctx.typeOf(declaration))
     val tyFmt = ctx.nameFor(ty, Some(declaration))
     assert(halo > 0)
-    boundary match {
-      case EirFunctionCall(_, EirScopedSymbol(_, x), value :: _, _)
-          if isSymbolInList(x, List("pad")) =>
-        GenerateCpp.CppNode(
+    boundaryValue(boundary) match {
+      case ("pad", value) => GenerateCpp.CppNode(
           s"$tyFmt::fill(std::make_tuple($halo, $size), $value)"
         )
     }
@@ -94,13 +102,13 @@ object GenerateStencil {
       val initializer = makeBoundaryInitializer(x, boundary)
 
       ctx << s"if (!this->$hasAbove()) {"
-      ctx << s"__${nameFmt}_above__" << "=" << GenerateCpp.visit(initializer)(
+      ctx << arrayAbove(nameFmt) << "=" << GenerateCpp.visit(initializer)(
         ctx.ctx
       ) << ";"
       ctx << "}"
 
       ctx << s"if (!this->$hasBelow()) {"
-      ctx << s"__${nameFmt}_below__" << "=" << GenerateCpp.visit(initializer)(
+      ctx << arrayBelow(nameFmt) << "=" << GenerateCpp.visit(initializer)(
         ctx.ctx
       ) << ";"
       ctx << "}"
@@ -181,7 +189,7 @@ object GenerateStencil {
     info.references.zip(declarations).foreach { case (ref, decl) =>
       val boundary = ctx.info.boundaries.get(decl)
       val args = counters.zip(ref.args).map { case (counter, arg) =>
-        GenerateCpp.CppNode(s"$counter + ($arg)")
+        GenerateCpp.CppNode(s"($counter + ($arg))")
       }
 
       if (boundary.nonEmpty) {
@@ -383,14 +391,16 @@ object GenerateStencil {
     }
     unpack(Seq(theirIdx) ++ haloName)
 
+    def moveAssign(f: String => String): Unit = {
+      arrayName.map(f).zip(haloName).foreach { case (arr, halo) =>
+        ctx << arr << "=" << "std::move(" << halo << ");"
+      }
+    }
+
     ctx << s"if (this->index() > $theirIdx) {"
-    arrayName.map(x => s"__${x}_above__").zip(haloName).foreach {
-      case (arr, halo) => ctx << arr << "=" << "std::move(" << halo << ");"
-    }
+    moveAssign(arrayAbove)
     ctx << "}" << "else {"
-    arrayName.map(x => s"__${x}_below__").zip(haloName).foreach {
-      case (arr, halo) => ctx << arr << "=" << "std::move(" << halo << ");"
-    }
+    moveAssign(arrayBelow)
     ctx << "}"
 
     ctx << "if (++" << ctx.counterFor(
@@ -519,6 +529,14 @@ object GenerateStencil {
     ctx << s"${nameFor(construct)}();"
   }
 
+  def makeAccessor(array: String, counters: IndexedSeq[String]): String = {
+    if (counters.size == 2) {
+      s"(*$array)[(${counters.head}*$array->shape[1])+${counters.last}]"
+    } else {
+      ???
+    }
+  }
+
   def makeAt(declaration: EirDeclaration, expression: EirExpressionNode)(
       implicit ctx: Context
   ): Unit = {
@@ -532,18 +550,27 @@ object GenerateStencil {
           ) => (ctx.typeFor(ty), n)
     }
     val counters = (0 until n).map(x => s"__it_${x}__")
-    ctx << s"inline $ty &${arrayName}_at(" << (counters.map(x =>
+    ctx << s"inline $ty ${arrayName}_at(" << (counters.map(x =>
       s"int $x"
     ), ",") << ") {"
-    ctx << s"if (__it_1__ < 0 || __it_1__ >= $arrayName->shape[1]) {"
-    ctx << "// pull from pad;"
-    ctx << "}" << "else {"
+    val boundary = boundaryValue(expression)
+    ((n - 1) to 1 by -1).foreach(i => {
+      ctx << s"if (${counters(i)} < 0 || ${counters(i)} >= $arrayName->shape[$i]) {"
+      boundary match {
+        case ("pad", value) => ctx << s"return $value;"
+      }
+      ctx << "}"
+    })
+    def updateCounters(name: String, op: String): IndexedSeq[String] = {
+      IndexedSeq(s"(__it_0__ $op $name->shape[0])") ++ counters.tail
+    }
+    ctx << Option.when(n >= 2)("else ") << "{"
     ctx << "if (__it_0__ < 0) {"
-    ctx << "// get from above;"
-    ctx << "}" << s"if (__it_0__ >= $arrayName->shape[1]) {"
-    ctx << "// get from below;"
+    ctx << s"return ${makeAccessor(arrayAbove(arrayName), updateCounters(arrayAbove(arrayName), "+"))};"
+    ctx << "}" << s"else if (__it_0__ >= $arrayName->shape[0]) {"
+    ctx << s"return ${makeAccessor(arrayBelow(arrayName), updateCounters(arrayName, "-"))};"
     ctx << "}" << "else {" << "{"
-    ctx << s"// get from $arrayName;"
+    ctx << s"return ${makeAccessor(arrayName, counters)};"
     ctx << "}" << "}" << "}" << "}"
   }
 
