@@ -45,7 +45,16 @@ object GenerateStencil {
   def visitFields(
       it: Iterable[EirNamedNode]
   )(implicit ctx: Context): Iterable[EirDeclaration] = {
-    it.flatMap(node => {
+    val list = it.toList
+    val names = list.map(ctx.nameFor(_))
+    val boundaries = list.map {
+      Option(_)
+        .to[EirDeclaration]
+        .filter(x => ctx.info.boundaries.contains(x))
+    }
+    val zipped = list.zip(names).zip(boundaries)
+
+    zipped.foreach { case ((node, nameFmt), bounds) =>
       val ty = CheckTypes.stripReference(node match {
         case x: EirDeclaration => CheckTypes.visitDeclaration(x)(ctx.tyCtx)
         case x: EirFunctionArgument =>
@@ -53,21 +62,28 @@ object GenerateStencil {
       })
 
       val tyFmt = ctx.typeFor(ty, Some(node))
-      val nameFmt = ctx.nameFor(node)
 
       ctx << tyFmt << nameFmt << ";"
-
-      val bounds = Option(node)
-        .to[EirDeclaration]
-        .filter(x => ctx.info.boundaries.contains(x))
 
       bounds.foreach(_ => {
         ctx << tyFmt << arrayAbove(nameFmt) << ";"
         ctx << tyFmt << arrayBelow(nameFmt) << ";"
       })
+    }
 
-      bounds
-    })
+    ctx << "void pup(PUP::er& p) {"
+    ctx << "auto s = hypercomm::make_serdes(p);"
+    zipped.foreach { case ((_, nameFmt), bounds) =>
+      ctx << "hypercomm::pup(*s, " << nameFmt << ");"
+
+      bounds.foreach(_ => {
+        ctx << "hypercomm::pup(*s, " << arrayAbove(nameFmt) << ");"
+        ctx << "hypercomm::pup(*s, " << arrayAbove(nameFmt) << ");"
+      })
+    }
+    ctx << "}"
+
+    boundaries.flatten
   }
 
   def boundaryValue(node: EirExpressionNode): (String, EirExpressionNode) = {
@@ -359,7 +375,11 @@ object GenerateStencil {
     }
     ctx << "}"
 
+    ctx << s"if (this->$hasAbove() || this->$hasBelow()) {"
     ctx << "this->suspend<" << methodRef << ">();"
+    ctx << "}" << "else {"
+    makeContinuation(clause)
+    ctx << "}"
   }
 
   def extractProperties(
