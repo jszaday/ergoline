@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.analysis.Stencil
 import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
@@ -42,13 +43,18 @@ class CheckTypes extends Pass {
   override def apply(n: EirNode): Unit = {
     CheckTypes.visit(n)(Processes.typeContext())
   }
-  override def after: Seq[Pass] = Seq(Registry.instance[FullyResolve])
+  override def after: Seq[Pass] =
+    Seq(Registry.instance[FullyResolve], Registry.instance[Stencil.Pass])
   override def phase: Phase = Phase.Load
 }
 
 object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class MissingSelfException[A <: EirNamedNode](symbol: EirSymbol[A])
       extends Exception
+
+  override def fallback(implicit ctx: TypeCheckContext): Matcher = {
+    case x: GenerateCpp.CppNode => x.foundType.getOrElse(Errors.missingType(x))
+  }
 
   private def generateLval(x: EirArrayReference): EirExpressionNode = {
     makeMemberCall(x.target, "get", x.args)

@@ -3,4 +3,10 @@ package ergoline;
 namespace math {
     @system(fromHeader="cmath")
     def abs(d: double): double;
+
+    @system(alias="std::min", fromHeader="algorithm")
+    def min<A>(lhs: A, rhs: A): A;
+
+    @system(alias="std::max", fromHeader="algorithm")
+    def max<A>(lhs: A, rhs: A): A;
 }

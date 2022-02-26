@@ -1,0 +1,7 @@
+package stencil;
+
+import ck::future;
+
+@system def foreach();
+@system def boundary<Ts...>(ts: *(Ts...));
+@system def launch_<A, Ts...>(a: future<A>, ts: *(Ts...));

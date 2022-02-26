@@ -402,6 +402,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       ctx << "CpvAccess(" << name << ") = 0;"
     }
 
+    Processes.modules.foreach(mod => {
+      ctx << s"_register$mod();"
+    })
+
     if (anyObjects) {
       ctx << "ergoline::setup_singleton_module();"
     }
@@ -1202,6 +1206,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             args
           ) << ")"
         }
+      case _: EirFunction if name == "launch_" =>
+        val fn = Find.ancestors(fc).collectFirst { case x: EirFunction => x }
+        ctx << "hypercomm::tasking::launch<" << fn.map(
+          GenerateStencil.taskNameFor
+        ) << ">("
+        ctx << "ergoline::workgroup()," << visitArguments(
+          Some(fc),
+          Some(disambiguated),
+          args
+        )
+        ctx << ")"
       case f: EirFunction if name == "CkPrintf" || name == "::CkAbort" =>
         val endl = if (f.name == "println") "\\n" else ""
         ctx << name << "(\"%s" << endl << "\"," << "(" << {
@@ -1930,6 +1945,20 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       Option.when(annotatable && member.exists(_.isOverride))(" override")
     val virtual =
       Option.when(annotatable && member.exists(_.isVirtual))("virtual")
+
+    // TODO this is a temporary solution that may cause failures when
+    //      function bodies are defined ahead of their used symbols
+    val nestedParent = parent.flatMap(_.parent).to[EirMember].nonEmpty
+    val pureVirtual = virtual.nonEmpty && x.body.isEmpty
+    val forwardDeclaration = langCi || (
+      x.templateArgs.isEmpty && !hasDependentScope(x) && !nestedParent
+    )
+
+    val willReturn = isMember && (pureVirtual || forwardDeclaration)
+    if (!willReturn && x.hasAnnotation("stencil")) {
+      GenerateStencil.visit(x)
+    }
+
     visitTemplateArgs(x, systemParent)
     ctx << entryKwd
     ctx << virtual
@@ -1984,18 +2013,11 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
     ctx << ")" << overrides
 
-    // TODO this is a temporary solution that may cause failures when
-    //      function bodies are defined ahead of their used symbols
-    val nestedParent = parent.flatMap(_.parent).to[EirMember].nonEmpty
     if (isMember) {
-      if (virtual.nonEmpty && x.body.isEmpty) {
+      if (pureVirtual) {
         ctx << " = 0;"
         return
-      } else if (
-        langCi || (x.templateArgs.isEmpty && !hasDependentScope(
-          x
-        ) && !nestedParent)
-      ) {
+      } else if (forwardDeclaration) {
         ctx << ";"
         return
       }
@@ -2488,11 +2510,30 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def makeIndex(
-      ctx: CodeGenerationContext,
-      args: List[EirExpressionNode]
+  def createArray(
+      name: String,
+      args: List[EirExpressionNode],
+      n: Int,
+      initialize: Boolean
+  )(implicit
+      ctx: CodeGenerationContext
   ): Unit = {
-    ctx << "{ (std::size_t) " << (args, ", (std::size_t) ") << "})"
+    ctx << name << "::instantiate(std::array<std::size_t," << n.toString << ">"
+    ctx << "{ (std::size_t) " << (args, ", (std::size_t) ") << s" },${initialize.toString.toLowerCase})"
+  }
+
+  def createArray(
+      name: String,
+      args: List[EirExpressionNode],
+      n: EirLiteral[_],
+      initialize: Boolean
+  )(implicit
+      ctx: CodeGenerationContext
+  ): Unit = {
+    n match {
+      case EirIntegerLiteral(x) => createArray(name, args, x, initialize)
+      case _                    => ???
+    }
   }
 
   override def visitNew(
@@ -2557,11 +2598,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case (t: EirType, None) if t.isPointer =>
         val name = ctx.nameFor(t, Some(x))
         arrayDim(ctx, t) match {
-          case Some(n) =>
-            ctx << name << "::instantiate(std::array<std::size_t," << n << ">" << makeIndex(
-              ctx,
-              args
-            )
+          case Some(n) => createArray(name, args, n, initialize = true)
           case None =>
             ctx << "std::make_shared<ergoline::extricate_t<" << name << ">>(" << visitArguments(
               None,

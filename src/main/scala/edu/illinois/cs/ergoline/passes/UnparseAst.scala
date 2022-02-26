@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.literals.{EirLiteral, EirStringLiteral}
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.globals
+import edu.illinois.cs.ergoline.passes.GenerateCpp.Matcher
 import edu.illinois.cs.ergoline.passes.UnparseAst.UnparseContext
 import edu.illinois.cs.ergoline.proxies.EirProxy
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable}
@@ -78,6 +79,11 @@ class UnparseAst extends EirVisitor[UnparseContext, String] {
 
   override def error(node: EirNode)(implicit ctx: UnparseContext): String =
     error(ctx, node, s"unknown error on ${node.getClass.getName}")
+
+  override def fallback(implicit ctx: UnparseContext): Matcher = {
+    case x: EirClosure          => visitBlock(x.block)
+    case x: GenerateCpp.CppNode => s"system { ${x.s} }"
+  }
 
   def error(ctx: UnparseContext, node: EirNode, msg: String = ""): String =
     Errors.exit(Errors.format(node, msg))

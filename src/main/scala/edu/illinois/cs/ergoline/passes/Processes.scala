@@ -1,5 +1,6 @@
 package edu.illinois.cs.ergoline.passes
 
+import edu.illinois.cs.ergoline.analysis.Stencil
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
@@ -13,11 +14,14 @@ import edu.illinois.cs.ergoline.util.{Errors, TopologicalSort, isSystem}
 object Processes {
   def registerPasses(): Unit = {
     Registry.instance[FullyResolve]
+    Registry.instance[Stencil.Pass]
     Registry.instance[CheckTypes]
     Registry.instance[Orchestrate]
   }
 
   registerPasses()
+
+  var modules: Set[String] = Set()
 
   var cppIncludes: Set[String] = Set(
     "algorithm",
@@ -31,6 +35,8 @@ object Processes {
     //    "ergoline/reducer.hpp",
     "#include \"generate.decl.h\" // ;"
   )
+
+  var defIncludes: Set[String] = Set("generate.def.h")
 
   var sensitiveDeclIncludes: Map[String, String] = Map(
     ("iterable", "ergoline/section.decl.hpp")
@@ -245,11 +251,17 @@ object Processes {
     GenerateCpp.generateMain(ctx)
     GenerateCpp.registerPolymorphs(ctx)
 
-    sensitiveHelper(sensitiveDefIncludes)(ctx)
-
-    ctx << "#include \"generate.def.h\" // ;"
+    makeDefIncludes(ctx)
 
     List(ctx.toString)
+  }
+
+  def makeDefIncludes(ctx: CodeGenerationContext): Unit = {
+    sensitiveHelper(sensitiveDefIncludes)(ctx)
+
+    defIncludes.foreach(x => {
+      ctx << "#include \"" << x << "\" // ;"
+    })
   }
 
   // TODO this logic should be moved into its own file or generate cpp
