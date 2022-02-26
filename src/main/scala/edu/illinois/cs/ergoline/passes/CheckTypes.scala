@@ -52,6 +52,10 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
   final case class MissingSelfException[A <: EirNamedNode](symbol: EirSymbol[A])
       extends Exception
 
+  override def fallback(implicit ctx: TypeCheckContext): Matcher = {
+    case x: GenerateCpp.CppNode => x.foundType.getOrElse(Errors.missingType(x))
+  }
+
   private def generateLval(x: EirArrayReference): EirExpressionNode = {
     makeMemberCall(x.target, "get", x.args)
   }

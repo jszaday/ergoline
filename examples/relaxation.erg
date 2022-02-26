@@ -1,0 +1,71 @@
+package examples;
+
+import ck;
+import ergoline::_;
+import stencil::_;
+
+// launches a distributed task, gathers tiles and returns a future
+@stencil def relaxation(n: int, tol: double): array<double, 2> {
+    var grid = array<double, 2>::fill((n, n), 0.0);
+    var next = grid.clone();
+
+    // set the grid's boundary conditions
+    grid.pad(1.0);
+
+    var converged = false;
+    while (!converged) {
+        var max = 0.0;
+
+        // update the grid's boundaries (halo exchange)
+        boundary(grid);
+
+        foreach({
+            next[] = 0.2 * (grid[] +
+                grid[-1, 0] + grid[1, 0] +
+                grid[0, 1] + grid[0, -1]
+            );
+
+            val diff = math::abs(next[] - grid[]);
+            max = math::max(max, diff);
+        });
+
+        (grid, next) = (next, grid);
+
+        // automatically all-reduces `max' from all participants
+        converged = (max <= tol);
+    }
+
+    return grid;
+}
+
+@main class main {
+    @entry def self(args: array<string>) {
+        val n = (args.size() >= 2) ? args[1].toInt() : 16;
+        // calls `done' when the future's value is ready
+        relaxation(closest(n), 0.004).then(self@done);
+    }
+
+    @entry def done(grid: array<double, 2>) {
+        val (m, n) = grid.shape;
+
+        var s = "[ ";
+        for (var i = 0; i < m; i += 1) {
+            s += "[ ";
+            for (var j = 0; j < n; j += 1) {
+                s += `${grid[i, j]}, `;
+            }
+            s += "],\n";
+        }
+        s += "]";
+
+        println(s);
+
+        exit();
+    }
+}
+
+// helper to round to nearest pe count
+def closest(i: int): int {
+    val np = ck::numPes();
+    return math::max(np, i + (i % np));
+}

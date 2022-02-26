@@ -93,6 +93,10 @@ object GenerateStencil {
     }
   }
 
+  def lastDimSize(array: EirDeclaration)(implicit ctx: Context): String = {
+    ctx.info.dimensions(array).lastOption.map(_.toString).getOrElse(???)
+  }
+
   def makeBoundaryInitializer(
       declaration: EirDeclaration,
       boundary: EirExpressionNode
@@ -183,6 +187,16 @@ object GenerateStencil {
     s"block_${x.id}_$suffix"
   }
 
+  def splitDimension(x: EirExpressionNode): EirExpressionNode = {
+    val node = GenerateCpp.CppNode("ergoline::workgroup_size()")
+    node.foundType = Some(globals.integerType)
+    EirBinaryExpression(None, x, "/", node)
+  }
+
+  def splitFirst(list: List[EirExpressionNode]): List[EirExpressionNode] = {
+    (list.headOption.map(splitDimension) ++ list.tail).toList
+  }
+
   def visitForEach(call: EirFunctionCall)(implicit
       ctx: Context
   ): Unit = {
@@ -193,7 +207,7 @@ object GenerateStencil {
       .map(_.block)
       .getOrElse(???)
     val info = ctx.info.loops(body)
-    val dimensions = info.dimensions.getOrElse(???)
+    val dimensions = splitFirst(info.dimensions.getOrElse(???))
     val counters = dimensions.indices.map(i => s"__it_${i}__").toList
 
     CheckTypes.visit(body)(ctx.tyCtx)
@@ -231,7 +245,9 @@ object GenerateStencil {
     }
 
     counters.zip(dimensions).foreach { case (counter, dim) =>
-      ctx << s"for (auto $counter = 0; $counter < ($dim); $counter++) {"
+      ctx << s"for (auto $counter = 0; $counter < ("
+      GenerateCpp.visit(dim)(ctx.ctx)
+      ctx << s"); $counter++) {"
     }
 
     GenerateCpp.visit(body)(ctx.ctx)
@@ -342,10 +358,6 @@ object GenerateStencil {
     ctx << s"this->send<$methodRef>(this->index() " << direction << ", this->index(), __slice__);"
   }
 
-  def lastDimSize(array: EirDeclaration)(implicit ctx: Context): String = {
-    ctx.info.dimensions(array).lastOption.map(_.toString).getOrElse(???)
-  }
-
   def declarationsFor(call: EirFunctionCall): View[EirDeclaration] = {
     call.args.view
       .map(_.expr)
@@ -371,7 +383,7 @@ object GenerateStencil {
 
     ctx << s"if (this->$hasBelow())" << "{"
     decls.zip(halos).foreach { case (x, halo) =>
-      sendHalo(x, methodRef, "+ 1", s"(${lastDimSize(x)}) - $halo", halo)
+      sendHalo(x, methodRef, "+ 1", s"${x.name}->shape[0] - $halo", halo)
     }
     ctx << "}"
 
@@ -610,6 +622,26 @@ object GenerateStencil {
 
   def taskNameFor(fn: EirFunction): String = s"${fn.name}_task"
 
+  def splitDeclarations(implicit ctx: Context): Unit = {
+    ctx.info.dimensions.keys.foreach(declaration => {
+      declaration.initialValue match {
+        case Some(_: EirNew) => ???
+        case Some(x: EirFunctionCall) => Stencil
+            .isFill(x)
+            .foreach(dims => {
+              dims.headOption
+                .map(dim => (dim, splitDimension(dim)))
+                .foreach { case (before, after) =>
+                  assert(before.parent.exists(parent => {
+                    parent.replaceChild(before, after)
+                  }))
+                }
+            })
+        case _ => ???
+      }
+    })
+  }
+
   def visit(fn: EirFunction)(implicit cgn: CodeGenerationContext): Unit = {
     val (res, graph) = Registry.instance[Stencil.Pass].apply(fn)
     val taskName = taskNameFor(fn)
@@ -640,6 +672,7 @@ object GenerateStencil {
     ctx << payloadHeader(taskName) << "{"
     visitArguments(fn.functionArgs)
     makeBoundaries(boundaries)
+    splitDeclarations(ctx)
     graph match {
       case Some(x: Segmentation.SerialBlock) =>
         visitSerialBlock(x, inline = true)
