@@ -80,10 +80,13 @@ object Driver extends App {
   val codegen = Modules.currTimeMs
   println(s"ergoline compilation:\t${codegen - start}ms")
 
-  val blasMod = globals.ergolineModule
+  val usingBlas = globals.ergolineModule
     .flatMap(Find.child(_, withName("blas")).headOption)
+    .exists(_.isInstanceOf[EirNamespace])
 
-  val usingBlas = blasMod.exists(_.isInstanceOf[EirNamespace])
+  val usingTasking = Find
+    .child(EirGlobalNamespace, withName("stencil"))
+    .exists(_.isInstanceOf[EirNamespace])
 
   if (!skipCompilation) compile()
 
@@ -98,7 +101,9 @@ object Driver extends App {
 
     val info = Modules.hypercommHome.flatMap(util.readLibsAndIncludes)
 
-    val hyperLibs = splitInfo(info.map(_._1))
+    val hyperLibs = splitInfo(info.map(_._1)) ++ Option.when(usingTasking)({
+      "-lhypercomm-tasking"
+    })
     val hyperIncl = splitInfo(info.map(_._2))
 
     val inclPaths: Seq[String] = hyperIncl ++ {
