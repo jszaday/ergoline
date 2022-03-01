@@ -11,7 +11,7 @@ class array<A, N: int = 1> extends iterable<A> {
 
     @system def [](idx: *shapeType): A&;
 
-    @system def [](indices: *((range<int>) .* N)): iterable< A& >;
+    @system def [](indices: *((slice) .* N)): iterable< A& >;
 
     @system def size(): int where N == 1;
 

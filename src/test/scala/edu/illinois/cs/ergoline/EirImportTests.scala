@@ -213,8 +213,8 @@ class EirImportTests extends AnyFunSuite {
 
     val ctx = new TypeCheckContext()
     val range = globals.rangeType.asInstanceOf[EirClass]
-    val iterable = globals.iterableType.asInstanceOf[EirTrait]
-    val iterator = globals.iteratorType.asInstanceOf[EirTrait]
+    val iterable = globals.iterableType
+    val iterator = globals.iteratorType
 
     val intRange = EirTemplatedType(None, range, List(globals.integerType))
     val intIterator = EirTemplatedType(None, iterator, List(globals.integerType))

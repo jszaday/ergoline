@@ -1,7 +1,7 @@
-#ifndef __ERGOLINE_SECTION_DEF_HPP__
-#define __ERGOLINE_SECTION_DEF_HPP__
+#ifndef ERGOLINE_ITERATOR_DEF_HPP
+#define ERGOLINE_ITERATOR_DEF_HPP
 
-#include "section.decl.hpp"
+#include "iterator.decl.hpp"
 
 namespace ergoline {
 
@@ -26,13 +26,12 @@ inline std::shared_ptr<imprintable_t<T>> conv2section(const T& t) {
     vect.push_back(iter->next());
   }
   return std::static_pointer_cast<imprintable_t<T>>(
-    std::make_shared<section_type>(std::move(vect))
-  );
+      std::make_shared<section_type>(std::move(vect)));
 }
 
 hypercomm::combiner_ptr make_null_combiner(void) {
   return std::make_shared<hypercomm::null_combiner>();
 }
-}
+}  // namespace ergoline
 
 #endif

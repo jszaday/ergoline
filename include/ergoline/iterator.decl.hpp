@@ -1,9 +1,8 @@
-#ifndef __ERGOLINE_SECTION_DECL_HPP__
-#define __ERGOLINE_SECTION_DECL_HPP__
+#ifndef ERGOLINE_ITERATOR_DECL_HPP
+#define ERGOLINE_ITERATOR_DECL_HPP
 
-#include <hypercomm/core/null_combiner.hpp>
 #include <hypercomm/core/inter_callback.hpp>
-
+#include <hypercomm/core/null_combiner.hpp>
 #include <hypercomm/sections.hpp>
 #include <hypercomm/sections/imprintable.hpp>
 
@@ -33,6 +32,6 @@ template <typename T>
 std::shared_ptr<imprintable_t<T>> conv2section(const T&);
 
 hypercomm::combiner_ptr make_null_combiner(void);
-}
+}  // namespace ergoline
 
 #endif

@@ -39,11 +39,13 @@ object Processes {
   var defIncludes: Set[String] = Set("generate.def.h")
 
   var sensitiveDeclIncludes: Map[String, String] = Map(
-    ("iterable", "ergoline/section.decl.hpp")
+    ("iterator", "ergoline/iterator.decl.hpp"),
+    ("slice", "ergoline/slice.decl.hpp")
   )
 
   var sensitiveDefIncludes: Map[String, String] = Map(
-    ("iterable", "ergoline/section.def.hpp")
+    ("iterator", "ergoline/iterator.def.hpp"),
+    ("slice", "ergoline/slice.def.hpp")
   )
 
   private var ctx: TypeCheckContext = new TypeCheckContext
