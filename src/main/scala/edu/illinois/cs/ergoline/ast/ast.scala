@@ -600,8 +600,6 @@ case class EirMember(
     !isStatic && (member match {
       case _: EirFunction =>
         !isConstructor && (base.isAbstract || isOverride) && {
-          !annotations.exists(_.name == "system")
-        } && {
           member match {
             case s: EirSpecializable => s.templateArgs.isEmpty
             case _                   => false

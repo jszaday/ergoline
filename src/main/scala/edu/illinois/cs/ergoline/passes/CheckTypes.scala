@@ -5,7 +5,7 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
-import edu.illinois.cs.ergoline.ast._
+import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirFunctionCall, _}
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
@@ -1871,86 +1871,40 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     x.body.map(visit).getOrElse(globals.unitType)
   }
 
-  override def visitSlice(slice: EirSlice)(implicit
+  def mkOption(parent: EirExpressionNode, option: Option[EirExpressionNode])(
+      implicit ctx: TypeCheckContext
+  ): EirExpressionNode = {
+    // create the symbol for the some/none matcher
+    val symbol = EirSymbol[EirNamedNode](
+      None,
+      List(option.map(_ => "some").getOrElse("none"))
+    )
+    // create the call using the symbol (e.g., some(x) or none())
+    val call = EirFunctionCall(
+      parent.parent,
+      symbol,
+      option match {
+        case Some(x) => List(EirCallArgument(x, isRef = false)(None))
+        case _       => Nil
+      },
+      Nil
+    )
+    // assign the parents for all the newly created nodes
+    symbol.parent = Some(call)
+    call.args.foreach(_.parent = Some(call))
+    // then return the call
+    call
+  }
+
+  override def visitSlice(x: EirSlice)(implicit
       ctx: TypeCheckContext
   ): EirType = {
-    val arrRef = slice.parent collect { case x: EirArrayReference => x }
-    val isHead = arrRef.flatMap(_.args.headOption).contains(slice)
-    val isLast = arrRef.flatMap(_.args.lastOption).contains(slice)
-    val targetType = arrRef.map(_.target).map(visit)
-    val one = EirIntegerLiteral(1)(None)
-
-    // TODO changeover to begin/end using iterators/indices?
-    val start = slice.start getOrElse {
-      if (isHead) {
-        EirIntegerLiteral(0)(None)
-      } else {
-        val prev = arrRef
-          .map(_.args.indexOf(slice) - 1)
-          .filter(_ >= 0)
-          .flatMap(x => arrRef.map(_.args(x)))
-
-        prev match {
-          case Some(x: EirSlice) => x.end.map(y => {
-              EirBinaryExpression(
-                None,
-                y,
-                "-",
-                EirBinaryExpression(None, y, "%", x.step getOrElse one)
-              )
-            }) getOrElse Errors.unboundSlice(slice, targetType)
-          case Some(x) => x
-          case _       => Errors.unboundSlice(slice, targetType)
-        }
-      }
-    }
-
-    val step = slice.step getOrElse one
-
-    val end = slice.end getOrElse {
-      val hasSizer = {
-        targetType
-          .flatMap(Find.tryClassLike)
-          .flatMap(_.members collectFirst {
-            case m @ EirMember(_, f: EirFunction, _)
-                if f.name == "size" && f.functionArgs.isEmpty && !m.isStatic =>
-              m
-          })
-          .nonEmpty
-      }
-
-      if (isLast && hasSizer) {
-        EirFunctionCall(
-          None,
-          EirScopedSymbol(
-            arrRef.get.target,
-            EirSymbol[EirNamedNode](None, List("size"))
-          )(None),
-          Nil,
-          Nil
-        )
-      } else {
-        val peer = arrRef.map(_.args).flatMap { x =>
-          Option.unless(isLast)(x(x.indexOf(slice) + 1))
-        }
-
-        peer match {
-          case Some(x: EirSlice) =>
-            x.start getOrElse Errors.unboundSlice(slice, targetType)
-          case Some(x) => x
-          case _       => Errors.unboundSlice(slice, targetType)
-        }
-      }
-    }
-
-    val args = List(start, step, end)
-    val types = args.map(visit(_))
-    val union =
-      Find.unifyTypes(types).getOrElse(Errors.unableToUnify(slice, types))
-    val range =
-      EirNew(None, EirTemplatedType(None, globals.rangeType, List(union)), args)
-    slice.disambiguation = Some(range)
-    visit(range)
+    val start = mkOption(x, x.start)
+    val stop = mkOption(x, x.end)
+    val step = mkOption(x, x.step)
+    val slice = EirNew(None, globals.sliceType, List(start, step, stop))
+    x.disambiguation = Some(slice)
+    visit(slice)
   }
 
   override def visitAwaitMany(

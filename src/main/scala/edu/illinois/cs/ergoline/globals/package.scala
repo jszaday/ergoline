@@ -113,6 +113,10 @@ package object globals {
     Find.namedChild[EirClassLike](ergolineModule, "range")
   }
 
+  def sliceType: EirType = {
+    Find.namedChild[EirClassLike](ergolineModule, "slice")
+  }
+
   def arrayType: EirType = {
     Find.namedChild[EirClassLike](ergolineModule, "array")
   }

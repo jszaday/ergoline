@@ -1,0 +1,19 @@
+package ergoline;
+
+struct slice with iterable<int> {
+    val start: option<int>;
+    val stop: option<int>;
+    val step: option<int>;
+
+    def self(=start: option<int>,
+             =step: option<int>,
+             =stop: option<int>) {}
+
+    def self(=start: option<int>,
+             =stop: option<int>) {
+        step = option<int>();
+    }
+
+    @system(static, alias="make_slice_iterator")
+    override def iter(): iterator<int>;
+}

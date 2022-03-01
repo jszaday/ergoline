@@ -1901,6 +1901,28 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  private def mkVirtualSystemCall(
+      f: EirFunction
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val member = f.parent.to[EirMember]
+    val system =
+      f.annotation("system").orElse(member.flatMap(_.annotation("system")))
+    val name =
+      system.flatMap(_("alias")).map(_.strip()).getOrElse(ctx.nameFor(f))
+    val isUnit = ctx.typeOf(f.returnType) == globals.unitType
+    val isStatic = system.flatMap(_("static")).exists(_.toBoolean)
+    val self = Option.when(isStatic)(
+      if (member.exists(_.base.isValueType)) "*this"
+      else "this->shared_from_this()"
+    )
+
+    ctx << Option.unless(isUnit)(
+      "return"
+    ) << name << "(" << (self ++ (f.functionArgs ++ f.implicitArgs).map(
+      ctx.nameFor(_)
+    ), ",") << ");"
+  }
+
   def visitFunction(
       x: EirFunction,
       isMember: Boolean,
@@ -1917,8 +1939,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
     val canEnter = ctx.hasChecked(x) || langCi
 
+    val isSystem = x.isSystem
+    val systemParent = parent.exists(_.isSystem)
+    val virtualMember = member.exists(_.isVirtual)
+    val avoidableSystem = isSystem && (systemParent || !virtualMember)
+
     if (
-      !canEnter || (!langCi && entryOnly) || x.isSystem || abstractMember || isTempl
+      !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || isTempl
     ) {
       return
     }
@@ -1926,7 +1953,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val ancestor = Find.ancestors(x).collectFirst { case fn: EirFunction => fn }
     val isNested = ancestor.nonEmpty
     val isConstructor = member.exists(_.isConstructor)
-    val systemParent = parent.exists(_.isSystem)
     val isStatic = member.exists(_.isStatic)
     val proxyParent = parent.to[EirProxy]
 
@@ -1943,8 +1969,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       langCi && isMember && member.flatMap(_.annotation("async")).isDefined
     val overrides =
       Option.when(annotatable && member.exists(_.isOverride))(" override")
-    val virtual =
-      Option.when(annotatable && member.exists(_.isVirtual))("virtual")
+    val virtual = Option.when(annotatable && virtualMember)("virtual")
 
     // TODO this is a temporary solution that may cause failures when
     //      function bodies are defined ahead of their used symbols
@@ -2014,6 +2039,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     ctx << ")" << overrides
 
     if (isMember) {
+      if (isSystem && virtualMember) {
+        ctx << "{" << mkVirtualSystemCall(x) << "}"
+        return
+      }
       if (pureVirtual) {
         ctx << " = 0;"
         return
