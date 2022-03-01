@@ -2,16 +2,22 @@ package ergoline;
 
 struct slice with iterable<int> {
     val start: option<int>;
-    val stop: option<int>;
+    val end: option<int>;
     val step: option<int>;
 
     def self(=start: option<int>,
              =step: option<int>,
-             =stop: option<int>) {}
+             =end: option<int>) {}
 
     def self(=start: option<int>,
-             =stop: option<int>) {
+             =end: option<int>) {
         step = option<int>();
+    }
+
+    def self(x: range<int>) {
+        start = option<int>(x.start);
+        step = option<int>(x.step);
+        end = option<int>(x.end);
     }
 
     @system(static, alias="make_slice_iterator")

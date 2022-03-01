@@ -1,7 +1,7 @@
-#ifndef __ERGOLINE_SECTION_DEF_HPP__
-#define __ERGOLINE_SECTION_DEF_HPP__
+#ifndef ERGOLINE_ITERATOR_DEF_HPP
+#define ERGOLINE_ITERATOR_DEF_HPP
 
-#include "section.decl.hpp"
+#include "iterator.decl.hpp"
 
 namespace ergoline {
 
@@ -31,18 +31,6 @@ inline std::shared_ptr<imprintable_t<T>> conv2section(const T& t) {
 
 hypercomm::combiner_ptr make_null_combiner(void) {
   return std::make_shared<hypercomm::null_combiner>();
-}
-
-std::shared_ptr<iterator<int>> make_slice_iterator(const slice& self) {
-  if (self.stop) {
-    auto start = self.start ? *(self.start) : 0;
-    auto& stop = *(self.stop);
-    auto step = self.step ? *(self.step) : ((start > stop) ? -1 : 1);
-    return std::make_shared<range<int>::range_iterator>(
-        range<int>(start, step, stop));
-  } else {
-    return nullptr;
-  }
 }
 }  // namespace ergoline
 
