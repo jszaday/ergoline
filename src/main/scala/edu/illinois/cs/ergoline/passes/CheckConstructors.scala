@@ -69,7 +69,12 @@ object CheckConstructors {
       if (!selfAssignmentsOk(cls, constructor)) {
         Errors.invalidSelfAssignment(constructor)
       }
-      if (!fulfillsMandatoryAssignments(needsInitialization, constructor)) {
+      if (
+        !fulfillsMandatoryAssignments(
+          needsInitialization,
+          constructor
+        ) && !constructor.isSystem
+      ) {
         Errors.missingMemberAssignment(constructor)
       }
     }

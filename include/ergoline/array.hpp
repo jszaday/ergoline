@@ -168,6 +168,24 @@ template <typename T>
 constexpr std::size_t offset_for(void) {
   return T::offset;
 }
+
+template <typename T>
+struct iterator;
+
+template <typename T, std::size_t N>
+struct array_view;
+
+template <typename T>
+struct array_view<T, 2> {
+  T *start;
+  T *stop;
+  int step;
+
+  template <typename... Args>
+  array_view(const std::shared_ptr<nd_span<T, 2>> &array, Args... args);
+
+  std::shared_ptr<iterator<T>> iter(void) const;
+};
 }  // namespace ergoline
 
 namespace hypercomm {

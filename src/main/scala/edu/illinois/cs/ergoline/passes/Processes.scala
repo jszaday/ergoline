@@ -124,6 +124,7 @@ object Processes {
     "#include <ergoline/mailbox.hpp> // ;",
     "#include <ergoline/collectives.hpp> // ;",
     "#include <ergoline/object.hpp> // ;",
+    "#include <ergoline/trait.hpp> // ;",
     "#include <ergoline/array.hpp> // ;"
   )
 

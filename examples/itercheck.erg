@@ -25,6 +25,35 @@ import ergoline::_;
             println(`a(${a}) = ${b}`);
         }
 
+        self@checkSlicing();
+    }
+
+    @entry def checkSlicing() {
+        val m = 4;
+        val n = m;
+
+        val a = new array<int, 2>(m, n);
+
+        println("contents of matrix:");
+        for ( i <- 0 to m ) {
+            for ( j <- 0 to n ) {
+                val x = i * n + j;
+                a[i, j] = x;
+                print(`${x}\t`);
+            }
+            println("");
+        }
+
+        println("contents of third row:");
+        for ( x <- a[:, 2] ) {
+            print(`${x}\t`);
+        }
+
+        println("\ncontents of third column:");
+        for ( x <- a[2, :] ) {
+            print(`${x}\t`);
+        }
+
         exit();
     }
 }
