@@ -56,8 +56,10 @@ import ergoline::_;
         }
 
         a[2, :] = a[:, 2];
+        a[:, 2] = 0;
+        a[2, 2] = 2 * n + 2;
 
-        println("\ncontents of matrix after copying the third column to the third row:");
+        println("\ncontents of matrix after moving the third column to the third row:");
         for ( i <- 0 to m ) {
             for ( j <- 0 to n ) {
                 print(`${a[i, j]}\t`);

@@ -101,6 +101,16 @@ array_view<T, 2>::array_view(const std::shared_ptr<nd_span<T, 2>> &array,
                                           std::forward<Args>(args)...);
 }
 
+template <typename T> void array_view<T, 2>::set(const T &t) {
+  auto *curr = this->start;
+  auto stop = (std::uintptr_t)this->stop;
+
+  while ((std::uintptr_t)curr < stop) {
+    *curr = t;
+    curr += this->step;
+  }
+}
+
 template <typename T>
 template <typename It>
 void array_view<T, 2>::set(const std::shared_ptr<It> &it) {

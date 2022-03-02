@@ -186,6 +186,8 @@ struct array_view<T, 2> {
 
   std::shared_ptr<iterator<T>> iter(void) const;
 
+  void set(const T& t);
+
   template <typename A>
   void set(const std::shared_ptr<A>& it);
 };
