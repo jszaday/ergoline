@@ -166,17 +166,17 @@ class jacobi2d {
         // helper functions to extract rows/columns of data
         // (it would be nice to use slicing here eventually)
         def getColumn(j: int): array<double> {
-            val row = new array<double>(dimX);
-            for (var i = 0; i < dimX; i += 1) {
-                row[i] = grid[i + 1, j];
+            val row = new array<double>(dimX + 2);
+            for (var i = 0; i < (dimX + 2); i += 1) {
+                row[i] = grid[i, j];
             }
             return row;
         }
 
         def getRow(i: int): array<double> {
-            val col = new array<double>(dimY);
-            for (var j = 0; j < dimY; j += 1) {
-                col[j] = grid[i, j + 1];
+            val col = new array<double>(dimY + 2);
+            for (var j = 0; j < (dimY + 2); j += 1) {
+                col[j] = grid[i, j];
             }
             return col;
         }
@@ -205,19 +205,14 @@ class jacobi2d {
 
         // helper functions to init parts of grid and nextGrid
         // (we initialize both because we swap between them.)
-        // (it would be nice to use slicing here eventually.)
         def setColumn(j: int) {
-            for (var i = 0; i < (dimX + 2); i += 1) {
-                grid[i, j] = defaultValue;
-                nextGrid[i, j] = defaultValue;
-            }
+            grid[:, j] = defaultValue;
+            nextGrid[:, j] = defaultValue;
         }
 
         def setRow(i: int) {
-            for (var j = 0; j < (dimY + 2); j += 1) {
-                grid[i, j] = defaultValue;
-                nextGrid[i, j] = defaultValue;
-            }
+            grid[i, :] = defaultValue;
+            nextGrid[i, :] = defaultValue;
         }
 
         // initialize regions of the grids at the edges,
@@ -233,31 +228,16 @@ class jacobi2d {
 
     private def process_ghost(dir: int, data: array<double>) {
         val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
-
-        // helper functions to place ghost data in the grid
-        // (it would be nice to use slicing here eventually)
-        def setColumn(j: int) {
-            assert(data.size() == dimX);
-            for (var i = 0; i < dimX; i += 1) {
-                grid[i + 1, j] = data[i];
-            }
-        }
-
-        def setRow(i: int) {
-            assert(data.size() == dimY);
-            for (var j = 0; j < dimY; j += 1) {
-                grid[i, j + 1] = data[j];
-            }
-        }
+        assert((data.size() == (dimX + 2)) || (data.size() == (dimY + 2)));
 
         if (dir == globals.north && hasNorth) {
-            setColumn(0);
+            grid[:, 0] = data;
         } else if (dir == globals.east && hasEast) {
-            setRow(0);
+            grid[0, :] = data;
         } else if (dir == globals.south && hasSouth) {
-            setColumn(dimY + 1);
+            grid[:, (dimY + 1)] = data;
         } else if (dir == globals.west && hasWest) {
-            setRow(dimX + 1);
+            grid[(dimX + 1), :] = data;
         } else {
             abort(`fatal> received unexpected ghost from ${dir}`);
         }
