@@ -1479,9 +1479,35 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       }
     }
 
-    checkPair(visit(node.lval), visit(node.rval))
+    val lhsTy = visit(node.lval)
+    val tryCall = Find.tryClassLike(lhsTy).exists(_.hasMember(node.op))
 
-    globals.unitType
+    if (tryCall) {
+      // make a symbol akin to (lhs.=)
+      val scoped = EirScopedSymbol[EirNamedNode](
+        node.lval,
+        EirSymbol[EirNamedNode](None, List(node.op))
+      )(None)
+      // form the complete call (lhs.=(rhs))
+      val call = EirFunctionCall(
+        node.parent,
+        scoped,
+        List(EirCallArgument(node.rval, isRef = false)(None)),
+        Nil
+      )
+      // assign parents
+      scoped.parent = Some(call)
+      scoped.pending.parent = Some(scoped)
+      call.args.foreach(_.parent = Some(call))
+      // assign disambiguation
+      node.disambiguation = Some(call)
+      // visit function call
+      visit(call)
+    } else {
+      checkPair(lhsTy, visit(node.rval))
+
+      globals.unitType
+    }
   }
 
   override def visitTupleExpression(

@@ -3,8 +3,18 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, RichEirType}
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, qualifiedNameFor, templateArgsOf, visitInherits, visitTemplateArgs}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{
+  RichEirNode,
+  RichEirType
+}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{
+  makeHasher,
+  makePupper,
+  qualifiedNameFor,
+  templateArgsOf,
+  visitInherits,
+  visitTemplateArgs
+}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{assertValid, isSystem}

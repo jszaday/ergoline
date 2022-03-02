@@ -1967,7 +1967,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val virtualMember = member.exists(_.isVirtual)
     val avoidableSystem = isSystem && (systemParent || !virtualMember)
     val isGeneric = x.templateArgs.nonEmpty
-    val definableTemplate = isGeneric && !isMember && !(parent.isEmpty || systemParent)
+    val definableTemplate =
+      isGeneric && !isMember && !(parent.isEmpty || systemParent)
 
     if (
       !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || definableTemplate

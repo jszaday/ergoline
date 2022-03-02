@@ -379,7 +379,7 @@ trait EirClassLike
   def hasMember(name: String): Boolean = member(name).isDefined || {
     inherited.view
       .map(Find.uniqueResolution[EirType])
-      .flatMap(Find.tryClassLike(_))
+      .flatMap(Find.tryClassLike)
       .exists(_.hasMember(name))
   }
 
