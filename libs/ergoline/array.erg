@@ -11,7 +11,22 @@ class array<A, N: int = 1> extends iterable<A> {
 
     @system def [](idx: *shapeType): A&;
 
-    @system def [](indices: *((slice) .* N)): iterable< A& >;
+    // TODO ( introduce a way to auto-generate these alternatives )
+    def [](slices: *(slice, slice)): array_view<A, N> where (N == 2) {
+        return new array_view<A, N>(self, slices);
+    }
+
+    def [](slices: *(int, slice)): array_view<A, N> where (N == 2) {
+        return new array_view<A, N>(self, slices);
+    }
+
+    def [](slices: *(slice, int)): array_view<A, N> where (N == 2) {
+        return new array_view<A, N>(self, slices);
+    }
+
+    def [](x: slice): array_view<A, N> where (N == 1) {
+        return new array_view<A, N>(self, x);
+    }
 
     @system def size(): int where N == 1;
 

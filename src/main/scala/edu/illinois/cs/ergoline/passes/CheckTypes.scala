@@ -741,6 +741,7 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
 
     x match {
       case x: EirExpressionNode => x.disambiguation = found.map(_._1)
+      case _                    =>
     }
 
     found.map(_._2)
@@ -845,8 +846,9 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
         } else {
           val s = visit(candidate)
           val t = assertValid[EirLambdaType](s)
+          val tArgs = t.from.map(visit)
 
-          if (argumentsMatch(ours, t.from.map(assertValid[EirType]))) {
+          if (argumentsMatch(ours, tArgs)) {
             // NOTE the double check is necessary here to visit candidate if it hasn't
             // already been visited... and since visitFunction doesn't resolve its types
             (false, Some((candidate, t)))
@@ -1875,10 +1877,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       implicit ctx: TypeCheckContext
   ): EirExpressionNode = {
     // create the symbol for the some/none matcher
-    val symbol = EirSymbol[EirNamedNode](
-      None,
-      List(option.map(_ => "some").getOrElse("none"))
-    )
+    val symbol = option match {
+      case Some(_) => EirSymbol[EirNamedNode](
+          None,
+          List("some")
+        )
+      case _ => EirSpecializedSymbol[EirNamedNode](
+          None,
+          globals.optionType
+            .asInstanceOf[EirResolvable[EirNamedNode with EirSpecializable]],
+          List(globals.integerType)
+        )
+    }
     // create the call using the symbol (e.g., some(x) or none())
     val call = EirFunctionCall(
       parent.parent,

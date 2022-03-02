@@ -3,14 +3,8 @@ package edu.illinois.cs.ergoline.passes
 import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.ast.types.{EirTemplatedType, EirType}
 import edu.illinois.cs.ergoline.globals
-import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.RichEirType
-import edu.illinois.cs.ergoline.passes.GenerateCpp.{
-  makeHasher,
-  makePupper,
-  templateArgsOf,
-  visitInherits,
-  visitTemplateArgs
-}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.GenCppSyntax.{RichEirNode, RichEirType}
+import edu.illinois.cs.ergoline.passes.GenerateCpp.{makeHasher, makePupper, qualifiedNameFor, templateArgsOf, visitInherits, visitTemplateArgs}
 import edu.illinois.cs.ergoline.resolution.Find
 import edu.illinois.cs.ergoline.util.TypeCompatibility.RichEirClassLike
 import edu.illinois.cs.ergoline.util.{assertValid, isSystem}
@@ -176,10 +170,15 @@ object GenerateDecls {
   )(implicit ctx: CodeGenerationContext): Unit = {
     ctx << "constexpr" << "auto" << "accessor" << "="
     if (x.isSystem) {
-      ctx << iter.map(ctx.nameFor(_, ns))
-      ctx << Option.when(args.nonEmpty)(
-        s"<${args.map(ctx.nameFor(_)) mkString ","}>"
-      )
+      if (iter.exists(_.isSystem)) {
+        ctx << ns.map(qualifiedNameFor(ctx, _, includeTemplates = true)(x))
+        ctx << "::" << iter.map(ctx.nameFor(_))
+      } else {
+        ctx << iter.map(ctx.nameFor(_, ns))
+        ctx << Option.when(args.nonEmpty)(
+          s"<${args.map(ctx.nameFor(_)) mkString ","}>"
+        )
+      }
     } else if (x.isValueType) {
       ctx << "ergoline::access_value_iter<" << qualifiedName << ">"
     } else {

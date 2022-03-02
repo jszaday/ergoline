@@ -1,0 +1,14 @@
+package ergoline;
+
+@system struct array_view<A, N: int> with iterable<A> {
+    using slicesType = (slice) .* N;
+
+    @system val a: array<A, N>;
+    @system val slices: slicesType;
+
+    @system def self(a: array<A, N>, slices: slicesType);
+    @system def self(a: array<A, N>, ij: (int, slice)) where (N == 2);
+    @system def self(a: array<A, N>, ij: (slice, int)) where (N == 2);
+
+    @system override def iter(): iterator<A>;
+}

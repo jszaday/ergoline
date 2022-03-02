@@ -9,7 +9,6 @@
 #include "array.hpp"
 
 namespace ergoline {
-
 template <typename T, typename Enable = void>
 struct iterator_for;
 

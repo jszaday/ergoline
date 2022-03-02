@@ -4,6 +4,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirBooleanLiteral,
   EirIntegerLiteral,
   EirLiteral,
+  EirLiteralSymbol,
   EirStringLiteral,
   EirUnitLiteral
 }
@@ -97,7 +98,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       }
 
       def isSystem: Boolean =
-        Find.asClassLike(self).annotation("system").isDefined
+        Find.tryClassLike(self).flatMap(_.annotation("system")).nonEmpty
 
       def isTrait: Boolean = Find.asClassLike(self).isInstanceOf[EirTrait]
     }
@@ -1509,6 +1510,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(implicit ctx: CodeGenerationContext): Unit = {
     x match {
       case EirStringLiteral(value) => ctx << s"std::string($value)"
+      case EirLiteralSymbol(value) => ctx << ctx.nameFor(value, x.parent)
       case EirUnitLiteral(_)       =>
       case _                       => ctx << x.value.toString
     }
@@ -1902,15 +1904,36 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  private def mkVirtualSystemCall(
-      f: EirFunction
-  )(implicit ctx: CodeGenerationContext): Unit = {
+  private def systemNameFor(node: EirNode, where: Option[EirNode])(implicit
+      ctx: CodeGenerationContext
+  ): (Option[EirAnnotation], String) = {
+    node match {
+      case x: EirMember   => systemNameFor(x.member, where)
+      case x: EirFunction => systemNameFor(x, where)
+      case _              => ???
+    }
+  }
+
+  private def systemNameFor(f: EirFunction, where: Option[EirNode])(implicit
+      ctx: CodeGenerationContext
+  ): (Option[EirAnnotation], String) = {
     val member = f.parent.to[EirMember]
     val system =
       f.annotation("system").orElse(member.flatMap(_.annotation("system")))
     val name =
-      system.flatMap(_("alias")).map(_.strip()).getOrElse(ctx.nameFor(f))
-    val isUnit = ctx.typeOf(f.returnType) == globals.unitType
+      system.flatMap(_("alias")).map(_.strip()).getOrElse(ctx.nameFor(f, where))
+    (system, name)
+  }
+
+  private def mkVirtualSystemCall(
+      f: EirFunction
+  )(implicit ctx: CodeGenerationContext): Unit = {
+    val member = f.parent.to[EirMember]
+    val isUnit = f.returnType match {
+      case _: EirTemplatedType | _: EirSpecializedSymbol[_] => false
+      case x                                                => ctx.typeOf(x) == globals.unitType
+    }
+    val (system, name) = systemNameFor(f, None)
     val isStatic = system.flatMap(_("static")).exists(_.toBoolean)
     val self = Option.when(isStatic)(
       if (member.exists(_.base.isValueType)) "*this"
@@ -2142,12 +2165,15 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   )(
       of: EirNode
   ): String = {
-    (qualificationsFor(of, occurrence)(ctx) :+ nameFor(
-      ctx,
-      of,
-      includeTemplates,
-      Some(occurrence)
-    )).mkString("::")
+    of match {
+      case x: EirConstantFacade => expressionToString(x.value)(ctx)
+      case x => (qualificationsFor(x, occurrence)(ctx) :+ nameFor(
+          ctx,
+          x,
+          includeTemplates,
+          Some(occurrence)
+        )).mkString("::")
+    }
   }
 
   def selfIndex(ctx: CodeGenerationContext): String =
@@ -2280,6 +2306,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
+  def expressionToString(
+      x: EirExpressionNode
+  )(implicit ctx: CodeGenerationContext): String = {
+    val child = ctx.makeSubContext()
+    child << x
+    child.toString
+  }
+
   def nameFor(
       ctx: CodeGenerationContext,
       x: EirNode,
@@ -2345,6 +2379,12 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
             })
             .getOrElse("")
         }
+      case x: EirTypeAlias =>
+        if (x.templateArgs.isEmpty) {
+          expressionToString(x.value)(ctx)
+        } else {
+          ???
+        }
       case x: EirSpecializable with EirNamedNode =>
         nameFor(x, dealiased.get, includeTemplates, usage)(ctx)
       case _: EirNamedNode => dealiased.get
@@ -2367,6 +2407,10 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case b: EirTemplateFacade => nameFor(ctx, b.t, includeTemplates, usage)
       case t: EirReferenceType =>
         nameFor(ctx, t.base, includeTemplates, usage) + "&"
+      case x: EirTupleMultiply =>
+        val lhs = nameFor(ctx, x.lhs, includeTemplates, usage)
+        val rhs = expressionToString(x.rhs)(ctx)
+        s"ergoline::tuple_multiply_t<$lhs, $rhs>"
     }
     if (ctx.hasPointerOverride(x)) s"(*$result)" else result
   }
@@ -2922,12 +2966,21 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case t if isArray(ctx, t) =>
         val target = arrayRef.target
         val args = arrayRef.args
-        ctx << "(*" << target << ")["
-        args.init.zipWithIndex.foreach { case (arg, idx) =>
-          ctx << arg << "*" << s"(" << target << s"->shape[${args.length - (idx + 1)}])" << "+"
+        if (args.exists(_.isInstanceOf[EirSlice])) {
+          val dis = arrayRef.disambiguation match {
+            case Some(x: EirFunctionCall) => x.target.disambiguation
+            case _                        => ???
+          }
+          val name = dis.map(systemNameFor(_, Some(arrayRef))(ctx)).map(_._2)
+          ctx << name << "(" << target << ",std::forward_as_tuple(" << (args, ",") << "))"
+        } else {
+          ctx << "(*" << target << ")["
+          args.init.zipWithIndex.foreach { case (arg, idx) =>
+            ctx << arg << "*" << s"(" << target << s"->shape[${args.length - (idx + 1)}])" << "+"
+          }
+          ctx << args.last
+          ctx << "]"
         }
-        ctx << args.last
-        ctx << "]"
       case t =>
         if (isPlainArrayRef(arrayRef)) {
           if (t.isPointer) {
