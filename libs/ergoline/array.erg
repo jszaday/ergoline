@@ -24,6 +24,10 @@ class array<A, N: int = 1> extends iterable<A> {
         return new array_view<A, N>(self, slices);
     }
 
+    def [](x: slice): array_view<A, N> where (N == 1) {
+        return new array_view<A, N>(self, x);
+    }
+
     @system def size(): int where N == 1;
 
     @system(static, alias="ergoline::total_size", applyResult="int")
