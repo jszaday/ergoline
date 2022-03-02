@@ -46,16 +46,27 @@ import ergoline::_;
         }
 
         println("contents of third row:");
-        for ( x <- a[:, 2] ) {
-            print(`${x}\t`);
-        }
-
-        println("\ncontents of third column:");
         for ( x <- a[2, :] ) {
             print(`${x}\t`);
         }
 
-        print("\n");
+        println("\ncontents of third column:");
+        for ( x <- a[:, 2] ) {
+            print(`${x}\t`);
+        }
+
+        a[2, :] = a[:, 2];
+        a[:, 2] = 0;
+        a[2, 2] = 2 * n + 2;
+
+        println("\ncontents of matrix after moving the third column to the third row:");
+        for ( i <- 0 to m ) {
+            for ( j <- 0 to n ) {
+                print(`${a[i, j]}\t`);
+            }
+
+            print("\n");
+        }
 
         exit();
     }

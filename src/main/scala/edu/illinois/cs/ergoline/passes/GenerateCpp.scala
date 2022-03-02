@@ -516,16 +516,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     }
   }
 
-  def structToTrait(n: EirNode, t: EirType, noCopy: Boolean)(implicit
+  def structToTrait(node: EirNode, ty: EirType, noCopy: Boolean)(implicit
       ctx: CodeGenerationContext
   ): CodeGenerationContext = {
+    val name = ctx.nameFor(ty, Some(node))
     if (noCopy) {
-      ctx << "std::shared_ptr<" << ctx.typeFor(
-        t,
-        Some(n)
-      ) << ">(std::shared_ptr<void>{},&" << n << ")"
+      ctx << "std::shared_ptr<" << name << ">(std::shared_ptr<void>{},&" << node << ")"
     } else {
-      ctx << "std::make_shared<" << ctx.typeFor(t, Some(n)) << ">(" << n << ")"
+      ctx << "std::make_shared<" << name << ">(" << node << ")"
     }
   }
 
@@ -649,8 +647,6 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         })
 
         visitCallArgument(zipped.last)(ctx)
-      } else {
-        ctx
       }
     } else {
       ctx << (args, ",")
@@ -1194,12 +1190,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       case EirMember(_, f: EirFunction, _) if cast =>
         ctx << s"((" << ctx.typeFor(f.returnType) << ")" << base << ")"
       case m: EirMember =>
-        if (name == "apply") ctx << base << s"(" << visitArguments(
-          Some(fc),
-          Some(disambiguated),
-          args
-        ) << ")"
-        else {
+        if (name == "apply") {
+          ctx << base << s"(" << visitArguments(
+            Some(fc),
+            Some(disambiguated),
+            args
+          ) << ")"
+        } else {
           val fqnOrDot = fieldAccessorFor(ctx.exprType(base))(Some(m.isStatic))
           ctx << invOp << base << s"$fqnOrDot$name(" << visitArguments(
             Some(fc),
@@ -1967,7 +1964,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val virtualMember = member.exists(_.isVirtual)
     val avoidableSystem = isSystem && (systemParent || !virtualMember)
     val isGeneric = x.templateArgs.nonEmpty
-    val definableTemplate = isGeneric && !isMember && !(parent.isEmpty || systemParent)
+    val definableTemplate =
+      isGeneric && !isMember && !(parent.isEmpty || systemParent)
 
     if (
       !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || definableTemplate
@@ -3157,13 +3155,16 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
   }
 
   override def visitAssignment(
-      x: EirAssignment
+      assign: EirAssignment
   )(implicit ctx: CodeGenerationContext): Unit = {
-    val lhsTy = ctx.resolve(ctx.typeOf(x.lval))
-
-    x.lval match {
-      case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x
-      case _                                           => ctx << x.lval << assignmentRhs(lhsTy, x.op, x.rval)
+    assign.disambiguation match {
+      case Some(x) => ctx << x
+      case None =>
+        val lhsTy = ctx.resolve(ctx.typeOf(assign.lval))
+        assign.lval match {
+          case x: EirArrayReference if !isPlainArrayRef(x) => ctx << x
+          case x                                           => ctx << x << assignmentRhs(lhsTy, assign.op, assign.rval)
+        }
     }
   }
 

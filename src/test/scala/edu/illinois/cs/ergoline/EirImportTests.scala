@@ -2,9 +2,9 @@ package edu.illinois.cs.ergoline
 
 import edu.illinois.cs.ergoline.EirImportTests.setupEnv
 import edu.illinois.cs.ergoline.ast.types.EirTemplatedType
-import edu.illinois.cs.ergoline.ast.{EirClass, EirClassLike, EirGlobalNamespace, EirNamedNode, EirTrait}
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.passes.Processes.RichProcessesSyntax.RichEirClassList
-import edu.illinois.cs.ergoline.passes.{CheckTypes, FullyResolve, GenerateCpp, Processes, TypeCheckContext}
+import edu.illinois.cs.ergoline.passes.{FullyResolve, Processes, TypeCheckContext}
 import edu.illinois.cs.ergoline.resolution.{Find, Modules}
 import edu.illinois.cs.ergoline.util.Errors
 import edu.illinois.cs.ergoline.util.Errors.EirException
@@ -278,6 +278,44 @@ class EirImportTests extends AnyFunSuite {
       |}
       |""".stripMargin)
     Processes.onLoad(module)
+  }
+
+  test("check that custom assignment operators work") {
+    setupEnv()
+    // TODO restore this to string::tryParse<...> and auto-generate lambda
+    val module = Modules.load("""
+      |package foo;
+      |import ergoline::_;
+      |
+      |struct bar {
+      |   private var x: int = 0;
+      |   def +=(i: int) { x += i; }
+      |   def toString(): string {
+      |     return `bar(x=${x})`;
+      |   }
+      |}
+      |
+      |def baz() {
+      |   val x = new bar();
+      |   x += 20;
+      |   x += 22;
+      |   println(x.toString());
+      |}
+      |""".stripMargin)
+    Processes.onLoad(module)
+
+    val baz = module.children.collectFirst {
+      case x: EirFunction if x.name == "baz" => x
+    }
+
+    val assigns = baz.flatMap(_.body).toList.flatMap(_.children).collect {
+      case x: EirAssignment => x
+    }
+
+    assigns.size shouldBe 2
+    assigns.forall(
+      _.disambiguation.exists(_.isInstanceOf[EirFunctionCall])
+    ) shouldBe true
   }
 
   test("verify that slicing works as expected") {

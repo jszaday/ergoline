@@ -1,6 +1,7 @@
 package ergoline;
 
-@system struct array_view<A, N: int> with iterable<A> {
+@system(alias="ergoline::array_view")
+struct array_view<A, N: int> with iterable<A> {
     using slicesType = (slice) .* N;
 
     @system val a: array<A, N>;
@@ -11,4 +12,12 @@ package ergoline;
     @system def self(a: array<A, N>, ij: (slice, int)) where (N == 2);
 
     @system override def iter(): iterator<A>;
+
+    @system(alias="set") def =(it: iterator<A>);
+    @system(alias="set") def =(it: iterable<A>);
+
+    // broadcast a scalar value over a range
+    @system(alias="set") def =(a: A);
+
+    @system(alias="to_array") def toArray(): array<A>;
 }

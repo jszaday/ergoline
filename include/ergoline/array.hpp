@@ -30,7 +30,7 @@ struct nd_span {
   using self_type = nd_span<T, N>;
   using shape_type = std::array<std::size_t, N>;
 
-  static constexpr auto non_trivial = !hypercomm::is_bytes<T>::value;
+  static constexpr auto non_trivial = !std::is_trivial<T>::value;
   static constexpr auto shape_size = sizeof(shape_type);
   static constexpr auto pad_amount = ALIGN_DEFAULT(shape_size) - shape_size;
 
@@ -185,6 +185,46 @@ struct array_view<T, 2> {
   array_view(const std::shared_ptr<nd_span<T, 2>> &array, Args... args);
 
   std::shared_ptr<iterator<T>> iter(void) const;
+
+  void set(const T& t);
+
+  template <typename A>
+  void set(const std::shared_ptr<A>& it);
+
+  std::size_t size(void) const {
+    auto diff = (std::uintptr_t)(this->stop - this->start);
+    auto align = diff % this->step;
+    auto count = diff / this->step + (align ? 1 : 0);
+    return count;
+  }
+
+  std::shared_ptr<nd_span<T, 1>> to_array(void) const {
+    auto count = this->size();
+    auto arr = nd_span<T, 1>::instantiate({count}, true);
+
+    if (step == 1) {
+      std::copy(this->start, this->stop, arr->begin());
+    } else {
+      auto *curr = this->start;
+      auto *dst = arr->begin();
+      auto stop = (std::uintptr_t)this->stop;
+
+      while ((std::uintptr_t)curr < stop) {
+        *dst = *curr;
+        curr += step;
+        dst += 1;
+      }
+
+#if CMK_ERROR_CHECKING
+      auto nCopied = dst - arr->begin();
+      if (nCopied != count) {
+        CkAbort("fatal> copied %lu elements, expected to copy %lu\n", nCopied, count);
+      }
+#endif
+    }
+
+    return arr;
+  }
 };
 }  // namespace ergoline
 
