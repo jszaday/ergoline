@@ -1695,13 +1695,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
       x: EirClassLike
   )(implicit ctx: CodeGenerationContext): Unit = {
     val isDefined = x.templateArgs.isEmpty && ctx.hasChecked(x)
+    val isSystem = x.isSystem
 
-    if (isDefined) {
+    if (isDefined || isSystem) {
       ctx << x.members.collect {
         case m @ EirMember(_, _: EirFunction, _) if !m.isSystem => m
       }
 
-      if (!x.isSystem && !x.isTrait && !GenerateDecls.hasPup(x)) {
+      if (!(isSystem || x.isTrait || GenerateDecls.hasPup(x))) {
         makePupper(ctx, x)
       }
     }
@@ -1936,16 +1937,17 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val abstractMember =
       !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
-    val isTempl = parent.isDefined && !isMember && x.templateArgs.nonEmpty
-    val canEnter = ctx.hasChecked(x) || langCi
+    val canEnter = langCi || ctx.hasChecked(x)
 
     val isSystem = x.isSystem
     val systemParent = parent.exists(_.isSystem)
     val virtualMember = member.exists(_.isVirtual)
     val avoidableSystem = isSystem && (systemParent || !virtualMember)
+    val isGeneric = x.templateArgs.nonEmpty
+    val definableTemplate = isGeneric && !isMember && !(parent.isEmpty || systemParent)
 
     if (
-      !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || isTempl
+      !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || definableTemplate
     ) {
       return
     }
@@ -1956,7 +1958,7 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val isStatic = member.exists(_.isStatic)
     val proxyParent = parent.to[EirProxy]
 
-    if (isNested && isTempl) {
+    if (isNested && isGeneric) {
       Errors.unsupportedOperation(
         x,
         "generic nested functions",
@@ -1975,8 +1977,8 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     //      function bodies are defined ahead of their used symbols
     val nestedParent = parent.flatMap(_.parent).to[EirMember].nonEmpty
     val pureVirtual = virtual.nonEmpty && x.body.isEmpty
-    val forwardDeclaration = langCi || (
-      x.templateArgs.isEmpty && !hasDependentScope(x) && !nestedParent
+    val forwardDeclaration = langCi || systemParent || (
+      x.templateArgs.isEmpty && !nestedParent && !hasDependentScope(x)
     )
 
     val willReturn = isMember && (pureVirtual || forwardDeclaration)
