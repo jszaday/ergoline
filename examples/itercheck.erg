@@ -41,7 +41,8 @@ import ergoline::_;
                 a[i, j] = x;
                 print(`${x}\t`);
             }
-            println("");
+
+            print("\n");
         }
 
         println("contents of third row:");
@@ -53,6 +54,8 @@ import ergoline::_;
         for ( x <- a[2, :] ) {
             print(`${x}\t`);
         }
+
+        print("\n");
 
         exit();
     }
