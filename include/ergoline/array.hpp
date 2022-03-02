@@ -185,6 +185,9 @@ struct array_view<T, 2> {
   array_view(const std::shared_ptr<nd_span<T, 2>> &array, Args... args);
 
   std::shared_ptr<iterator<T>> iter(void) const;
+
+  template <typename A>
+  void set(const std::shared_ptr<A>& it);
 };
 }  // namespace ergoline
 
