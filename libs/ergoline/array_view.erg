@@ -18,4 +18,6 @@ struct array_view<A, N: int> with iterable<A> {
 
     // broadcast a scalar value over a range
     @system(alias="set") def =(a: A);
+
+    @system(alias="to_array") def toArray(): array<A>;
 }
