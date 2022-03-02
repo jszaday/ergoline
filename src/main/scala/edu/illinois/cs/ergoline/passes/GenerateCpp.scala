@@ -1937,14 +1937,14 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
     val abstractMember =
       !isMember && (parent.exists(_.isAbstract) && x.body.isEmpty)
     val langCi = ctx.language == "ci"
-    val canEnter = ctx.hasChecked(x) || langCi
+    val canEnter = langCi || ctx.hasChecked(x)
 
     val isSystem = x.isSystem
     val systemParent = parent.exists(_.isSystem)
     val virtualMember = member.exists(_.isVirtual)
     val avoidableSystem = isSystem && (systemParent || !virtualMember)
     val isGeneric = x.templateArgs.nonEmpty
-    val definableTemplate = isGeneric && !isMember && parent.nonEmpty
+    val definableTemplate = isGeneric && !isMember && !(parent.isEmpty || systemParent)
 
     if (
       !canEnter || (!langCi && entryOnly) || abstractMember || avoidableSystem || definableTemplate
