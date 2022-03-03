@@ -3,13 +3,16 @@ package examples;
 import ergoline::_;
 
 @main class main with acceptor {
+    val n: int;
+
     @entry def self(args: array<string>) {
-        val n: int = (args.size() > 1) ? args[1].toInt() : 0;
-        new fib@(self@, (n > 16) ? n : 16);
+        n = (args.size() > 1) ? args[1].toInt() : 0;
+        n = math::max(2 * configuration.threshold, n);
+        new fib@(self@, n);
     }
 
     @entry override def accept(x: int): unit {
-        println(`result = ${x}`);
+        println(`fib(${n}) = ${x}`);
         exit();
     }
 }
@@ -20,21 +23,30 @@ class fib with acceptor {
     val parent: acceptor@;
 
     @entry def self(=parent: acceptor@, n: int) {
-        if (n > 1) {
+        if (n <= configuration.threshold) {
+            parent.accept(seq_fib(n));
+        } else {
             new fib@(self@, n - 1);
             new fib@(self@, n - 2);
-        } else {
-            parent.accept(n);
         }
     }
 
     @entry override def accept(x: int): unit {
         count += 1;
         value += x;
+
         if (count >= 2) {
             parent.accept(value);
         }
     }
+
+    private def seq_fib(n: int): int {
+        return (n > 1) ? (seq_fib(n - 1) + seq_fib(n - 2)) : n;
+    }
+}
+
+object configuration {
+    val threshold: int = 16;
 }
 
 trait acceptor {
