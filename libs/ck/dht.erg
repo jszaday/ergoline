@@ -34,35 +34,32 @@ class dht_<A> {
     }
 
     private def enqueue(h: hashcode, f: future<A>) {
-        if (waiting.contains(h)) {
-            waiting[h].append(f);
-        } else {
+        if (!waiting.contains(h)) {
             waiting[h] = new queue<future<A>>();
-            waiting[h].append(f);
         }
+
+        waiting[h].append(f);
     }
 
     @entry def get(h: hashcode, f: future<A>) {
-        val i = (h % n).toInt();
-        assert(i == self[@]index());
         if (data.contains(h)) {
             f.set(data[h]);
+            data.remove(h);
         } else {
             enqueue(h, f);
         }
     }
 
     @entry def set(h: hashcode, a: A) {
-        val i = (h % n).toInt();
-        assert(i == self[@]index());
-        data[h] = a;
         if (waiting.contains(h)) {
             val q = waiting[h];
-            while (q.nonEmpty()) {
-                q.head().set(a);
-                q.removeHead();
+            q.head().set(a);
+            q.removeHead();
+            if (q.isEmpty()) {
+                waiting.remove(h);
             }
-            waiting.remove(h);
+        } else {
+            data[h] = a;
         }
     }
 }
