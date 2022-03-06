@@ -1153,6 +1153,13 @@ object GenerateCpp extends EirVisitor[CodeGenerationContext, Unit] {
         } << ">(" << {
           visitCallback(flattenArgs(args).last, isReduction = false)
         } << ")"
+      case m: EirMember if m.name == "toString" =>
+        // TODO ( make this more robust )
+        ctx << s"ergoline::to_string(" << (target match {
+          case s: EirScopedSymbol[_] => s.target
+          case _                     => ???
+        }) << ")"
+        assert(fc.args.isEmpty)
       case m: EirMember if isArray(ctx, m.base) && m.name == "size" =>
         ctx << target // bypass args for size!
       case m @ EirMember(Some(p: EirProxy), _, _) if m.name == "contribute" =>

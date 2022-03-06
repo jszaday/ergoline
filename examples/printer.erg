@@ -1,0 +1,16 @@
+package examples;
+
+import ergoline::_;
+import ck;
+
+@main class printer {
+    @entry def self() {
+        self@print(42);
+        self@print("hi");
+        ck::exitAfterQuiescence();
+    }
+
+    @entry def print<A>(a: A) {
+        println(`${a}!`);
+    }
+}
