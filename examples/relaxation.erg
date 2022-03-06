@@ -46,19 +46,7 @@ import stencil::_;
     }
 
     @entry def done(grid: array<double, 2>) {
-        val (m, n) = grid.shape;
-
-        var s = "[ ";
-        for (var i = 0; i < m; i += 1) {
-            s += "[ ";
-            for (var j = 0; j < n; j += 1) {
-                s += `${grid[i, j]}, `;
-            }
-            s += "],\n";
-        }
-        s += "]";
-
-        println(s);
+        println(grid.toString());
 
         exit();
     }

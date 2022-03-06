@@ -248,21 +248,4 @@ class jacobi2d {
 
         return maxDiff;
     }
-
-    // helper function to output the grid for debugging
-    private def grid2str(): string {
-        val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
-        var s = "[ ";
-        for (var i = 0; i < shape[0]; i += 1) {
-            s += "[ ";
-            for (var j = 0; j < shape[1]; j += 1) {
-                s += `${grid[i, j]}, `;
-            }
-
-            s += "],\n";
-        }
-
-        s += "]";
-        return s;
-    }
 }
