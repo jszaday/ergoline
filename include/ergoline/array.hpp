@@ -2,6 +2,7 @@
 #define __ERGOLINE_ARRAY_HPP__
 
 #include <cstdlib>
+#include <ergoline/to_string.hpp>
 #include <hypercomm/serialization/pup.hpp>
 
 namespace ergoline {
@@ -56,8 +57,8 @@ struct nd_span {
 
   inline std::size_t size() const { return detail::reduce(this->shape); }
 
-  inline T &operator[](const std::size_t &idx) {
-    return *(this->begin() + idx);
+  inline T &operator[](std::size_t idx) const {
+    return (this->data())[idx];
   }
 
   inline static std::size_t total_size(
@@ -224,6 +225,42 @@ struct array_view<T, 2> {
     }
 
     return arr;
+  }
+};
+
+template <typename T>
+struct to_string_helper_<nd_span<T, 1>> {
+  std::string operator()(const nd_span<T, 1>& t) const {
+    std::stringstream ss;
+
+    ss << "[\t";
+    for (auto it = t.begin(); it != t.end(); ++it) {
+      ss << to_string(*it) << ",\t";
+    }
+    ss << "]";
+
+    return ss.str();
+  }
+};
+
+template <typename T>
+struct to_string_helper_<nd_span<T, 2>> {
+  std::string operator()(const nd_span<T, 2>& t) const {
+    auto m = (int)t.shape[0];
+    auto n = (int)t.shape[1];
+    std::stringstream ss;
+
+    ss << "[\n";
+    for (auto i = 0; i != m; ++i) {
+      ss << "\t[";
+      for (auto j = 0; j != n; ++j) {
+        ss << to_string(t[i * n + j]) << ",\t";
+      }
+      ss << "]\n";
+    }
+    ss << "]";
+
+    return ss.str();
   }
 };
 }  // namespace ergoline

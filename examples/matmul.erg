@@ -4,17 +4,6 @@ import ergoline::_;
 import ck;
 
 @main class matmul {
-    def mat2str(m: array<double, 2>): string {
-        var s = "";
-        for (var i = 0; i < m.shape[0]; i += 1) {
-            for (var j = 0; j < m.shape[1]; j += 1) {
-                s += `\t${m[i, j]}`;
-            }
-            s += "\n";
-        }
-        return s;
-    }
-
     def dgemm(a: array<double, 2>, b: array<double, 2>): array<double, 2> {
         val m = a.shape[0];
         assert(a.shape[1] == b.shape[0]);
@@ -44,11 +33,11 @@ import ck;
         val m = 4;
         val n = 2;
         val a = linspace(m, n);
-        println(`a = \n${mat2str(a)}`);
+        println(`a = ${a}`);
         val b = linspace(n, m);
-        println(`b = \n${mat2str(b)}`);
+        println(`b = ${b}`);
         val c = dgemm(a, b);
-        println(`c = \n${mat2str(c)}`);
+        println(`c = ${c}`);
         exit();
     }
 }
