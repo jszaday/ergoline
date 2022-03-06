@@ -4,22 +4,23 @@ import ergoline::_;
 import ck;
 
 @main class main {
-    var count: int = 0;
-    val n: int;
+    val k: int = 4;
 
-    @entry def self() {
-        n = ck::numPes() * 16;
-        val table = new ck::dht<int, int>(n);
-        new sharing@array1d(n, n, self@, table);
+    @entry def self(args: array<string>) {
+        if (args.size() >= 2) {
+            k = args[1].toInt();
+        }
+
+        val p = ck::numPes();
+        val n = k * p;
+
+        val table = new ck::dht<int, int>(p);
+        new sharing@array1d(n, n, k, self@, table);
     }
 
-    @entry def tally() {
-        count += 1;
-
-        if (count >= n) {
-            println("done");
-            exit();
-        }
+    @entry def done() {
+        println("main> all done!");
+        exit();
     }
 }
 
@@ -27,21 +28,25 @@ class sharing {
     val mainProxy: main@;
     val table: ck::dht<int, int>;
     val n: int;
+    val k: int;
 
-    @entry def self(=n: int, =mainProxy: main@, =table: ck::dht<int, int>) {
+    @entry def self(=n: int, =k: int, =mainProxy: main@, =table: ck::dht<int, int>) {
         self[@]share();
     }
 
     @threaded @entry def share() {
-        val mine = self[@]index();
-        table[mine] = 2 * mine + 1;
+        val ours = self[@]index();
+        val theirs = (ours + 1) % n;
 
-        for (var i = mine; i < (mine + 4); i += 1) {
-            val neighbor = (i + 1) % n;
-            val received = await table[neighbor];
-            println(`${mine} received value ${received}`);
+        for (var i = (ours * k); i < ((ours * k) + k); i += 1) {
+            table[i] = 2 * i + 1;
         }
 
-        mainProxy.tally();
+        for (var i = (theirs * k); i < ((theirs * k) + k); i += 1) {
+            val value = await table[i];
+            println(`${ours}> received table[${i}]=${value}`);
+        }
+
+        self[@]contribute(mainProxy.done);
     }
 }
