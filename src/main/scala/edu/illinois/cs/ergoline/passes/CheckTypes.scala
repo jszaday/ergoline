@@ -5,7 +5,6 @@ import edu.illinois.cs.ergoline.ast.EirAccessibility.{
   EirAccessibility,
   Protected
 }
-import edu.illinois.cs.ergoline.ast.{EirExpressionNode, EirFunctionCall, _}
 import edu.illinois.cs.ergoline.ast.literals.{
   EirIntegerLiteral,
   EirLiteral,
@@ -13,6 +12,7 @@ import edu.illinois.cs.ergoline.ast.literals.{
   EirLiteralType
 }
 import edu.illinois.cs.ergoline.ast.types._
+import edu.illinois.cs.ergoline.ast._
 import edu.illinois.cs.ergoline.globals
 import edu.illinois.cs.ergoline.passes.GenerateCpp.{
   asMember,
@@ -22,7 +22,6 @@ import edu.illinois.cs.ergoline.passes.GenerateCpp.{
 import edu.illinois.cs.ergoline.passes.Pass.Phase
 import edu.illinois.cs.ergoline.passes.TypeCheckContext.ExpressionScope
 import edu.illinois.cs.ergoline.proxies.{EirProxy, ProxyManager}
-import edu.illinois.cs.ergoline.resolution.Find.tryClassLike
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
   RichOption,
@@ -210,12 +209,13 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       x: types.EirTemplatedType
   )(implicit ctx: TypeCheckContext): EirType = {
     val base: EirSpecializable = Find.uniqueResolution[EirSpecializable](x.base)
-    val spec = ctx.specialize(base, x)
+    val args = x.args.map(visit(_))
+    val spec = ctx.specialize(base, x, Some(args))
     visit(base)
     ctx.leave(spec)
     // visit our base
     base match {
-      case c: EirClassLike => ctx.getTemplatedType(c, x.args.map(visit(_)))
+      case c: EirClassLike => ctx.getTemplatedType(c, args)
       case _               => error(x, s"unsure how to specialize ${x.base}")
     }
   }
@@ -933,6 +933,21 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
     EirScopedSymbol[A](null, EirSymbol[A](parent, List(name)))(parent)
   }
 
+  // resolves the qualifiers of a scoped symbol
+  // TODO ( need to make this recursive somehow, since this )
+  //      ( would not handle nested template arguments!     )
+  def resolveQualifiers(parent: Option[EirNode], qualifiers: List[String])(
+      implicit ctx: TypeCheckContext
+  ): Option[EirClassLike] = {
+    val resolutions = Find.resolutions[EirNamedNode](
+      EirSymbol[EirNamedNode](parent, qualifiers)
+    )
+    resolutions.headOption.flatMap {
+      case x: EirTemplateArgument => Find.tryClassLike(visit(x))
+      case x                      => Find.tryClassLike(x)
+    }
+  }
+
   override def visitSymbol[A <: EirNamedNode](
       value: EirSymbol[A]
   )(implicit ctx: TypeCheckContext): EirType = {
@@ -968,19 +983,18 @@ object CheckTypes extends EirVisitor[TypeCheckContext, EirType] {
       case None =>
         val (init, last) = (value.qualifiedName.init, value.qualifiedName.last)
         if (init.nonEmpty) {
-          val parent = Find.resolutions[EirNamedNode](
-            EirSymbol[EirNamedNode](value.parent, init)
-          )
-          val asCls = parent.headOption.flatMap(tryClassLike)
-          if (asCls.isDefined) {
+          val asClass = resolveQualifiers(value.parent, init)
+          if (asClass.isDefined) {
             // NOTE this may not be reachable with a templated class
-            val asType = asCls.map(_.asType).map(visit)
-            val accessor = mkAccessor(asCls.get, last)(value.parent)
+            val asType = asClass.map(_.asType).map(visit)
+            val accessor = mkAccessor(asClass.get, last)(value.parent)
             accessor.foundType = asType
             // NOTE this is symptomatic of a hack that will persist
             //      until (true) static-ness detection is more mature
             accessor.isStatic = true
-            (Some(accessor), Find.resolveAccessor(accessor)(asType, Some(true)))
+            val resolutions =
+              Find.resolveAccessor(accessor)(asType, Some(true)).toList
+            (Some(accessor), resolutions)
           } else {
             (None, Find.resolutions[EirNamedNode](value).map((_, None)))
           }

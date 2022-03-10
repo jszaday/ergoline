@@ -356,6 +356,8 @@ object GenerateProxies {
         .foreach {
           case m @ EirMember(_, f: EirFunction, _) if m.isMailbox =>
             visitMailbox(m, f)(ctx)
+          case EirMember(_, _: EirTypeAlias, _) =>
+          // TODO ( should we actually generate something here? )
           case y => visitProxyMember(ctx, x, y)
         }
     } << "std::shared_ptr<" << nameFor(

@@ -1,7 +1,10 @@
 package edu.illinois.cs.ergoline.proxies
 
 import edu.illinois.cs.ergoline.ast._
-import edu.illinois.cs.ergoline.ast.literals.EirStringLiteral
+import edu.illinois.cs.ergoline.ast.literals.{
+  EirLiteralSymbol,
+  EirStringLiteral
+}
 import edu.illinois.cs.ergoline.ast.types._
 import edu.illinois.cs.ergoline.resolution.{EirPlaceholder, EirResolvable, Find}
 import edu.illinois.cs.ergoline.util.EirUtilitySyntax.{
@@ -259,6 +262,19 @@ case class EirProxy(
 
   def isArray: Boolean = collective.exists(_.startsWith("array"))
 
+  val indexTypeName = "indexType"
+
+  def mkIndexTypeAlias(): EirMember = {
+    val alias = EirTypeAlias(indexTypeName, Nil, null)(None)
+    val mem = EirMember(Some(this), alias, EirAccessibility.Public)
+    mem.isStatic = true
+    alias.parent = Some(mem)
+    indexType.foreach(t => {
+      alias.value = EirLiteralSymbol(t)(Some(alias))
+    })
+    mem
+  }
+
   private def genCollectiveMembers(): List[EirMember] = {
     val idx: List[EirType] = indices.get
     val idxTy = idx.toTupleType()(None)
@@ -274,6 +290,7 @@ case class EirProxy(
       )
       .getOrElse(Nil) ++
       mkSectionAccessor(idx, idxTy) :+
+      mkIndexTypeAlias() :+
       util.makeMemberFunction(this, "get", idx, eleTy)
   }
 
