@@ -104,10 +104,9 @@ object TypeCheckContext {
           .toList
       }
 
-      def sameAs(specialization: EirSpecialization): Boolean = {
+      def sameAs(args: List[EirType]): Boolean = {
         val ours = Find.uniqueResolution[EirType](specializable.templateArgs)
-        val theirs = Find.uniqueResolution[EirType](specialization.types)
-        ours.zip(theirs).forall(t => t._1 == t._2)
+        ours.zip(args).forall(t => t._1 == t._2)
       }
     }
   }
@@ -232,16 +231,22 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
     }
   }
 
-  def getTemplatedType(t: EirTemplatedType): EirTemplatedType = {
+  def getTemplatedType(
+      t: EirTemplatedType,
+      args: List[EirType]
+  ): EirTemplatedType = {
     getTemplatedType(
       Find.uniqueResolution[EirSpecializable](t.base),
-      t.args.map(CheckTypes.visit(_)(this))
+      args
     )
   }
 
-  def makeDistinct(s: EirSpecialization): EirSpecialization = {
+  def makeDistinct(
+      s: EirSpecialization,
+      args: List[EirType]
+  ): EirSpecialization = {
     s match {
-      case t: EirTemplatedType => getTemplatedType(t)
+      case t: EirTemplatedType => getTemplatedType(t, args)
       case _                   => s
     }
   }
@@ -310,15 +315,19 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
 
   def trySpecialize(
       s: EirSpecializable,
-      spec: EirSpecialization
+      spec: EirSpecialization,
+      specTypes: Option[List[EirType]] = None
   ): Option[EirSpecialization] = {
+    val args = specTypes.getOrElse {
+      spec.types.map(CheckTypes.visit(_)(this))
+    }
     val types = s.accepts(spec)(this)
     Option
       .when(types.forall(_.isDefined))({
         if (types.length == spec.types.length) spec
         else synthesize(types.map(_.get))
       })
-      .map(enter(s, _))
+      .map(enter(s, _, args))
       .filter(sp => {
         checkPredicate(s) || {
           leave(sp); false
@@ -328,18 +337,20 @@ class TypeCheckContext(parent: Option[TypeCheckContext] = None)
 
   def specialize(
       s: EirSpecializable,
-      sp: EirSpecialization
+      sp: EirSpecialization,
+      spTypes: Option[List[EirType]] = None
   ): EirSpecialization = {
-    trySpecialize(s, sp).getOrElse(Errors.missingSpecialization(sp))
+    trySpecialize(s, sp, spTypes).getOrElse(Errors.missingSpecialization(sp))
   }
 
   private def enter(
       s: EirSpecializable,
-      sp: EirSpecialization
+      sp: EirSpecialization,
+      args: List[EirType]
   ): EirSpecialization = {
     Option
-      .unless(s.sameAs(sp))({
-        activate(EirSubstituteTransaction(s, makeDistinct(sp))).sp
+      .unless(s.sameAs(args))({
+        activate(EirSubstituteTransaction(s, makeDistinct(sp, args))).sp
       })
       .orNull
   }

@@ -1,0 +1,5 @@
+package or;
+
+import ergoline::iterable;
+
+@system def ispace<A>(a: A): iterable<A::indexType>;
