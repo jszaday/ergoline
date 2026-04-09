@@ -619,21 +619,39 @@ program_member  ::= annotation* ( namespace_decl | import_decl | top_decl )
 namespace_decl  ::= 'namespace' fqn ( ';' | '{' program_member* '}' )
 
 import_decl     ::= 'public'? 'import' fqn import_tail? ';'
-                  (* wildcard '_' imports all names from the module *)
-                  (* single-name: import foo::bar; *)
-                  (* brace-list: import foo::{bar, baz}; *)
+                  (* wildcard '_':   import foo::_;           all public names     *)
+                  (* single name:    import foo::bar;         one name, no alias   *)
+                  (* brace-list:     import foo::{bar, baz};  subset               *)
+                  (* with alias:     import foo::{bar as b};  rename on import     *)
+                  (* mixed:          import foo::{bar, baz as qux}; *)
 
 import_tail     ::= '::' '_'
-                  | '::' '{' ID ( ',' ID )* '}'
+                  | '::' '{' import_item ( ',' import_item )* '}'
                   | ε
+
+import_item     ::= ID ( 'as' ID )?
+                  (* 'as' renames the binding in the importing scope only *)
+                  (* does not affect the original definition or re-exports *)
 
 top_decl        ::= class_decl | fn_decl | using_decl
 ```
 
-`import foo::bar;` imports a single name. `import foo::_;` imports all public names from
-the module. `import foo::{bar, baz};` imports a listed subset of public names.
+`import foo::bar;` imports a single name. `import foo::_;` imports all public names.
+`import foo::{bar, baz};` imports a subset. `import foo::{bar as b};` imports `bar`
+and binds it locally as `b` — the alias is scope-local and does not affect how `bar`
+is known outside the current file.
 
-`public import` re-exports the imported names from the current module.
+Aliases are particularly useful for resolving collisions between modules with overlapping
+names, or for shortening deeply qualified names at use-site without a full `using`
+declaration:
+
+```ergoline
+import ergoline::{iterator as iter, iterable};
+import mylib::{foo as myFoo};
+```
+
+`public import` re-exports the imported names (under their local binding, including any
+alias) from the current module.
 
 ---
 

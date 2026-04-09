@@ -128,11 +128,11 @@ The most SDAG-complete example. Shows `await any`, nested `forall` replacing dou
 package examples;
 
 import ergoline::_;
-import runtime;  // ck:: runtime primitives → runtime::
+import hc;  // idiomatic short runtime namespace
 
 @main class main {
     def self() {
-        val n: i64 = runtime::numPes() * 4;  // ck::numPes() → runtime::numPes(); i64 index
+        val n: i64 = hc::numPes() * 4;  // ck::numPes() → hc::numPes(); i64 index
         new sdagtest@array1d(n, n, n * 4, self@);
     }
 
@@ -199,7 +199,7 @@ class sdagtest {
 - `array<int, 1>` → `array<i64>` (1D is implicit)
 - `@threaded @entry` → `@entry`
 - Nested `@overlap for` → nested `forall`
-- `ck::numPes()` → `runtime::numPes()`
+- idiomaticity: use the shorter `hc::` runtime namespace instead of `runtime::`
 - Backtick f-strings → `f"..."`
 - type suffixes are omitted unless they disambiguate something important
 
@@ -214,7 +214,7 @@ main work is `@overlap for` → `forall` and type cleanup.
 package examples;
 
 import ergoline::_;
-import runtime;
+import hc;
 
 @system(fromHeader="rand48_replacement.h")
 def drand48(): f64;  // double → f64
@@ -228,7 +228,7 @@ def sqrt(value: f64): f64;  // double → f64
 
     @entry def self(args: array<string>) {
         val alpha:     f64 = 1.0;
-        val np:        i64 = runtime::numPes();
+        val np:        i64 = hc::numPes();
         val npPerDim:  i64 = sqrt(np as f64) as i64;
         val nbPerDim:  i64 = (np > 1 && npPerDim == 1) ? 2 : npPerDim;
         val blockSize: i64 = (args.size() > 1
@@ -243,14 +243,14 @@ def sqrt(value: f64): f64;  // double → f64
         val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
         val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
 
-        startTime = runtime::wallTime();  // ck::wallTime() → runtime::wallTime()
+        startTime = hc::wallTime();  // ck::wallTime() → hc::wallTime()
         a.sendData(c, true);
         b.sendData(c, false);
         c.run(alpha);
     }
 
     @entry def done() {
-        endTime = runtime::wallTime();
+        endTime = hc::wallTime();
         println(f"matmul finished in ${(endTime - startTime) * 1000.0} ms");
         exit();
     }
@@ -317,7 +317,7 @@ class block {
 - explicit numeric conversions now use `as`, e.g. `sqrt(np as f64) as i64`
 - `@threaded @entry def run(...)` → `@entry def run(...)`
 - `@overlap for` → `forall`
-- `ck::wallTime()` / `ck::numPes()` → `runtime::wallTime()` / `runtime::numPes()`
+- idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
 - `args[1].toInt()` → `args[1].parse<i64>().getOrElse(128)`
 - Backtick f-strings → `f"..."`
 - The compound `when inputA(...), inputB(...)` is **identical** — it was already right
@@ -334,7 +334,7 @@ constructor→initialize becomes one, and `@overlap for` becomes `forall`.
 package examples;
 
 import ergoline::_;
-import runtime;
+import hc;
 
 // Singleton with direct field mutation — no ck::updateGlobal needed intra-node
 object globals {
@@ -377,19 +377,19 @@ object globals {
         globals.numChareY = globals.arrDimY / globals.blockDimY;
 
         println("\nSTENCIL COMPUTATION WITH NO BARRIERS");
-        println(f"Running Jacobi on ${runtime::numPes()} processors with (${globals.numChareX}, ${globals.numChareY}) chares");
+        println(f"Running Jacobi on ${hc::numPes()} processors with (${globals.numChareX}, ${globals.numChareY}) chares");
         println(f"Array Dimensions: [${globals.arrDimX}, ${globals.arrDimY}]");
         println(f"Block Dimensions: [${globals.blockDimX}, ${globals.blockDimX}]");
         println(f"Max Iterations: ${globals.maxIters}");
         println(f"Threshold: ${globals.threshold}");
 
-        startTime = runtime::wallTime();
+        startTime = hc::wallTime();
         val workers = new jacobi2d@array2d(globals.numChareX, globals.numChareY);
         workers.run();  // no separate initialize() step needed
     }
 
     @entry def done(numIters: i64) {
-        val time = runtime::wallTime() - startTime;
+        val time = hc::wallTime() - startTime;
         if (numIters >= globals.maxIters) {
             println(f"main> did not converge, finished $numIters iterations in $time s.");
         } else {
@@ -535,7 +535,7 @@ class jacobi2d {
 - `for (var imsg = 0; ...) { when ... }` → `forall (_ <- 0 to numNeighbors) { when ... }`
 - bool→integer casts use ordinary `as`; `!hasSouth as i64` parses as `(!hasSouth) as i64`
 - `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**. The two-step init was required by Charm++'s distributed broadcast. Intra-node actors share memory; globals are set directly in `def self()` and `workers.run()` is called immediately.
-- `ck::wallTime()` / `ck::numPes()` → `runtime::wallTime()` / `runtime::numPes()`
+- idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
 - `args[N].toInt()` → `args[N].parse<i64>().getOrElse(default)`
 - Backtick f-strings → `f"..."`, bare `$name` for simple identifiers
 - unsuffixed integer literals in index position infer `i64`
@@ -553,7 +553,7 @@ class jacobi2d {
 | Interpolated strings | `` `hello ${x}` `` | `f"hello $x"` or `f"hello ${x}"` |
 | Threaded entry methods | `@threaded @entry def foo()` | `@entry def foo()` |
 | Parallel loops | `@overlap for (var i = 0; ...)` | `forall (i <- 0 to n)` |
-| Runtime functions | `ck::numPes()`, `ck::wallTime()` | `runtime::numPes()`, `runtime::wallTime()` |
+| Runtime functions | `ck::numPes()`, `ck::wallTime()` | `hc::numPes()`, `hc::wallTime()` |
 | String parsing | `.toInt()` | `.parse<i32>().getOrElse(n)` |
 | Numeric conversions | method-style conversions | explicit `as` casts |
 | Distributed globals | `ck::updateGlobal<T>(callback)` | Direct mutation (intra-node) |
