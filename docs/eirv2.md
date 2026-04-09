@@ -159,6 +159,258 @@ No source-level migration path is provided for the name changes — this is a cl
 The v1 names (`int`, `long`, `double`, etc.) are not reserved; they could be user-defined
 type aliases if someone wants them, but the STL does not define them.
 
+### Default index type: `u64`
+
+Array sizes, indices, and loop counters default to `u64`. There is no `usize` or
+`isize` — pointer-width types are gone — and signed indices are unnecessary for
+natural counting. Using `u64` as the universal index type eliminates an entire class
+of "negative index" bugs at the type level, and is large enough for any realistic
+collection size.
+
+Concretely:
+- `array<T>.size()` returns `u64`
+- `array<T>[i]` expects `i: u64`
+- `for (i <- 0 to n)` — if `n` is `u64`, `i` is `u64`
+- Integer literals are contextually typed — `a[42]` infers `42` as `u64` because
+  that is what `[]` demands; `val x = 42` without context defaults to `i32`
+
+Python-style negative indexing (`a[-1]`) is not supported — use `a[a.size() - 1]`
+or `a.last()`. The explicitness is intentional.
+
+---
+
+## Type Casting
+
+### Implicit widening (same sign domain only)
+
+Widening conversions within the same sign domain are implicit — no syntax required:
+
+```ergoline
+val a: u32 = 42u8;    // u8  → u32: implicit, always safe
+val b: i64 = -1i32;   // i32 → i64: implicit, always safe
+val c: f64 = 3.14f32; // f32 → f64: implicit, always safe
+```
+
+Cross-sign widening is **not** implicit, even when technically lossless. `u32` always
+fits in `i64`, but mixing signs is a historical bug vector and the explicit cast is
+worth the friction:
+
+```ergoline
+val d: i64 = 42u32 as i64;   // required — cross-sign, even though lossless
+```
+
+Float↔integer conversions are never implicit in either direction.
+
+### `as T` — explicit cast
+
+`as T` is the general-purpose explicit cast. It always succeeds at compile time; the
+result is truncated or reinterpreted as needed. It is intentionally permissive — you
+are declaring that you know what you are doing:
+
+```ergoline
+val e: u8  = 300u32 as u8;    // truncates to 44
+val f: i32 = 42u32  as i32;   // reinterprets bit pattern
+val g: i32 = 3.14f64 as i32;  // truncates toward zero → 3
+val h: f32 = 3.14f64 as f32;  // narrows, may lose precision
+val i: u8  = true    as u8;   // bool → integer: false=0, true=1
+val j: bool = 1u8   as bool;  // integer → bool: 0=false, nonzero=true
+```
+
+A constant-expression cast that would produce a value outside the representable range
+of `T` is a compile error:
+
+```ergoline
+val bad: u8 = 300u32 as u8;   // ERROR if 300 is a compile-time constant
+                               // and the result overflows u8 ... wait, 300 as u8
+                               // is 44 — truncation, not undefined. OK.
+val bad: u8 = -1i32  as u8;   // Permitted — produces 255. Explicit is explicit.
+```
+
+The rule is simple: `as T` is never undefined behavior. It always produces a
+deterministic value — truncation for integers, IEEE 754 rounding for floats.
+
+### `.tryAs<T>()` — checked cast
+
+`.tryAs<T>()` returns `result<T, castError>` and propagates the error if the value
+cannot be represented in `T` without loss:
+
+```ergoline
+val k = 300u32.tryAs<u8>()?;            // err — 300 does not fit in u8
+val l = 42u32.tryAs<u8>()?;             // ok(42)
+val m = (-1i32).tryAs<u8>()?;           // err — negative does not fit in u8
+val n = 3.0f64.tryAs<i32>()?;           // ok(3) — exact
+val o = 3.14f64.tryAs<i32>()?;          // err — fractional part lost
+```
+
+`castError` carries the source value (as a string) and the target type name. It
+implements the `status` trait.
+
+### Summary
+
+| Conversion | Syntax | Notes |
+|---|---|---|
+| Same-sign widening | Implicit | `u8→u32`, `i16→i64`, `f32→f64` |
+| Cross-sign (any direction) | `as T` | Even if lossless |
+| Narrowing (integer) | `as T` | Truncates; deterministic |
+| Narrowing (float) | `as T` | IEEE 754 rounding |
+| Float → integer | `as T` | Truncates toward zero |
+| Integer → float | `as T` | May lose precision for large integers |
+| Checked | `.tryAs<T>()?` | `result<T, castError>` |
+| bool ↔ integer | `as T` | 0/1 ↔ false/true |
+
+---
+
+## Packed Types
+
+Native bit-precise layout types for protocol headers, GPU data, SIMD buffers, and
+any context where exact memory layout matters. This is C bitfields done properly —
+deterministic layout, explicit endianness, compiler-enforced range checks.
+
+### `packed struct`
+
+```ergoline
+@bigEndian
+packed struct ipv4Header {
+    version:  unsigned<4>;   // 4-bit unsigned; accessor type u8, values 0..15
+    ihl:      unsigned<4>;   // 4-bit unsigned
+    dscp:     unsigned<6>;   // 6-bit unsigned; accessor type u8, values 0..63
+    ecn:      unsigned<2>;   // 2-bit unsigned
+    length:   u16;           // standard types are valid in packed structs too
+    id:       u16;
+    flags:    unsigned<3>;
+    fragOff:  unsigned<13>;  // accessor type u16
+    ttl:      u8;
+    protocol: u8;
+    checksum: u16;
+    src:      u32;
+    dst:      u32;
+    // total: 4+4+6+2+16+16+16+3+13+8+8+16+32+32 = 160 bits = 20 bytes
+}
+
+static_assert(sizeof(ipv4Header) == 20);
+```
+
+**Layout rules:**
+- Fields are packed from LSB to MSB within each byte, in declaration order
+- No implicit padding between fields
+- `sizeof` returns bytes, always; rounds up to the nearest whole byte if the bit
+  total is not a multiple of 8 (but see padding rules below)
+- Standard types (`u8`, `u16`, etc.) in a packed struct are treated as
+  `unsigned<8>`, `unsigned<16>`, etc. — they align to their natural width within
+  the bit stream but do not force inter-field padding
+
+### `unsigned<N>` and `signed<N>`
+
+These are **layout-only types**, reserved for use inside `packed struct` declarations.
+They are not valid as standalone variable types outside a packed struct — use the
+explicit-width standard types (`u8`..`u64`, `i8`..`i64`) for everything else.
+
+```ergoline
+val x: unsigned<3> = ...;  // ERROR — unsigned<N> not valid outside packed struct
+val x: u8          = ...;  // correct
+```
+
+**Accessor types** — reading a packed field gives the smallest standard type that
+contains it:
+
+| Field type | Accessor type | Value range |
+|---|---|---|
+| `unsigned<1>` | `u8` | 0..1 (also accepts `bool`) |
+| `unsigned<2..8>` | `u8` | 0..2ᴺ−1 |
+| `unsigned<9..16>` | `u16` | 0..2ᴺ−1 |
+| `unsigned<17..32>` | `u32` | 0..2ᴺ−1 |
+| `unsigned<33..64>` | `u64` | 0..2ᴺ−1 |
+| `signed<1..8>` | `i8` | −2ᴺ⁻¹..2ᴺ⁻¹−1 |
+| `signed<9..16>` | `i16` | −2ᴺ⁻¹..2ᴺ⁻¹−1 |
+| `signed<17..32>` | `i32` | −2ᴺ⁻¹..2ᴺ⁻¹−1 |
+| `signed<33..64>` | `i64` | −2ᴺ⁻¹..2ᴺ⁻¹−1 |
+| `bool` | `bool` | equivalent to `unsigned<1>` |
+| `u8`..`u64`, `i8`..`i64` | same type | natural width |
+
+### Endianness
+
+A `packed struct` with no endianness annotation uses host byte order. For
+cross-platform or network use, annotate explicitly:
+
+```ergoline
+@bigEndian    packed struct networkFoo { ... }  // network byte order
+@littleEndian packed struct hostFoo    { ... }  // explicit host (x86) order
+```
+
+Endianness applies to multi-byte field values — it controls how the bytes of a
+`u16` or `u32` field are laid out in memory, not the bit order within a byte.
+
+### Non-power-of-two totals and `@allowPadding`
+
+A packed struct whose fields sum to a non-multiple of 8 bits **does not compile**
+by default. The compiler forces you to either add explicit padding fields or declare
+intent:
+
+```ergoline
+packed struct bad {
+    a: unsigned<3>;
+    b: unsigned<2>;
+    // 5 bits total — not a whole byte. COMPILE ERROR.
+}
+
+// Option 1: explicit padding field
+packed struct good1 {
+    a: unsigned<3>;
+    b: unsigned<2>;
+    _pad: unsigned<3>;  // named _ to signal it's padding
+    // 8 bits total — ok
+}
+
+// Option 2: @allowPadding(N) — N is the padded total in bits, must be power of two
+@allowPadding(8)
+packed struct good2 {
+    a: unsigned<3>;
+    b: unsigned<2>;
+    // compiler pads to 8 bits; padding bits are zero on write, undefined on read
+}
+
+@allowPadding(16)
+packed struct good3 {
+    a: unsigned<3>;
+    b: unsigned<9>;
+    // 12 bits → padded to 16 bits (next power of two)
+}
+```
+
+The `N` in `@allowPadding(N)` must be a power of two and must be ≥ the field total.
+Specifying a target smaller than the field total is a compile error.
+
+### Range enforcement on writes
+
+Writing a value outside the range of a packed field:
+
+- **Compile-time constant**: always a compile error
+- **Runtime, debug build**: panic with a clear message
+- **Runtime, release build**: silently masked to N bits (truncated from LSB)
+
+```ergoline
+var h: ipv4Header = ...;
+h.version = 4u8;    // OK — 4 fits in 4 bits
+h.version = 15u8;   // OK — 15 is max for unsigned<4>
+h.version = 16u8;   // COMPILE ERROR — constant 16 does not fit in unsigned<4>
+
+val v: u8 = computeVersion();
+h.version = v;      // OK at compile time; range-checked at runtime in debug
+```
+
+### `static_assert` for layout verification
+
+Since packed struct layout is deterministic and fully known at compile time, layout
+assertions are encouraged:
+
+```ergoline
+static_assert(sizeof(ipv4Header) == 20);
+static_assert(sizeof(networkFoo) == 4);
+```
+
+A failing `static_assert` is a compile error with a clear message. This catches
+accidental layout changes when fields are added or reordered.
+
 ---
 
 ## What to Cut / Redesign
@@ -628,7 +880,10 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 - Infix identifiers as operators
 - Implicit variables/parameters
 - Primitives: `bool`, `byte`/`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`,
-  `f32`, `f64`, `char` (= `i8`), provisional `f16`/`bf16`
+  `f32`, `f64`, `char` (= `i8`), provisional `f16`/`bf16`; `u64` default index type
+- Type casting: implicit same-sign widening; `as T` for explicit; `.tryAs<T>()` checked
+- Packed types: `packed struct`, `unsigned<N>`/`signed<N>` layout-only, `@bigEndian`/
+  `@littleEndian`, `@allowPadding(N)`, `static_assert` for layout verification
 - Core STL: `array`, `slice`, `queue`, `map`, `string`, `option`, `result`, `either`,
   `range`, `iterator`/`iterable`, `future`, `channel`, `dht`, `uid`, `math`, `status` trait
 - `@system` FFI (compiled path)
