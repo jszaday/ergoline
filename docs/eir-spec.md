@@ -194,7 +194,7 @@ struct DefId(u32);
 
 struct DefInfo {
     name:   String,
-    kind:   DefKind,     // Fn, Class, Trait, Field, Local, ...
+    kind:   DefKind,     // Fn, Entry, Mailbox, Class, Trait, Field, Local, ...
     span:   Span,
     scope:  ScopeId,
 }
@@ -207,6 +207,11 @@ Resolution rules:
 
 Template type parameters get their own `DefId` kind (`DefKind::TypeParam`) and are
 scoped to their enclosing function or class.
+
+Declarations annotated `@mailbox` resolve to `DefKind::Mailbox`, distinct from ordinary
+functions and `@entry` methods. This distinction is preserved through later phases so
+`when foo(...)` can only resolve to a mailbox declaration, never to an entry method or
+plain function.
 
 ---
 
@@ -242,13 +247,17 @@ the substitution using `StaticEvaluator`.
 types. Any expression statement of a must-use type that is not the last expression of a
 block produces a `Diagnostic::Error`. Calling `.ignore()` suppresses this.
 
-**Packed struct layout** is computed here: each `packed struct` gets a `PackedLayout`
+**Packed struct layout** is computed here: each `@packed struct` gets a `PackedLayout`
 annotation recording the bit offset and bit width of each field. `static_assert`
 statements are evaluated against the computed layout.
 
 **The `specialization_worklist`** — the type checker maintains a set of
 `(DefId, Vec<TypeId>)` pairs representing all specializations encountered during checking.
 This is the seed for monomorphization in Phase 7.
+
+Generic `@entry` methods are not permitted. Remote entry points must be fully concrete at
+their declaration site; this avoids requiring cross-compilation-unit specialization
+discovery for runtime-invocable methods.
 
 ---
 
@@ -294,6 +303,14 @@ suspension points and the variables live across each. A suspension point is any 
 The liveness analysis determines which locals must be stored in the state machine struct
 (those that are used after a suspension point but defined before it). Locals that do not
 cross suspension points remain as normal stack variables in the generated code.
+
+Mailbox lowering:
+- each `@mailbox def foo(a: A, b: B, ...) ;` declaration lowers to a typed mailbox field on
+  the enclosing migratable object
+- the generated field name is `foo__mailbox`
+- the mailbox's message type is the ordered tuple of its declared argument types
+- `when foo(pat1, pat2, ...)` resolves to that mailbox field and installs a typed predicate
+  over the mailbox's buffered message stream
 
 **`forall` lowering:**
 
@@ -354,6 +371,12 @@ monomorphized output.
 **No `.ci` files.** Everything the Charmxi interface file previously described is now
 emitted directly by ergc.
 
+Every compilation unit that emits migratable objects also emits one `eir_register()`.
+Runtime startup is required to invoke all unit-local registration functions before any
+migratable object is created or any remote entry method is dispatched. The mechanism is
+runtime-defined (startup table, explicit bootstrap list, constructor registration, etc.),
+but the ordering guarantee is normative.
+
 **`eir_register()` structure:**
 
 ```cpp
@@ -382,8 +405,9 @@ void eir_register() {
 **Packed struct codegen:**
 
 ```ergoline
+@packed
 @bigEndian
-packed struct ipv4Header {
+struct ipv4Header {
     version: unsigned<4>;
     ihl:     unsigned<4>;
     length:  u16;
@@ -418,6 +442,13 @@ static_assert(sizeof(ipv4Header) == 4);
 ```
 
 `EIRV2_RANGE_CHECK` expands to a panic in debug builds and is a no-op in release.
+
+Serialization:
+- migratable objects are serializable by default through compiler-generated field walking
+- all non-static, non-`@hashExclude` fields participate unless explicitly marked otherwise by
+  a future serialization-specific annotation
+- generated serialization is used for migration and message transport of by-value object state
+- fields whose types are not serializable make the enclosing migratable object ill-formed
 
 ---
 
@@ -469,6 +500,46 @@ error[E0042]: value 16 does not fit in unsigned<4>
 The `Diagnostic` type is accumulated across all phases. The compiler reports all
 diagnostics at the end (not abort-on-first-error), unless a later phase cannot proceed
 without a clean earlier phase (e.g., codegen requires a clean monomorphized AST).
+
+---
+
+### Tooling and Developer Workflow
+
+EIR is expected to ship with first-class tooling. The language is not considered complete
+without at least the following:
+
+- `ergc check` — parse, resolve, and type-check without code generation; this is the
+  default fast feedback loop for development and should be comparable in spirit to
+  `cargo check`
+- incremental compilation and checking — unchanged modules should not be re-lexed,
+  re-parsed, re-resolved, and re-checked unnecessarily when their interface-relevant
+  inputs have not changed
+- `eir run path/to/file.erg` — a one-command local execution flow for single-file or
+  small-program iteration on a laptop, including runtime bootstrap and a default local
+  worker/PE configuration
+- LSP support — definition lookup, hover, rename, diagnostics, completion, and semantic
+  highlighting should be exposed through an LSP server built on the same resolver and
+  type-checker crates used by `ergc`
+- `ergfmt` — an official formatter with stable formatting rules
+- `erglint` — an official linter for style and correctness-adjacent conventions not
+  enforced by parsing or typing alone
+
+Toolchain requirements:
+- the LSP server should reuse `ergc-resolve` and `ergc-check` as libraries rather than
+  reimplementing language intelligence separately
+- `ergfmt` formatting should be deterministic and idempotent
+- `erglint` diagnostics should support machine-readable output and editor integration
+
+Baseline lint/style rules:
+- unused locals and parameters must begin with `_`
+- fields and local variables should begin with a lowercase letter
+- global constants may use `SCREAMING_SNAKE_CASE`
+- type, trait, and object names should use `PascalCase`
+- functions, methods, and local bindings should use `camelCase`
+- when multiple styles are technically valid, tooling should prefer lowercase-led names
+
+These are tooling rules, not grammar rules. They are enforced by formatter/linter policy,
+not by the parser.
 
 ---
 
@@ -672,7 +743,6 @@ class_kind      ::= 'abstract'? 'class'
                   | 'struct'
                   | 'object'
                   | 'trait'
-                  | 'packed' 'struct'
 
 inheritance     ::= ( 'extends' type )? ( 'with' type )*
 
@@ -686,14 +756,14 @@ member_body     ::= field_decl | fn_decl | class_decl | using_decl | import_decl
 
 field_decl      ::= ( 'val' | 'var' ) ID ':' field_type ( '=' expr )? ';'
 
-field_type      ::= pack_field_type   (* only valid inside 'packed struct' *)
+field_type      ::= pack_field_type   (* only valid inside '@packed struct' *)
                   | type
 
 pack_field_type ::= 'unsigned' '<' INT_LIT '>'
                   | 'signed'   '<' INT_LIT '>'
                   | type
                   (* 'unsigned<N>' and 'signed<N>' reserved here;
-                     using them outside a packed struct is a compile error *)
+                     using them outside an @packed struct is a compile error *)
 ```
 
 ---
@@ -730,6 +800,13 @@ where_clause    ::= 'where' const_expr
 
 Return type defaults to `unit` when omitted. Functions with no body (`;` instead of
 block) are abstract; only permitted inside `trait` or annotated `@system`.
+
+Argument prefixes:
+- `&arg: T` declares a by-reference parameter
+- `=arg: T` is constructor-binding sugar and is only valid on `def self(...)` within a
+  class or object
+- a `=arg: T` parameter both introduces the parameter `arg` and assigns it to the field
+  of the same name before the function body executes
 
 ---
 
@@ -869,10 +946,13 @@ A `match` without an exhaustive case is a compile error.
 ```
 expr            ::= match_expr | assign_expr
 
-assign_expr     ::= infix_expr ( assign_op infix_expr )?
+assign_expr     ::= coalesce_expr ( assign_op coalesce_expr )?
 assign_op       ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
                   | '&=' | '|=' | '^=' | '<<=' | '>>='
                   | ID '='       (* custom assignment operator overload *)
+
+coalesce_expr   ::= infix_expr ( '??' infix_expr )*
+                  (* defaulting for option/result values *)
 
 infix_expr      ::= cast_expr ( ID cast_expr )*
                   (* ID may be any operator identifier *)
@@ -910,6 +990,12 @@ postfix_suffix  ::= '.' ID                                   (* member access *)
 `?` and `!` are postfix — they bind tighter than any infix operator. Chaining works
 naturally: `foo()?.bar` calls `foo`, propagates error if `err`, then accesses `.bar` on
 the unwrapped value.
+
+`??` is a defaulting operator:
+- for `option<T>`, `lhs ?? rhs` evaluates to the unwrapped `T` when `lhs` is `some`, else `rhs`
+- for `result<T, E>`, `lhs ?? rhs` evaluates to the unwrapped `T` when `lhs` is `ok`, else `rhs`
+- `rhs` is evaluated only when the left side does not produce a value
+- mixed or non-`option`/`result` use is ill-typed
 
 `as T` is a value conversion operator. It never preserves raw bytes as-is and never
 performs layout reinterpretation. Byte-preserving conversion is spelled explicitly with
@@ -965,6 +1051,21 @@ slice           ::= expr? ( ':' ( expr ':' )? expr? )?
 slice_list      ::= slice ( ',' slice )*
 ```
 
+Qualified function references:
+- a `qualified_id` that resolves to a function, static method, or operator implementation
+  may appear as a first-class function value in expression position
+- this includes reducer references such as `i64::+` and `bool::logical_and`
+- when used as values, their types are the corresponding function types, for example
+  `(i64, i64) => i64` and `(bool, bool) => bool`
+
+Slice semantics:
+- `a[i]` indexes one axis with a single element expression
+- `a[start:end]` slices from `start` (inclusive) to `end` (exclusive)
+- `a[start:step:end]` slices with an explicit stride
+- `a[:]` selects the full extent of one axis
+- comma-separated `slice_list` forms such as `a[:, 1]` and `a[i, :]` apply one slice per axis
+- omitted `start`, `step`, or `end` default to the natural bounds and unit stride of that axis
+
 ---
 
 ### Types
@@ -1000,6 +1101,18 @@ Classes annotated or otherwise designated for remote invocation are instantiated
 **migratable objects**. A proxy is the typed handle through which those objects are
 created, addressed, and sent entry-method invocations.
 
+Calling semantics:
+- ordinary method calls on a local value execute synchronously
+- calls through a proxy to an `@entry` method are asynchronous by default
+- `@local` entry methods execute synchronously when invoked on a target in the same runtime
+  instance; invoking `@local` on a non-local target is ill-formed
+
+`object` declarations are process-local singletons. Their `val` and `var` fields are shared
+within one runtime instance/address space, but mutation is not implicitly broadcast across
+multiple runtime instances, PEs, or nodes. Programs that require cross-instance publication
+must use an explicit runtime/library mechanism; ordinary assignment to an `object` field is
+local mutation only.
+
 Proxy suffixes encode the addressing shape of the target collection:
 - `T@` — proxy to an arbitrary-sized distributed collection or singleton-style target
 - `T[@]K` — proxy to a collection with one logical element per processing element (PE)
@@ -1011,6 +1124,23 @@ Proxy suffixes encode the addressing shape of the target collection:
 `self@`, `self[@]`, and `self{@}` are valid proxy-self expressions. They refer to the
 current migratable object's enclosing proxy at the corresponding scope. They are ordinary
 surface syntax and are not shorthand for a distinct `.self` operator.
+
+Built-in proxy members:
+- `index()` returns the logical position of the current element within its collection
+- for `array1d`, `index(): i64`
+- for `arrayNd` with `N > 1`, `index()` returns an `N`-tuple of `i64`
+- for `group`, `index(): i64` denotes the processing-element index
+- for `nodegroup`, `index(): i64` denotes the node index
+
+`contribute` supports two forms:
+- barrier-only: `proxy.contribute(dest)`
+- value contribution: `proxy.contribute(value, reducer, dest)`
+
+In the value form:
+- `reducer` must be a function value of type `(T, T) => T`
+- `dest` may be an entry method reference or mailbox-post target compatible with the
+  reduced result type
+- all contributors in the same reduction epoch must use the same `T` and reducer
 
 ### Index and Size Types
 
@@ -1036,7 +1166,7 @@ EIR distinguishes between:
 The statically sized, byte-layout-known value types are:
 - fixed-width primitives (`bool`, `byte`, `char`, `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `f16`, `bf16`)
 - tuples whose elements are all statically sized value types
-- `packed struct`
+- `@packed struct`
 - `vec<T, N>` where `T` is a statically sized value type and `N` is a compile-time constant
 
 These types have fully known layout and size at compile time. Dynamic arrays, strings,
@@ -1064,7 +1194,7 @@ Examples:
 - `array<u16, 1>.reinterpret<u64>()` is illegal because a dynamic array is not a statically sized value type
 
 Because reinterpretation preserves raw bytes, its result is host-endian for primitive
-numeric targets. Portable wire/layout transformations should use `packed struct` plus
+numeric targets. Portable wire/layout transformations should use `@packed struct` plus
 explicit endianness, not `reinterpret`.
 
 ### `vec<T, N>` Semantics
@@ -1157,16 +1287,17 @@ Built-in annotations:
 |---|---|---|
 | `@entry` | method | Remotely invocable entry method |
 | `@entry(kind, ...)` | method | Entry method restricted to certain proxy kinds |
-| `@mailbox` | body-less method | Declares a typed mailbox slot |
+| `@mailbox` | body-less method | Declares a typed mailbox slot; lowers to `name__mailbox` |
 | `@local` | entry method | Executes synchronously on caller's PE only |
 | `@main` | class | Main chare (program entry point) |
 | `@system(...)` | fn, class | C++ FFI binding |
 | `@extern "C"` | fn | C ABI binding (ctypes-compatible) |
 | `@override` | method | (syntactic; also keyword form) |
 | `@static` | member | (syntactic; also keyword form) |
-| `@bigEndian` | packed struct | Big-endian byte order |
-| `@littleEndian` | packed struct | Little-endian byte order (default) |
-| `@allowPadding(N)` | packed struct | Allow padding to N bits (N must be power of two) |
+| `@packed` | struct | Enables packed-layout field rules for the struct |
+| `@bigEndian` | `@packed struct` | Big-endian byte order |
+| `@littleEndian` | `@packed struct` | Little-endian byte order (default) |
+| `@allowPadding(N)` | `@packed struct` | Allow padding to N bits (N must be power of two) |
 | `@hashExclude` | field | Exclude from generated hash/pup |
 
 Structured entry methods do not require a separate `@threaded` annotation. Any `@entry`
@@ -1204,15 +1335,16 @@ defaults to `i32`.
 | Level | Operators | Notes |
 |---|---|---|
 | 0 (lowest) | assignment: `=`, `+=`, `-=`, `*=`, … | Right-associative |
-| 1 | alphabetic identifiers as infix (`and`, `or`, …) | Left-associative |
-| 2 | `\|` | |
-| 3 | `^` | |
-| 4 | `&` | |
-| 5 | `<`, `>`, `<:`, `>:`, `==`, `!=`, … | |
-| 6 | `+`, `-` | |
-| 7 | `*`, `/`, `%` | |
-| 8 | `as` (cast) | Right of `as` is a type, not an expr |
-| 9 (highest) | unary prefix: `+`, `-`, `!`, `~` | |
+| 1 | `??` | Left-associative defaulting for `option`/`result` |
+| 2 | alphabetic identifiers as infix (`and`, `or`, …) | Left-associative |
+| 3 | `\|` | |
+| 4 | `^` | |
+| 5 | `&` | |
+| 6 | `<`, `>`, `<:`, `>:`, `==`, `!=`, … | |
+| 7 | `+`, `-` | |
+| 8 | `*`, `/`, `%` | |
+| 9 | `as` (cast) | Right of `as` is a type, not an expr |
+| 10 (highest) | unary prefix: `+`, `-`, `!`, `~` | |
 | — | postfix: `.`, `[]`, `()`, `?`, `!` | Tightest binding |
 
 Precedence is determined by the **first character** of an operator identifier. Custom

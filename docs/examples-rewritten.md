@@ -25,7 +25,7 @@ import ergoline::_;
 
     def self(args: array<string>) {
         n = args.size() > 1
-            ? args[1].parse<i32>().getOrElse(0)
+            ? (args[1].parse<i32>() ?? 0)
             : math::max(2 * configuration.threshold, 32);
         new fib@(self@, n);
     }
@@ -75,7 +75,7 @@ trait acceptor {
 **Migration Notes**
 - `int` → `i32`
 - `` `fib(${n}) = ${x}` `` → `f"fib($n) = $x"` (bare `$name` for simple identifiers)
-- `args[1].toInt()` → `args[1].parse<i32>().getOrElse(0)` — explicit error handling
+- `args[1].toInt()` → `args[1].parse<i32>() ?? 0`
 
 ---
 
@@ -133,6 +133,7 @@ package examples;
 
 import ergoline::_;
 import hc;
+import blas;
 
 @main class main {
     def self() {
@@ -232,7 +233,7 @@ def sqrt(value: f64): f64;
         val npPerDim:  i64 = sqrt(np as f64) as i64;
         val nbPerDim:  i64 = (np > 1 && npPerDim == 1) ? 2 : npPerDim;
         val blockSize: i64 = (args.size() > 1
-            ? args[1].parse<i64>().getOrElse(128)
+            ? (args[1].parse<i64>() ?? 128)
             : 128) / nbPerDim;
         val blockShape = (blockSize, blockSize);
 
@@ -316,7 +317,8 @@ class block {
 - `@threaded @entry def run(...)` → `@entry def run(...)`
 - `@overlap for` → `forall`
 - idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
-- `args[1].toInt()` → `args[1].parse<i64>().getOrElse(128)`
+- explicitly import `blas` before using `blas::dgemm`
+- `args[1].toInt()` → `args[1].parse<i64>() ?? 128`
 - Backtick f-strings → `f"..."`
 - The compound `when inputA(...), inputB(...)` is **identical** — it was already right
 
@@ -359,12 +361,12 @@ object globals {
         globals.mainProxy = self@;
 
         if (args.size() >= 3) {
-            globals.arrDimX   = args[1].parse<i64>().getOrElse(128);
+            globals.arrDimX   = args[1].parse<i64>() ?? 128;
             globals.arrDimY   = globals.arrDimX;
-            globals.blockDimX = args[2].parse<i64>().getOrElse(64);
+            globals.blockDimX = args[2].parse<i64>() ?? 64;
             globals.blockDimY = globals.blockDimX;
             if (args.size() >= 4) {
-                globals.maxIters = args[3].parse<i64>().getOrElse(250);
+                globals.maxIters = args[3].parse<i64>() ?? 250;
             }
         }
 
@@ -380,7 +382,7 @@ object globals {
 
         startTime = hc::wallTime();
         val workers = new jacobi2d@array2d(globals.numChareX, globals.numChareY);
-        workers.run();  // no separate initialize() step needed
+        workers.run();
     }
 
     @entry def done(numIters: i64) {
@@ -466,7 +468,7 @@ class jacobi2d {
         }
     }
 
-    @entry def start_iteration(it: i64) {
+    private def start_iteration(it: i64) {
         val (x, y) = self[@]index();
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
@@ -532,7 +534,8 @@ class jacobi2d {
 - bool→integer casts use ordinary `as`; `!hasSouth as i64` parses as `(!hasSouth) as i64`
 - `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**
 - idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
-- `args[N].toInt()` → `args[N].parse<i64>().getOrElse(default)`
+- `args[N].toInt()` → `args[N].parse<i64>() ?? default`
+- `start_iteration` is a plain local helper, not an async self-entry call
 - Backtick f-strings → `f"..."`, bare `$name` for simple identifiers
 - unsuffixed integer literals in index position infer `i64`
 
@@ -550,20 +553,17 @@ class jacobi2d {
 | Threaded entry methods | `@threaded @entry def foo()` | `@entry def foo()` |
 | Parallel loops | `@overlap for (var i = 0; ...)` | `forall (i <- 0 to n)` |
 | Runtime functions | `ck::numPes()`, `ck::wallTime()` | `hc::numPes()`, `hc::wallTime()` |
-| String parsing | `.toInt()` | `.parse<i32>().getOrElse(n)` |
+| String parsing | `.toInt()` | `.parse<i32>() ?? n` |
 | Numeric conversions | method-style conversions | explicit `as` casts |
 | Distributed globals | `ck::updateGlobal<T>(callback)` | Direct mutation (intra-node) |
 
 ---
 
-## Non-Normative Syntax Notes
+## Syntax Notes
 
-The examples still use `parse<T>().getOrElse(default)` because that behavior is expressible
-today, but it is verbose. A cleaner defaulting operator is worth considering:
+The examples use `??` for defaulting because it is now specified for `option`/`result`
+values:
 
 ```ergoline
 args[1].parse<i32>() ?? 0
 ```
-
-This document does **not** specify `??`; it is only noted here as a plausible ergonomic
-replacement for `getOrElse(...)` on `option`/`result`-like values.
