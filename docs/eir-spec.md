@@ -7,6 +7,16 @@
 
 ## Part I — Compiler Architecture
 
+This document is the authoritative language and compiler specification for EIR.
+Historical implementations and earlier design notes are non-normative.
+
+Terminology:
+- **migratable object** — the primary runtime entity; a stateful object whose entry
+  methods are invoked asynchronously and whose execution may be relocated by the runtime
+- **proxy** — a typed handle used to create or invoke migratable objects
+- **actor** — informal shorthand only; when precision matters, this spec uses
+  **migratable object**
+
 ### Pipeline Overview
 
 ```
@@ -508,7 +518,7 @@ op_char     ::= '!' | '#' | '%' | '&' | '*' | '+' | '-' | '/'
 **Reserved keywords** (may not be used as identifiers):
 ```
 abstract  all      any      as       async    await
-bool      byte     char     class    def      do
+bool      break    byte     char     class    continue def      do
 else      extends  f16      f32      f64      bf16
 false     for      forall   i8       i16      i32
 i64       if       implicit import   match    namespace
@@ -608,13 +618,22 @@ program_member  ::= annotation* ( namespace_decl | import_decl | top_decl )
 
 namespace_decl  ::= 'namespace' fqn ( ';' | '{' program_member* '}' )
 
-import_decl     ::= 'public'? 'import' fqn ( '::' '_' )? ';'
+import_decl     ::= 'public'? 'import' fqn import_tail? ';'
                   (* wildcard '_' imports all names from the module *)
                   (* single-name: import foo::bar; *)
-                  (* no brace-list form *)
+                  (* brace-list: import foo::{bar, baz}; *)
+
+import_tail     ::= '::' '_'
+                  | '::' '{' ID ( ',' ID )* '}'
+                  | ε
 
 top_decl        ::= class_decl | fn_decl | using_decl
 ```
+
+`import foo::bar;` imports a single name. `import foo::_;` imports all public names from
+the module. `import foo::{bar, baz};` imports a listed subset of public names.
+
+`public import` re-exports the imported names from the current module.
 
 ---
 
@@ -708,6 +727,8 @@ inner_stmt      ::= block
                   | while_loop
                   | if_else
                   | return_stmt
+                  | break_stmt
+                  | continue_stmt
                   | when_stmt
                   | await_many_stmt
                   | static_assert_stmt
@@ -721,6 +742,9 @@ block           ::= '{' statement* '}'
 
 return_stmt     ::= 'return' expr? ';'
                   (* bare 'return;' produces unit *)
+
+break_stmt      ::= 'break' ';'
+continue_stmt   ::= 'continue' ';'
 
 static_assert_stmt ::= 'static_assert' '(' const_expr ( ',' STRING_LIT )? ')' ';'
                      (* evaluated at compile time; failure is a compile error *)
@@ -761,6 +785,13 @@ val __tasks = (0 to n).map(i => async { body(i) });
 await __tasks.reduce((a, b) => a.and(b));
 ```
 
+Control-flow rules:
+- `continue` is valid inside `forall`; it terminates the current iteration's coroutine
+  immediately and schedules no further work for that iteration
+- `break` is not valid inside `forall`; cancelling sibling iterations is not part of the
+  `forall` model and is a compile error
+- `break` and `continue` are both valid in ordinary `for`, `while`, and `do ... while`
+
 ---
 
 ### SDAG Constructs
@@ -776,6 +807,10 @@ when_fn         ::= identifier '(' pattern_list? ')'
 Valid only inside a structured entry method (`@entry def` containing suspension points).
 The compiler identifies structured entry methods during SDAG segmentation and rejects
 `when`/`await` outside them.
+
+`await all { ... }`, `await any { ... }`, and `await forall (...) { ... }` may be nested
+inside a structured entry method. Their suspension semantics are composed structurally by
+the segmentation pass.
 
 ---
 
@@ -807,8 +842,7 @@ expr_pattern    ::= infix_expr
                      it from id_pattern; typically '_ == expr' or '_ >= expr' etc. *)
 ```
 
-A `match` without an exhaustive case is a compile error in strict mode; a runtime abort
-in non-strict mode when no case matches.
+A `match` without an exhaustive case is a compile error.
 
 ---
 
@@ -849,7 +883,6 @@ prefix_op       ::= '+' | '-' | '!' | '~'
 postfix_expr    ::= primary_expr postfix_suffix*
 
 postfix_suffix  ::= '.' ID                                   (* member access *)
-                  | '.' 'self' proxy_suffix                  (* proxy member shorthand *)
                   | '[' slice_list ']'                       (* index or slice *)
                   | specialization? '(' call_arg_list? ')'  (* function call *)
                   | '?'                  (* result<T,E> propagation — only in result-returning fn *)
@@ -859,6 +892,12 @@ postfix_suffix  ::= '.' ID                                   (* member access *)
 `?` and `!` are postfix — they bind tighter than any infix operator. Chaining works
 naturally: `foo()?.bar` calls `foo`, propagates error if `err`, then accesses `.bar` on
 the unwrapped value.
+
+`as T` is a value conversion operator. It never preserves raw bytes as-is and never
+performs layout reinterpretation. Byte-preserving conversion is spelled explicitly with
+`reinterpret<T>()`.
+
+Prefix operators bind before `as`. For example, `!flag as i64` parses as `(!flag) as i64`.
 
 ```
 primary_expr    ::= literal
@@ -874,6 +913,7 @@ new_expr        ::= 'new' type tuple_expr?
 await_expr      ::= 'await' postfix_expr
                   | 'await' 'all' '{' when_stmt+ '}'
                   | 'await' 'any' '{' when_stmt+ '}'
+                  | 'await' forall_expr
                   (* postfix_expr may be:
                      - a future<T>          → unwraps T when resolved
                      - an array<future<T>>  → awaits all, returns array<T>
@@ -919,7 +959,7 @@ lambda_type     ::= tuple_multiply ( '=>' tuple_multiply )?
 
 tuple_multiply  ::= basic_type ( '.*' const_primary_expr )?
 
-basic_type      ::= proxy_type | tuple_type
+basic_type      ::= proxy_type | tuple_type | vec_type
 
 proxy_type      ::= type_path proxy_type_suffix?
 
@@ -931,7 +971,134 @@ collective_kwd  ::= 'array' [1-9] 'd' | 'nodegroup' | 'group'
 
 tuple_type      ::= '(' type ( ',' type )+ ')'
                   | '(' ')'          (* unit type *)
+
+vec_type        ::= 'vec' '<' type ',' const_expr '>'
+                  (* statically sized homogeneous value vector; length known at compile time *)
 ```
+
+### Migratable Objects and Proxies
+
+Classes annotated or otherwise designated for remote invocation are instantiated as
+**migratable objects**. A proxy is the typed handle through which those objects are
+created, addressed, and sent entry-method invocations.
+
+Proxy suffixes encode the addressing shape of the target collection:
+- `T@` — proxy to an arbitrary-sized distributed collection or singleton-style target
+- `T[@]K` — proxy to a collection with one logical element per processing element (PE)
+- `T{@}K` — proxy to a collection with one logical element per node
+
+`K` is the collection category named by `collective_kwd`, such as `array1d`, `array2d`,
+`group`, or `nodegroup`.
+
+`self@`, `self[@]`, and `self{@}` are valid proxy-self expressions. They refer to the
+current migratable object's enclosing proxy at the corresponding scope. They are ordinary
+surface syntax and are not shorthand for a distinct `.self` operator.
+
+### Index and Size Types
+
+The canonical type for indices, sizes, shapes, and loop counters is `i64`.
+
+- `array<T>.size()` returns `i64`
+- indexing operations expect `i64`
+- range-based loops infer `i64` loop variables unless constrained otherwise
+- integer literals in index position are contextually typed as `i64`
+
+Negative indices are not given Python-style wraparound semantics. An index expression must
+be in range `0 <= i < size`; when provably false at compile time this is a compile error,
+otherwise it is a runtime bounds error.
+
+### Statically Sized Value Types
+
+EIR distinguishes between:
+- **dynamic arrays** such as `array<f64, 2>`: heap-managed arrays whose rank is fixed but
+  whose extents are runtime values
+- **statically sized vectors** such as `vec<u16, 4>`: inline value types with compile-time
+  known length
+
+The statically sized, byte-layout-known value types are:
+- fixed-width primitives (`bool`, `byte`, `char`, `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `f16`, `bf16`)
+- tuples whose elements are all statically sized value types
+- `packed struct`
+- `vec<T, N>` where `T` is a statically sized value type and `N` is a compile-time constant
+
+These types have fully known layout and size at compile time. Dynamic arrays, strings,
+references, proxies, lambdas, futures, channels, and ordinary class/object instances are
+not statically sized value types.
+
+### Reinterpretation
+
+`x.reinterpret<T>()` performs a byte-preserving reinterpretation of a value.
+
+It is legal if and only if:
+- the source type of `x` is a statically sized value type
+- `T` is a statically sized value type
+- `sizeof(source) == sizeof(T)` at compile time
+
+`reinterpret` does **not** perform numeric conversion, sign extension, truncation, byte
+swapping, serialization, or element-wise mapping. It preserves the source value's byte
+representation exactly and interprets those bytes as `T`.
+
+Examples:
+- `u64.reinterpret<f64>()` is a 64-bit bitcast
+- `u64.reinterpret<vec<u16, 4>>()` is legal because both sides are 8 bytes
+- `vec<byte, 8>.reinterpret<u64>()` is legal because both sides are 8 bytes
+- `vec<u16, 4>.reinterpret<u64>()` is legal because both sides are 8 bytes
+- `array<u16, 1>.reinterpret<u64>()` is illegal because a dynamic array is not a statically sized value type
+
+Because reinterpretation preserves raw bytes, its result is host-endian for primitive
+numeric targets. Portable wire/layout transformations should use `packed struct` plus
+explicit endianness, not `reinterpret`.
+
+### `vec<T, N>` Semantics
+
+`vec<T, N>` is a statically sized homogeneous value container with `N` elements of type
+`T`, stored inline.
+
+Core properties:
+- `N` is a compile-time constant
+- `sizeof(vec<T, N>) == N * sizeof(T)` when `T` has no interior padding requirements beyond
+  its own natural layout
+- `vec<T, N>` is copied, compared, and reinterpreted as a value type
+
+Basic operations:
+- `v[i]` indexes a vector element and expects `i: i64`
+- `v.size()` returns `i64` and is always equal to `N`
+- vectors are iterable in element order from `0` to `N - 1`
+
+Construction forms:
+- `vec<T, N>(x0, x1, ..., xNminus1)` constructs a vector from exactly `N` elements
+- `vec<T, N>::fill(x)` constructs a vector whose elements are all `x`
+
+Vector literal syntax is deferred. Constructor-like forms such as `vec<T, N>(...)` are
+provisional library notation, not yet a dedicated grammar production.
+
+Conversions:
+- `vec<T, N>` may convert to and from a tuple of arity `N` when each tuple element has type `T`
+- `reinterpret` between `vec<T, N>` and other statically sized value types is governed only
+  by the reinterpretation rules above; it is not element-aware
+
+Operators on `vec<T, N>` are lifted elementwise from `T`.
+
+If `T` defines an operator, method-like operator, or assignment operator, then the
+corresponding `vec<T, N>` operation applies that operator pointwise to each element.
+
+Examples:
+- if `T` supports `+`, then `vec<T, N> + vec<T, N>` applies `+` to each pair of elements
+- if `T` supports unary `-`, then `-vec<T, N>` negates each element
+- if `T` supports custom infix `:+:`, then `a :+: b` for `vec<T, N>` applies `:+:` elementwise
+- if `T` supports `+=`, then `lhs += rhs` for `vec<T, N>` updates each element of `lhs` pointwise
+
+Lifting rules:
+- binary lifted operators require operands with the same length `N`
+- scalar broadcasting does not occur implicitly
+- the result type is `vec<U, N>` where the elementwise application of the underlying
+  operator yields `U`
+- if any elementwise operator application is ill-typed, the lifted vector operator is ill-typed
+
+Equality and ordering:
+- `==` and `!=` are lifted elementwise and then reduced with logical `and`
+- ordering operators such as `<` and `<=` are not lifted by default unless explicitly defined
+  for `vec<T, N>` in the standard library or user code
 
 ---
 
@@ -984,6 +1151,10 @@ Built-in annotations:
 | `@allowPadding(N)` | packed struct | Allow padding to N bits (N must be power of two) |
 | `@hashExclude` | field | Exclude from generated hash/pup |
 
+Structured entry methods do not require a separate `@threaded` annotation. Any `@entry`
+method containing suspension points (`when`, `await`, `await all/any`, `await forall`)
+is segmented automatically by the compiler.
+
 ---
 
 ### Literals (summary)
@@ -1001,11 +1172,11 @@ int_suffix      ::= 'u8'|'i8'|'u16'|'i16'|'u32'|'i32'|'u64'|'i64'
 float_suffix    ::= 'f32'|'f64'|'f16'|'bf16'
 ```
 
-**Default types:** integer literal without suffix → `i32` (or `u64` in index position);
+**Default types:** integer literal without suffix → `i32` (or `i64` in index position);
 float literal without suffix → `f64`.
 
 **Literal type inference:** Integer and float literals are contextually typed. `a[42]`
-infers `42: u64` because array indexing demands `u64`. `val x = 42` without context
+infers `42: i64` because array indexing demands `i64`. `val x = 42` without context
 defaults to `i32`.
 
 ---
@@ -1048,4 +1219,3 @@ i16::min i16::max  u16::min u16::max
 i32::min i32::max  u32::min u32::max
 i64::min i64::max  u64::min u64::max
 ```
-
