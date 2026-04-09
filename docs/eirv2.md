@@ -59,6 +59,108 @@ Before cutting, it's worth naming what worked well and should survive in some fo
 
 ---
 
+## Primitive Types
+
+### No unsized types
+
+Ergoline v1 inherited C's loosely-sized primitives: `int` (aliased to `std::int32_t` but
+named as if platform-dependent), `long`, `short`, `double`, `char`. In an HPC context —
+where data layout, SIMD width, serialization format, and wire protocol all depend on
+knowing exact sizes — this is a footgun. EIRv2 eliminates all unsized primitive names.
+
+Every numeric type has an explicit width. There are no surprises about layout.
+
+### The primitive type table
+
+| Type | Width | Description |
+|------|-------|-------------|
+| `bool` | 1 byte | Boolean — `true` or `false` |
+| `byte` | 1 byte | Alias for `u8`; for byte buffers and I/O |
+| `u8` | 8 bits | Unsigned integer |
+| `i8` | 8 bits | Signed integer |
+| `u16` | 16 bits | Unsigned integer |
+| `i16` | 16 bits | Signed integer |
+| `u32` | 32 bits | Unsigned integer |
+| `i32` | 32 bits | Signed integer — **default integer literal type** |
+| `u64` | 64 bits | Unsigned integer |
+| `i64` | 64 bits | Signed integer |
+| `f32` | 32 bits | IEEE 754 single precision |
+| `f64` | 64 bits | IEEE 754 double precision — **default float literal type** |
+| `char` | 8 bits | Alias for `i8`; kept as a convenience for ASCII/byte strings |
+| `f16` | 16 bits | IEEE 754 half precision (optional — see below) |
+| `bf16` | 16 bits | bfloat16 (optional — see below) |
+
+**No `usize` / `isize`.** Pointer-width integers are a Rust-ism that leaks platform
+details into user code. Array indices use `i64` by convention (large enough for any
+realistic count, signed to allow sentinel values). If a specific binding needs a
+pointer-width value, `@extern "C"` can declare it explicitly.
+
+### `char` is `i8`
+
+`char` is a convenience alias for `i8` — a signed byte. It has no special Unicode
+semantics. Strings in EIRv2 are UTF-8 byte sequences; iterating over a `string` yields
+`byte` (`u8`) values, not decoded code points. This is the HPC-pragmatic choice: string
+processing in HPC is almost always byte-level (parsing, protocol headers, file I/O), and
+Unicode decoding is a library concern when needed.
+
+The name `char` is kept because `for (c <- "hello")` reading naturally. It is not a
+distinct type — `i8 == char` is always true; they are interchangeable.
+
+### `byte` is `u8`
+
+Similarly, `byte` is a convenience alias for `u8`. Byte-buffer types read more clearly
+as `array<byte>` than `array<u8>`. They are identical in every other respect.
+
+### `f16` and `bf16` — provisional
+
+`f16` (IEEE 754 half precision) and `bf16` (bfloat16, 8-bit exponent / 7-bit mantissa)
+are included provisionally. Both are increasingly relevant for HPC and ML workloads
+(GPU memory bandwidth reduction, tensor cores). The caveats:
+
+- Neither has native arithmetic support on all CPUs. x86 gains `f16` arithmetic in
+  AVX-512FP16; `bf16` arithmetic requires AVX-512BF16 or AMX. Without hardware support,
+  operations must promote to `f32`.
+- They are fully valid as **layout types**: storing, transmitting, and converting `f16`
+  / `bf16` values is always supported. Arithmetic may require an explicit `.toF32()`
+  round-trip on unsupported hardware.
+- The compiler should emit a diagnostic (not an error) when `f16`/`bf16` arithmetic is
+  used on a target without native support.
+
+### Literal suffixes
+
+Integer and float literals support explicit type suffixes. Without a suffix, `42` is
+`i32` and `3.14` is `f64` — matching the defaults.
+
+```ergoline
+val a: i32  = 42;        // inferred from type annotation
+val b        = 42i32;    // explicit suffix
+val c        = 42u64;    // 64-bit unsigned
+val d        = 3.14f32;  // single precision
+val e        = 3.14f64;  // double precision (same as 3.14)
+val f        = 255u8;    // max u8
+val g        = -1i8;     // min negative i8
+```
+
+Literals that overflow their declared type are a compile error, not silent truncation.
+
+### What this replaces from v1
+
+| Ergoline v1 | EIRv2 | Notes |
+|-------------|-------|-------|
+| `int` | `i32` | Same underlying type; explicit name |
+| `long` | `i64` | Same underlying type; explicit name |
+| `short` | `i16` | Same underlying type; explicit name |
+| `double` | `f64` | Same underlying type; explicit name |
+| `float` (EirFloatLiteral, labeled "double") | `f32` | The v1 naming bug is gone |
+| `char` | `char` / `i8` | Now explicit alias; no semantic change |
+| `bool` | `bool` | Unchanged |
+
+No source-level migration path is provided for the name changes — this is a clean break.
+The v1 names (`int`, `long`, `double`, etc.) are not reserved; they could be user-defined
+type aliases if someone wants them, but the STL does not define them.
+
+---
+
 ## What to Cut / Redesign
 
 ### Cut entirely
@@ -525,12 +627,17 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 - `import`/`package` module system
 - Infix identifiers as operators
 - Implicit variables/parameters
+- Primitives: `bool`, `byte`/`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`,
+  `f32`, `f64`, `char` (= `i8`), provisional `f16`/`bf16`
 - Core STL: `array`, `slice`, `queue`, `map`, `string`, `option`, `result`, `either`,
   `range`, `iterator`/`iterable`, `future`, `channel`, `dht`, `uid`, `math`, `status` trait
 - `@system` FFI (compiled path)
-- FastParse grammar as starting point
+- FastParse grammar as starting point (with primitive names updated)
 
 ### Redesign
+- **Primitive types:** `int`→`i32`, `long`→`i64`, `short`→`i16`, `double`→`f64`,
+  `float` (mislabeled in v1) → `f32`; `char` kept as alias for `i8`; `byte` alias for `u8`;
+  no unsized types, no silent platform-dependent sizing
 - Error propagation: `result<T, E>` + `?` + `!` operators replace exceptions and absl macros
 - Type hierarchy: separate `EirTemplateArgument`/`EirTypeAlias` from `EirType`
 - Variance: implement correctly via monomorphization
