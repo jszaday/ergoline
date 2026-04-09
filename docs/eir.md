@@ -1,4 +1,4 @@
-# Toward EIRv2 — A Clean Rework
+# Toward EIR — A Clean Rework
 
 > Status: design notes / pre-proposal
 > Context: builds on `code-review.md` and the 2022 dissertation
@@ -7,7 +7,7 @@
 
 ## Framing
 
-EIRv2 is a clean-sheet redesign that keeps the core intellectual contributions of Ergoline/EIR —
+EIR is a clean-sheet redesign that keeps the core intellectual contributions of Ergoline/EIR —
 migratable objects, SDAG, a rich type system — while cutting the Charm++/Hypercomm dependency,
 fixing known design debt, and targeting intra-node execution first with a clear path to
 multi-node (UCX) later.
@@ -66,7 +66,7 @@ Before cutting, it's worth naming what worked well and should survive in some fo
 Ergoline v1 inherited C's loosely-sized primitives: `int` (aliased to `std::int32_t` but
 named as if platform-dependent), `long`, `short`, `double`, `char`. In an HPC context —
 where data layout, SIMD width, serialization format, and wire protocol all depend on
-knowing exact sizes — this is a footgun. EIRv2 eliminates all unsized primitive names.
+knowing exact sizes — this is a footgun. EIR eliminates all unsized primitive names.
 
 Every numeric type has an explicit width. There are no surprises about layout.
 
@@ -98,7 +98,7 @@ pointer-width value, `@extern "C"` can declare it explicitly.
 ### `char` is `i8`
 
 `char` is a convenience alias for `i8` — a signed byte. It has no special Unicode
-semantics. Strings in EIRv2 are UTF-8 byte sequences; iterating over a `string` yields
+semantics. Strings in EIR are UTF-8 byte sequences; iterating over a `string` yields
 `byte` (`u8`) values, not decoded code points. This is the HPC-pragmatic choice: string
 processing in HPC is almost always byte-level (parsing, protocol headers, file I/O), and
 Unicode decoding is a library concern when needed.
@@ -145,7 +145,7 @@ Literals that overflow their declared type are a compile error, not silent trunc
 
 ### What this replaces from v1
 
-| Ergoline v1 | EIRv2 | Notes |
+| Ergoline v1 | EIR | Notes |
 |-------------|-------|-------|
 | `int` | `i32` | Same underlying type; explicit name |
 | `long` | `i64` | Same underlying type; explicit name |
@@ -416,18 +416,18 @@ accidental layout changes when fields are added or reordered.
 ## What to Cut / Redesign
 
 ### Cut entirely
-- **Charm++ `.ci` files and Charmxi.** EIRv2's compiler emits all registration code
+- **Charm++ `.ci` files and Charmxi.** EIR's compiler emits all registration code
   directly — it has full knowledge of all chare types and entry methods at compile time.
   A `register_all()` function (or equivalent) replaces the `.ci` → Charmxi → `.decl.h`
   pipeline.
 - **`EirProxy` three-way split** (`@`, `[@]`, `{@}`). The element/section/collective
-  distinction is Charm++ array semantics. In EIRv2, proxy kinds simplify: a proxy is a
+  distinction is Charm++ array semantics. In EIR, proxy kinds simplify: a proxy is a
   handle to an actor (singleton or collection member). Sections become a library concern.
 - **`ck::updateGlobal`, `ck::exitAfterQuiescence`, `ck::awaitQuiescence`.** These are
-  Charm++ runtime hooks. EIRv2's runtime exposes its own lifecycle API.
+  Charm++ runtime hooks. EIR's runtime exposes its own lifecycle API.
 - **`@createhome` / `@createhere`.** Demand-creation semantics can be re-expressed as
   regular `new` with routing hints if needed later.
-- **`@async` as a distinct annotation.** In EIRv2, `async` is a first-class expression
+- **`@async` as a distinct annotation.** In EIR, `async` is a first-class expression
   modifier, not an annotation. Every non-`@entry` call to a remote actor is inherently
   async; the return type is inferred as `future<T>`.
 - **Nodegroups.** Intra-node only for now; revisit for multinode.
@@ -438,10 +438,10 @@ accidental layout changes when fields are added or reordered.
 ### Redesign
 - **`EirTemplateArgument` and `EirTypeAlias` are not types.** The single biggest type
   system correctness issue in EIR. Both incorrectly extend `EirType`, causing confusion
-  throughout resolution and codegen. EIRv2 separates them cleanly.
+  throughout resolution and codegen. EIR separates them cleanly.
 - **`EirReturn.expression` is not optional.** A void return synthesizes `unitLiteral` at
   parse time. Fix by making it `Option[EirExpressionNode]` in the AST.
-- **`replaceChild` stubs.** The tree mutation API is half-implemented. EIRv2 should either
+- **`replaceChild` stubs.** The tree mutation API is half-implemented. EIR should either
   implement it completely or replace it with a structural rewrite pass that doesn't mutate
   in-place.
 - **`deepCloneTree` no-op.** The buffer-reuse optimization requires real tree cloning.
@@ -459,10 +459,10 @@ accidental layout changes when fields are added or reordered.
 The dissertation notes that SDAG segmentation already decomposes `@threaded @entry` methods
 into continuation state machines — exactly what coroutine transformation does. ULTs (user-level
 threads with their own stacks) were needed in Charm++ because the SDAG library operated at
-runtime, not compile time. Since EIRv2's segmentation pass operates at compile time, there is
+runtime, not compile time. Since EIR's segmentation pass operates at compile time, there is
 no reason to pay the ULT overhead.
 
-**EIRv2 execution model:**
+**EIR execution model:**
 
 ```
 Actor (chare instance)
@@ -482,7 +482,7 @@ it forward when the required messages arrive.
 - Work-stealing pool underneath; number of OS threads = hardware concurrency (configurable)
 - No per-actor thread affinity initially; migration is a scheduler decision
 
-**`@threaded` in EIRv2:** Becomes the default for any entry method containing `when`/`await`.
+**`@threaded` in EIR:** Becomes the default for any entry method containing `when`/`await`.
 The annotation is no longer needed — the compiler detects suspension points and generates a
 coroutine automatically. For entry methods with no suspension, plain function calls suffice.
 
@@ -494,7 +494,7 @@ explicit `concurrent for` keyword with the same semantics, or a `parallel for` t
 the barrier explicit:
 
 ```ergoline
-// EIRv2 proposal: structured concurrent loop
+// EIR proposal: structured concurrent loop
 for concurrent (i <- 0 to n) {   // all iterations launch concurrently
     when receive(_ == i, data) => process(i, data);
 }
@@ -517,7 +517,7 @@ block form, and make the barrier explicit.**
 
 ---
 
-## SDAG in EIRv2
+## SDAG in EIR
 
 SDAG is the one eDSL to keep. Two questions: (1) how should it be lowered, and (2) should
 `when`/`await` be language built-ins or STL abstractions?
@@ -531,7 +531,7 @@ approach because:
 - Type checking of `when` predicates is possible
 - The generated code has no runtime SDAG overhead, only the coroutine state machine
 
-In EIRv2, the segmentation pass outputs coroutine frames (or equivalent continuation-passing
+In EIR, the segmentation pass outputs coroutine frames (or equivalent continuation-passing
 code) rather than SDAG continuation objects. The runtime only needs to know how to deliver
 messages and resume suspended coroutines — it does not need SDAG-specific logic.
 
@@ -562,14 +562,14 @@ compelling reason to fight that. For the Python embedding (nanobind) path, the r
 exposes a `Mailbox` class with `.recv()`, `.when()`, and `Mailbox.select()` (equivalent to
 `await any`) as regular Python awaitable methods. The two paths do not need to share syntax.
 
-### `@mailbox` in EIRv2
+### `@mailbox` in EIR
 
 `@mailbox` declares a typed message queue slot on an actor. This maps cleanly onto a
 `std::deque<T>` (or similar) field with a condition variable or coroutine wakeup. The key
 semantics:
 
 ```ergoline
-// EIRv2: mailbox declaration (unchanged syntax)
+// EIR: mailbox declaration (unchanged syntax)
 @mailbox def receive(it: int, data: array<double>);
 
 // usage in structured entry method
@@ -604,7 +604,7 @@ via UCX, the critical design decisions are:
 These three primitives cover the full space. Message-passing (`send`) is a special case of
 one-sided (sending triggers a handler). The language should not commit to only message-passing.
 
-**Implication for proxy design:** A proxy in EIRv2 should carry enough information to
+**Implication for proxy design:** A proxy in EIR should carry enough information to
 support both message-dispatch and direct memory operations. For intra-node, a proxy is a
 pointer + actor ID. For multi-node, a proxy is a global address (node ID + actor ID) plus,
 optionally, a registered memory key for RDMA.
@@ -633,11 +633,11 @@ Keep the Scala-inspired surface, fix the grammar gaps, ship a clean language.
 
 ### Option B: Python embedding via nanobind
 
-Expose the EIRv2 runtime as a Python extension module. Actors are Python classes decorated
+Expose the EIR runtime as a Python extension module. Actors are Python classes decorated
 with `@actor`. Entry methods are `async def`. SDAG `when`-clauses become `await mailbox.recv()`.
 
 ```python
-from eirv2 import actor, mailbox, future
+from eir import actor, mailbox, future
 
 @actor
 class Jacobi:
@@ -675,8 +675,8 @@ class Jacobi:
 The segmentation pass and the type system are the core value propositions. Neither can be
 replicated in pure Python. The right model is:
 
-1. **EIRv2 compiler** (compiled language) — full type checking, SDAG segmentation, codegen
-2. **EIRv2 Python runtime** (nanobind extension) — expose actors, futures, and mailboxes
+1. **EIR compiler** (compiled language) — full type checking, SDAG segmentation, codegen
+2. **EIR Python runtime** (nanobind extension) — expose actors, futures, and mailboxes
    as Python objects; no SDAG segmentation, but the runtime primitives are available for
    Python actors that don't need structured entry methods
 
@@ -726,7 +726,7 @@ Variance (`+A` covariant, `-A` contravariant) is correctly parsed and type-check
 Ergoline but the C++ codegen doesn't handle it. The root cause is that C++ has no notion
 of variance — you can't cast `vector<Cat>` to `vector<Animal>`.
 
-In EIRv2, if the codegen target emits monomorphized code (see below), variance becomes
+In EIR, if the codegen target emits monomorphized code (see below), variance becomes
 straightforward: each `Foo<Cat>` and `Foo<Animal>` are distinct generated types, and
 variance relationships are checked at the ergc level only. The generated code doesn't need
 to know about variance at all.
@@ -744,7 +744,7 @@ in a non-`unit` function it is an error.
 ### 4. Trait `self` declarations
 
 Traits currently don't get a `self` declaration. This means trait methods can't refer to
-`self` for member access without special-casing. Fix in EIRv2 — all traits get a `self`
+`self` for member access without special-casing. Fix in EIR — all traits get a `self`
 with the trait's own type.
 
 ---
@@ -756,7 +756,7 @@ means the C++ compiler re-does a version of the type-checking and instantiation 
 ergc already performed. This causes the covariance/contravariance issue and makes errors
 hard to attribute.
 
-**EIRv2 proposal: monomorphized codegen**
+**EIR proposal: monomorphized codegen**
 
 ergc collects all specializations used in a program (it already tracks these in
 `TypeCheckContext.checked`) and emits one concrete C++ class per specialization. No C++
@@ -768,7 +768,7 @@ class box<A> { val value: A; }
 val x: box<int> = new box<int>(42);
 val y: box<string> = new box<string>("hi");
 
-// EIRv2 generated output (monomorphized)
+// EIR generated output (monomorphized)
 struct box__int { int value; ... };
 struct box__string { std::string value; ... };
 ```
@@ -782,10 +782,10 @@ struct box__string { std::string value; ... };
 
 **Registration without `.ci`:**
 
-ergc emits a `eirv2_register()` function in the generated `.cc` file:
+ergc emits a `eir_register()` function in the generated `.cc` file:
 
 ```cpp
-void eirv2_register() {
+void eir_register() {
     runtime::register_actor<Jacobi>("examples::jacobi2d::jacobi2d");
     runtime::register_entry<Jacobi, &Jacobi::run>("run");
     runtime::register_entry<Jacobi, &Jacobi::receive_ghost>("receive_ghost");
@@ -843,7 +843,7 @@ The case for ditching Scala:
 - Fast iteration; good for experimenting with type system designs
 - `lark` for parsing, `pydantic` for AST nodes
 - Cons: slow for large programs; type system of the *implementation* language (Python) is
-  weaker than what EIRv2 is trying to implement
+  weaker than what EIR is trying to implement
 
 **TypeScript**
 - Surprisingly viable: the TypeScript compiler itself is written in TypeScript
@@ -900,7 +900,7 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 - `@async` → implicit from return type inference; annotation removed
 - Proxy kinds: simplify to handle + optional collection index; remove Charm++ three-way split
 - `@overlap for` → `concurrent for` or `spawn`/`sync`
-- Registration: ergc emits `eirv2_register()`, no `.ci` files
+- Registration: ergc emits `eir_register()`, no `.ci` files
 - Codegen: monomorphized C++, no templates in output
 - Compiler implementation: Rust (production) / Python (prototype)
 - `object` singletons: keep as syntactic sugar, remove `ck::updateGlobal` coupling
@@ -924,7 +924,7 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 ## Error Propagation: `result<T, E>` and `option<T>`
 
 Ergoline deliberately omitted exceptions (standard HPC practice — `-fno-exceptions` is
-common). EIRv2 formalizes this: no exceptions, no `abort`-on-error in library code. Error
+common). EIR formalizes this: no exceptions, no `abort`-on-error in library code. Error
 propagation is explicit, lightweight, and statically enforced by the compiler. The design
 replaces the need for anything like `absl::StatusOr` or `std::expected` — those are
 library workarounds for a language that lacks the feature natively.
@@ -992,7 +992,7 @@ This replaces the entire `RETURN_IF_ERROR` / `ASSIGN_OR_RETURN` macro family fro
 `absl`. There are no macros — `?` is a real grammar production that the type checker
 understands. The equivalence:
 
-| absl / C++ pattern | EIRv2 |
+| absl / C++ pattern | EIR |
 |---|---|
 | `RETURN_IF_ERROR(expr)` | `expr?;` |
 | `ASSIGN_OR_RETURN(var, expr)` | `val var = expr?;` |
@@ -1078,9 +1078,9 @@ no exceptions, no runtime overhead beyond the branch already implied by the type
 
 ## Type Parameter Syntax: Keep `<>`
 
-EIRv2 keeps `<>` for type parameters and type arguments, matching C++, Java, Rust, Go,
+EIR keeps `<>` for type parameters and type arguments, matching C++, Java, Rust, Go,
 and Swift. The alternative (`[]`, Scala-style) has a concrete conflict with array indexing:
-EIRv2 uses `a[i]` for indexing (C-style), so `a[int]` in expression position is ambiguous
+EIR uses `a[i]` for indexing (C-style), so `a[int]` in expression position is ambiguous
 between type application and array access. Scala avoids this by using `a(i)` for indexing,
 which we do not want. The disambiguation `<>` requires in the FastParse grammar is already
 handled cleanly and ANTLR4 (where it was painful) is being dropped.
@@ -1089,7 +1089,7 @@ handled cleanly and ANTLR4 (where it was painful) is being dropped.
 
 ## Self-hosting
 
-EIRv2 is designed to eventually compile itself. This is a concrete milestone that:
+EIR is designed to eventually compile itself. This is a concrete milestone that:
 - Validates that the language is expressive enough for non-HPC general programming
 - Forces the core sequential subset (classes, generics, pattern matching, `result`,
   string handling, file I/O) to be solid before any actor/SDAG features are needed
@@ -1099,7 +1099,7 @@ EIRv2 is designed to eventually compile itself. This is a concrete milestone tha
 The self-hosting compiler is a purely sequential program — no actors, no SDAG, no entry
 methods. It exercises exactly the subset that needs to work correctly first.
 
-**What EIRv2 already has for self-hosting (from Ergoline):**
+**What EIR already has for self-hosting (from Ergoline):**
 - Recursive class hierarchies + traits for AST nodes ✓
 - Generics + predicates for typed containers ✓
 - Pattern matching / `match`-`case` for AST dispatch ✓
@@ -1121,9 +1121,9 @@ methods. It exercises exactly the subset that needs to work correctly first.
 
 ```
 Phase 1: Rust (or Python) bootstrap compiler
-         → compiles EIRv2 source → C++ output
+         → compiles EIR source → C++ output
 
-Phase 2: EIRv2 compiler written in EIRv2
+Phase 2: EIR compiler written in EIR
          → compiled by Phase 1 bootstrap
          → output compared against bootstrap for equivalence
 
@@ -1144,7 +1144,7 @@ in the I/O and string surface area, not in the type system or control flow.
    (consistent function addresses across processes). Defer to the multinode design phase.
 
 2. **`@entry` on constructors:** The `def self(...)` constructor convention is
-   Charm++-specific. For EIRv2, `new Actor(args)` with a conventionally-named constructor
+   Charm++-specific. For EIR, `new Actor(args)` with a conventionally-named constructor
    method is cleaner; ergc generates the registration entry automatically. Whether `self`
    is kept or replaced with the class name is a stylistic decision to make before the
    grammar is finalized.
