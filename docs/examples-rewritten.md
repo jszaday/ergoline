@@ -1,14 +1,19 @@
 # Examples Rewritten in EIR Syntax
 
 Five examples from the original `examples/` directory, rewritten to the new language.
-Annotations mark every meaningful change from the original.
+These favor idiomatic EIR over line-by-line transliteration. Notes call out semantic or
+stylistic choices only when they clarify something non-obvious.
+
+The code blocks are intended to read as first-class EIR examples. Historical deltas are
+kept below each example in separate **Migration Notes** sections so the examples
+themselves do not have to carry that explanation inline.
 
 ---
 
 ## `fib.erg` — Fibonacci (actor model, abstract proxies)
 
-The simplest showcase of the actor model. Unchanged structurally — just type names and
-string interpolation.
+The simplest showcase of the actor model. Structurally it stays close to the original,
+but the code is written in the style the new language should encourage.
 
 ```ergoline
 package examples;
@@ -16,17 +21,17 @@ package examples;
 import ergoline::_;
 
 @main class main with acceptor {
-    val n: i32;  // int → i32
+    val n: i32;
 
     def self(args: array<string>) {
         n = args.size() > 1
-            ? args[1].parse<i32>().getOrElse(0)  // .toInt() → .parse<i32>().getOrElse
+            ? args[1].parse<i32>().getOrElse(0)
             : math::max(2 * configuration.threshold, 32);
         new fib@(self@, n);
     }
 
     @entry override def accept(x: i32): unit {
-        println(f"fib($n) = $x");  // backtick f-string → f"..."  $n bare, ${x} not needed
+        println(f"fib($n) = $x");
         exit();
     }
 }
@@ -59,15 +64,15 @@ class fib with acceptor {
 }
 
 object configuration {
-    val threshold: i32 = 16;  // int → i32
+    val threshold: i32 = 16;
 }
 
 trait acceptor {
-    @entry def accept(x: i32): unit;  // int → i32
+    @entry def accept(x: i32): unit;
 }
 ```
 
-**Changes from v1:**
+**Migration Notes**
 - `int` → `i32`
 - `` `fib(${n}) = ${x}` `` → `f"fib($n) = $x"` (bare `$name` for simple identifiers)
 - `args[1].toInt()` → `args[1].parse<i32>().getOrElse(0)` — explicit error handling
@@ -76,8 +81,8 @@ trait acceptor {
 
 ## `receiver.erg` — Channel producer/consumer
 
-Short example; the main change is that `@threaded @entry` collapses to `@entry` — the
-compiler detects the `await` suspension point and generates the coroutine automatically.
+Short example. `ck::channel` remains a library type, while runtime timing/process queries
+live under `hc::`.
 
 ```ergoline
 package examples;
@@ -94,10 +99,9 @@ import ck::channel;
         new sender@(ch);
     }
 
-    // @threaded @entry → @entry (suspension detected from `await ch`)
     @entry def receive() {
         for (var i: i32 = 0; i < 16; i += 1) {
-            println(f"received value: ${await ch}");  // f-string
+            println(f"received value: ${await ch}");
         }
         exit();
     }
@@ -112,7 +116,7 @@ class sender {
 }
 ```
 
-**Changes from v1:**
+**Migration Notes**
 - `channel<int>` → `channel<i32>`
 - `@threaded @entry def receive()` → `@entry def receive()`
 - `` `received value: ${await ch}` `` → `f"received value: ${await ch}"`
@@ -121,35 +125,35 @@ class sender {
 
 ## `sdagtest.erg` — SDAG stress test (await any, nested forall)
 
-The most SDAG-complete example. Shows `await any`, nested `forall` replacing double
-`@overlap for`, and the full when-clause pattern matching.
+The most SDAG-complete example. It shows `await any`, nested `forall`, and the full
+mailbox-pattern style.
 
 ```ergoline
 package examples;
 
 import ergoline::_;
-import hc;  // idiomatic short runtime namespace
+import hc;
 
 @main class main {
     def self() {
-        val n: i64 = hc::numPes() * 4;  // ck::numPes() → hc::numPes(); i64 index
+        val n: i64 = hc::numPes() * 4;
         new sdagtest@array1d(n, n, n * 4, self@);
     }
 
-    @entry def done(count: i64) {  // int → i64 (a sum of indices)
+    @entry def done(count: i64) {
         println(f"main> done, count = $count.");
         exit();
     }
 }
 
 class sdagtest {
-    val neighbors: array<i64>;     // array<int, 1> → array<i64>
+    val neighbors: array<i64>;
     val mainProxy: main@;
-    val numIts:    i64;            // int → i64
+    val numIts:    i64;
     val n:         i64;
 
     @entry def self(=n: i64, =numIts: i64, =mainProxy: main@) {
-        val idx: i64 = self[@]index();
+        val idx = self[@]index();
         neighbors    = new array<i64>(2);
         neighbors[0] = (idx + n - 1) % n;
         neighbors[1] = (idx + 1) % n;
@@ -161,11 +165,9 @@ class sdagtest {
     @mailbox def invalid();
     @mailbox def receive(it: i64, from: i64);
 
-    // @threaded @entry → @entry
     @entry def run() {
-        val idx: i64 = self[@]index();
+        val idx = self[@]index();
 
-        // await any is unchanged
         await any {
             when valid(_ == idx) =>
                 println(f"ch($idx)> received a message from itself!");
@@ -179,8 +181,6 @@ class sdagtest {
             }
         }
 
-        // double @overlap for → nested forall
-        // outer: one coroutine per iteration; inner: one per neighbor
         forall (it <- 0 to numIts) {
             forall (i <- 0 to neighbors.size()) {
                 when receive(_ == it, _ == neighbors[i]) => {
@@ -194,7 +194,7 @@ class sdagtest {
 }
 ```
 
-**Changes from v1:**
+**Migration Notes**
 - `int` → `i64` throughout (sizes, indices, iteration counts)
 - `array<int, 1>` → `array<i64>` (1D is implicit)
 - `@threaded @entry` → `@entry`
@@ -207,8 +207,8 @@ class sdagtest {
 
 ## `cannon.erg` — Cannon's matrix multiplication (compound when, forall, BLAS FFI)
 
-The compound `when` across two mailboxes is unchanged — it already reads naturally. The
-main work is `@overlap for` → `forall` and type cleanup.
+The compound `when` across two mailboxes already reads naturally. The rewrite mostly just
+removes old naming debt and uses the modern runtime namespace.
 
 ```ergoline
 package examples;
@@ -217,13 +217,13 @@ import ergoline::_;
 import hc;
 
 @system(fromHeader="rand48_replacement.h")
-def drand48(): f64;  // double → f64
+def drand48(): f64;
 
 @system(fromHeader="cmath")
-def sqrt(value: f64): f64;  // double → f64
+def sqrt(value: f64): f64;
 
 @main class cannon {
-    var startTime: f64;  // double → f64
+    var startTime: f64;
     var endTime:   f64;
 
     @entry def self(args: array<string>) {
@@ -243,7 +243,7 @@ def sqrt(value: f64): f64;  // double → f64
         val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
         val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
 
-        startTime = hc::wallTime();  // ck::wallTime() → hc::wallTime()
+        startTime = hc::wallTime();
         a.sendData(c, true);
         b.sendData(c, false);
         c.run(alpha);
@@ -257,9 +257,9 @@ def sqrt(value: f64): f64;  // double → f64
 }
 
 class block {
-    val shape:     (i64, i64);       // (int, int) → (i64, i64)
+    val shape:     (i64, i64);
     val nBlocks:   i64;
-    val data:      array<f64, 2>;    // array<double, 2> → array<f64, 2>
+    val data:      array<f64, 2>;
     val mainProxy: cannon@;
 
     @entry def self(=mainProxy: cannon@, =shape: (i64, i64), =nBlocks: i64, randInit: bool) {
@@ -287,11 +287,9 @@ class block {
         }
     }
 
-    // @threaded @entry → @entry
     @entry def run(alpha: f64) {
         val idx = self[@]index();
 
-        // @overlap for → forall; compound when unchanged
         forall (block <- 0 to nBlocks) {
             when inputA(_ == block, blockA: array<f64, 2>),
                  inputB(_ == block, blockB: array<f64, 2>) => {
@@ -310,7 +308,7 @@ class block {
 }
 ```
 
-**Changes from v1:**
+**Migration Notes**
 - `int` → `i64` for all dimensions, block counts, and indices
 - `double` → `f64`; `array<double, 2>` → `array<f64, 2>`
 - float suffixes are omitted when `f64` is already implied by context
@@ -326,9 +324,8 @@ class block {
 
 ## `jacobi2d.erg` — Jacobi 2D relaxation (full SDAG, dissertation example)
 
-The most significant rewrite. Beyond type names: `ck::updateGlobal` is gone entirely
-(intra-node actors share memory, no broadcast needed), the two-step
-constructor→initialize becomes one, and `@overlap for` becomes `forall`.
+The most significant rewrite. The old global-update choreography is gone, startup is
+direct, and the hot loop reads like native EIR instead of translated Charm++.
 
 ```ergoline
 package examples;
@@ -336,7 +333,6 @@ package examples;
 import ergoline::_;
 import hc;
 
-// Singleton with direct field mutation — no ck::updateGlobal needed intra-node
 object globals {
     val north: i32 = 1;
     val east:  i32 = 2;
@@ -359,7 +355,6 @@ object globals {
 @main class main {
     var startTime: f64;
 
-    // ck::updateGlobal removed — just set globals and proceed directly
     @entry def self(args: array<string>) {
         globals.mainProxy = self@;
 
@@ -412,7 +407,7 @@ class jacobi2d {
     val iFinish: i64;
     val jFinish: i64;
 
-    var grid:     array<f64, 2>;  // array<double, 2> → array<f64, 2>
+    var grid:     array<f64, 2>;
     var nextGrid: array<f64, 2>;
 
     @entry def self() {
@@ -443,7 +438,6 @@ class jacobi2d {
     @mailbox def receive_ghost(it: i64, dir: i32, data: array<f64>);
     @mailbox def receive_status(g_converged: bool);
 
-    // @threaded @entry → @entry
     @entry def run() {
         var converged = false;
         var it: i64   = 0;
@@ -451,7 +445,6 @@ class jacobi2d {
         for (; !converged && it < globals.maxIters; it += 1) {
             start_iteration(it);
 
-            // inner for-when loop → forall
             forall (_ <- 0 to numNeighbors) {
                 when receive_ghost(_ == it, dir, data) => {
                     process_ghost(dir, data);
@@ -475,7 +468,8 @@ class jacobi2d {
 
     @entry def start_iteration(it: i64) {
         val (x, y) = self[@]index();
-        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val dimX = globals.blockDimX;
+        val dimY = globals.blockDimY;
 
         if (hasNorth) self@[x, y - 1].receive_ghost(it, globals.south, grid[:, 1].toArray());
         if (hasEast)  self@[x - 1, y].receive_ghost(it, globals.west,  grid[1, :].toArray());
@@ -484,7 +478,8 @@ class jacobi2d {
     }
 
     private def enforce_boundaries() {
-        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val dimX = globals.blockDimX;
+        val dimY = globals.blockDimY;
         val default = 1.0;
 
         def setColumn(j: i64) { grid[:, j] = default; nextGrid[:, j] = default; }
@@ -497,7 +492,8 @@ class jacobi2d {
     }
 
     private def process_ghost(dir: i32, data: array<f64>) {
-        val (dimX, dimY) = (globals.blockDimX, globals.blockDimY);
+        val dimX = globals.blockDimX;
+        val dimY = globals.blockDimY;
 
         if      (dir == globals.north && hasNorth) grid[:, 0]        = data;
         else if (dir == globals.east  && hasEast)  grid[0, :]        = data;
@@ -527,14 +523,14 @@ class jacobi2d {
 }
 ```
 
-**Changes from v1:**
+**Migration Notes**
 - `int` → `i64` for dimensions, indices, iteration counters, and neighbor counts
 - `double` → `f64`; `array<double, 2>` → `array<f64, 2>`; `array<double>` → `array<f64>`
 - float suffixes are omitted when `f64` is already implied by context
 - `@threaded @entry def run()` → `@entry def run()`
 - `for (var imsg = 0; ...) { when ... }` → `forall (_ <- 0 to numNeighbors) { when ... }`
 - bool→integer casts use ordinary `as`; `!hasSouth as i64` parses as `(!hasSouth) as i64`
-- `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**. The two-step init was required by Charm++'s distributed broadcast. Intra-node actors share memory; globals are set directly in `def self()` and `workers.run()` is called immediately.
+- `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**
 - idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
 - `args[N].toInt()` → `args[N].parse<i64>().getOrElse(default)`
 - Backtick f-strings → `f"..."`, bare `$name` for simple identifiers
@@ -557,3 +553,17 @@ class jacobi2d {
 | String parsing | `.toInt()` | `.parse<i32>().getOrElse(n)` |
 | Numeric conversions | method-style conversions | explicit `as` casts |
 | Distributed globals | `ck::updateGlobal<T>(callback)` | Direct mutation (intra-node) |
+
+---
+
+## Non-Normative Syntax Notes
+
+The examples still use `parse<T>().getOrElse(default)` because that behavior is expressible
+today, but it is verbose. A cleaner defaulting operator is worth considering:
+
+```ergoline
+args[1].parse<i32>() ?? 0
+```
+
+This document does **not** specify `??`; it is only noted here as a plausible ergonomic
+replacement for `getOrElse(...)` on `option`/`result`-like values.
