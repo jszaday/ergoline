@@ -43,7 +43,7 @@ class fib with acceptor {
 
     @entry def self(=parent: acceptor@, n: i32) {
         if (n <= configuration.threshold) {
-            parent.accept(seq_fib(n));
+            parent.accept(seqFib(n));
         } else {
             new fib@(self@, n - 1);
             new fib@(self@, n - 2);
@@ -58,8 +58,8 @@ class fib with acceptor {
         }
     }
 
-    private def seq_fib(n: i32): i32 {
-        return (n > 1) ? (seq_fib(n - 1) + seq_fib(n - 2)) : n;
+    private def seqFib(n: i32): i32 {
+        return (n > 1) ? (seqFib(n - 1) + seqFib(n - 2)) : n;
     }
 }
 
@@ -434,32 +434,32 @@ class jacobi2d {
         iFinish = globals.blockDimX + 1 - (!hasWest as i64);
         jFinish = globals.blockDimY + 1 - (!hasSouth as i64);
 
-        enforce_boundaries();
+        enforceBoundaries();
     }
 
-    @mailbox def receive_ghost(it: i64, dir: i32, data: array<f64>);
-    @mailbox def receive_status(g_converged: bool);
+    @mailbox def receiveGhost(it: i64, dir: i32, data: array<f64>);
+    @mailbox def receiveStatus(gConverged: bool);
 
     @entry def run() {
         var converged = false;
         var it: i64   = 0;
 
         for (; !converged && it < globals.maxIters; it += 1) {
-            start_iteration(it);
+            startIteration(it);
 
             forall (_ <- 0 to numNeighbors) {
-                when receive_ghost(_ == it, dir, data) => {
-                    process_ghost(dir, data);
+                when receiveGhost(_ == it, dir, data) => {
+                    processGhost(dir, data);
                 }
             }
 
-            val maxDiff = check_and_compute();
+            val maxDiff = checkAndCompute();
             converged   = maxDiff <= globals.threshold;
 
-            self[@]contribute(converged, bool::logical_and, self@receive_status);
+            self[@]contribute(converged, bool::logical_and, self@receiveStatus);
 
-            when receive_status(g_converged) => {
-                converged = g_converged;
+            when receiveStatus(gConverged) => {
+                converged = gConverged;
             }
         }
 
@@ -468,18 +468,18 @@ class jacobi2d {
         }
     }
 
-    private def start_iteration(it: i64) {
+    private def startIteration(it: i64) {
         val (x, y) = self[@]index();
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
 
-        if (hasNorth) self@[x, y - 1].receive_ghost(it, globals.south, grid[:, 1].toArray());
-        if (hasEast)  self@[x - 1, y].receive_ghost(it, globals.west,  grid[1, :].toArray());
-        if (hasSouth) self@[x, y + 1].receive_ghost(it, globals.north, grid[:, dimY].toArray());
-        if (hasWest)  self@[x + 1, y].receive_ghost(it, globals.east,  grid[dimX, :].toArray());
+        if (hasNorth) self@[x, y - 1].receiveGhost(it, globals.south, grid[:, 1].copy());
+        if (hasEast)  self@[x - 1, y].receiveGhost(it, globals.west,  grid[1, :].copy());
+        if (hasSouth) self@[x, y + 1].receiveGhost(it, globals.north, grid[:, dimY].copy());
+        if (hasWest)  self@[x + 1, y].receiveGhost(it, globals.east,  grid[dimX, :].copy());
     }
 
-    private def enforce_boundaries() {
+    private def enforceBoundaries() {
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
         val default = 1.0;
@@ -493,7 +493,7 @@ class jacobi2d {
         if (!hasWest)  setRow(dimX);
     }
 
-    private def process_ghost(dir: i32, data: array<f64>) {
+    private def processGhost(dir: i32, data: array<f64>) {
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
 
@@ -504,7 +504,7 @@ class jacobi2d {
         else abort(f"fatal> unexpected ghost from dir $dir");
     }
 
-    private def check_and_compute(): f64 {
+    private def checkAndCompute(): f64 {
         var maxDiff = 0.0;
 
         for (var i: i64 = iStart; i < iFinish; i += 1) {
@@ -535,7 +535,8 @@ class jacobi2d {
 - `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**
 - idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
 - `args[N].toInt()` → `args[N].parse<i64>() ?? default`
-- `start_iteration` is a plain local helper, not an async self-entry call
+- slice/span materialization uses `.copy()` rather than the older `.toArray()`
+- `startIteration` is a plain local helper, not an async self-entry call
 - Backtick f-strings → `f"..."`, bare `$name` for simple identifiers
 - unsuffixed integer literals in index position infer `i64`
 

@@ -1077,6 +1077,10 @@ Slice semantics:
 - `a[:]` selects the full extent of one axis
 - comma-separated `slice_list` forms such as `a[:, 1]` and `a[i, :]` apply one slice per axis
 - omitted `start`, `step`, or `end` default to the natural bounds and unit stride of that axis
+- slicing never produces an owned container directly
+- contiguous selections produce a `span`
+- strided or otherwise non-contiguous selections produce a `slice`
+- both `span.copy()` and `slice.copy()` materialize owned `array` values from the selected elements
 
 ---
 
@@ -1090,7 +1094,7 @@ lambda_type     ::= tuple_multiply ( '=>' tuple_multiply )?
 
 tuple_multiply  ::= basic_type ( '.*' const_primary_expr )?
 
-basic_type      ::= proxy_type | tuple_type | vec_type
+basic_type      ::= proxy_type | tuple_type | span_type | slice_type | vec_type
 
 proxy_type      ::= type_path proxy_type_suffix?
 
@@ -1102,6 +1106,12 @@ collective_kwd  ::= 'array' [1-9] 'd' | 'nodegroup' | 'group'
 
 tuple_type      ::= '(' type ( ',' type )+ ')'
                   | '(' ')'          (* unit type *)
+
+span_type       ::= 'span' '<' type ( ',' const_expr )? '>'
+                  (* non-owning contiguous slice/span over existing storage *)
+
+slice_type      ::= 'slice' '<' type ( ',' const_expr )? '>'
+                  (* non-owning possibly-strided borrowed range over existing storage *)
 
 vec_type        ::= 'vec' '<' type ',' const_expr '>'
                   (* statically sized homogeneous value vector; length known at compile time *)
@@ -1174,6 +1184,48 @@ The canonical type for indices, sizes, shapes, and loop counters is `i64`.
 Negative indices are not given Python-style wraparound semantics. An index expression must
 be in range `0 <= i < size`; when provably false at compile time this is a compile error,
 otherwise it is a runtime bounds error.
+
+### `span<T, N?>` and `slice<T, N?>` Semantics
+
+`span` is the non-owning contiguous range abstraction used by slicing and other borrowed
+sequence operations. `slice` is the corresponding borrowed range abstraction for selections
+that are strided or otherwise non-contiguous. These names replace vague "view" terminology
+in the language surface.
+
+Core properties:
+- `span<T>` denotes a one-dimensional borrowed contiguous sequence of `T`
+- `slice<T>` denotes a one-dimensional borrowed sequence of `T` that may be strided or
+  otherwise non-contiguous in its underlying storage
+- `span<T, N>` may be used when the rank or arity is relevant to an API, but rank-1
+  `span<T>` is the common surface form
+- `slice<T, N>` follows the same convention when arity/rank matters
+- neither `span` nor `slice` owns storage, and neither may outlive the underlying storage
+  it references
+- `span` and `slice` may be formed over `array`, `vec`, and other storage types defined by
+  the standard library or runtime
+
+Basic operations:
+- `s[i]` indexes a span element and expects `i: i64`
+- `s.size()` returns `i64`
+- `s.copy()` returns an owned `array<T>` containing the span's elements in order
+- spans are iterable in element order
+- slices support the same indexing, `size()`, `copy()`, and iteration operations
+
+Slicing rules:
+- slicing an `array` with at least one `:` produces a `span` when the selected region is
+  representable as a contiguous borrowed range
+- slicing an `array` with at least one `:` produces a `slice` when the selected region is
+  strided or otherwise non-contiguous
+- a slice expression used as an assignment target still aliases the original storage
+- APIs that require ownership, message passing, or retention beyond the source storage's
+  lifetime should call `copy()`
+
+Examples:
+- `grid[:, 1]` has type `slice<f64>` if that column is strided in memory
+- `grid[1, :]` has type `span<f64>` if that row is contiguous in memory
+- `grid[:, 1].copy()` materializes an owned `array<f64>`
+- `vec<u16, 4>` may expose `span<u16>` for borrowed iteration/indexing APIs without
+  changing its value semantics
 
 ### Statically Sized Value Types
 
