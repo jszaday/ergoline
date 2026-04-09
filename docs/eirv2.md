@@ -525,12 +525,13 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 - `import`/`package` module system
 - Infix identifiers as operators
 - Implicit variables/parameters
-- Core STL: `array`, `slice`, `queue`, `map`, `string`, `option`, `either`, `range`,
-  `iterator`/`iterable`, `future`, `channel`, `dht`, `uid`, `math`
+- Core STL: `array`, `slice`, `queue`, `map`, `string`, `option`, `result`, `either`,
+  `range`, `iterator`/`iterable`, `future`, `channel`, `dht`, `uid`, `math`, `status` trait
 - `@system` FFI (compiled path)
 - FastParse grammar as starting point
 
 ### Redesign
+- Error propagation: `result<T, E>` + `?` + `!` operators replace exceptions and absl macros
 - Type hierarchy: separate `EirTemplateArgument`/`EirTypeAlias` from `EirType`
 - Variance: implement correctly via monomorphization
 - `@threaded` → implicit from suspension points; annotation removed
@@ -558,28 +559,235 @@ design stabilizes, rewrite in Rust. The two implementations can coexist during t
 
 ---
 
+## Error Propagation: `result<T, E>` and `option<T>`
+
+Ergoline deliberately omitted exceptions (standard HPC practice — `-fno-exceptions` is
+common). EIRv2 formalizes this: no exceptions, no `abort`-on-error in library code. Error
+propagation is explicit, lightweight, and statically enforced by the compiler. The design
+replaces the need for anything like `absl::StatusOr` or `std::expected` — those are
+library workarounds for a language that lacks the feature natively.
+
+### `result<T, E>` — the error type
+
+```ergoline
+// STL: result.erg
+abstract class result<T, E> {
+    def isOk(): bool;
+    def isErr(): bool;
+    def get(): T;               // panics if err — use only when certain
+    def getErr(): E;            // panics if ok
+    def map<U>(f: T => U): result<U, E>;
+    def flatMap<U>(f: T => result<U, E>): result<U, E>;
+    def getOrElse(default: T): T;
+    def ignore(): unit;         // explicit opt-out of must_use
+}
+
+class ok<T, E>(val value: T) extends result<T, E>;
+class err<T, E>(val error: E) extends result<T, E>;
+```
+
+`result<T, E>` is `must_use` — the compiler issues an error if a `result` return value
+is silently dropped. The only way to suppress this is calling `.ignore()`, which is
+visible and grep-able in code review.
+
+```ergoline
+readFile("foo.erg");          // ERROR: result<string, ioError> is must_use
+readFile("foo.erg").ignore(); // OK: explicit discard
+```
+
+`E` is unconstrained — any type is a valid error. `result<int, string>` is valid for
+quick ad-hoc errors. The STL provides a `status` trait for callers that want richer
+error information:
+
+```ergoline
+trait status {
+    def message(): string;
+    def code(): int;
+    def withContext(msg: string): self;  // wrap with additional context
+}
+```
+
+Using `status` is optional. Nothing in the language requires it.
+
+### `?` — propagate `err` upward
+
+The `?` postfix operator unwraps a `result<T, E>`, returning the inner `T` on success or
+immediately returning `err(e)` from the enclosing function on failure. It is only valid
+inside a function whose return type is `result<U, F>` where `E` is assignable to `F`.
+
+```ergoline
+def readFile(path: string): result<string, ioError> { ... }
+def parseAst(src: string):  result<ast, ioError>    { ... }
+
+def compile(path: string): result<module, ioError> {
+    val src  = readFile(path)?;  // propagates ioError on failure, unwraps on success
+    val tree = parseAst(src)?;   // same
+    return ok(lower(tree));
+}
+```
+
+This replaces the entire `RETURN_IF_ERROR` / `ASSIGN_OR_RETURN` macro family from
+`absl`. There are no macros — `?` is a real grammar production that the type checker
+understands. The equivalence:
+
+| absl / C++ pattern | EIRv2 |
+|---|---|
+| `RETURN_IF_ERROR(expr)` | `expr?;` |
+| `ASSIGN_OR_RETURN(var, expr)` | `val var = expr?;` |
+| `StatusOr<T>.value()` | `.get()` or `match` |
+| Silent ignore | Compile error |
+| `Status::OkStatus()` | `ok(value)` |
+
+### `!` — propagate `none` upward
+
+`option<T>` uses a separate operator `!` for propagation, deliberately distinct from `?`.
+`!` unwraps a `some(v)` to `v` or immediately returns `none` from the enclosing function.
+It is only valid inside a function whose return type is `option<U>`.
+
+```ergoline
+def lookup(m: map<string, int>, k: string): option<int> {
+    val x = m.get("a")!;  // returns none if missing, unwraps if present
+    val y = m.get("b")!;
+    return some(x + y);
+}
+```
+
+The separation from `?` is intentional. Mixing `option` and `result` requires an explicit
+conversion — the compiler forces you to name what `none` means in a `result`-returning
+context:
+
+```ergoline
+def load(path: string): result<int, ioError> {
+    val src = readFile(path)?;
+
+    // This is a compile error — ! inside a result-returning function:
+    val n = parseInt(src)!;
+
+    // Correct: explicitly convert none to an err
+    val n = parseInt(src).okOr(ioError("not a number"))?;
+
+    return ok(n);
+}
+```
+
+This catches a real class of bugs: `none` and `err` are semantically different. A missing
+value is not automatically an I/O error, a parse error, or a logic error — the programmer
+must say which. The compiler enforces this at the `option`→`result` boundary.
+
+### Composition
+
+`option<T>` and `result<T, E>` compose via STL methods:
+
+```ergoline
+// option -> result
+val r: result<int, string> = opt.okOr("value was missing");
+val r: result<int, E>      = opt.okOrElse(() => computeError());
+
+// result -> option (discard the error)
+val o: option<int> = res.ok();    // some(v) on success, none on error
+val o: option<E>   = res.err();   // some(e) on error, none on success
+```
+
+Pattern matching works uniformly across both:
+
+```ergoline
+match parseFile("foo.erg") {
+    case ok(tree) => compile(tree);
+    case err(e)   => println(`error: ${e.message()}`);
+}
+
+match lookup(map, "key") {
+    case some(v) => use(v);
+    case none()  => println("not found");
+}
+```
+
+### Summary of operators
+
+| Operator | Valid inside | On success | On failure |
+|---|---|---|---|
+| `expr?` | `result<U, F>`-returning fn | unwraps to `T` | returns `err(e)` |
+| `expr!` | `option<U>`-returning fn | unwraps to `T` | returns `none` |
+
+Both are postfix, both are single-character, both are compile-time checked. No macros,
+no exceptions, no runtime overhead beyond the branch already implied by the type.
+
+---
+
+## Type Parameter Syntax: Keep `<>`
+
+EIRv2 keeps `<>` for type parameters and type arguments, matching C++, Java, Rust, Go,
+and Swift. The alternative (`[]`, Scala-style) has a concrete conflict with array indexing:
+EIRv2 uses `a[i]` for indexing (C-style), so `a[int]` in expression position is ambiguous
+between type application and array access. Scala avoids this by using `a(i)` for indexing,
+which we do not want. The disambiguation `<>` requires in the FastParse grammar is already
+handled cleanly and ANTLR4 (where it was painful) is being dropped.
+
+---
+
+## Self-hosting
+
+EIRv2 is designed to eventually compile itself. This is a concrete milestone that:
+- Validates that the language is expressive enough for non-HPC general programming
+- Forces the core sequential subset (classes, generics, pattern matching, `result`,
+  string handling, file I/O) to be solid before any actor/SDAG features are needed
+- Provides a natural test suite: the bootstrap compiler and the self-hosted compiler
+  must agree on all inputs
+
+The self-hosting compiler is a purely sequential program — no actors, no SDAG, no entry
+methods. It exercises exactly the subset that needs to work correctly first.
+
+**What EIRv2 already has for self-hosting (from Ergoline):**
+- Recursive class hierarchies + traits for AST nodes ✓
+- Generics + predicates for typed containers ✓
+- Pattern matching / `match`-`case` for AST dispatch ✓
+- `option<T>`, `map<K,V>`, `array<T>`, `queue<T>` ✓
+- String + interpolation ✓
+- Infix operators for builder-style APIs ✓
+
+**What needs to be added or strengthened:**
+- `result<T, E>` with `?`/`!` (designed above — not yet in Ergoline)
+- **File I/O** — entirely absent from Ergoline's STL; needs a thin `@extern "C"`
+  wrapper over `fopen`/`fread`/`fwrite`/`fclose` or a `stdio` module
+- **Richer string library** — `split`, `indexOf`, `startsWith`, `trim`, `padLeft`;
+  the current `string.erg` is thin
+- **`int64` / `long` arithmetic** — needed for file offsets and hash values; `long.erg`
+  exists but needs more coverage
+- **Exit codes** — `exit(n: int)` needs to be callable from non-actor code
+
+**Bootstrap path:**
+
+```
+Phase 1: Rust (or Python) bootstrap compiler
+         → compiles EIRv2 source → C++ output
+
+Phase 2: EIRv2 compiler written in EIRv2
+         → compiled by Phase 1 bootstrap
+         → output compared against bootstrap for equivalence
+
+Phase 3: Self-hosted compiler replaces bootstrap
+         → CI runs both compilers on the full test suite
+         → they must agree
+```
+
+The language is rich enough that Phase 2 is not a large lift. The gap is almost entirely
+in the I/O and string surface area, not in the type system or control flow.
+
+---
+
 ## Open Questions
 
-1. **Self-hosting:** Should EIRv2 eventually compile itself? This is a useful correctness
-   milestone and forces the language to be expressive enough for compiler workloads.
+1. **Lambda serialization:** For intra-node only, lambdas can be passed by value — no
+   static registration table needed. For multinode, the same problem as Ergoline recurs
+   (consistent function addresses across processes). Defer to the multinode design phase.
 
-2. **Lambda serialization:** In Ergoline, lambda capture serialization required a static
-   registration table (for consistent addresses across processes). For intra-node only,
-   this is unnecessary — lambdas can be passed by value. For multinode, the same problem
-   recurs. Defer to the multinode design phase.
+2. **`@entry` on constructors:** The `def self(...)` constructor convention is
+   Charm++-specific. For EIRv2, `new Actor(args)` with a conventionally-named constructor
+   method is cleaner; ergc generates the registration entry automatically. Whether `self`
+   is kept or replaced with the class name is a stylistic decision to make before the
+   grammar is finalized.
 
-3. **`@entry` on constructors:** The `def self(...)` constructor convention is Charm++-
-   specific. For EIRv2, constructors could use conventional `new Actor(args)` syntax,
-   with the compiler generating the required registration entry. Whether `self` is kept as
-   the constructor name or replaced with the class name is a stylistic decision.
-
-4. **GC vs. ARC vs. ownership:** Ergoline used ARC (reference counting) with optional
-   `owned`/`borrowed` ownership qualifiers. For an intra-node actor model with no data
-   sharing between actors, strong ownership (Rust-style) is the natural fit. The "no
-   sharing" invariant EIR tried to enforce weakly could be made a compile-time guarantee.
-   This would simplify the runtime significantly.
-
-5. **Error handling:** Ergoline deliberately omitted exceptions (HPC convention). EIRv2
-   should decide: `Result<T, E>` (Rust-style), panic+abort, or proper exceptions. Given
-   the HPC context, `Result<T, E>` is probably the right answer — it forces explicit
-   error handling without stack unwinding overhead.
+3. **GC vs. ARC vs. ownership:** Ergoline used ARC with optional `owned`/`borrowed`
+   qualifiers. For an intra-node actor model with the "no sharing between actors" invariant,
+   strong ownership (Rust-style) is the natural fit and could be made a compile-time
+   guarantee, simplifying the runtime significantly.
