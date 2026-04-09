@@ -10,6 +10,10 @@
 This document is the authoritative language and compiler specification for EIR.
 Historical implementations and earlier design notes are non-normative.
 
+Compiler-internal Rust sketches in Part I may use `enum` to describe implementation data
+structures. That does not imply a corresponding user-facing `enum` declaration in the
+language. EIR currently has no native enum / tagged-union declaration form.
+
 Terminology:
 - **migratable object** — the primary runtime entity; a stateful object whose entry
   methods are invoked asynchronously and whose execution may be relocated by the runtime
@@ -766,6 +770,14 @@ pack_field_type ::= 'unsigned' '<' INT_LIT '>'
                      using them outside an @packed struct is a compile error *)
 ```
 
+EIR currently defines four primary nominal declaration forms: `class`, `struct`,
+`object`, and `trait`. There is no native `enum` declaration in this draft.
+
+This is an intentional limitation of the current language surface, not hidden syntax.
+Pattern matching is still supported over literals, tuples, extractors, and ordinary
+nominal/object values with `unapply`-style support, but a dedicated closed tagged-union
+form remains future work.
+
 ---
 
 ### Functions
@@ -1094,6 +1106,14 @@ tuple_type      ::= '(' type ( ',' type )+ ')'
 vec_type        ::= 'vec' '<' type ',' const_expr '>'
                   (* statically sized homogeneous value vector; length known at compile time *)
 ```
+
+Non-normative ergonomics note:
+- Python 3.12 style type operators are a plausible future surface refinement
+- examples include `A | B` for union-style types and `T | none` as shorthand for optionality
+- this draft does not define such operators; type composition remains spelled with the
+  existing nominal/library forms
+- if adopted later, these operators should be specified as surface sugar over the
+  underlying type constructors rather than as a separate semantic type system
 
 ### Migratable Objects and Proxies
 
