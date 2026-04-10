@@ -21,29 +21,29 @@ package examples;
 import ergoline::_;
 
 @main class main with acceptor {
-    val n: i32;
+    val _n: i32;
 
     def self(args: array<string>) {
-        n = args.size() > 1
+        _n = args.size() > 1
             ? (args[1].parse<i32>() ?? 0)
             : math::max(2 * configuration.threshold, 32);
-        new fib@(self@, n);
+        new fib@(self@, _n);
     }
 
     @entry override def accept(x: i32): unit {
-        println(f"fib($n) = $x");
+        println(f"fib(${_n}) = $x");
         exit();
     }
 }
 
 class fib with acceptor {
-    var count: i32 = 0;
-    var value: i32 = 0;
-    val parent: acceptor@;
+    var _count: i32 = 0;
+    var _value: i32 = 0;
+    val _parent: acceptor@;
 
-    @entry def self(=parent: acceptor@, n: i32) {
+    @entry def self(=_parent: acceptor@, n: i32) {
         if (n <= configuration.threshold) {
-            parent.accept(seqFib(n));
+            _parent.accept(_seqFib(n));
         } else {
             new fib@(self@, n - 1);
             new fib@(self@, n - 2);
@@ -51,20 +51,20 @@ class fib with acceptor {
     }
 
     @entry override def accept(x: i32): unit {
-        count += 1;
-        value += x;
-        if (count >= 2) {
-            parent.accept(value);
+        _count += 1;
+        _value += x;
+        if (_count >= 2) {
+            _parent.accept(_value);
         }
     }
 
-    private def seqFib(n: i32): i32 {
-        return (n > 1) ? (seqFib(n - 1) + seqFib(n - 2)) : n;
+    private def _seqFib(n: i32): i32 {
+        return (n > 1) ? (_seqFib(n - 1) + _seqFib(n - 2)) : n;
     }
 }
 
 object configuration {
-    val threshold: i32 = 16;
+    public val threshold: i32 = 16;
 }
 
 trait acceptor {
@@ -76,6 +76,7 @@ trait acceptor {
 - `int` → `i32`
 - `` `fib(${n}) = ${x}` `` → `f"fib($n) = $x"` (bare `$name` for simple identifiers)
 - `args[1].toInt()` → `args[1].parse<i32>() ?? 0`
+- private state and helper methods are underscored to match the lint policy
 
 ---
 
@@ -91,17 +92,17 @@ import ergoline::_;
 import ck::channel;
 
 @main class receiver {
-    val ch: channel<i32>@;  // channel<int> → channel<i32>
+    val _ch: channel<i32>@;  // channel<int> → channel<i32>
 
     def self() {
-        ch = new channel<i32>@();
+        _ch = new channel<i32>@();
         self@receive();
-        new sender@(ch);
+        new sender@(_ch);
     }
 
     @entry def receive() {
         for (var i: i32 = 0; i < 16; i += 1) {
-            println(f"received value: ${await ch}");
+            println(f"received value: ${await _ch}");
         }
         exit();
     }
@@ -118,6 +119,7 @@ class sender {
 
 **Migration Notes**
 - `channel<int>` → `channel<i32>`
+- private members are underscored to match the lint policy
 - `@threaded @entry def receive()` → `@entry def receive()`
 - `` `received value: ${await ch}` `` → `f"received value: ${await ch}"`
 
@@ -148,16 +150,16 @@ import blas;
 }
 
 class sdagtest {
-    val neighbors: array<i64>;
-    val mainProxy: main@;
-    val numIts:    i64;
-    val n:         i64;
+    val _neighbors: array<i64>;
+    val _mainProxy: main@;
+    val _numIts:    i64;
+    val _n:         i64;
 
-    @entry def self(=n: i64, =numIts: i64, =mainProxy: main@) {
+    @entry def self(=_n: i64, =_numIts: i64, =_mainProxy: main@) {
         val idx = self[@]index();
-        neighbors    = new array<i64>(2);
-        neighbors[0] = (idx + n - 1) % n;
-        neighbors[1] = (idx + 1) % n;
+        _neighbors    = new array<i64>(2);
+        _neighbors[0] = (idx + _n - 1) % _n;
+        _neighbors[1] = (idx + 1) % _n;
         self[@]run();
         self[@]valid(idx);
     }
@@ -176,21 +178,21 @@ class sdagtest {
                 abort("you shouldn't see this!");
         }
 
-        for (var it: i64 = 0; it < numIts; it += 1) {
-            for (var i: i64 = 0; i < neighbors.size(); i += 1) {
-                self@[neighbors[i]].receive(it, idx);
+        for (var it: i64 = 0; it < _numIts; it += 1) {
+            for (var i: i64 = 0; i < _neighbors.size(); i += 1) {
+                self@[_neighbors[i]].receive(it, idx);
             }
         }
 
-        forall (it <- 0 to numIts) {
-            forall (i <- 0 to neighbors.size()) {
-                when receive(_ == it, _ == neighbors[i]) => {
-                    println(f"ch$idx> received from ch${neighbors[i]} for iteration $it.");
+        forall (it <- 0 to _numIts) {
+            forall (i <- 0 to _neighbors.size()) {
+                when receive(_ == it, _ == _neighbors[i]) => {
+                    println(f"ch$idx> received from ch${_neighbors[i]} for iteration $it.");
                 }
             }
         }
 
-        self[@]contribute(idx, i64::+, mainProxy.done);
+        self[@]contribute(idx, i64::+, _mainProxy.done);
     }
 }
 ```
@@ -203,6 +205,7 @@ class sdagtest {
 - idiomaticity: use the shorter `hc::` runtime namespace instead of `runtime::`
 - Backtick f-strings → `f"..."`
 - type suffixes are omitted unless they disambiguate something important
+- private members are underscored to match the lint policy
 
 ---
 
@@ -224,8 +227,7 @@ def drand48(): f64;
 def sqrt(value: f64): f64;
 
 @main class cannon {
-    var startTime: f64;
-    var endTime:   f64;
+    val _startTime: f64;
 
     @entry def self(args: array<string>) {
         val alpha:     f64 = 1.0;
@@ -244,35 +246,35 @@ def sqrt(value: f64): f64;
         val b = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, true);
         val c = new block@array2d(nbPerDim, nbPerDim, self@, blockShape, nbPerDim, false);
 
-        startTime = hc::wallTime();
+        _startTime = hc::wallTime();
         a.sendData(c, true);
         b.sendData(c, false);
         c.run(alpha);
     }
 
     @entry def done() {
-        endTime = hc::wallTime();
-        println(f"matmul finished in ${(endTime - startTime) * 1000.0} ms");
+        val endTime = hc::wallTime();
+        println(f"matmul finished in ${(endTime - _startTime) * 1000.0} ms");
         exit();
     }
 }
 
 class block {
-    val shape:     (i64, i64);
-    val nBlocks:   i64;
-    val data:      array<f64, 2>;
-    val mainProxy: cannon@;
+    val _shape:     (i64, i64);
+    val _nBlocks:   i64;
+    val _data:      array<f64, 2>;
+    val _mainProxy: cannon@;
 
-    @entry def self(=mainProxy: cannon@, =shape: (i64, i64), =nBlocks: i64, randInit: bool) {
+    @entry def self(=_mainProxy: cannon@, =_shape: (i64, i64), =_nBlocks: i64, randInit: bool) {
         if (randInit) {
-            data = new array<f64, 2>(shape[0], shape[1]);
-            for (var i: i64 = 0; i < shape[0]; i += 1) {
-                for (var j: i64 = 0; j < shape[1]; j += 1) {
-                    data[i, j] = drand48();
+            _data = new array<f64, 2>(_shape[0], _shape[1]);
+            for (var i: i64 = 0; i < _shape[0]; i += 1) {
+                for (var j: i64 = 0; j < _shape[1]; j += 1) {
+                    _data[i, j] = drand48();
                 }
             }
         } else {
-            data = array<f64, 2>::fill(shape, 0.0);
+            _data = array<f64, 2>::fill(_shape, 0.0);
         }
     }
 
@@ -282,29 +284,29 @@ class block {
     @entry def sendData(dest: block@array2d, sendA: bool) {
         val idx = self[@]index();
         if (sendA) {
-            dest[(idx[0] - idx[1] + nBlocks) % nBlocks, idx[1]].inputA(0, data);
+            dest[(idx[0] - idx[1] + _nBlocks) % _nBlocks, idx[1]].inputA(0, _data);
         } else {
-            dest[idx[0], (idx[1] - idx[0] + nBlocks) % nBlocks].inputB(0, data);
+            dest[idx[0], (idx[1] - idx[0] + _nBlocks) % _nBlocks].inputB(0, _data);
         }
     }
 
     @entry def run(alpha: f64) {
         val idx = self[@]index();
 
-        forall (block <- 0 to nBlocks) {
+        forall (block <- 0 to _nBlocks) {
             when inputA(_ == block, blockA: array<f64, 2>),
                  inputB(_ == block, blockB: array<f64, 2>) => {
 
-                blas::dgemm(alpha, blockA, blockB, 0.0, data);
+                blas::dgemm(alpha, blockA, blockB, 0.0, _data);
 
-                if ((block + 1) < nBlocks) {
-                    self@[(idx[0] + 1) % nBlocks, idx[1]].inputA(block + 1, blockA);
-                    self@[idx[0], (idx[1] + 1) % nBlocks].inputB(block + 1, blockB);
+                if ((block + 1) < _nBlocks) {
+                    self@[(idx[0] + 1) % _nBlocks, idx[1]].inputA(block + 1, blockA);
+                    self@[idx[0], (idx[1] + 1) % _nBlocks].inputB(block + 1, blockB);
                 }
             }
         }
 
-        self[@]contribute(mainProxy.done);
+        self[@]contribute(_mainProxy.done);
     }
 }
 ```
@@ -321,6 +323,7 @@ class block {
 - `args[1].toInt()` → `args[1].parse<i64>() ?? 128`
 - Backtick f-strings → `f"..."`
 - The compound `when inputA(...), inputB(...)` is **identical** — it was already right
+- private members are underscored to match the lint policy
 
 ---
 
@@ -336,26 +339,26 @@ import ergoline::_;
 import hc;
 
 object globals {
-    val north: i32 = 1;
-    val east:  i32 = 2;
-    val south: i32 = 3;
-    val west:  i32 = 4;
+    public val north: i32 = 1;
+    public val east:  i32 = 2;
+    public val south: i32 = 3;
+    public val west:  i32 = 4;
 
-    var maxIters:   i64 = 250;
-    var threshold:  f64 = 0.004;
-    var mainProxy:  main@;
+    public var maxIters:   i64 = 250;
+    public var threshold:  f64 = 0.004;
+    public var mainProxy:  main@;
 
-    var arrDimX:   i64 = 128;
-    var arrDimY:   i64 = 128;
-    var blockDimX: i64 = 64;
-    var blockDimY: i64 = 64;
+    public var arrDimX:   i64 = 128;
+    public var arrDimY:   i64 = 128;
+    public var blockDimX: i64 = 64;
+    public var blockDimY: i64 = 64;
 
-    var numChareX: i64;
-    var numChareY: i64;
+    public var numChareX: i64;
+    public var numChareY: i64;
 }
 
 @main class main {
-    var startTime: f64;
+    val _startTime: f64;
 
     @entry def self(args: array<string>) {
         globals.mainProxy = self@;
@@ -380,13 +383,13 @@ object globals {
         println(f"Max Iterations: ${globals.maxIters}");
         println(f"Threshold: ${globals.threshold}");
 
-        startTime = hc::wallTime();
+        _startTime = hc::wallTime();
         val workers = new jacobi2d@array2d(globals.numChareX, globals.numChareY);
         workers.run();
     }
 
     @entry def done(numIters: i64) {
-        val time = hc::wallTime() - startTime;
+        val time = hc::wallTime() - _startTime;
         if (numIters >= globals.maxIters) {
             println(f"main> did not converge, finished $numIters iterations in $time s.");
         } else {
@@ -397,25 +400,25 @@ object globals {
 }
 
 class jacobi2d {
-    var numNeighbors: i64 = 0;
+    val _numNeighbors: i64;
 
-    val hasEast:  bool;
-    val hasWest:  bool;
-    val hasNorth: bool;
-    val hasSouth: bool;
+    val _hasEast:  bool;
+    val _hasWest:  bool;
+    val _hasNorth: bool;
+    val _hasSouth: bool;
 
-    val iStart:  i64 = 1;
-    val jStart:  i64 = 1;
-    val iFinish: i64;
-    val jFinish: i64;
+    val _iStart:  i64 = 1;
+    val _jStart:  i64 = 1;
+    val _iFinish: i64;
+    val _jFinish: i64;
 
-    var grid:     array<f64, 2>;
-    var nextGrid: array<f64, 2>;
+    var _grid:     array<f64, 2>;
+    var _nextGrid: array<f64, 2>;
 
     @entry def self() {
         val shape = (globals.blockDimX + 2, globals.blockDimY + 2);
-        nextGrid  = new array<f64, 2>(shape[0], shape[1]);
-        grid      = array<f64, 2>::fill(shape, 0.0);
+        _nextGrid  = new array<f64, 2>(shape[0], shape[1]);
+        _grid      = array<f64, 2>::fill(shape, 0.0);
 
         val (x, y) = self[@]index();
 
@@ -423,18 +426,18 @@ class jacobi2d {
             return (num != 0, num != (max - 1));
         }
 
-        (hasEast,  hasWest)  = inBounds(x, globals.numChareX);
-        (hasNorth, hasSouth) = inBounds(y, globals.numChareY);
+        (_hasEast,  _hasWest)  = inBounds(x, globals.numChareX);
+        (_hasNorth, _hasSouth) = inBounds(y, globals.numChareY);
 
-        numNeighbors = (hasEast as i64) + (hasWest as i64)
-                     + (hasNorth as i64) + (hasSouth as i64);
+        _numNeighbors = (_hasEast as i64) + (_hasWest as i64)
+                      + (_hasNorth as i64) + (_hasSouth as i64);
 
-        iStart  = (!hasEast as i64)  + 1;
-        jStart  = (!hasNorth as i64) + 1;
-        iFinish = globals.blockDimX + 1 - (!hasWest as i64);
-        jFinish = globals.blockDimY + 1 - (!hasSouth as i64);
+        _iStart  = (!_hasEast as i64)  + 1;
+        _jStart  = (!_hasNorth as i64) + 1;
+        _iFinish = globals.blockDimX + 1 - (!_hasWest as i64);
+        _jFinish = globals.blockDimY + 1 - (!_hasSouth as i64);
 
-        enforceBoundaries();
+        _enforceBoundaries();
     }
 
     @mailbox def receiveGhost(it: i64, dir: i32, data: array<f64>);
@@ -445,15 +448,15 @@ class jacobi2d {
         var it: i64   = 0;
 
         for (; !converged && it < globals.maxIters; it += 1) {
-            startIteration(it);
+            _startIteration(it);
 
-            forall (_ <- 0 to numNeighbors) {
+            forall (_ <- 0 to _numNeighbors) {
                 when receiveGhost(_ == it, dir, data) => {
-                    processGhost(dir, data);
+                    _processGhost(dir, data);
                 }
             }
 
-            val maxDiff = checkAndCompute();
+            val maxDiff = _checkAndCompute();
             converged   = maxDiff <= globals.threshold;
 
             self[@]contribute(converged, bool::logical_and, self@receiveStatus);
@@ -468,58 +471,58 @@ class jacobi2d {
         }
     }
 
-    private def startIteration(it: i64) {
+    private def _startIteration(it: i64) {
         val (x, y) = self[@]index();
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
 
-        if (hasNorth) self@[x, y - 1].receiveGhost(it, globals.south, grid[:, 1].copy());
-        if (hasEast)  self@[x - 1, y].receiveGhost(it, globals.west,  grid[1, :].copy());
-        if (hasSouth) self@[x, y + 1].receiveGhost(it, globals.north, grid[:, dimY].copy());
-        if (hasWest)  self@[x + 1, y].receiveGhost(it, globals.east,  grid[dimX, :].copy());
+        if (_hasNorth) self@[x, y - 1].receiveGhost(it, globals.south, _grid[:, 1].copy());
+        if (_hasEast)  self@[x - 1, y].receiveGhost(it, globals.west,  _grid[1, :].copy());
+        if (_hasSouth) self@[x, y + 1].receiveGhost(it, globals.north, _grid[:, dimY].copy());
+        if (_hasWest)  self@[x + 1, y].receiveGhost(it, globals.east,  _grid[dimX, :].copy());
     }
 
-    private def enforceBoundaries() {
+    private def _enforceBoundaries() {
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
         val default = 1.0;
 
-        def setColumn(j: i64) { grid[:, j] = default; nextGrid[:, j] = default; }
-        def setRow(i: i64)    { grid[i, :] = default; nextGrid[i, :] = default; }
+        def setColumn(j: i64) { _grid[:, j] = default; _nextGrid[:, j] = default; }
+        def setRow(i: i64)    { _grid[i, :] = default; _nextGrid[i, :] = default; }
 
-        if (!hasNorth) setColumn(1);
-        if (!hasEast)  setRow(1);
-        if (!hasSouth) setColumn(dimY);
-        if (!hasWest)  setRow(dimX);
+        if (!_hasNorth) setColumn(1);
+        if (!_hasEast)  setRow(1);
+        if (!_hasSouth) setColumn(dimY);
+        if (!_hasWest)  setRow(dimX);
     }
 
-    private def processGhost(dir: i32, data: array<f64>) {
+    private def _processGhost(dir: i32, data: array<f64>) {
         val dimX = globals.blockDimX;
         val dimY = globals.blockDimY;
 
-        if      (dir == globals.north && hasNorth) grid[:, 0]        = data;
-        else if (dir == globals.east  && hasEast)  grid[0, :]        = data;
-        else if (dir == globals.south && hasSouth) grid[:, dimY + 1] = data;
-        else if (dir == globals.west  && hasWest)  grid[dimX + 1, :] = data;
+        if      (dir == globals.north && _hasNorth) _grid[:, 0]        = data;
+        else if (dir == globals.east  && _hasEast)  _grid[0, :]        = data;
+        else if (dir == globals.south && _hasSouth) _grid[:, dimY + 1] = data;
+        else if (dir == globals.west  && _hasWest)  _grid[dimX + 1, :] = data;
         else abort(f"fatal> unexpected ghost from dir $dir");
     }
 
-    private def checkAndCompute(): f64 {
+    private def _checkAndCompute(): f64 {
         var maxDiff = 0.0;
 
-        for (var i: i64 = iStart; i < iFinish; i += 1) {
-            for (var j: i64 = jStart; j < jFinish; j += 1) {
-                nextGrid[i, j] = 0.2 * (
-                    grid[i, j]     +
-                    grid[i - 1, j] + grid[i + 1, j] +
-                    grid[i, j - 1] + grid[i, j + 1]
+        for (var i: i64 = _iStart; i < _iFinish; i += 1) {
+            for (var j: i64 = _jStart; j < _jFinish; j += 1) {
+                _nextGrid[i, j] = 0.2 * (
+                    _grid[i, j]     +
+                    _grid[i - 1, j] + _grid[i + 1, j] +
+                    _grid[i, j - 1] + _grid[i, j + 1]
                 );
-                val diff = math::abs(nextGrid[i, j] - grid[i, j]);
+                val diff = math::abs(_nextGrid[i, j] - _grid[i, j]);
                 if (diff > maxDiff) maxDiff = diff;
             }
         }
 
-        (grid, nextGrid) = (nextGrid, grid);
+        (_grid, _nextGrid) = (_nextGrid, _grid);
         return maxDiff;
     }
 }
@@ -530,15 +533,21 @@ class jacobi2d {
 - `double` → `f64`; `array<double, 2>` → `array<f64, 2>`; `array<double>` → `array<f64>`
 - float suffixes are omitted when `f64` is already implied by context
 - `@threaded @entry def run()` → `@entry def run()`
-- `for (var imsg = 0; ...) { when ... }` → `forall (_ <- 0 to numNeighbors) { when ... }`
+- `for (var imsg = 0; ...) { when ... }` → `forall (_ <- 0 to _numNeighbors) { when ... }`
 - bool→integer casts use ordinary `as`; `!hasSouth as i64` parses as `(!hasSouth) as i64`
 - `ck::updateGlobal<globals>(self@initialize)` + separate `initialize()` entry method → **gone**
 - idiomaticity: use `hc::wallTime()` / `hc::numPes()` rather than the longer `runtime::...`
 - `args[N].toInt()` → `args[N].parse<i64>() ?? default`
 - slice/span materialization uses `.copy()` rather than the older `.toArray()`
-- `startIteration` is a plain local helper, not an async self-entry call
+- `_startIteration` is a plain local helper, not an async self-entry call
 - Backtick f-strings → `f"..."`, bare `$name` for simple identifiers
 - unsuffixed integer literals in index position infer `i64`
+- private members are underscored to match the lint policy
+- fields initialized only in their own `self(...)` prefer `val`; the `globals` object stays
+  `var`-heavy because its members are assigned from `main.self(...)`, not from a
+  constructor of `globals` itself
+- `object`/`globals` are still a less-settled part of the language shape than ordinary
+  classes and traits
 
 ---
 

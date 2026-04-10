@@ -540,6 +540,9 @@ Baseline lint/style rules:
 - global constants may use `SCREAMING_SNAKE_CASE`
 - type, trait, and object names should use `PascalCase`
 - functions, methods, and local bindings should use `camelCase`
+- private members should begin with `_`
+- bindings assigned exactly once, or only during `self(...)` construction of their enclosing
+  type, should prefer `val` over `var`
 - when multiple styles are technically valid, tooling should prefer lowercase-led names
 
 These are tooling rules, not grammar rules. They are enforced by formatter/linter policy,
@@ -587,8 +590,14 @@ operator_seq ::= op_char+
 op_char     ::= '!' | '#' | '%' | '&' | '*' | '+' | '-' | '/'
               | ':' | '<' | '=' | '>' | '?' | '@' | '\' | '^'
               | '|' | '~'
-              (* excluding reserved sequences: '::' '=>' '<-' '<:' '>:' '@' '[@]' '{@}' )
+              (* excluding reserved sequences: '::' '=>' '<-' '<:' '>:' '??' '@' '[@]' '{@}' )
 ```
+
+Lexing note:
+- `??` is a distinct token and is never lexed as two consecutive `?` operators
+- the lexer applies maximal munch to operator sequences, so `a ?? b` always produces one
+  coalescing operator token rather than two propagation tokens
+- postfix `?` remains a separate operator in expression parsing
 
 **Reserved keywords** (may not be used as identifiers):
 ```
@@ -603,6 +612,9 @@ struct    trait    true     u8       u16      u32
 u64       unsigned using    val      var      when
 where     with
 ```
+
+Built-in library types such as `array`, `span`, and `slice` are not reserved keywords.
+They are ordinary names, typically made available by `import ergoline::_;`.
 
 #### Integer literals
 
@@ -770,6 +782,13 @@ pack_field_type ::= 'unsigned' '<' INT_LIT '>'
                      using them outside an @packed struct is a compile error *)
 ```
 
+Default member visibility:
+- variable-like members (`val`, `var`) are `private` by default
+- method-like members (`def`) are `public` by default
+- nested type declarations, `using`, and `import` members are `public` by default unless
+  an explicit access modifier is present
+- explicit `public`, `protected`, and `private` always override these defaults
+
 EIR currently defines four primary nominal declaration forms: `class`, `struct`,
 `object`, and `trait`. There is no native `enum` declaration in this draft.
 
@@ -777,6 +796,11 @@ This is an intentional limitation of the current language surface, not hidden sy
 Pattern matching is still supported over literals, tuples, extractors, and ordinary
 nominal/object values with `unapply`-style support, but a dedicated closed tagged-union
 form remains future work.
+
+`object` remains a lower-priority and still-debatable part of the language surface.
+This draft specifies its current semantics, but its final shape should be treated as less
+settled than the core `class`/`struct`/`trait` model. In practice, `object` and
+`globals`-style patterns are on thinner ice than the rest of the language design.
 
 ---
 
@@ -1094,7 +1118,7 @@ lambda_type     ::= tuple_multiply ( '=>' tuple_multiply )?
 
 tuple_multiply  ::= basic_type ( '.*' const_primary_expr )?
 
-basic_type      ::= proxy_type | tuple_type | span_type | slice_type | vec_type
+basic_type      ::= proxy_type | tuple_type | vec_type
 
 proxy_type      ::= type_path proxy_type_suffix?
 
@@ -1106,12 +1130,6 @@ collective_kwd  ::= 'array' [1-9] 'd' | 'nodegroup' | 'group'
 
 tuple_type      ::= '(' type ( ',' type )+ ')'
                   | '(' ')'          (* unit type *)
-
-span_type       ::= 'span' '<' type ( ',' const_expr )? '>'
-                  (* non-owning contiguous slice/span over existing storage *)
-
-slice_type      ::= 'slice' '<' type ( ',' const_expr )? '>'
-                  (* non-owning possibly-strided borrowed range over existing storage *)
 
 vec_type        ::= 'vec' '<' type ',' const_expr '>'
                   (* statically sized homogeneous value vector; length known at compile time *)
@@ -1191,6 +1209,9 @@ otherwise it is a runtime bounds error.
 sequence operations. `slice` is the corresponding borrowed range abstraction for selections
 that are strided or otherwise non-contiguous. These names replace vague "view" terminology
 in the language surface.
+
+`span<T>` and `slice<T>` are standard-library/prelude types, not reserved keywords. Their
+syntax is accepted through ordinary type-name resolution, typically via `import ergoline::_;`.
 
 Core properties:
 - `span<T>` denotes a one-dimensional borrowed contiguous sequence of `T`
